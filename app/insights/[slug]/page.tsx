@@ -3,7 +3,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getPostCMS } from "@/lib/cms";
 
-export const dynamic = "force-dynamic"; // render on demand so new posts don't 404
+export const dynamic = "force-dynamic"; // render per-request so new posts don't 404
 
 export default async function Page({ params }: { params: { slug: string } }) {
   const post = await getPostCMS(params.slug);
@@ -17,7 +17,7 @@ export default async function Page({ params }: { params: { slug: string } }) {
     <section className="py-12 md:py-20">
       <Container>
         <p className="text-sm text-slate-500">
-          {frontmatter?.category ?? "Insight"}{date ? ` • ${date}` : ""}
+          {(frontmatter?.category ?? "Insight") + (date ? ` • ${date}` : "")}
         </p>
         <h1 className="text-3xl font-bold mt-2">{frontmatter?.title ?? params.slug}</h1>
 
