@@ -23,6 +23,5 @@
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3",
-    "@types/gray-matter": "^3.1.4"
   }
 }
