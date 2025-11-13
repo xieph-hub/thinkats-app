@@ -1,59 +1,77 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 import Container from "@/components/Container";
 import Link from "next/link";
-import Image from "next/image";
-import { getAllPostsCMS } from "@/lib/cms";
-import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Insights — HR Strategy, Workforce Trends, Career Growth",
+  title: "Connecting Talent with Opportunity — Redefining Workplaces and Careers",
   description:
-    "Research, thought leadership, and HR trends shaping the future of work. Practical insights for employers and professionals.",
-  alternates: { canonical: SITE_URL + "/insights" },
+    "At Resourcin Human Capital Advisors, we bridge the gap between talent and opportunity through tech-driven human capital solutions for employers and professionals.",
+  alternates: { canonical: SITE_URL + "/" },
 };
 
-export const dynamic = "force-dynamic"; // always fetch fresh from Notion
-
-export default async function Page() {
-  const posts = await getAllPostsCMS();
-
+export default function Page() {
   return (
-    <section className="py-12 md:py-20 bg-white border-y">
-      <Container>
-        <h2 className="text-3xl font-bold">Stay Ahead with Expert Insights</h2>
-        <p className="mt-2 text-slate-600 max-w-3xl">
-          Access research, thought leadership, and HR trends shaping the future of work.
-        </p>
+    <main>
+      {/* Hero */}
+      <section className="py-14 md:py-24 bg-white">
+        <Container>
+          <h1 className="text-3xl md:text-5xl font-bold leading-tight">
+            Connecting Talent with Opportunity — Redefining Workplaces and Careers
+          </h1>
+          <p className="mt-4 text-slate-600 max-w-3xl">
+            At Resourcin Human Capital Advisors, we bridge the gap between talent and opportunity through
+            innovative, tech-driven human capital solutions. Whether you’re an employer building your dream team
+            or a professional ready for the next step, we make your goals our mission.
+          </p>
 
-        <div className="mt-8 grid md:grid-cols-3 gap-6">
-          {posts.map((p) => (
+          <div className="mt-6 flex flex-wrap gap-3">
             <Link
-              key={p.slug}
-              href={`/insights/${p.slug}`}
-              className="rounded-2xl border border-slate-200 hover:shadow-soft transition block"
+              href="/services"
+              className="px-5 py-3 rounded-xl bg-[#172965] text-white hover:opacity-90"
             >
-              {p.cover && (
-                <div className="relative w-full h-40 rounded-t-2xl overflow-hidden">
-                  <Image
-                    src={p.cover}
-                    alt={p.title}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-              )}
-              <div className="p-5">
-                <p className="text-xs text-slate-500">
-                  {(p.category ?? "Insight") + (p.date ? ` • ${new Date(p.date).toLocaleDateString()}` : "")}
-                </p>
-                <h3 className="font-semibold mt-1">{p.title}</h3>
-                <p className="text-sm text-slate-600 mt-2">{p.excerpt}</p>
-              </div>
+              Find Talent
             </Link>
-          ))}
-        </div>
-      </Container>
-    </section>
+            <Link
+              href="/jobs"
+              className="px-5 py-3 rounded-xl border border-slate-300 hover:bg-slate-50"
+            >
+              Find Jobs
+            </Link>
+          </div>
+
+          <p className="mt-6 text-sm text-slate-500">
+            Empowering organizations and professionals through data-driven talent solutions and human-centered expertise.
+          </p>
+        </Container>
+      </section>
+
+      {/* Two cards: Employers / Talent */}
+      <section className="py-12 md:py-16 bg-slate-50 border-t">
+        <Container>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="rounded-2xl bg-white p-6 border">
+              <h2 className="text-xl font-semibold">For Employers</h2>
+              <p className="mt-2 text-slate-600">
+                Attract, hire, and retain top talent with scalable recruitment and HR solutions tailored to your business needs.
+              </p>
+              <Link href="/services" className="mt-4 inline-block text-[#172965] font-medium">
+                Explore Services →
+              </Link>
+            </div>
+
+            <div className="rounded-2xl bg-white p-6 border">
+              <h2 className="text-xl font-semibold">For Talent</h2>
+              <p className="mt-2 text-slate-600">
+                Discover curated roles, expert insights, and career resources designed to help you thrive.
+              </p>
+              <Link href="/jobs" className="mt-4 inline-block text-[#172965] font-medium">
+                Browse Jobs →
+              </Link>
+            </div>
+          </div>
+        </Container>
+      </section>
+    </main>
   );
 }
