@@ -1,0 +1,13 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html { scroll-behavior: smooth; }
+:focus-visible { outline: 3px solid #FFC107; outline-offset: 3px; border-radius: 8px; }
+.img-fallback { background: linear-gradient(135deg, rgba(10,102,194,.08), rgba(16,185,129,.08)); }
+.nav-active { color: #0A66C2; font-weight: 600; }
