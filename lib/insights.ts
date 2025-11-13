@@ -1,4 +1,3 @@
-
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
@@ -9,6 +8,7 @@ export type Post = {
   excerpt?: string;
   date?: string;
   category?: string;
+  cover?: string; // ← include cover
 };
 
 const insightsDir = path.join(process.cwd(), "content", "insights");
@@ -28,9 +28,9 @@ export function getAllPosts(): Post[] {
       excerpt,
       date: (data.date as string) ?? undefined,
       category: (data.category as string) ?? undefined,
+      cover: (data.cover as string) ?? undefined, // ← include cover
     } as Post;
   });
-  // sort by date desc if available
   return posts.sort((a,b) => (b.date ?? "").localeCompare(a.date ?? ""));
 }
 
