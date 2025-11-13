@@ -10,7 +10,7 @@ export default function Footer() {
           <a href="/" aria-label="Resourcin — Home" className="inline-flex items-center">
             <img src="/logo.svg" alt="Resourcin" className="h-12 w-auto md:h-14" />
           </a>
-          <p className="mt-3 text-sm opacity-90">Boutique HR & recruitment partner.</p>
+          <p className="mt-3 text-sm opacity-90">Connecting Talent with Opportunity, Redefining Workplaces and Careers</p>
 
           {/* Tiny social row */}
           <div className="mt-4 flex items-center gap-2">
