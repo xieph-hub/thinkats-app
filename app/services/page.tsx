@@ -1,5 +1,5 @@
-
 import Container from "@/components/Container";
+import Image from "next/image";
 
 export default function Page() {
   return (
@@ -7,6 +7,7 @@ export default function Page() {
       <Container>
         <h2 className="text-3xl font-bold">Services</h2>
 
+        {/* Talent Acquisition */}
         <div className="mt-8 grid lg:grid-cols-2 gap-8 items-start">
           <div>
             <h3 className="text-2xl font-semibold">Talent Acquisition</h3>
@@ -28,11 +29,18 @@ export default function Page() {
               and workforce strategy to ensure every hire adds measurable value.
             </p>
           </div>
-          <div className="rounded-2xl h-72 w-full img-fallback" />
+
+          <div className="relative rounded-2xl h-72 w-full overflow-hidden">
+            <Image src="/services/ta.jpg" alt="Talent acquisition" fill className="object-cover" />
+          </div>
         </div>
 
+        {/* EOR */}
         <div className="mt-12 grid lg:grid-cols-2 gap-8 items-start">
-          <div className="rounded-2xl h-72 w-full img-fallback order-last lg:order-first" />
+          <div className="relative rounded-2xl h-72 w-full overflow-hidden order-last lg:order-first">
+            <Image src="/services/eor.jpg" alt="Employer of Record" fill className="object-cover" />
+          </div>
+
           <div>
             <h3 className="text-2xl font-semibold">Employer of Record (EOR)</h3>
             <p className="mt-2 text-slate-600">
