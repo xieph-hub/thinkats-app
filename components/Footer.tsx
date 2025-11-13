@@ -11,7 +11,7 @@ export default function Footer() {
             <img src="/logo.svg" alt="Resourcin" className="w-8 h-8" />
             <span className="font-semibold">Resourcin</span>
           </div>
-          <p className="mt-3 text-sm opacity-90">Boutique HR & recruitment partner.</p>
+          <p className="mt-3 text-sm opacity-90">Connecting Talent with Opportunity, Redefining Workplaces and Careers</p>
 
           {/* Tiny social row */}
           <div className="mt-4 flex items-center gap-2">
