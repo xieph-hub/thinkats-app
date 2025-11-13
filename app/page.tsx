@@ -1,5 +1,5 @@
-
 import Container from "@/components/Container";
+import Image from "next/image";
 
 export default function Page() {
   return (
@@ -32,12 +32,11 @@ export default function Page() {
               </p>
             </div>
           </div>
-          <p className="mt-6 text-sm text-slate-600">
-            Empowering organizations and professionals through data-driven talent solutions and human-centered expertise.
-          </p>
+          <p className="mt-6 text-sm text-slate-600">Empowering organizations and professionals through data-driven talent solutions and human-centered expertise.</p>
         </div>
-        <div className="relative">
-          <div className="w-full h-80 md:h-[28rem] rounded-2xl shadow-soft img-fallback" />
+
+        <div className="relative w-full h-80 md:h-[28rem] overflow-hidden rounded-2xl shadow-soft">
+          <Image src="/hero.jpg" alt="Connecting talent with opportunity" fill className="object-cover" priority />
         </div>
       </Container>
     </section>
