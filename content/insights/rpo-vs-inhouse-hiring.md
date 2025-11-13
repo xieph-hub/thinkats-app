@@ -1,6 +1,6 @@
 
 ---
-RPO vs In‑House Hiring - When Each Model Wins
+title: RPO vs In‑House Hiring - When Each Model Wins
 date: 2025-10-20
 category: HR Strategy & Leadership
 excerpt: Deciding between building an internal recruiting engine or partnering with an RPO? Here’s a practical rubric.
