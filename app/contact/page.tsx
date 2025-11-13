@@ -98,7 +98,7 @@ export default function Page() {
               </a>
             </div>
           </form>
-          <p className="mt-3 text-xs text-slate-500">Replace the form action with your Formspree (or similar) endpoint.</p>
+          <p className="mt-3 text-xs text-slate-500">Thank You.</p>
         </div>
       </Container>
     </section>
