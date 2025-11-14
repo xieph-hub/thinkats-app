@@ -89,3 +89,5 @@ Perfect for someone with solid HR operations experience who enjoys structure, de
     `.trim(),
   },
 ];
+
+chore: add shared jobs data
