@@ -139,31 +139,7 @@ export default function JobsListing({ initialJobs }: JobsListingProps) {
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">
                     {job.company} · {job.department}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {job.location} · {job.type}
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <Link
-                    href={`/jobs/${job.slug}`}
-                    className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors"
-                  >
-                    View details
-                  </Link>
-                  <a
-                    href={`mailto:hello@resourcin.com?subject=${encodeURIComponent(
-                      `Application: ${job.title}`
-                    )}`}
-                    className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-xs font-medium text-white hover:bg-[#101c44] transition-colors"
-                  >
-                    Apply via Email
-                  </a>
-                </div>
-              </div>
-              <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                {job.summary}
-              </p>
+                  </p
             </article>
           ))}
         </div>
