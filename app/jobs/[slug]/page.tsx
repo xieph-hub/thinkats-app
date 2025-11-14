@@ -159,5 +159,3 @@ Best regards,
     </main>
   );
 }
-
-feat: add job detail pages with email apply flow
