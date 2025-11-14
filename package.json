@@ -10,22 +10,21 @@
     "lint": "next lint"
   },
   "dependencies": {
-  "@notionhq/client": "^2.2.15",
-  "marked": "^12.0.2",
-  "@supabase/supabase-js": "^2.45.0",
-  "@prisma/client": "^5.19.1",
-  "next": "14.2.5",
-  "react": "18.3.1",
-  "react-dom": "18.3.1"
-}
+    "@notionhq/client": "^2.2.15",
+    "@prisma/client": "^5.19.1",
+    "@supabase/supabase-js": "^2.45.0",
+    "marked": "^12.0.2",
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "prisma": "^5.19.1",
-    "typescript": "^5.4.5",
     "@types/node": "^20.14.10",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.5"
+    "eslint-config-next": "14.2.5",
+    "prisma": "^5.19.1",
+    "typescript": "^5.4.5"
   }
 }
