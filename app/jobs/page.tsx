@@ -2,6 +2,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { jobs } from "@/lib/jobs";
 
 export const metadata: Metadata = {
   title: "Jobs | Resourcin Human Capital Advisors",
@@ -9,56 +10,10 @@ export const metadata: Metadata = {
     "Explore open roles curated by Resourcin Human Capital Advisors. Find your next opportunity and take the next step in your career.",
 };
 
-type Job = {
-  id: string;
-  title: string;
-  slug: string;
-  location: string;
-  type: string;
-  company: string;
-  department: string;
-  summary: string;
-};
-
-const jobs: Job[] = [
-  {
-    id: "1",
-    title: "Senior Product Manager (Fintech)",
-    slug: "senior-product-manager-fintech",
-    location: "Lagos, Nigeria (Hybrid)",
-    type: "Full-time",
-    company: "Resourcin Client – Fintech",
-    department: "Product",
-    summary:
-      "Lead product strategy and execution for a high-growth fintech client, working closely with engineering, design, and commercial teams.",
-  },
-  {
-    id: "2",
-    title: "Business Development Manager",
-    slug: "business-development-manager",
-    location: "Lagos, Nigeria",
-    type: "Full-time",
-    company: "Resourcin Client – B2B Services",
-    department: "Sales & Business Development",
-    summary:
-      "Drive new business acquisition, manage key accounts, and build strategic partnerships to accelerate revenue growth.",
-  },
-  {
-    id: "3",
-    title: "HR Generalist",
-    slug: "hr-generalist",
-    location: "Remote (Nigeria)",
-    type: "Contract",
-    company: "Resourcin Human Capital Advisors",
-    department: "People & HR",
-    summary:
-      "Support recruitment, onboarding, employee relations, and HR operations across multiple client accounts.",
-  },
-];
-
 export default function JobsPage() {
   return (
     <main className="min-h-screen bg-slate-50">
+      {/* Hero */}
       <section className="bg-[#172965] text-white py-16 px-6">
         <div className="mx-auto max-w-5xl">
           <p className="text-xs uppercase tracking-[0.2em] text-blue-200/80 mb-2">
@@ -75,6 +30,7 @@ export default function JobsPage() {
         </div>
       </section>
 
+      {/* Jobs list */}
       <section className="px-6 py-10">
         <div className="mx-auto max-w-5xl">
           {jobs.length === 0 ? (
@@ -104,10 +60,16 @@ export default function JobsPage() {
                       </p>
                     </div>
                     <div className="flex gap-3">
-                      {/* For now, we link to LinkedIn or email.
-                          Later, we will replace this with a full apply flow. */}
+                      <Link
+                        href={`/jobs/${job.slug}`}
+                        className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 transition-colors"
+                      >
+                        View details
+                      </Link>
                       <a
-                        href="mailto:hello@resourcin.com?subject=Job%20Application"
+                        href={`mailto:hello@resourcin.com?subject=${encodeURIComponent(
+                          `Application: ${job.title}`
+                        )}`}
                         className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-xs font-medium text-white hover:bg-[#101c44] transition-colors"
                       >
                         Apply via Email
