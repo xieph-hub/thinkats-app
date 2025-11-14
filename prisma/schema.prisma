@@ -32,7 +32,7 @@ model Candidate {
   email      String?
   phone      String?
   location   String?
-  // For privacy, we store the private object path (not a public URL)
+  // Private object path in Supabase Storage (not public URL)
   resumeUrl  String?
   rawText    String?   // Placeholder for parsed resume text
   createdAt  DateTime  @default(now())
@@ -53,6 +53,7 @@ model Application {
 
   job         Job       @relation(fields: [jobId], references: [id])
   candidate   Candidate @relation(fields: [candidateId], references: [id])
+  notes       Note[]    // <-- reverse relation to Note
 
   @@index([jobId, createdAt])
 }
