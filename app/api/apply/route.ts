@@ -12,17 +12,18 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
 
-    const jobSlug = body?.jobSlug as string | undefined;
-    const jobTitleFromClient = body?.jobTitle as string | undefined;
-    const rawName = body?.name as string | undefined;
-    const rawEmail = body?.email as string | undefined;
+    const jobSlug = (body?.jobSlug as string | undefined) || undefined;
+    const jobTitleFromClient =
+      (body?.jobTitle as string | undefined) || undefined;
+    const rawName = (body?.name as string | undefined) || "";
+    const rawEmail = (body?.email as string | undefined) || "";
     const phone = (body?.phone as string | undefined) || null;
     const location = (body?.location as string | undefined) || null;
     const resumeUrl = (body?.resumeUrl as string | undefined) || null;
     const source = (body?.source as string | undefined) || "website";
 
-    const name = rawName?.trim() || "";
-    const email = rawEmail?.trim().toLowerCase() || "";
+    const name = rawName.trim();
+    const email = rawEmail.trim().toLowerCase();
 
     console.log("Apply API payload", {
       jobSlug,
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find job by slug first, fall back to title if slug is missing
+    // 🔍 Find job by slug first, then by title
     let job = null;
 
     if (jobSlug) {
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find or create candidate based on email
+    // 👤 Candidate: NO jobId relation here anymore
     let candidate = await prisma.candidate.findFirst({
       where: { email },
     });
@@ -85,7 +86,6 @@ export async function POST(req: Request) {
           location,
           resumeUrl,
           source,
-          job: { connect: { id: job.id } },
         },
       });
     } else {
@@ -97,17 +97,19 @@ export async function POST(req: Request) {
           location: location || candidate.location,
           resumeUrl: resumeUrl || candidate.resumeUrl,
           source: source || candidate.source,
-          job: { connect: { id: job.id } },
         },
       });
     }
 
+    // 🧾 Application: this is where we connect Job + Candidate
     const application = await prisma.application.create({
       data: {
         job: { connect: { id: job.id } },
         candidate: { connect: { id: candidate.id } },
         stage: "APPLIED",
         source,
+        // If your Application model has a resumeUrl column and you want it there too:
+        // resumeUrl,
       },
       include: {
         job: true,
@@ -115,7 +117,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Send emails (candidate + admin); failures here won't break the response
+    // 📧 Emails (candidate + admin). Email failures shouldn't break the API.
     try {
       await Promise.all([
         sendCandidateApplicationReceivedEmail({
