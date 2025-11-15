@@ -1,112 +1,184 @@
 // app/admin/jobs/page.tsx
 
-import type { Metadata } from "next";
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 
-export const metadata: Metadata = {
-  title: "Admin – Jobs | Resourcin",
-  description:
-    "Internal jobs admin panel for Resourcin Human Capital Advisors.",
-};
+export const dynamic = "force-dynamic";
 
-interface AdminJobsPageProps {
-  searchParams?: { key?: string };
+async function toggleJobPublish(formData: FormData) {
+  "use server";
+
+  const jobId = formData.get("jobId");
+  const current = formData.get("current");
+
+  if (!jobId || typeof jobId !== "string") {
+    return;
+  }
+
+  const isPublished =
+    typeof current === "string" ? current === "true" : Boolean(current);
+
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { isPublished: !isPublished },
+  });
 }
 
-export default function AdminJobsPage({ searchParams }: AdminJobsPageProps) {
-  const keyFromUrl = searchParams?.key;
-  const adminSecret = process.env.ADMIN_SECRET;
+export default async function AdminJobsPage() {
+  const jobs = await prisma.job.findMany({
+    orderBy: { postedAt: "desc" },
+    include: {
+      _count: {
+        select: { applications: true },
+      },
+    },
+  });
 
-  // 1) If ADMIN_SECRET is not set in Vercel, show a clear message
-  if (!adminSecret) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-6 py-16">
-        <div className="mx-auto max-w-2xl rounded-xl bg-white p-8 shadow-md border border-slate-100">
-          <h1 className="text-2xl font-semibold text-slate-900 mb-4">
-            Admin Jobs – Config Issue
-          </h1>
-          <p className="text-sm text-slate-600">
-            The <code className="px-1 py-0.5 rounded bg-slate-100">ADMIN_SECRET</code>{" "}
-            environment variable is not set in production.
-          </p>
-          <ol className="mt-4 list-decimal list-inside text-sm text-slate-700 space-y-1">
-            <li>Go to Vercel → Project Settings → Environment Variables.</li>
-            <li>Add a variable named <strong>ADMIN_SECRET</strong> in the Production environment.</li>
-            <li>Redeploy the project.</li>
-          </ol>
-        </div>
-      </main>
-    );
-  }
-
-  // 2) If key is missing or wrong, show an "invalid key" screen – not a 404
-  if (process.env.NODE_ENV === "production" && keyFromUrl !== adminSecret) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-6 py-16">
-        <div className="mx-auto max-w-md rounded-xl bg-white p-8 shadow-md border border-slate-100">
-          <h1 className="text-xl font-semibold text-slate-900 mb-3">
-            Admin access required
-          </h1>
-          <p className="text-sm text-slate-600 mb-4">
-            The admin key in the URL is missing or incorrect.
-          </p>
-          <p className="text-sm text-slate-600">
-            Open this page as:
-          </p>
-          <pre className="mt-2 rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-50 overflow-x-auto">
-            https://www.resourcin.com/admin/jobs?key=YOUR_ADMIN_SECRET
-          </pre>
-          <p className="mt-3 text-xs text-slate-500">
-            Make sure <code>YOUR_ADMIN_SECRET</code> exactly matches the{" "}
-            <code>ADMIN_SECRET</code> value configured in Vercel.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  // 3) If key matches, show a simple admin dashboard placeholder
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-8 flex items-center justify-between">
+    <main className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        {/* Header */}
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Jobs Admin
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#172965]">
+              Resourcin · Admin
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+              Jobs
             </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Internal view for managing open roles on the Resourcin job board.
+            <p className="mt-1 text-sm text-slate-500 max-w-xl">
+              Manage which roles are visible on the public /jobs page and see
+              how many applications each role has.
             </p>
           </div>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 border border-emerald-100">
-            Admin access granted
-          </span>
+
+          <div className="flex gap-2">
+            <Link
+              href="/admin/overview"
+              className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
+            >
+              ← Back to overview
+            </Link>
+            <Link
+              href="/jobs"
+              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#101c44]"
+            >
+              View public jobs
+            </Link>
+          </div>
         </header>
 
-        <section className="rounded-xl bg-white p-6 shadow-sm border border-slate-100">
-          <h2 className="text-lg font-semibold text-slate-900 mb-2">
-            Next steps
-          </h2>
-          <p className="text-sm text-slate-600 mb-3">
-            The database is wired (Supabase + Prisma). For now, you can:
-          </p>
-          <ol className="list-decimal list-inside text-sm text-slate-700 space-y-1">
-            <li>
-              Use <strong>Supabase → Table Editor</strong> to add rows in the{" "}
-              <code>Job</code> table (title, slug, description, isPublished, etc.).
-            </li>
-            <li>
-              Visit <code>/jobs</code> on the live site to confirm they appear on
-              the public job board.
-            </li>
-            <li>
-              When candidates apply, their data lands in the{" "}
-              <code>Candidate</code> and <code>Application</code> tables.
-            </li>
-          </ol>
-          <p className="mt-4 text-xs text-slate-500">
-            We can extend this page into a full CRUD dashboard (create/edit
-            jobs, view applications) once access is working reliably.
-          </p>
+        {/* Jobs table */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {jobs.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              No jobs found. Once you add jobs in your database, they&apos;ll
+              appear here.
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-slate-100">
+              <table className="min-w-full divide-y divide-slate-100 text-xs">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">
+                      Role
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">
+                      Status
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">
+                      Applications
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-slate-500">
+                      Posted
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-slate-500">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {jobs.map((job) => (
+                    <tr key={job.id}>
+                      {/* Role */}
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-800">
+                            {job.title}
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            {job.department} · {job.location} · {job.type}
+                          </span>
+                          <span className="mt-1 text-[11px] text-slate-400 line-clamp-2">
+                            {job.excerpt}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-3 py-2 align-top">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                            job.isPublished
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                              : "bg-slate-50 text-slate-500 border border-slate-200"
+                          }`}
+                        >
+                          {job.isPublished ? "Published" : "Draft"}
+                        </span>
+                      </td>
+
+                      {/* Applications count */}
+                      <td className="px-3 py-2 align-top text-slate-700">
+                        {job._count.applications}
+                      </td>
+
+                      {/* Posted date */}
+                      <td className="px-3 py-2 align-top text-slate-500">
+                        {job.postedAt
+                          ? new Date(job.postedAt).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-3 py-2 align-top text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          {job.isPublished && (
+                            <Link
+                              href={`/jobs/${job.slug}`}
+                              className="text-[11px] font-medium text-[#172965] hover:underline"
+                              target="_blank"
+                            >
+                              View live ↗
+                            </Link>
+                          )}
+
+                          <form action={toggleJobPublish}>
+                            <input type="hidden" name="jobId" value={job.id} />
+                            <input
+                              type="hidden"
+                              name="current"
+                              value={job.isPublished ? "true" : "false"}
+                            />
+                            <button
+                              type="submit"
+                              className="mt-1 inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
+                            >
+                              {job.isPublished ? "Set as draft" : "Publish"}
+                            </button>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
     </main>
