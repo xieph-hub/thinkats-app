@@ -20,70 +20,92 @@ datasource db {
   directUrl = env("DIRECT_URL")    // direct
 }
 
-model Job {
+model ClientCompany {
   id          String   @id @default(cuid())
-  title       String
+  name        String
   slug        String   @unique
-  type        String?
-  department  String?
-  location    String?
-  description String
-  excerpt     String?
-  postedAt    DateTime @default(now())
-  isPublished Boolean  @default(false)
+  logoUrl     String?
+  website     String?
+  description String?
 
-  // Client-facing fields
-  clientName  String?
-  clientSlug  String?
+  jobs        Job[]
 
-  // Relations
-  applications Application[]
-  candidates   Candidate[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Job {
+  id             String   @id @default(cuid())
+  client         ClientCompany? @relation(fields: [clientId], references: [id])
+  clientId       String?
+  title          String
+  slug           String   @unique
+  location       String?
+  jobType        String?   // full-time, contract, internship
+  level          String?   // graduate, mid, senior, executive
+  function       String?   // e.g. Product, HR, Finance
+  industry       String?   // e.g. Fintech, Banking
+  summary        String?
+  description    String?
+  requirements   String?
+  salaryCurrency String?
+  salaryMin      Int?
+  salaryMax      Int?
+  remoteOption   String?   // remote, hybrid, onsite
+  status         String    @default("open") // open, on_hold, closed
+
+  applications   Application[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model Candidate {
-  id        String    @id @default(cuid())
-  jobId     String?   // can be null for older candidates
-  job       Job?      @relation(fields: [jobId], references: [id])
+  id                    String   @id @default(cuid())
+  fullName              String
+  email                 String   @unique
+  phone                 String?
+  city                  String?
+  country               String?
+  headline              String?
+  summary               String?
+  currentRole           String?
+  currentCompany        String?
+  totalExperienceYears  Int?
 
-  fullname  String?
-  email     String?
-  phone     String?
-  location  String?
-  resumeUrl String?
-  source    String?
-  rawText   String?
+  level                 String?  // graduate, mid, senior, executive
+  functions             String?  // comma-separated list
+  industries            String?  // comma-separated list
+  skills                String?  // comma-separated list
 
-  createdAt DateTime? @default(now())
-  applications Application[]
+  preferredLocations    String?  // comma-separated; e.g. "Nigeria,Ghana,Remote"
+  workPreference        String?  // remote, onsite, hybrid
+  salaryCurrency        String?
+  salaryMin             Int?
+  salaryMax             Int?
+  noticePeriod          String?  // e.g. "Immediate", "1 month"
 
-  @@index([email])
-  @@index([createdAt])
+  cvUrl                 String?
+  source                String?  // job_application, talent_network, referral
+  status                String?  // active, inactive
+
+  applications          Application[]
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Application {
   id          String    @id @default(cuid())
-  jobId       String
-  candidateId String
-  stage       String    @default("APPLIED") // APPLIED | SCREEN | HM | PANEL | OFFER | HIRED | REJECTED
-  source      String?   // inbound, sourced, referral
-  createdAt   DateTime  @default(now())
-
   job         Job       @relation(fields: [jobId], references: [id])
+  jobId       String
   candidate   Candidate @relation(fields: [candidateId], references: [id])
-  notes       Note[]    // <-- reverse relation to Note
+  candidateId String
 
-  @@index([jobId, createdAt])
-}
+  status      String    @default("applied") // applied, in_review, shortlisted, interview, offer, hired, rejected
+  source      String?   // job_board, internal, referral
+  notes       String?
 
-model Note {
-  id            String   @id @default(cuid())
-  applicationId String
-  author        String?
-  body          String
-  createdAt     DateTime @default(now())
-
-  application Application @relation(fields: [applicationId], references: [id])
-
-  @@index([applicationId, createdAt])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
