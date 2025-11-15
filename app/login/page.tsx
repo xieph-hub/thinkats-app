@@ -17,28 +17,33 @@ export default function LoginPage() {
       </header>
 
       <section className="grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 space-y-3">
+        <Link
+          href="/candidate"
+          className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 space-y-3 hover:border-emerald-400/70 hover:bg-neutral-900 transition"
+        >
           <h2 className="text-lg font-semibold">I&apos;m a candidate</h2>
           <p className="text-sm text-neutral-400">
-            Sign in to view and update your profile, track applications and
-            discover roles that match your preferences.
+            Go to the candidate workspace to view and update your profile, track
+            applications and discover roles that match your preferences.
           </p>
-          <p className="text-xs text-neutral-500">
-            In the next phase this will link to the full candidate portal.
+          <p className="text-xs text-emerald-300 font-medium">
+            Continue to candidate portal →
           </p>
-        </div>
+        </Link>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 space-y-3">
+        <Link
+          href="/client"
+          className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 space-y-3 hover:border-emerald-400/70 hover:bg-neutral-900 transition"
+        >
           <h2 className="text-lg font-semibold">I&apos;m an employer</h2>
           <p className="text-sm text-neutral-400">
-            Sign in to see live search pipelines, shortlisted candidates and
-            EOR employees.
+            Go to the client workspace to see live search pipelines, shortlists
+            and (later) EOR employees.
           </p>
-          <p className="text-xs text-neutral-500">
-            We&apos;ll connect this to the client portal dashboards as we build
-            them out.
+          <p className="text-xs text-emerald-300 font-medium">
+            Continue to client portal →
           </p>
-        </div>
+        </Link>
       </section>
 
       <p className="text-xs text-neutral-500">
