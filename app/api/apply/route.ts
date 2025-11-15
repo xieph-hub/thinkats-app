@@ -24,19 +24,31 @@ export async function POST(req: Request) {
     const name = rawName?.trim() || "";
     const email = rawEmail?.trim().toLowerCase() || "";
 
-    if (!jobSlug || !name || !email) {
+    // ✅ Now we allow jobSlug OR jobTitle, but still require name + email
+    if (!name || !email || (!jobSlug && !jobTitleFromClient)) {
       return NextResponse.json(
         {
           ok: false,
-          message: "Missing required fields (jobSlug, name, email).",
+          message: "Missing required fields (job, name, email).",
         },
         { status: 400 }
       );
     }
 
-    const job = await prisma.job.findUnique({
-      where: { slug: jobSlug },
-    });
+    // 🔎 Find job by slug first, fall back to title if slug is missing
+    let job = null;
+
+    if (jobSlug) {
+      job = await prisma.job.findUnique({
+        where: { slug: jobSlug },
+      });
+    }
+
+    if (!job && jobTitleFromClient) {
+      job = await prisma.job.findFirst({
+        where: { title: jobTitleFromClient },
+      });
+    }
 
     if (!job) {
       return NextResponse.json(
@@ -48,39 +60,42 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find or create candidate based on email
+    // 🔁 Find or create candidate by email
     let candidate = await prisma.candidate.findFirst({
-      where: {
-        email,
-      },
+      where: { email },
     });
 
     if (!candidate) {
       candidate = await prisma.candidate.create({
         data: {
-          job: { connect: { id: job.id } },
           fullname: name,
           email,
           phone,
           location,
           resumeUrl,
           source,
+          ...(job && {
+            job: { connect: { id: job.id } },
+          }),
         },
       });
     } else {
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
-          job: { connect: { id: job.id } },
           fullname: candidate.fullname || name,
           phone: phone || candidate.phone,
           location: location || candidate.location,
           resumeUrl: resumeUrl || candidate.resumeUrl,
           source: source || candidate.source,
+          ...(job && {
+            job: { connect: { id: job.id } },
+          }),
         },
       });
     }
 
+    // 🧾 Create the application record
     const application = await prisma.application.create({
       data: {
         job: { connect: { id: job.id } },
@@ -94,8 +109,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // Fire-and-forget style (we still await here so we can log errors,
-    // but errors won't break the application response)
+    // 📧 Fire off emails (candidate + admin) — errors here won't break the response
     try {
       await Promise.all([
         sendCandidateApplicationReceivedEmail({
@@ -111,7 +125,7 @@ export async function POST(req: Request) {
           candidateLocation: application.candidate.location || null,
           jobTitle:
             application.job.title || jobTitleFromClient || "Unknown role",
-          jobSlug,
+          jobSlug: job.slug,
           source,
         }),
       ]);
