@@ -51,20 +51,30 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
 
       const res = await fetch("/api/apply", {
         method: "POST",
-        body: formData, // browser sets multipart/form-data with boundary
+        body: formData, // browser sets multipart/form-data
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({} as any));
 
-      if (!res.ok || !data.success) {
+      const succeeded =
+        res.ok &&
+        (data.success === true ||
+          data.ok === true ||
+          typeof data.applicationId === "string");
+
+      if (!succeeded) {
         setIsError(true);
         setMessage(
           data?.error ||
+            data?.message ||
             "We couldn’t submit your application. Please try again or email us directly."
         );
       } else {
         setIsError(false);
-        setMessage("Thank you — your application has been received.");
+        setMessage(
+          data?.message ||
+            "Thank you — your application has been received."
+        );
 
         // Reset form
         setName("");
