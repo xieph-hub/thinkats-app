@@ -8,12 +8,18 @@ type PageProps = {
 };
 
 export default async function JobPage({ params }: PageProps) {
-  const job = await prisma.job.findUnique({
-    where: { slug: params.slug },
+  const slugOrId = params.slug;
+
+  // Try to find the job either by slug or by id
+  const job = await prisma.job.findFirst({
+    where: {
+      OR: [{ slug: slugOrId }, { id: slugOrId }],
+    },
   });
 
+  // If no job or explicitly unpublished, show 404
   if (!job || job.isPublished === false) {
-    return notFound();
+    notFound();
   }
 
   return (
@@ -53,13 +59,11 @@ export default async function JobPage({ params }: PageProps) {
             <p className="mb-4 text-sm text-slate-700">{job.excerpt}</p>
           )}
           <div className="prose prose-sm max-w-none text-slate-700">
-            {/* If description is rich text / HTML, adjust accordingly.
-               For now assume plain text / markdown-ish */}
             {job.description}
           </div>
         </section>
 
-        {/* Apply form – this is where the CV / Resume field lives */}
+        {/* Apply form – includes CV / Resume URL */}
         <ApplyForm jobTitle={job.title} jobSlug={job.slug} />
       </div>
     </main>
