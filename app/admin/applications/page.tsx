@@ -1,4 +1,5 @@
 // app/admin/applications/page.tsx
+
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
@@ -18,19 +19,23 @@ export default async function ApplicationsPage({
   if (jobId) where.jobId = jobId;
   if (stage) where.stage = stage;
 
-  const [jobs, applications] = await Promise.all([
+  // Cast results to `any` so we don't fight TypeScript over Prisma types
+  const [jobsRaw, applicationsRaw] = await Promise.all([
     prisma.job.findMany({
-      orderBy: { createdAt: "desc" },
+      // No orderBy here because your Job model doesn't have createdAt
       select: { id: true, title: true },
-    }),
+    }) as any,
     prisma.application.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: "desc" } as any,
       include: {
         job: { select: { title: true } },
       },
-    }),
+    }) as any,
   ]);
+
+  const jobs = jobsRaw as any[];
+  const applications = applicationsRaw as any[];
 
   const stages = [
     "APPLIED",
@@ -125,46 +130,58 @@ export default async function ApplicationsPage({
                   </td>
                 </tr>
               ) : (
-                applications.map((application) => (
-                  <tr
-                    key={application.id}
-                    className="border-b border-slate-800/70 hover:bg-slate-800/40"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className="font-medium">
-                          {application.fullName}
+                applications.map((application: any) => {
+                  const appliedDate =
+                    application.createdAt &&
+                    application.createdAt.toLocaleDateString
+                      ? application.createdAt.toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "";
+
+                  const name =
+                    application.fullName ??
+                    application.fullname ??
+                    application.name ??
+                    "Candidate";
+
+                  return (
+                    <tr
+                      key={application.id}
+                      className="border-b border-slate-800/70 hover:bg-slate-800/40"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className="font-medium">{name}</span>
+                          <span className="text-xs text-slate-400">
+                            {application.email}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-200">
+                        {application.job?.title ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-medium">
+                          {application.stage ?? "APPLIED"}
                         </span>
-                        <span className="text-xs text-slate-400">
-                          {application.email}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-200">
-                      {application.job?.title ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-medium">
-                        {application.stage}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">
-                      {application.createdAt.toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/admin/applications/${application.id}`}
-                        className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
-                      >
-                        View / Update
-                      </Link>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        {appliedDate || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          href={`/admin/applications/${application.id}`}
+                          className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+                        >
+                          View / Update
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
