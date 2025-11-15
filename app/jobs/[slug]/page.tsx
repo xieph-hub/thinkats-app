@@ -11,15 +11,37 @@ type PageProps = {
 export default async function JobPage({ params }: PageProps) {
   const slugOrId = params.slug;
 
-  // Find the job either by slug OR by id
+  // Break the slug into words: "senior-product-manager-fintech" -> ["senior","product","manager","fintech"]
+  const tokens = slugOrId.split("-").filter(Boolean);
+
+  // Build OR conditions:
+  // 1) Match by slug
+  // 2) Match by id
+  // 3) Fallback: match title containing all slug words (case-insensitive)
+  const orConditions: any[] = [
+    { slug: slugOrId },
+    { id: slugOrId },
+  ];
+
+  if (tokens.length > 0) {
+    orConditions.push({
+      AND: tokens.map((token) => ({
+        title: {
+          contains: token,
+          mode: "insensitive" as const,
+        },
+      })),
+    });
+  }
+
   const job = await prisma.job.findFirst({
     where: {
-      OR: [{ slug: slugOrId }, { id: slugOrId }],
+      OR: orConditions,
     },
   });
 
-  // If not found or unpublished, show a friendly message (NOT Next.js 404)
-  if (!job || job.isPublished === false) {
+  // If still not found, show a friendly message (NOT Next.js 404)
+  if (!job) {
     return (
       <main className="min-h-screen bg-slate-50">
         <div className="mx-auto max-w-4xl px-4 py-16">
@@ -75,7 +97,7 @@ export default async function JobPage({ params }: PageProps) {
           </div>
         </section>
 
-        {/* Apply form — includes CV / Resume URL */}
+        {/* Apply form – with CV upload wired already */}
         <ApplyForm jobTitle={job.title} jobSlug={job.slug ?? slugOrId} />
       </div>
     </main>
