@@ -22,20 +22,22 @@ datasource db {
 
 model Job {
   id          String   @id @default(cuid())
-  slug        String   @unique
   title       String
-  excerpt     String?
+  slug        String   @unique
+  type        String?
   department  String?
   location    String?
-  type        String?    // Full-time, Contract...
-  description String     // HTML
-  postedAt    DateTime   @default(now())
-  isPublished Boolean    @default(false)
+  description String
+  excerpt     String?
+  postedAt    DateTime @default(now())
+  isPublished Boolean  @default(false)
+
+  /// NEW: client-facing fields
+  /// Example: clientName = "Trips Africa", clientSlug = "trips-africa"
+  clientName  String?
+  clientSlug  String?
 
   applications Application[]
-  candidates  Candidate[]   //
-
-  @@index([isPublished, postedAt])
 }
 
 model Candidate {
