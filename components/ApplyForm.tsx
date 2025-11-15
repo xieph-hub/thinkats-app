@@ -1,72 +1,70 @@
 // components/ApplyForm.tsx
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 
 type ApplyFormProps = {
   jobTitle: string;
-  jobSlug: string;
+  jobId: string;
 };
 
-export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
+export default function ApplyForm({ jobTitle, jobId }: ApplyFormProps) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [location, setLocation] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
     setMessage(null);
     setIsError(false);
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-
-    // Make sure these are present regardless of the DOM
-    formData.set("jobSlug", jobSlug);
-    formData.set("jobTitle", jobTitle);
-
     try {
+      const formData = new FormData();
+      formData.append("jobId", jobId);
+      formData.append("name", name);
+      formData.append("email", email);
+      if (phone) formData.append("phone", phone);
+      if (location) formData.append("location", location);
+      formData.append("source", "website");
+      if (resumeFile) {
+        formData.append("resume", resumeFile);
+      }
+
       const res = await fetch("/api/apply", {
         method: "POST",
         body: formData,
       });
 
-      const raw = await res.text();
-      let data: any = null;
+      const data = await res.json().catch(() => null);
 
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        console.error("Non-JSON /api/apply response:", raw);
-      }
-
-      const ok = res.ok && data?.ok;
-
-      if (!ok) {
+      if (!res.ok || !data?.ok) {
         setIsError(true);
         setMessage(
           data?.message ||
-            raw ||
             "We couldn’t submit your application. Please try again or email us directly."
-        );
-        return;
-      }
-
-      if (data?.uploadError) {
-        setIsError(false);
-        setMessage(
-          `Your application has been received, but your CV upload failed: ${data.uploadError}. Please email your CV to hello@resourcin.com with the role title in the subject.`
         );
       } else {
         setIsError(false);
-        setMessage("Thank you — your application has been received.");
-      }
+        setMessage(
+          data.message ||
+            "Thank you — your application has been received."
+        );
 
-      // Reset the form fields
-      form.reset();
-    } catch (err) {
-      console.error("Apply error:", err);
+        // Reset form
+        setName("");
+        setEmail("");
+        setPhone("");
+        setLocation("");
+        setResumeFile(null);
+      }
+    } catch (error) {
+      console.error(error);
       setIsError(true);
       setMessage(
         "Something went wrong while submitting your application. Please try again."
@@ -78,10 +76,10 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
 
   return (
     <section className="mt-10 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900 mb-2">
+      <h2 className="mb-2 text-lg font-semibold text-slate-900">
         Apply for this role
       </h2>
-      <p className="text-xs text-slate-500 mb-4">
+      <p className="mb-4 text-xs text-slate-500">
         Submit your details and we&apos;ll review your application. You can also
         email{" "}
         <a
@@ -96,90 +94,89 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Hidden job identifiers */}
-        <input type="hidden" name="jobSlug" value={jobSlug} />
-        <input type="hidden" name="jobTitle" value={jobTitle} />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {/* Name */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label className="mb-1 block text-xs font-medium text-slate-600">
               Full name *
             </label>
             <input
               required
-              name="name"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#172965] focus:border-[#172965]"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
               placeholder="Jane Doe"
             />
           </div>
 
           {/* Email */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label className="mb-1 block text-xs font-medium text-slate-600">
               Email address *
             </label>
             <input
               required
               type="email"
-              name="email"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#172965] focus:border-[#172965]"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
               placeholder="jane@example.com"
             />
           </div>
 
           {/* Phone */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label className="mb-1 block text-xs font-medium text-slate-600">
               Phone number
             </label>
             <input
-              name="phone"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#172965] focus:border-[#172965]"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
               placeholder="+234..."
             />
           </div>
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">
+            <label className="mb-1 block text-xs font-medium text-slate-600">
               Location
             </label>
             <input
-              name="location"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#172965] focus:border-[#172965]"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
               placeholder="Lagos, Nigeria"
             />
           </div>
         </div>
 
-        {/* CV / Resume file upload */}
+        {/* CV Upload */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">
-            CV / Resume file
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            Upload CV / Resume
           </label>
           <input
-            name="resume"
             type="file"
             accept=".pdf,.doc,.docx,.rtf,.txt"
-            className="block w-full text-xs text-slate-500
-                       file:mr-3 file:rounded-full file:border-0
-                       file:bg-[#172965] file:px-4 file:py-2
-                       file:text-xs file:font-semibold file:text-white
-                       hover:file:bg-[#101c44]"
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              setResumeFile(file);
+            }}
+            className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-4 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-[#101c44]"
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            If upload fails, your application will still go through and you can
-            email your CV separately.
+            If the upload fails, you&apos;ll still be able to submit and email
+            your CV separately.
           </p>
         </div>
 
         {/* Button + message */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2.5 text-xs font-medium text-white hover:bg-[#101c44] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2.5 text-xs font-medium text-white transition-colors hover:bg-[#101c44] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? "Submitting..." : "Submit application"}
           </button>
