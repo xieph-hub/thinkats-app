@@ -61,6 +61,12 @@ export async function POST(req: Request) {
     if (!candidate) {
       candidate = await prisma.candidate.create({
         data: {
+          // 👇 connect this candidate to the job they applied for
+          job: {
+            connect: {
+              id: job.id, // assumes you already fetched `job` earlier in this file
+            },
+          },
           fullname: name,
           email: normalizedEmail,
           phone: phone || null,
