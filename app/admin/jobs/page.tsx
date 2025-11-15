@@ -1,180 +1,243 @@
 // app/admin/jobs/page.tsx
-
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { createJob } from "./actions";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-async function toggleJobPublish(formData: FormData) {
-  "use server";
-
-  const jobId = formData.get("jobId");
-  const current = formData.get("current");
-
-  if (!jobId || typeof jobId !== "string") {
-    return;
-  }
-
-  const isPublished =
-    typeof current === "string" ? current === "true" : Boolean(current);
-
-  await prisma.job.update({
-    where: { id: jobId },
-    data: { isPublished: !isPublished },
-  });
-}
-
 export default async function AdminJobsPage() {
   const jobs = await prisma.job.findMany({
-    orderBy: { postedAt: "desc" },
-    include: {
-      _count: {
-        select: { applications: true },
-      },
+    orderBy: {
+      postedAt: "desc",
     },
   });
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
         {/* Header */}
-        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#172965]">
-              Resourcin · Admin
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-              Jobs
-            </h1>
-            <p className="mt-1 text-sm text-slate-500 max-w-xl">
-              Manage which roles are visible on the public /jobs page and see
-              how many applications each role has.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Link
-              href="/admin/overview"
-              className="inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
-            >
-              ← Back to overview
-            </Link>
+        <header className="space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.15em] text-[#FFB703] font-semibold">
+            Admin · Jobs
+          </p>
+          <h1 className="text-2xl font-semibold">Job mandates</h1>
+          <p className="text-sm text-slate-300 max-w-2xl">
+            Create and manage roles that appear on{" "}
             <Link
               href="/jobs"
-              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#101c44]"
+              className="underline text-slate-100 hover:text-white"
             >
-              View public jobs
+              /jobs
             </Link>
-          </div>
+            . Each role gets its own detail page and apply flow.
+          </p>
         </header>
 
-        {/* Jobs table */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {/* Create job form */}
+        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-6">
+          <h2 className="text-sm font-semibold mb-1">Create new job</h2>
+          <p className="text-xs text-slate-400 mb-4">
+            Only title and description are truly essential. Slug is optional —
+            we&apos;ll generate one if you leave it blank.
+          </p>
+
+          <form action={createJob} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Title */}
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                  Job title *
+                </label>
+                <input
+                  name="title"
+                  required
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703]"
+                  placeholder="Senior Product Manager (Fintech)"
+                />
+              </div>
+
+              {/* Slug */}
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                  Slug (optional)
+                </label>
+                <input
+                  name="slug"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703]"
+                  placeholder="senior-product-manager-fintech"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Defaults to a slugified version of the title.
+                </p>
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                  Department / Team
+                </label>
+                <input
+                  name="department"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703]"
+                  placeholder="Product, Engineering, Commercial…"
+                />
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                  Location
+                </label>
+                <input
+                  name="location"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703]"
+                  placeholder="Lagos, Remote, Hybrid…"
+                />
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                  Role type
+                </label>
+                <input
+                  name="type"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703]"
+                  placeholder="Full-time, Contract, Interim…"
+                />
+              </div>
+            </div>
+
+            {/* Excerpt */}
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                Short summary (excerpt)
+              </label>
+              <textarea
+                name="excerpt"
+                rows={2}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703] resize-none"
+                placeholder="One or two lines you want to show in the list view."
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                Full job description
+              </label>
+              <textarea
+                name="description"
+                rows={8}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs outline-none focus:border-[#FFB703] focus:ring-1 focus:ring-[#FFB703]"
+                placeholder="Paste the full JD here. You can use basic HTML or just plain text."
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                Rich formatting: you can paste HTML from your editor, or just
+                keep it as raw paragraphs and bullet points.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-slate-500">
+                Once created, the role appears on{" "}
+                <span className="text-slate-100">/jobs</span> and gets an apply
+                form automatically.
+              </p>
+              <button
+                type="submit"
+                className="inline-flex items-center rounded-full bg-[#FFB703] px-4 py-2 text-[11px] font-semibold text-slate-950 hover:bg-[#ffca3a] transition"
+              >
+                Save job
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* Existing jobs */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Existing jobs</h2>
+            <span className="text-[11px] text-slate-400">
+              {jobs.length} role{jobs.length === 1 ? "" : "s"}
+            </span>
+          </div>
+
           {jobs.length === 0 ? (
-            <p className="text-xs text-slate-500">
-              No jobs found. Once you add jobs in your database, they&apos;ll
-              appear here.
-            </p>
+            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 px-6 py-8 text-center text-sm text-slate-400">
+              No jobs yet. Create your first mandate above.
+            </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-slate-100">
-              <table className="min-w-full divide-y divide-slate-100 text-xs">
-                <thead className="bg-slate-50">
+            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-900/70">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">
-                      Role
+                    <th className="px-4 py-2 text-left font-medium text-slate-400">
+                      Title
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">
-                      Status
+                    <th className="px-4 py-2 text-left font-medium text-slate-400">
+                      Location
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">
-                      Applications
+                    <th className="px-4 py-2 text-left font-medium text-slate-400">
+                      Type
                     </th>
-                    <th className="px-3 py-2 text-left font-medium text-slate-500">
+                    <th className="px-4 py-2 text-left font-medium text-slate-400">
                       Posted
                     </th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-500">
-                      Actions
+                    <th className="px-4 py-2 text-right font-medium text-slate-400">
+                      Link
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {jobs.map((job) => (
-                    <tr key={job.id}>
-                      {/* Role */}
-                      <td className="px-3 py-2 align-top">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-slate-800">
+                <tbody>
+                  {jobs.map((job) => {
+                    const posted =
+                      job.postedAt instanceof Date
+                        ? job.postedAt.toLocaleDateString("en-NG", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "";
+
+                    return (
+                      <tr
+                        key={job.id}
+                        className="border-t border-slate-800/70 hover:bg-slate-900/70"
+                      >
+                        <td className="px-4 py-2 align-top">
+                          <div className="font-medium text-slate-50">
                             {job.title}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            {job.department} · {job.location} · {job.type}
-                          </span>
-                          <span className="mt-1 text-[11px] text-slate-400 line-clamp-2">
-                            {job.excerpt}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-3 py-2 align-top">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                            job.isPublished
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                              : "bg-slate-50 text-slate-500 border border-slate-200"
-                          }`}
-                        >
-                          {job.isPublished ? "Published" : "Draft"}
-                        </span>
-                      </td>
-
-                      {/* Applications count */}
-                      <td className="px-3 py-2 align-top text-slate-700">
-                        {job._count.applications}
-                      </td>
-
-                      {/* Posted date */}
-                      <td className="px-3 py-2 align-top text-slate-500">
-                        {job.postedAt
-                          ? new Date(job.postedAt).toLocaleDateString("en-GB", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "—"}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3 py-2 align-top text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          {job.isPublished && (
-                            <Link
-                              href={`/jobs/${job.slug}`}
-                              className="text-[11px] font-medium text-[#172965] hover:underline"
-                              target="_blank"
-                            >
-                              View live ↗
-                            </Link>
+                          </div>
+                          {job.department && (
+                            <div className="text-[10px] text-slate-400">
+                              {job.department}
+                            </div>
                           )}
-
-                          <form action={toggleJobPublish}>
-                            <input type="hidden" name="jobId" value={job.id} />
-                            <input
-                              type="hidden"
-                              name="current"
-                              value={job.isPublished ? "true" : "false"}
-                            />
-                            <button
-                              type="submit"
-                              className="mt-1 inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
-                            >
-                              {job.isPublished ? "Set as draft" : "Publish"}
-                            </button>
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          <div className="text-[10px] text-slate-500">
+                            {job.slug}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 align-top text-slate-300">
+                          {job.location || "—"}
+                        </td>
+                        <td className="px-4 py-2 align-top text-slate-300">
+                          {job.type || "—"}
+                        </td>
+                        <td className="px-4 py-2 align-top text-slate-300">
+                          {posted || "—"}
+                        </td>
+                        <td className="px-4 py-2 align-top text-right">
+                          <Link
+                            href={`/jobs/${job.slug}`}
+                            className="text-[11px] text-[#FFB703] hover:text-[#ffca3a] underline"
+                          >
+                            View page →
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
