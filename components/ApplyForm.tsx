@@ -66,18 +66,19 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
             console.error("Resume upload failed", uploadData);
             uploadError =
               uploadData?.message ||
-              "We couldn’t upload your CV. Please email it to hello@resourcin.com.";
+              "Unknown storage error while uploading CV.";
           } else {
             resumeUrl = uploadData.url as string;
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error("Resume upload threw:", err);
           uploadError =
-            "We couldn’t upload your CV due to a technical issue. Please email it to hello@resourcin.com.";
+            err?.message ||
+            "Unexpected error while uploading CV. Please email it instead.";
         }
       }
 
-      // 2) Call existing /api/apply regardless of upload result
+      // 2) Call /api/apply regardless of upload result
       const res = await fetch("/api/apply", {
         method: "POST",
         headers: {
@@ -108,7 +109,7 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
 
         if (uploadError) {
           setMessage(
-            `Your application has been received, but your CV upload failed. Please email your CV to hello@resourcin.com with the role title in the subject.`
+            `Your application has been received, but your CV upload failed:\n${uploadError}\n\nPlease email your CV to hello@resourcin.com with the role title in the subject.`
           );
         } else {
           setMessage("Thank you — your application has been received.");
@@ -241,7 +242,7 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
 
           {message && (
             <p
-              className={`text-xs ${
+              className={`whitespace-pre-line text-xs ${
                 isError ? "text-red-600" : "text-emerald-600"
               }`}
             >
