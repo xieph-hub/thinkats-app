@@ -2,11 +2,10 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
 
 type ApplyFormProps = {
   jobTitle: string;
-  jobSlug?: string;
+  jobSlug: string;
 };
 
 export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
@@ -14,20 +13,11 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [location, setLocation] = useState("");
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
-
-  const pathname = usePathname();
-  const slugFromPath =
-    pathname
-      ?.split("?")[0]
-      .split("/")
-      .filter(Boolean)
-      .pop() || "";
-
-  const effectiveJobSlug = jobSlug || slugFromPath;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,68 +25,57 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
     setMessage(null);
     setIsError(false);
 
+    let uploadedResumeUrl: string | null = null;
+    let uploadErrorMessage: string | null = null;
+
     try {
-      if (!effectiveJobSlug && !jobTitle) {
-        setIsError(true);
-        setMessage(
-          "We couldn’t identify the job you’re applying for. Please refresh the page and try again."
-        );
-        setIsSubmitting(false);
-        return;
-      }
+      // 1) Upload CV to Supabase Storage (if a file was selected)
+      if (cvFile) {
+        const fd = new FormData();
+        fd.append("file", cvFile);
+        fd.append("jobSlug", jobSlug);
 
-      let resumeUrl: string | null = null;
-      let uploadError: string | null = null;
+        const uploadRes = await fetch("/api/upload-resume", {
+          method: "POST",
+          body: fd,
+        });
 
-      // 1) Try to upload CV file if present — but DO NOT block application if this fails
-      if (resumeFile) {
+        let uploadData: any = null;
         try {
-          const uploadForm = new FormData();
-          uploadForm.append("file", resumeFile);
-          uploadForm.append("jobSlug", effectiveJobSlug || "general");
+          uploadData = await uploadRes.json();
+        } catch {
+          // ignore JSON parse errors – will handle as generic
+        }
 
-          const uploadRes = await fetch("/api/upload-resume", {
-            method: "POST",
-            body: uploadForm,
-          });
-
-          const uploadData = await uploadRes.json().catch(() => null);
-
-          if (!uploadRes.ok || !uploadData?.ok) {
-            console.error("Resume upload failed", uploadData);
-            uploadError =
-              uploadData?.message ||
-              "Unknown storage error while uploading CV.";
-          } else {
-            resumeUrl = uploadData.url as string;
-          }
-        } catch (err: any) {
-          console.error("Resume upload threw:", err);
-          uploadError =
-            err?.message ||
-            "Unexpected error while uploading CV. Please email it instead.";
+        if (uploadRes.ok && uploadData?.ok && uploadData?.url) {
+          uploadedResumeUrl = uploadData.url as string;
+        } else {
+          uploadErrorMessage =
+            uploadData?.message ||
+            "Supabase storage could not upload the CV file.";
+          console.warn("CV upload failed:", uploadErrorMessage);
         }
       }
 
-      // 2) Call /api/apply regardless of upload result
+      // 2) Create application in Prisma
       const res = await fetch("/api/apply", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          jobSlug: effectiveJobSlug || null,
-          jobTitle: jobTitle || null,
+          jobSlug,
+          jobTitle,
           name,
           email,
           phone,
           location,
-          resumeUrl,
+          resumeUrl: uploadedResumeUrl, // may be null
           source: "website",
         }),
       });
 
-      const data = await res.json().catch(() => null);
+      const data = await res.json();
 
       if (!res.ok || !data?.ok) {
         setIsError(true);
@@ -104,24 +83,26 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
           data?.message ||
             "We couldn’t submit your application. Please try again or email us directly."
         );
-      } else {
-        setIsError(false);
-
-        if (uploadError) {
-          setMessage(
-            `Your application has been received, but your CV upload failed:\n${uploadError}\n\nPlease email your CV to hello@resourcin.com with the role title in the subject.`
-          );
-        } else {
-          setMessage("Thank you — your application has been received.");
-        }
-
-        // Clear the form
-        setName("");
-        setEmail("");
-        setPhone("");
-        setLocation("");
-        setResumeFile(null);
+        return;
       }
+
+      // 3) Application succeeded
+      setIsError(false);
+
+      if (uploadErrorMessage) {
+        setMessage(
+          `Your application has been received, but your CV upload failed: ${uploadErrorMessage}. Please email your CV to hello@resourcin.com with the role title in the subject.`
+        );
+      } else {
+        setMessage("Thank you — your application has been received.");
+      }
+
+      // Reset form
+      setName("");
+      setEmail("");
+      setPhone("");
+      setLocation("");
+      setCvFile(null);
     } catch (error) {
       console.error(error);
       setIsError(true);
@@ -143,7 +124,7 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
         email{" "}
         <a
           href={`mailto:hello@resourcin.com?subject=${encodeURIComponent(
-            `Application: ${jobTitle || "Role"}`
+            `Application: ${jobTitle}`
           )}`}
           className="text-[#172965] underline"
         >
@@ -210,23 +191,22 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
           </div>
         </div>
 
-        {/* Resume file upload */}
+        {/* CV / Resume file */}
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">
             CV / Resume file
           </label>
           <input
             type="file"
-            accept=".pdf,.doc,.docx,.rtf,.txt,.odt"
-            onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-xs text-slate-600
-                       file:mr-3 file:rounded-full file:border-0
-                       file:bg-[#172965] file:px-4 file:py-2
-                       file:text-xs file:font-medium file:text-white
-                       hover:file:bg-[#101c44]"
+            accept=".pdf,.doc,.docx"
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              setCvFile(file);
+            }}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#172965] focus:border-[#172965]"
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            Upload your CV in PDF or Word format. Max size ~10MB is recommended.
+            Upload a PDF or Word document. Max 50MB.
           </p>
         </div>
 
@@ -242,7 +222,7 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
 
           {message && (
             <p
-              className={`whitespace-pre-line text-xs ${
+              className={`text-xs ${
                 isError ? "text-red-600" : "text-emerald-600"
               }`}
             >
