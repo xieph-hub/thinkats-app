@@ -1,172 +1,175 @@
 // app/admin/applications/page.tsx
-
-import { prisma } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
+type SearchParams = {
+  jobId?: string;
+  stage?: string;
+};
 
-async function getApplicationsSafe() {
-  try {
-    const applications = await prisma.application.findMany({
+export default async function ApplicationsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { jobId, stage } = searchParams;
+
+  const where: any = {};
+  if (jobId) where.jobId = jobId;
+  if (stage) where.stage = stage;
+
+  const [jobs, applications] = await Promise.all([
+    prisma.job.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { id: true, title: true },
+    }),
+    prisma.application.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       include: {
-        job: true,
-        candidate: true,
+        job: { select: { title: true } },
       },
-      take: 200,
-    });
+    }),
+  ]);
 
-    return { applications, error: null as string | null };
-  } catch (err) {
-    console.error("Admin applications error:", err);
-    return { applications: [], error: "Could not load applications from the database." };
-  }
-}
-
-export default async function AdminApplicationsPage() {
-  const { applications, error } = await getApplicationsSafe();
+  const stages = [
+    "APPLIED",
+    "SCREENING",
+    "HM_INTERVIEW",
+    "PANEL",
+    "OFFER",
+    "HIRED",
+    "REJECTED",
+  ];
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8 gap-4">
+    <div className="min-h-screen bg-slate-950 text-slate-50 p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Applications
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Latest candidates across all roles in your ATS.
+            <h1 className="text-2xl font-semibold">Applications</h1>
+            <p className="text-sm text-slate-400">
+              Internal view of all candidates across roles.
             </p>
           </div>
-
-          <Link
-            href="/admin/jobs"
-            className="text-xs sm:text-sm text-amber-400 hover:text-amber-300 underline underline-offset-4"
-          >
-            ← Back to jobs
-          </Link>
         </header>
 
-        {/* Error state */}
-        {error && (
-          <div className="mb-6 rounded-2xl border border-red-500/40 bg-red-950/20 px-4 py-3 text-sm text-red-200">
-            <div className="font-medium mb-1">We couldn&apos;t load applications.</div>
-            <div className="text-xs text-red-200/80">
-              {error} If you just changed database settings, give it a moment and refresh.
-            </div>
-          </div>
-        )}
+        {/* Filters */}
+        <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <form className="flex flex-wrap gap-3 items-center">
+            <select
+              name="jobId"
+              defaultValue={jobId ?? ""}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            >
+              <option value="">All jobs</option>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.title}
+                </option>
+              ))}
+            </select>
 
-        {/* Empty state */}
-        {!error && applications.length === 0 && (
-          <div className="border border-dashed border-slate-700 rounded-2xl px-6 py-10 text-center">
-            <p className="text-sm text-slate-300 font-medium mb-1">
-              No applications yet.
-            </p>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Once you share a job link and candidates apply from the website,
-              they will appear here with their contact details and role applied for.
-            </p>
-          </div>
-        )}
+            <select
+              name="stage"
+              defaultValue={stage ?? ""}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            >
+              <option value="">All stages</option>
+              {stages.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="submit"
+              className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+            >
+              Filter
+            </button>
+          </form>
+        </section>
 
         {/* Table */}
-        {!error && applications.length > 0 && (
-          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-lg shadow-black/30">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-900/80 border-b border-slate-800">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium text-slate-400 text-xs uppercase tracking-wide">
-                      Candidate
-                    </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-400 text-xs uppercase tracking-wide">
-                      Role
-                    </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-400 text-xs uppercase tracking-wide">
-                      Stage
-                    </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-400 text-xs uppercase tracking-wide">
-                      Source
-                    </th>
-                    <th className="px-4 py-3 text-left font-medium text-slate-400 text-xs uppercase tracking-wide">
-                      Applied
-                    </th>
-                    <th className="px-4 py-3 text-right font-medium text-slate-400 text-xs uppercase tracking-wide">
-                      View
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {applications.map((app) => (
-                    <tr
-                      key={app.id}
-                      className="border-t border-slate-800/80 hover:bg-slate-900/60 transition-colors"
-                    >
-                      {/* Candidate */}
-                      <td className="px-4 py-3 align-top">
-                        <div className="font-medium">
-                          {app.candidate?.name || "—"}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {app.candidate?.email || "No email"}
-                        </div>
-                        {app.candidate?.phone && (
-                          <div className="text-xs text-slate-500">
-                            {app.candidate.phone}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Role */}
-                      <td className="px-4 py-3 align-top">
-                        <div className="font-medium">
-                          {app.job?.title || "—"}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {app.job?.location || "Location N/A"}
-                        </div>
-                      </td>
-
-                      {/* Stage */}
-                      <td className="px-4 py-3 align-top">
-                        <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-200">
-                          {app.stage}
+        <section className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900/80 border-b border-slate-800">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-slate-400">
+                  Candidate
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-slate-400">
+                  Job
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-slate-400">
+                  Stage
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-slate-400">
+                  Applied
+                </th>
+                <th className="px-4 py-3 text-right font-medium text-slate-400">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {applications.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
+                    No applications yet for this filter.
+                  </td>
+                </tr>
+              ) : (
+                applications.map((application) => (
+                  <tr
+                    key={application.id}
+                    className="border-b border-slate-800/70 hover:bg-slate-800/40"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col">
+                        <span className="font-medium">
+                          {application.fullName}
                         </span>
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-4 py-3 align-top text-xs text-slate-400">
-                        {app.source || "Website"}
-                      </td>
-
-                      {/* Applied date */}
-                      <td className="px-4 py-3 align-top text-xs text-slate-400">
-                        {app.createdAt
-                          ? new Date(app.createdAt as unknown as string)
-                              .toISOString()
-                              .slice(0, 10)
-                          : "—"}
-                      </td>
-
-                      {/* View link */}
-                      <td className="px-4 py-3 align-top text-right">
-                        <Link
-                          href={`/admin/applications/${app.id}`}
-                          className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-4"
-                        >
-                          Open →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                        <span className="text-xs text-slate-400">
+                          {application.email}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-200">
+                      {application.job?.title ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-medium">
+                        {application.stage}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      {application.createdAt.toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/admin/applications/${application.id}`}
+                        className="text-xs font-medium text-emerald-400 hover:text-emerald-300"
+                      >
+                        View / Update
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </section>
       </div>
-    </main>
+    </div>
   );
 }
