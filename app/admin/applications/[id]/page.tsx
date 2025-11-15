@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { updateApplicationStage, addApplicationNote } from "../actions";
+import { updateApplicationStage } from "../actions";
 
 const STAGES = [
   "APPLIED",
@@ -19,14 +19,11 @@ export default async function ApplicationDetailPage({
 }: {
   params: { id: string };
 }) {
-  // Cast to `any` so TypeScript doesn't complain about field names (fullName vs fullname vs name)
+  // Cast result to any so we don't fight TypeScript over exact field names
   const application = (await prisma.application.findUnique({
     where: { id: params.id },
     include: {
       job: true,
-      notes: {
-        orderBy: { createdAt: "desc" },
-      },
     },
   })) as any;
 
@@ -150,75 +147,6 @@ export default async function ApplicationDetailPage({
                 </p>
               )}
             </div>
-          </div>
-        </section>
-
-        {/* Notes */}
-        <section className="grid gap-6 md:grid-cols-[2fr,1.5fr]">
-          {/* Notes list */}
-          <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-              Notes
-            </h2>
-
-            {!application.notes || application.notes.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No notes yet. Add your first note on the right.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {application.notes.map((note: any) => (
-                  <li
-                    key={note.id}
-                    className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"
-                  >
-                    <p className="text-sm text-slate-100">{note.body}</p>
-                    <div className="mt-2 flex justify-between text-[11px] text-slate-500">
-                      <span>{note.author ?? "System"}</span>
-                      <span>
-                        {note.createdAt?.toLocaleString?.("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Add note form */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-            <h3 className="text-sm font-semibold text-slate-200">Add a note</h3>
-            <form action={addApplicationNote} className="mt-3 space-y-3">
-              <input
-                type="hidden"
-                name="applicationId"
-                value={application.id}
-              />
-              <input
-                type="text"
-                name="author"
-                placeholder="Your name (optional)"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              />
-              <textarea
-                name="body"
-                rows={3}
-                placeholder="E.g., 'Strong technical depth, needs more structured thinking.'"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
-              >
-                Save note
-              </button>
-            </form>
           </div>
         </section>
       </div>
