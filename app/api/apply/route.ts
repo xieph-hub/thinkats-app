@@ -24,7 +24,18 @@ export async function POST(req: Request) {
     const name = rawName?.trim() || "";
     const email = rawEmail?.trim().toLowerCase() || "";
 
-    // ✅ Now we allow jobSlug OR jobTitle, but still require name + email
+    console.log("Apply API payload", {
+      jobSlug,
+      jobTitleFromClient,
+      name,
+      email,
+      phone,
+      location,
+      resumeUrl,
+      source,
+    });
+
+    // Require name + email + some job identifier (slug or title)
     if (!name || !email || (!jobSlug && !jobTitleFromClient)) {
       return NextResponse.json(
         {
@@ -35,7 +46,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔎 Find job by slug first, fall back to title if slug is missing
+    // Find job by slug first, fall back to title if slug is missing
     let job = null;
 
     if (jobSlug) {
@@ -60,7 +71,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔁 Find or create candidate by email
+    // Find or create candidate based on email
     let candidate = await prisma.candidate.findFirst({
       where: { email },
     });
@@ -74,9 +85,7 @@ export async function POST(req: Request) {
           location,
           resumeUrl,
           source,
-          ...(job && {
-            job: { connect: { id: job.id } },
-          }),
+          job: { connect: { id: job.id } },
         },
       });
     } else {
@@ -88,14 +97,11 @@ export async function POST(req: Request) {
           location: location || candidate.location,
           resumeUrl: resumeUrl || candidate.resumeUrl,
           source: source || candidate.source,
-          ...(job && {
-            job: { connect: { id: job.id } },
-          }),
+          job: { connect: { id: job.id } },
         },
       });
     }
 
-    // 🧾 Create the application record
     const application = await prisma.application.create({
       data: {
         job: { connect: { id: job.id } },
@@ -109,7 +115,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // 📧 Fire off emails (candidate + admin) — errors here won't break the response
+    // Send emails (candidate + admin); failures here won't break the response
     try {
       await Promise.all([
         sendCandidateApplicationReceivedEmail({
