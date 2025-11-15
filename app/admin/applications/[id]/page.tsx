@@ -1,4 +1,5 @@
 // app/admin/applications/[id]/page.tsx
+
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { updateApplicationStage, addApplicationNote } from "../actions";
@@ -18,7 +19,8 @@ export default async function ApplicationDetailPage({
 }: {
   params: { id: string };
 }) {
-  const application = await prisma.application.findUnique({
+  // Cast to `any` so TypeScript doesn't complain about field names (fullName vs fullname vs name)
+  const application = (await prisma.application.findUnique({
     where: { id: params.id },
     include: {
       job: true,
@@ -26,42 +28,47 @@ export default async function ApplicationDetailPage({
         orderBy: { createdAt: "desc" },
       },
     },
-  });
+  })) as any;
 
-if (!application) return notFound();
+  if (!application) return notFound();
 
-const app: any = application; // 👈 ADD THIS LINE
+  const job = application.job;
 
-return (
+  return (
     <div className="min-h-screen bg-slate-950 text-slate-50 p-6">
       <div className="max-w-4xl mx-auto space-y-8">
+        {/* Header: candidate basic info */}
         <header className="flex flex-col gap-2">
-  <h1 className="text-2xl font-semibold">
-    {app.fullName ?? app.fullname ?? app.name ?? "Candidate"}
-  </h1>
-  <p className="text-sm text-slate-400">
-    {app.email}
-    {app.phone ? ` · ${app.phone}` : ""}
-  </p>
-  <p className="text-sm text-slate-400">
-    Applied for{" "}
-    <span className="font-medium text-slate-100">
-      {app.job?.title}
-    </span>
-  </p>
-</header>
+          <h1 className="text-2xl font-semibold">
+            {application.fullName ??
+              application.fullname ??
+              application.name ??
+              "Candidate"}
+          </h1>
+          <p className="text-sm text-slate-400">
+            {application.email}
+            {application.phone ? ` · ${application.phone}` : ""}
+          </p>
+          <p className="text-sm text-slate-400">
+            Applied for{" "}
+            <span className="font-medium text-slate-100">
+              {job?.title ?? "—"}
+            </span>
+          </p>
+        </header>
 
         {/* Stage & meta */}
         <section className="grid gap-6 md:grid-cols-[2fr,1.5fr]">
+          {/* Stage card */}
           <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
               Stage
             </h2>
             <form action={updateApplicationStage} className="space-y-3">
-              <input type="hidden" name="id" value={app.id} />
+              <input type="hidden" name="id" value={application.id} />
               <select
                 name="stage"
-                defaultValue={app.stage}
+                defaultValue={application.stage}
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
               >
                 {STAGES.map((stage) => (
@@ -81,7 +88,7 @@ return (
             <div className="pt-4 border-t border-slate-800 mt-4">
               <p className="text-xs text-slate-500">
                 Created:{" "}
-                {app.createdAt.toLocaleString("en-GB", {
+                {application.createdAt?.toLocaleString?.("en-GB", {
                   day: "2-digit",
                   month: "short",
                   year: "numeric",
@@ -91,7 +98,7 @@ return (
               </p>
               <p className="text-xs text-slate-500">
                 Last updated:{" "}
-                {app.updatedAt.toLocaleString("en-GB", {
+                {application.updatedAt?.toLocaleString?.("en-GB", {
                   day: "2-digit",
                   month: "short",
                   year: "numeric",
@@ -110,30 +117,30 @@ return (
             <div className="space-y-1">
               <p className="text-slate-300">
                 <span className="text-slate-500">Job:</span>{" "}
-                {app.job?.title ?? "—"}
+                {job?.title ?? "—"}
               </p>
-              {app.job?.department && (
+              {job?.department && (
                 <p className="text-slate-300">
                   <span className="text-slate-500">Department:</span>{" "}
-                  {app.job.department}
+                  {job.department}
                 </p>
               )}
-              {appjob?.location && (
+              {job?.location && (
                 <p className="text-slate-300">
                   <span className="text-slate-500">Location:</span>{" "}
-                  {appjob.location}
+                  {job.location}
                 </p>
               )}
-              {app.source && (
+              {application.source && (
                 <p className="text-slate-300">
                   <span className="text-slate-500">Source:</span>{" "}
-                  {app.source}
+                  {application.source}
                 </p>
               )}
-              {app.resumeUrl && (
+              {application.resumeUrl && (
                 <p className="text-slate-300">
                   <a
-                    href={app.resumeUrl}
+                    href={application.resumeUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="text-emerald-400 hover:text-emerald-300 text-xs"
@@ -148,18 +155,19 @@ return (
 
         {/* Notes */}
         <section className="grid gap-6 md:grid-cols-[2fr,1.5fr]">
+          {/* Notes list */}
           <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
               Notes
             </h2>
 
-            {app.note.length === 0 ? (
+            {!application.notes || application.notes.length === 0 ? (
               <p className="text-sm text-slate-500">
-                No notes yet. Add your first note below.
+                No notes yet. Add your first note on the right.
               </p>
             ) : (
               <ul className="space-y-3">
-                {app.notes.map((note) => (
+                {application.notes.map((note: any) => (
                   <li
                     key={note.id}
                     className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"
@@ -168,7 +176,7 @@ return (
                     <div className="mt-2 flex justify-between text-[11px] text-slate-500">
                       <span>{note.author ?? "System"}</span>
                       <span>
-                        {note.createdAt.toLocaleString("en-GB", {
+                        {note.createdAt?.toLocaleString?.("en-GB", {
                           day: "2-digit",
                           month: "short",
                           year: "numeric",
@@ -183,15 +191,14 @@ return (
             )}
           </div>
 
+          {/* Add note form */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-            <h3 className="text-sm font-semibold text-slate-200">
-              Add a note
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-200">Add a note</h3>
             <form action={addApplicationNote} className="mt-3 space-y-3">
               <input
                 type="hidden"
                 name="applicationId"
-                value={app.id}
+                value={application.id}
               />
               <input
                 type="text"
