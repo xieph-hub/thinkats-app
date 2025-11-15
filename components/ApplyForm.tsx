@@ -14,6 +14,8 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
   const [phone, setPhone] = useState("");
   const [location, setLocation] = useState("");
   const [resumeUrl, setResumeUrl] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -25,40 +27,52 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
     setIsError(false);
 
     try {
+      const formData = new FormData();
+
+      // Job info
+      formData.append("jobSlug", jobSlug);
+      formData.append("jobTitle", jobTitle);
+
+      // Candidate info
+      formData.append("name", name);
+      formData.append("email", email);
+      if (phone) formData.append("phone", phone);
+      if (location) formData.append("location", location);
+
+      // Source
+      formData.append("source", "website");
+
+      // Resume: file takes priority; fallback to URL
+      if (resumeFile) {
+        formData.append("resume", resumeFile);
+      } else if (resumeUrl) {
+        formData.append("resumeUrl", resumeUrl);
+      }
+
       const res = await fetch("/api/apply", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobSlug,
-          jobTitle,
-          name,
-          email,
-          phone,
-          location,
-          resumeUrl,
-          source: "website",
-        }),
+        body: formData, // browser sets multipart/form-data with boundary
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || !data.ok) {
+      if (!res.ok || !data.success) {
         setIsError(true);
         setMessage(
-          data?.message ||
+          data?.error ||
             "We couldn’t submit your application. Please try again or email us directly."
         );
       } else {
         setIsError(false);
         setMessage("Thank you — your application has been received.");
+
         // Reset form
         setName("");
         setEmail("");
         setPhone("");
         setLocation("");
         setResumeUrl("");
+        setResumeFile(null);
       }
     } catch (error) {
       console.error(error);
@@ -148,10 +162,29 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
           </div>
         </div>
 
-        {/* Resume URL */}
+        {/* Resume File */}
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">
-            CV / Resume URL
+            CV / Resume file
+          </label>
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              setResumeFile(file);
+            }}
+            className="w-full text-sm text-slate-700"
+          />
+          <p className="mt-1 text-[11px] text-slate-500">
+            You can upload a file here, or paste a link below instead.
+          </p>
+        </div>
+
+        {/* Resume URL (optional) */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 mb-1">
+            CV / Resume URL (optional)
           </label>
           <input
             value={resumeUrl}
@@ -160,8 +193,8 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
             placeholder="Link to your CV (Google Drive, Dropbox, etc.)"
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            Please make sure the link is accessible (public or &quot;anyone with
-            the link&quot; can view).
+            If you don&apos;t upload a file, we&apos;ll use this link instead.
+            Please make sure it&apos;s accessible.
           </p>
         </div>
 
