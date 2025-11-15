@@ -11,15 +11,15 @@ type PageProps = {
 export default async function JobPage({ params }: PageProps) {
   const slugOrId = params.slug;
 
-  // Try to find the job either by slug or by id
+  // Find the job either by slug OR by id
   const job = await prisma.job.findFirst({
     where: {
       OR: [{ slug: slugOrId }, { id: slugOrId }],
     },
   });
 
-  // If not found, show a friendly message (NOT a Next 404 page)
-  if (!job) {
+  // If not found or unpublished, show a friendly message (NOT Next.js 404)
+  if (!job || job.isPublished === false) {
     return (
       <main className="min-h-screen bg-slate-50">
         <div className="mx-auto max-w-4xl px-4 py-16">
@@ -47,11 +47,6 @@ export default async function JobPage({ params }: PageProps) {
           </h1>
 
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
-            {job.company && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-                {job.company}
-              </span>
-            )}
             {job.department && (
               <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
                 {job.department}
@@ -80,7 +75,7 @@ export default async function JobPage({ params }: PageProps) {
           </div>
         </section>
 
-        {/* Apply form – same styling as rest of site */}
+        {/* Apply form — includes CV / Resume URL */}
         <ApplyForm jobTitle={job.title} jobSlug={job.slug ?? slugOrId} />
       </div>
     </main>
