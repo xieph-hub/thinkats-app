@@ -4,6 +4,7 @@ import Link from "next/link";
 import ApplicationStageSelect from "@/components/ApplicationStageSelect";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export default async function ApplicationsPage() {
   const applications = await prisma.application.findMany({
