@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 // Simple slug generator from title
 function slugify(input: string): string {
@@ -53,6 +54,8 @@ export async function createJob(formData: FormData) {
 
   revalidatePath("/jobs");
   revalidatePath("/admin/jobs");
+
+  redirect("/admin/jobs?created=1");
 }
 
 export async function updateJob(formData: FormData) {
@@ -105,15 +108,15 @@ export async function updateJob(formData: FormData) {
     },
   });
 
-  // Refresh listings + detail page
   revalidatePath("/jobs");
   revalidatePath("/admin/jobs");
   revalidatePath(`/jobs/${job.slug}`);
 
-  // If slug changed, also invalidate the old URL
   if (existingJob.slug !== job.slug) {
     revalidatePath(`/jobs/${existingJob.slug}`);
   }
+
+  redirect(`/admin/jobs/${id}?saved=1`);
 }
 
 export async function toggleJobPublish(formData: FormData) {
@@ -137,4 +140,6 @@ export async function toggleJobPublish(formData: FormData) {
   revalidatePath("/jobs");
   revalidatePath("/admin/jobs");
   revalidatePath(`/jobs/${job.slug}`);
+
+  redirect("/admin/jobs?status=updated");
 }
