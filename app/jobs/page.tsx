@@ -3,280 +3,338 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 type JobsPageProps = {
   searchParams?: {
-    q?: string;
-    location?: string;
-    department?: string;
-    type?: string;
+    q?: string | string[];
+    department?: string | string[];
+    location?: string | string[];
+    type?: string | string[];
   };
 };
 
+function normalizeParam(value: string | string[] | undefined): string {
+  if (!value) return "";
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export default async function JobsPage({ searchParams }: JobsPageProps) {
-  const q = (searchParams?.q ?? "").toString();
-  const location = (searchParams?.location ?? "").toString();
-  const department = (searchParams?.department ?? "").toString();
-  const type = (searchParams?.type ?? "").toString();
+  const q = normalizeParam(searchParams?.q).trim();
+  const departmentFilter = normalizeParam(searchParams?.department);
+  const locationFilter = normalizeParam(searchParams?.location);
+  const typeFilter = normalizeParam(searchParams?.type);
 
-  // ------- Build Prisma "where" filter ------- //
-  const where: any = {
-    isPublished: true,
-  };
+  // 1) Get all published jobs
+  const jobs = await prisma.job.findMany({
+    where: {
+      isPublished: true,
+    },
+    orderBy: {
+      postedAt: "desc",
+    },
+  });
 
-  if (q) {
-    where.OR = [
-      { title: { contains: q, mode: "insensitive" } },
-      { excerpt: { contains: q, mode: "insensitive" } },
-      { description: { contains: q, mode: "insensitive" } },
-    ];
-  }
-
-  if (location) {
-    where.location = { contains: location, mode: "insensitive" };
-  }
-
-  if (department) {
-    where.department = { contains: department, mode: "insensitive" };
-  }
-
-  if (type) {
-    where.type = type;
-  }
-
-  // ------- Fetch jobs + distinct filter options ------- //
-  const [jobs, locationsRaw, departmentsRaw, typesRaw] = await Promise.all([
-    prisma.job.findMany({
-      where,
-      orderBy: { postedAt: "desc" },
-    }),
-    prisma.job.findMany({
-      where: { isPublished: true },
-      select: { location: true },
-      distinct: ["location"],
-      orderBy: { location: "asc" },
-    }),
-    prisma.job.findMany({
-      where: { isPublished: true },
-      select: { department: true },
-      distinct: ["department"],
-      orderBy: { department: "asc" },
-    }),
-    prisma.job.findMany({
-      where: { isPublished: true },
-      select: { type: true },
-      distinct: ["type"],
-      orderBy: { type: "asc" },
-    }),
-  ]);
-
-  const locations = Array.from(
-    new Set(
-      locationsRaw
-        .map((j) => j.location)
-        .filter((v): v is string => Boolean(v && v.trim()))
-    )
-  );
-
+  // 2) Build filter options from existing jobs
   const departments = Array.from(
-    new Set(
-      departmentsRaw
-        .map((j) => j.department)
-        .filter((v): v is string => Boolean(v && v.trim()))
-    )
-  );
-
+    new Set(jobs.map((job) => job.department).filter(Boolean))
+  ).sort();
+  const locations = Array.from(
+    new Set(jobs.map((job) => job.location).filter(Boolean))
+  ).sort();
   const types = Array.from(
-    new Set(
-      typesRaw
-        .map((j) => j.type)
-        .filter((v): v is string => Boolean(v && v.trim()))
-    )
-  );
+    new Set(jobs.map((job) => job.type).filter(Boolean))
+  ).sort();
 
-  const hasFilters = Boolean(q || location || department || type);
+  // 3) Apply filters + search in memory
+  const filteredJobs = jobs.filter((job) => {
+    // Department filter
+    if (departmentFilter && job.department !== departmentFilter) {
+      return false;
+    }
+
+    // Location filter
+    if (locationFilter && job.location !== locationFilter) {
+      return false;
+    }
+
+    // Type filter
+    if (typeFilter && job.type !== typeFilter) {
+      return false;
+    }
+
+    // Search filter
+    if (q) {
+      const haystack = (
+        `${job.title} ${job.excerpt} ${job.department} ${job.location} ${job.type}`
+      ).toLowerCase();
+      if (!haystack.includes(q.toLowerCase())) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const totalJobs = jobs.length;
+  const totalVisible = filteredJobs.length;
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-5xl px-4 py-10">
+      <div className="mx-auto max-w-5xl px-4 py-10 space-y-8">
         {/* Header */}
-        <header className="mb-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#172965]">
+        <header className="space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#172965]">
             Resourcin · Opportunities
           </p>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+          <h1 className="text-3xl font-semibold text-slate-900">
             Open roles
           </h1>
-          <p className="mt-2 text-sm text-slate-500 max-w-2xl">
-            Browse roles across our clients and internal mandates. Use the
-            filters to narrow down by location, department, and role type.
+          <p className="max-w-2xl text-sm text-slate-600">
+            Explore current mandates we&apos;re running for our clients and
+            internal teams. Each role comes with clear expectations, reporting
+            lines, and impact.
           </p>
         </header>
 
-        {/* Filters */}
-        <section className="mb-8 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <form className="grid gap-4 md:grid-cols-4" method="GET">
-            {/* Search */}
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                Search
-              </label>
+        {/* Filters + search */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-700">
+                {totalVisible} role{totalVisible === 1 ? "" : "s"} showing
+                {totalJobs !== totalVisible
+                  ? ` · filtered from ${totalJobs} total`
+                  : ""}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Use search and filters to narrow down by department, location or
+                work type.
+              </p>
+            </div>
+
+            {/* Search form (GET) */}
+            <form className="w-full md:w-64" action="/jobs" method="get">
               <input
+                type="text"
                 name="q"
                 defaultValue={q}
-                placeholder="Search by job title, keywords, or description"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
+                placeholder="Search by role, location..."
+                className="w-full rounded-full border border-slate-300 px-3 py-2 text-xs outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
               />
-            </div>
+              {/* Preserve other filters when searching */}
+              {departmentFilter && (
+                <input
+                  type="hidden"
+                  name="department"
+                  value={departmentFilter}
+                />
+              )}
+              {locationFilter && (
+                <input type="hidden" name="location" value={locationFilter} />
+              )}
+              {typeFilter && (
+                <input type="hidden" name="type" value={typeFilter} />
+              )}
+            </form>
+          </div>
 
-            {/* Location */}
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                Location
-              </label>
-              <select
-                name="location"
-                defaultValue={location}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
-              >
-                <option value="">All locations</option>
-                {locations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Department */}
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                Department
-              </label>
-              <select
-                name="department"
-                defaultValue={department}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
-              >
-                <option value="">All departments</option>
+          {/* Filter pills */}
+          <div className="flex flex-wrap gap-3 text-[11px]">
+            {/* Department filter */}
+            {departments.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-slate-500">Department:</span>
+                <FilterPill
+                  label="All"
+                  isActive={!departmentFilter}
+                  href={{
+                    q,
+                    location: locationFilter,
+                    type: typeFilter,
+                    department: "",
+                  }}
+                />
                 {departments.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
+                  <FilterPill
+                    key={dept}
+                    label={dept}
+                    isActive={departmentFilter === dept}
+                    href={{
+                      q,
+                      location: locationFilter,
+                      type: typeFilter,
+                      department: dept,
+                    }}
+                  />
                 ))}
-              </select>
-            </div>
+              </div>
+            )}
 
-            {/* Type */}
-            <div className="md:col-span-1">
-              <label className="mb-1 block text-xs font-medium text-slate-600">
-                Role type
-              </label>
-              <select
-                name="type"
-                defaultValue={type}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-2 focus:ring-[#172965]"
-              >
-                <option value="">All types</option>
+            {/* Location filter */}
+            {locations.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-slate-500">Location:</span>
+                <FilterPill
+                  label="All"
+                  isActive={!locationFilter}
+                  href={{
+                    q,
+                    department: departmentFilter,
+                    type: typeFilter,
+                    location: "",
+                  }}
+                />
+                {locations.map((loc) => (
+                  <FilterPill
+                    key={loc}
+                    label={loc}
+                    isActive={locationFilter === loc}
+                    href={{
+                      q,
+                      department: departmentFilter,
+                      type: typeFilter,
+                      location: loc,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Type filter */}
+            {types.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-slate-500">Type:</span>
+                <FilterPill
+                  label="All"
+                  isActive={!typeFilter}
+                  href={{
+                    q,
+                    department: departmentFilter,
+                    location: locationFilter,
+                    type: "",
+                  }}
+                />
                 {types.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
+                  <FilterPill
+                    key={t}
+                    label={t}
+                    isActive={typeFilter === t}
+                    href={{
+                      q,
+                      department: departmentFilter,
+                      location: locationFilter,
+                      type: t,
+                    }}
+                  />
                 ))}
-              </select>
-            </div>
-
-            {/* Filter button row */}
-            <div className="md:col-span-4 flex items-center justify-between pt-1">
-              <div className="text-xs text-slate-500">
-                {hasFilters ? (
-                  <span>
-                    Showing <span className="font-semibold">{jobs.length}</span>{" "}
-                    role{jobs.length === 1 ? "" : "s"} with applied filters.
-                  </span>
-                ) : (
-                  <span>
-                    Showing{" "}
-                    <span className="font-semibold">{jobs.length}</span> open
-                    role{jobs.length === 1 ? "" : "s"}.
-                  </span>
-                )}
               </div>
-              <div className="flex items-center gap-2">
-                {hasFilters && (
-                  <Link
-                    href="/jobs"
-                    className="text-xs text-slate-500 hover:text-slate-700"
-                  >
-                    Clear filters
-                  </Link>
-                )}
-                <button
-                  type="submit"
-                  className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#101c44]"
-                >
-                  Apply filters
-                </button>
-              </div>
-            </div>
-          </form>
+            )}
+          </div>
         </section>
 
         {/* Jobs list */}
-        {jobs.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
-            No roles match your filters yet. Try removing a filter or check back
-            later.
-          </div>
-        ) : (
-          <section className="space-y-4">
-            {jobs.map((job) => (
-              <Link
-                key={job.id}
-                href={`/jobs/${job.slug}`}
-                className="block rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#172965] hover:shadow-md"
-              >
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-900">
-                      {job.title}
-                    </h2>
-                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
-                      <span className="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-0.5">
-                        {job.location}
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-0.5">
-                        {job.department}
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-slate-200 px-2.5 py-0.5">
-                        {job.type}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right text-[11px] text-slate-400 mt-1 md:mt-0">
-                    <p>
-                      Posted{" "}
-                      {new Date(job.postedAt).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                    <p className="mt-1 text-[#172965] font-medium">
-                      View &amp; apply →
-                    </p>
-                  </div>
-                </div>
+        <section className="space-y-3">
+          {filteredJobs.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-6 text-center text-sm text-slate-500">
+              No roles match these filters yet. Try clearing some filters or
+              checking back later.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {filteredJobs.map((job) => (
+                <li key={job.id}>
+                  <Link
+                    href={`/jobs/${job.slug}`}
+                    className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-[#172965] hover:shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-1.5">
+                        <h2 className="text-sm font-semibold text-slate-900">
+                          {job.title}
+                        </h2>
+                        <p className="text-[11px] text-slate-500">
+                          {job.department} · {job.location} · {job.type}
+                        </p>
+                        {job.excerpt && (
+                          <p className="text-xs text-slate-600 line-clamp-2">
+                            {job.excerpt}
+                          </p>
+                        )}
+                      </div>
 
-                {job.excerpt && (
-                  <p className="mt-3 line-clamp-2 text-xs text-slate-600">
-                    {job.excerpt}
-                  </p>
-                )}
-              </Link>
-            ))}
-          </section>
-        )}
+                      <div className="flex flex-col items-start gap-2 md:items-end">
+                        {job.postedAt && (
+                          <p className="text-[11px] text-slate-400">
+                            Posted{" "}
+                            {new Date(
+                              job.postedAt
+                            ).toLocaleDateString("en-GB", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </p>
+                        )}
+                        <span className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1 text-[11px] font-medium text-white">
+                          View role
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </main>
+  );
+}
+
+/**
+ * Small filter pill component
+ */
+
+type FilterHrefProps = {
+  q: string;
+  department?: string;
+  location?: string;
+  type?: string;
+};
+
+function buildFilterHref({ q, department, location, type }: FilterHrefProps) {
+  const params = new URLSearchParams();
+
+  if (q) params.set("q", q);
+  if (department) params.set("department", department);
+  if (location) params.set("location", location);
+  if (type) params.set("type", type);
+
+  const query = params.toString();
+  return query ? `/jobs?${query}` : "/jobs";
+}
+
+function FilterPill({
+  label,
+  isActive,
+  href,
+}: {
+  label: string;
+  isActive: boolean;
+  href: FilterHrefProps;
+}) {
+  const url = buildFilterHref(href);
+  return (
+    <Link
+      href={url}
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 transition ${
+        isActive
+          ? "border-[#172965] bg-[#172965] text-white"
+          : "border-slate-200 bg-slate-50 text-slate-600 hover:border-[#172965] hover:text-[#172965]"
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
