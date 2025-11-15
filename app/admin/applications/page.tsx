@@ -93,6 +93,9 @@ export default async function AdminApplicationsPage() {
                     <th className="px-4 py-3 text-left font-medium text-slate-400 text-xs uppercase tracking-wide">
                       Applied
                     </th>
+                    <th className="px-4 py-3 text-right font-medium text-slate-400 text-xs uppercase tracking-wide">
+                      View
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -145,6 +148,16 @@ export default async function AdminApplicationsPage() {
                               .toISOString()
                               .slice(0, 10)
                           : "—"}
+                      </td>
+
+                      {/* View link */}
+                      <td className="px-4 py-3 align-top text-right">
+                        <Link
+                          href={`/admin/applications/${app.id}`}
+                          className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-4"
+                        >
+                          Open →
+                        </Link>
                       </td>
                     </tr>
                   ))}
