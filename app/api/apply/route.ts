@@ -146,7 +146,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // 3️⃣ Find or create candidate by email (NO job connect here)
+    // 3️⃣ Find or create candidate by email
+    //    All "person details" live here: fullname, email, phone, location, resumeUrl, source
     let candidate = await prisma.candidate.findFirst({
       where: { email: normalizedEmail },
     });
@@ -154,7 +155,7 @@ export async function POST(req: Request) {
     if (!candidate) {
       candidate = await prisma.candidate.create({
         data: {
-          fullname: name || null, // Candidate has `fullname`
+          fullname: name || null,
           email: normalizedEmail,
           phone: phone || null,
           location: location || null,
@@ -175,20 +176,15 @@ export async function POST(req: Request) {
       });
     }
 
-    // 4️⃣ Create application record – link BOTH job and candidate
-    //    🔴 IMPORTANT: your Application model does NOT have `name` or `fullName`,
-    //    so we do NOT send those here anymore.
+    // 4️⃣ Create application record – ONLY fields that actually exist on Application
+    //    From the errors, we know Application does NOT have: name, fullName, email, phone, location, resumeUrl, source
+    //    So we ONLY send: job, candidate, stage.
     const application = await prisma.application.create({
       data: {
         job: { connect: { id: job.id } },
         candidate: { connect: { id: candidate.id } },
-        email: normalizedEmail,
-        phone: phone || candidate.phone,
-        location: location || candidate.location,
-        source,
-        resumeUrl,
         stage: "APPLIED",
-      } as any,
+      },
     });
 
     return NextResponse.json(
