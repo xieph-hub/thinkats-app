@@ -74,12 +74,12 @@ export async function POST(req: Request) {
           resumeUrl: resumeUrl || null,
         },
       });
-    } else {
-      // Light-touch update with latest info (optional)
+          } else {
+      // Update existing candidate with any new info from this application
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
-          name: candidate.name ?? name,
+          fullname: candidate.fullname ?? name,
           phone: phone || candidate.phone,
           location: location || candidate.location,
           resumeUrl: resumeUrl || candidate.resumeUrl,
