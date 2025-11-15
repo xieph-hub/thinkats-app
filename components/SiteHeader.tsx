@@ -5,46 +5,36 @@ import Image from "next/image";
 import { useState } from "react";
 import Container from "./Container";
 
-const nav = [
-  { href: "/services", label: "Services" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/insights", label: "Insights" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
-];
+const <nav className="flex items-center gap-6 text-sm">
+  <Link href="/">Home</Link>
 
-export default function SiteHeader() {
-  const [open, setOpen] = useState(false);
+  <Link href="/candidates">
+    For Candidates
+  </Link>
 
-  return (
-    <header className="border-b bg-white">
-      <Container>
-        <div className="h-16 md:h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            {/* Bigger logo */}
-            <Image
-              src="/logo.svg"
-              alt="Resourcin"
-              width={180}
-              height={48}
-              className="h-10 md:h-12 w-auto"
-              priority
-            />
-          </Link>
+  <Link href="/employers">
+    For Employers
+  </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-6">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="text-sm font-medium text-slate-700 hover:text-[#172965]"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+  <Link href="/insights">
+    Insights
+  </Link>
 
+  <Link href="/about">
+    About
+  </Link>
+
+  <Link href="/contact">
+    Contact
+  </Link>
+
+  <Link
+    href="/login"
+    className="rounded-full border border-emerald-400/80 px-3 py-1 text-[13px] font-medium text-emerald-200 hover:bg-emerald-500 hover:text-black transition"
+  >
+    Login
+  </Link>
+</nav>
           {/* Mobile hamburger */}
           <button
             onClick={() => setOpen((v) => !v)}
