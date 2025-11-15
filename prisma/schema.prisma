@@ -32,12 +32,13 @@ model Job {
   postedAt    DateTime @default(now())
   isPublished Boolean  @default(false)
 
-  /// NEW: client-facing fields
-  /// Example: clientName = "Trips Africa", clientSlug = "trips-africa"
+  // Client-facing fields
   clientName  String?
   clientSlug  String?
 
+  // Relations
   applications Application[]
+  candidates   Candidate[]
 }
 
 model Candidate {
