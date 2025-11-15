@@ -30,7 +30,7 @@ export default async function JobPage({ params }: JobPageProps) {
     console.error("Error loading job", err);
   }
 
-  // ❌ Still nothing – show friendly not-found page
+  // If still nothing – show friendly not-found page
   if (!job) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16">
@@ -86,7 +86,7 @@ export default async function JobPage({ params }: JobPageProps) {
           </p>
         </div>
 
-        {/* Apply form */}
+        {/* Apply form – IMPORTANT: pass job.id */}
         <ApplyForm jobTitle={job.title} jobId={job.id} />
       </div>
     </div>
