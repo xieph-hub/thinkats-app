@@ -39,19 +39,19 @@ model Job {
 }
 
 model Candidate {
-  id         String    @id @default(cuid())
-  jobId      String
-  job        Job?      @relation(fields: [jobId], references: [id])
-  fullname   String?
-  email      String?
-  phone      String?
-  location   String?
-  // Private object path in Supabase Storage (not public URL)
-  resumeUrl  String?
-  source     String?           // e.g. LinkedIn, Referral
-  rawText    String?   // Placeholder for parsed resume text
-  createdAt  DateTime  @default(now())
+  id        String    @id @default(cuid())
+  jobId     String?   // can be null for older candidates
+  job       Job?      @relation(fields: [jobId], references: [id])
 
+  fullname  String?
+  email     String?
+  phone     String?
+  location  String?
+  resumeUrl String?
+  source    String?
+  rawText   String?
+
+  createdAt DateTime? @default(now())
   applications Application[]
 
   @@index([email])
