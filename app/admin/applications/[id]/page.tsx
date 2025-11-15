@@ -1,240 +1,216 @@
 // app/admin/applications/[id]/page.tsx
-
-import { prisma } from "@/lib/db";
-import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { updateApplicationStage, addApplicationNote } from "../actions";
 
-export const dynamic = "force-dynamic";
-
-async function getApplicationSafe(id: string) {
-  try {
-    const application = await prisma.application.findUnique({
-      where: { id },
-      include: {
-        job: true,
-        candidate: true,
-        notes: {
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
-
-    if (!application) {
-      return { application: null, error: "Application not found." };
-    }
-
-    return { application, error: null as string | null };
-  } catch (err) {
-    console.error("Application detail error:", err);
-    return {
-      application: null,
-      error: "Could not load this application from the database.",
-    };
-  }
-}
+const STAGES = [
+  "APPLIED",
+  "SCREENING",
+  "HM_INTERVIEW",
+  "PANEL",
+  "OFFER",
+  "HIRED",
+  "REJECTED",
+];
 
 export default async function ApplicationDetailPage({
   params,
 }: {
   params: { id: string };
 }) {
-  const { id } = params;
-  const { application, error } = await getApplicationSafe(id);
+  const application = await prisma.application.findUnique({
+    where: { id: params.id },
+    include: {
+      job: true,
+      notes: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
 
-  if (!application && !error) {
-    // Truly not found, let Next.js show 404
-    notFound();
-  }
+  if (!application) return notFound();
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
-        {/* Top bar */}
-        <header className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {application?.candidate?.name || "Application"}
-            </h1>
-            <p className="text-sm text-slate-400 mt-1">
-              {application?.job?.title
-                ? `Applied for ${application.job.title}`
-                : "Role information not available."}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/admin/applications"
-              className="text-xs sm:text-sm text-slate-400 hover:text-slate-200 underline underline-offset-4"
-            >
-              ← Back to applications
-            </Link>
-          </div>
+    <div className="min-h-screen bg-slate-950 text-slate-50 p-6">
+      <div className="max-w-4xl mx-auto space-y-8">
+        <header className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold">{application.fullName}</h1>
+          <p className="text-sm text-slate-400">
+            {application.email}
+            {application.phone ? ` · ${application.phone}` : ""}
+          </p>
+          <p className="text-sm text-slate-400">
+            Applied for{" "}
+            <span className="font-medium text-slate-100">
+              {application.job?.title}
+            </span>
+          </p>
         </header>
 
-        {/* Error state */}
-        {error && (
-          <div className="rounded-2xl border border-red-500/40 bg-red-950/20 px-4 py-3 text-sm text-red-200">
-            <div className="font-medium mb-1">We couldn&apos;t load this application.</div>
-            <div className="text-xs text-red-200/80">
-              {error} Please confirm your database connection and try again.
+        {/* Stage & meta */}
+        <section className="grid gap-6 md:grid-cols-[2fr,1.5fr]">
+          <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Stage
+            </h2>
+            <form action={updateApplicationStage} className="space-y-3">
+              <input type="hidden" name="id" value={application.id} />
+              <select
+                name="stage"
+                defaultValue={application.stage}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                {STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+              >
+                Update stage
+              </button>
+            </form>
+
+            <div className="pt-4 border-t border-slate-800 mt-4">
+              <p className="text-xs text-slate-500">
+                Created:{" "}
+                {application.createdAt.toLocaleString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+              <p className="text-xs text-slate-500">
+                Last updated:{" "}
+                {application.updatedAt.toLocaleString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
             </div>
           </div>
-        )}
 
-        {!error && application && (
-          <div className="space-y-6">
-            {/* Candidate + Job summary */}
-            <section className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <h2 className="text-sm font-semibold text-slate-200 mb-3">
-                  Candidate
-                </h2>
-                <div className="space-y-1 text-sm">
-                  <div>
-                    <span className="text-slate-400">Name:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.candidate?.name || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Email:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.candidate?.email || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Phone:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.candidate?.phone || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Location:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.candidate?.location || "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <h2 className="text-sm font-semibold text-slate-200 mb-3">
-                  Role & Application
-                </h2>
-                <div className="space-y-1 text-sm">
-                  <div>
-                    <span className="text-slate-400">Role:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.job?.title || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Location:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.job?.location || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Stage:</span>{" "}
-                    <span className="inline-flex items-center rounded-full border border-slate-700 bg-slate-950/80 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-200">
-                      {application.stage}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Source:</span>{" "}
-                    <span className="text-slate-100">
-                      {application.source || "Website"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Applied:</span>{" "}
-                    <span className="text-slate-100">
-                      {new Date(
-                        application.createdAt as unknown as string
-                      )
-                        .toISOString()
-                        .slice(0, 16)
-                        .replace("T", " ")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Resume + Notes placeholder */}
-            <section className="grid gap-4 md:grid-cols-[2fr,1.3fr]">
-              {/* Resume / raw text */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-slate-200">
-                    Resume / Profile
-                  </h2>
-                  {application.candidate?.resumeUrl && (
-                    <a
-                      href={application.candidate.resumeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-4"
-                    >
-                      Open original resume
-                    </a>
-                  )}
-                </div>
-                {application.candidate?.rawText ? (
-                  <pre className="whitespace-pre-wrap text-xs text-slate-200 bg-slate-950/40 rounded-xl p-3 max-h-[320px] overflow-auto">
-                    {application.candidate.rawText}
-                  </pre>
-                ) : (
-                  <p className="text-xs text-slate-400">
-                    No parsed resume text stored yet. In a later phase, we&apos;ll
-                    plug in a parser here.
-                  </p>
-                )}
-              </div>
-
-              {/* Notes (read-only for now) */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <h2 className="text-sm font-semibold text-slate-200 mb-3">
-                  Notes
-                </h2>
-                {application.notes.length === 0 ? (
-                  <p className="text-xs text-slate-400">
-                    No notes yet. In the next iteration, we&apos;ll add the ability
-                    to leave recruiter / HM notes against this application.
-                  </p>
-                ) : (
-                  <div className="space-y-3 max-h-[320px] overflow-auto pr-1">
-                    {application.notes.map((note) => (
-                      <div
-                        key={note.id}
-                        className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-slate-100">
-                            {note.author || "System"}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            {new Date(
-                              note.createdAt as unknown as string
-                            )
-                              .toISOString()
-                              .slice(0, 16)
-                              .replace("T", " ")}
-                          </span>
-                        </div>
-                        <p className="text-slate-200 whitespace-pre-wrap">
-                          {note.body}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
+          {/* Quick metadata */}
+          <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Application details
+            </h2>
+            <div className="space-y-1">
+              <p className="text-slate-300">
+                <span className="text-slate-500">Job:</span>{" "}
+                {application.job?.title ?? "—"}
+              </p>
+              {application.job?.department && (
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Department:</span>{" "}
+                  {application.job.department}
+                </p>
+              )}
+              {application.job?.location && (
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Location:</span>{" "}
+                  {application.job.location}
+                </p>
+              )}
+              {application.source && (
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Source:</span>{" "}
+                  {application.source}
+                </p>
+              )}
+              {application.resumeUrl && (
+                <p className="text-slate-300">
+                  <a
+                    href={application.resumeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-400 hover:text-emerald-300 text-xs"
+                  >
+                    View resume
+                  </a>
+                </p>
+              )}
+            </div>
           </div>
-        )}
+        </section>
+
+        {/* Notes */}
+        <section className="grid gap-6 md:grid-cols-[2fr,1.5fr]">
+          <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Notes
+            </h2>
+
+            {application.notes.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No notes yet. Add your first note below.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {application.notes.map((note) => (
+                  <li
+                    key={note.id}
+                    className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"
+                  >
+                    <p className="text-sm text-slate-100">{note.body}</p>
+                    <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+                      <span>{note.author ?? "System"}</span>
+                      <span>
+                        {note.createdAt.toLocaleString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <h3 className="text-sm font-semibold text-slate-200">
+              Add a note
+            </h3>
+            <form action={addApplicationNote} className="mt-3 space-y-3">
+              <input
+                type="hidden"
+                name="applicationId"
+                value={application.id}
+              />
+              <input
+                type="text"
+                name="author"
+                placeholder="Your name (optional)"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              />
+              <textarea
+                name="body"
+                rows={3}
+                placeholder="E.g., 'Strong technical depth, needs more structured thinking.'"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400"
+              >
+                Save note
+              </button>
+            </form>
+          </div>
+        </section>
       </div>
-    </main>
+    </div>
   );
 }
