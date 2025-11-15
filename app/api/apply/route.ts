@@ -218,12 +218,12 @@ export async function POST(req: Request) {
       });
     }
 
-    // Create application record
+    // Create application record – now also connecting required candidate relation
     const application =
       await prisma.application.create({
         data: {
           job: { connect: { id: job.id } },
-          // Adjust this if your Application model uses a different field name:
+          candidate: { connect: { id: candidate.id } },
           fullName:
             name ||
             candidate.fullname ||
