@@ -4,6 +4,16 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum ApplicationStage {
+  APPLIED
+  SCREENING
+  HM_INTERVIEW
+  PANEL
+  OFFER
+  HIRED
+  REJECTED
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")  // pooled
@@ -29,12 +39,15 @@ model Job {
 
 model Candidate {
   id         String    @id @default(cuid())
-  name       String?
+  jobId      String
+  job        Job               @relation(fields: [jobId], references: [id])
+  fullname   String?
   email      String?
   phone      String?
   location   String?
   // Private object path in Supabase Storage (not public URL)
   resumeUrl  String?
+  source     String?           // e.g. LinkedIn, Referral
   rawText    String?   // Placeholder for parsed resume text
   createdAt  DateTime  @default(now())
 
