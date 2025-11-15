@@ -1,71 +1,98 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import Container from "./Container";
 
-const <nav className="flex items-center gap-6 text-sm">
-  <Link href="/">Home</Link>
+const navLinks = [
+  { href: "/", label: "Home" },
+  { href: "/candidates", label: "For Candidates" },
+  { href: "/employers", label: "For Employers" },
+  { href: "/insights", label: "Insights" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
+];
 
-  <Link href="/candidates">
-    For Candidates
-  </Link>
+export default function SiteHeader() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
-  <Link href="/employers">
-    For Employers
-  </Link>
+  return (
+    <header className="border-b border-neutral-900/70 bg-black/80 backdrop-blur">
+      <Container>
+        <div className="flex h-16 items-center justify-between gap-4">
+          {/* Logo / brand */}
+          <Link href="/" className="text-sm font-semibold tracking-wide">
+            Resourcin
+          </Link>
 
-  <Link href="/insights">
-    Insights
-  </Link>
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            {navLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={
+                  pathname === item.href
+                    ? "text-emerald-300"
+                    : "text-neutral-300 hover:text-white transition"
+                }
+              >
+                {item.label}
+              </Link>
+            ))}
 
-  <Link href="/about">
-    About
-  </Link>
+            <Link
+              href="/login"
+              className="rounded-full border border-emerald-400/80 px-3 py-1 text-[13px] font-medium text-emerald-200 hover:bg-emerald-500 hover:text-black transition"
+            >
+              Login
+            </Link>
+          </nav>
 
-  <Link href="/contact">
-    Contact
-  </Link>
-
-  <Link
-    href="/login"
-    className="rounded-full border border-emerald-400/80 px-3 py-1 text-[13px] font-medium text-emerald-200 hover:bg-emerald-500 hover:text-black transition"
-  >
-    Login
-  </Link>
-</nav>
-          {/* Mobile hamburger */}
+          {/* Mobile menu button */}
           <button
-            onClick={() => setOpen((v) => !v)}
-            className="md:hidden inline-flex items-center justify-center rounded-lg border px-3 py-2"
-            aria-label="Toggle menu"
+            type="button"
+            className="md:hidden inline-flex items-center justify-center rounded-full border border-neutral-800 px-3 py-1 text-xs text-neutral-200"
+            onClick={() => setOpen((prev) => !prev)}
           >
-            <span className="sr-only">Menu</span>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            Menu
           </button>
         </div>
+      </Container>
 
-        {/* Mobile menu */}
-        {open && (
-          <div className="md:hidden pb-4">
-            <nav className="grid gap-2">
-              {nav.map((item) => (
+      {/* Mobile dropdown */}
+      {open && (
+        <div className="md:hidden border-t border-neutral-900 bg-black">
+          <Container>
+            <nav className="flex flex-col gap-2 py-3 text-sm">
+              {navLinks.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="block rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50"
+                  className={
+                    pathname === item.href
+                      ? "text-emerald-300"
+                      : "text-neutral-300"
+                  }
                   onClick={() => setOpen(false)}
                 >
                   {item.label}
                 </Link>
               ))}
+
+              <Link
+                href="/login"
+                className="mt-2 inline-flex items-center justify-center rounded-full border border-emerald-400/80 px-3 py-1 text-[13px] font-medium text-emerald-200"
+                onClick={() => setOpen(false)}
+              >
+                Login
+              </Link>
             </nav>
-          </div>
-        )}
-      </Container>
+          </Container>
+        </div>
+      )}
     </header>
   );
 }
