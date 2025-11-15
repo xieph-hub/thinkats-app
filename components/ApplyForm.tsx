@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 
 type ApplyFormProps = {
   jobTitle: string;
-  jobSlug?: string; // now optional, we'll fall back to URL
+  jobSlug?: string; // optional, we can fall back to URL
 };
 
 export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
@@ -21,7 +21,7 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
 
   const pathname = usePathname();
 
-  // Try to derive the slug from the URL: /jobs/<slug>
+  // Try to derive slug from URL: e.g. /jobs/<slug>
   const slugFromPath =
     pathname
       ?.split("?")[0]
@@ -37,7 +37,7 @@ export default function ApplyForm({ jobTitle, jobSlug }: ApplyFormProps) {
     setMessage(null);
     setIsError(false);
 
-    // Extra safety: if for some weird reason we still have no slug/job info
+    // Safety check – we need some job identifier
     if (!effectiveJobSlug && !jobTitle) {
       setIsError(true);
       setMessage(
