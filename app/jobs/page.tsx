@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import type { ReactNode, SVGProps } from "react";
 import Link from "next/link";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Jobs | Resourcin",
@@ -129,7 +130,7 @@ const jobs: Job[] = [
 ];
 
 // -----------------------------------------------------------------------------
-// Small inline icon components with classic colors
+// Icon components (with classic colors)
 // -----------------------------------------------------------------------------
 
 function LocationIcon(props: SVGProps<SVGSVGElement>) {
@@ -206,6 +207,38 @@ function ClockIcon(props: SVGProps<SVGSVGElement>) {
     >
       <path
         d="M12 3.25a8.75 8.75 0 1 0 0 17.5 8.75 8.75 0 0 0 0-17.5Zm-.75 4.5a.75.75 0 0 1 1.5 0V12l2.22 2.22a.75.75 0 1 1-1.06 1.06l-2.5-2.5A.75.75 0 0 1 11.25 12V7.75Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function LinkedInIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 text-[#0A66C2] ${props.className ?? ""}`}
+    >
+      <path
+        d="M5.16 4.5a1.91 1.91 0 1 1 0 3.82 1.91 1.91 0 0 1 0-3.82ZM4 9h2.32v10.5H4V9Zm5.18 0H11.4v1.46h.03c.31-.59 1.1-1.21 2.27-1.21 2.43 0 2.88 1.6 2.88 3.68v6.57h-2.32v-5.83c0-1.39-.03-3.18-1.94-3.18-1.94 0-2.24 1.51-2.24 3.07v5.94H9.18V9Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function XIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 text-slate-900 ${props.className ?? ""}`}
+    >
+      <path
+        d="M5.25 4h3.02l3.02 4.33L14.83 4h3.92l-5 6.72L19 20h-3.02l-3.26-4.71L9 20H5.08l5.08-6.9L5.25 4Z"
         fill="currentColor"
       />
     </svg>
@@ -346,97 +379,141 @@ export default function JobsPage() {
           </div>
 
           <div className="space-y-3">
-            {jobs.map((job) => (
-              <article
-                key={job.slug}
-                className="relative overflow-hidden rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200/80 transition transform hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-300 sm:px-5"
-              >
-                {/* Accent bar */}
-                <div
-                  className="pointer-events-none absolute inset-x-0 top-0 h-1"
-                  style={{ backgroundImage: "linear-gradient(90deg,#64C247,#172965)" }}
-                />
+            {jobs.map((job) => {
+              const jobUrl = `${SITE_URL}/talent-network?job=${encodeURIComponent(
+                job.slug
+              )}`;
+              const encodedJobUrl = encodeURIComponent(jobUrl);
+              const shareText = encodeURIComponent(
+                `${job.title} – via Resourcin`
+              );
 
-                <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  {/* Left section */}
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3">
-                      {/* Employer avatar (future: replace with logo in white-label mode) */}
-                      <div
-                        className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold text-white shadow-sm sm:h-11 sm:w-11"
+              const linkedInShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedJobUrl}`;
+              const xShareUrl = `https://twitter.com/intent/tweet?url=${encodedJobUrl}&text=${shareText}`;
+
+              return (
+                <article
+                  key={job.slug}
+                  className="relative overflow-hidden rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200/80 transition transform hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-300 sm:px-5"
+                >
+                  {/* Accent bar */}
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-1"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(90deg,#64C247,#172965)",
+                    }}
+                  />
+
+                  <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    {/* Left section */}
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        {/* Employer avatar (future: replace with logo in white-label mode) */}
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold text-white shadow-sm sm:h-11 sm:w-11"
+                          style={{ backgroundColor: brand.primaryColor }}
+                        >
+                          {job.employerInitials}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-sm font-semibold text-[#172965] sm:text-base">
+                              {job.title}
+                            </h3>
+                            <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[0.65rem] font-medium text-slate-600 ring-1 ring-slate-200">
+                              {job.department}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600 sm:text-sm">
+                            {job.employerName}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Icon pills */}
+                      <div className="flex flex-wrap items-center gap-2 text-[0.7rem] sm:text-xs">
+                        <InfoPill
+                          icon={<LocationIcon />}
+                          label={job.location}
+                        />
+                        <InfoPill
+                          icon={<BriefcaseIcon />}
+                          label={`${job.workType} • ${job.type}`}
+                        />
+                        <InfoPill
+                          icon={<SparklesIcon />}
+                          label={`${job.seniority} level`}
+                        />
+                        {job.salaryRange && (
+                          <InfoPill
+                            icon={<CurrencyIcon />}
+                            label={job.salaryRange}
+                          />
+                        )}
+                      </div>
+
+                      {/* Short highlight */}
+                      {job.highlight && (
+                        <p className="mt-1.5 text-xs text-slate-700 sm:text-sm">
+                          {job.highlight}
+                        </p>
+                      )}
+
+                      {/* Social sharing */}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.7rem] text-slate-500 sm:text-xs">
+                        <span className="font-medium text-slate-600">
+                          Share:
+                        </span>
+                        <a
+                          href={linkedInShareUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200 hover:bg-slate-100"
+                        >
+                          <LinkedInIcon />
+                          <span>LinkedIn</span>
+                        </a>
+                        <a
+                          href={xShareUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200 hover:bg-slate-100"
+                        >
+                          <XIcon />
+                          <span>X</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Right section */}
+                    <div className="flex flex-col items-start gap-2 sm:items-end">
+                      <div className="inline-flex items-center gap-1.5 text-[0.7rem] text-slate-500 sm:text-xs">
+                        <ClockIcon />
+                        <span>{job.postedAt}</span>
+                      </div>
+
+                      <Link
+                        href={`/talent-network?job=${encodeURIComponent(
+                          job.slug
+                        )}`}
+                        className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
                         style={{ backgroundColor: brand.primaryColor }}
                       >
-                        {job.employerInitials}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-sm font-semibold text-[#172965] sm:text-base">
-                            {job.title}
-                          </h3>
-                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[0.65rem] font-medium text-slate-600 ring-1 ring-slate-200">
-                            {job.department}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-600 sm:text-sm">
-                          {job.employerName}
-                        </p>
-                      </div>
+                        View details & express interest
+                        <span
+                          className="ml-1.5 text-[0.65rem]"
+                          aria-hidden="true"
+                        >
+                          →
+                        </span>
+                      </Link>
                     </div>
-
-                    {/* Icon pills */}
-                    <div className="flex flex-wrap items-center gap-2 text-[0.7rem] sm:text-xs">
-                      <InfoPill
-                        icon={<LocationIcon />}
-                        label={job.location}
-                      />
-                      <InfoPill
-                        icon={<BriefcaseIcon />}
-                        label={`${job.workType} • ${job.type}`}
-                      />
-                      <InfoPill
-                        icon={<SparklesIcon />}
-                        label={`${job.seniority} level`}
-                      />
-                      {job.salaryRange && (
-                        <InfoPill
-                          icon={<CurrencyIcon />}
-                          label={job.salaryRange}
-                        />
-                      )}
-                    </div>
-
-                    {/* Short highlight */}
-                    {job.highlight && (
-                      <p className="mt-1.5 text-xs text-slate-700 sm:text-sm">
-                        {job.highlight}
-                      </p>
-                    )}
                   </div>
-
-                  {/* Right section */}
-                  <div className="flex flex-col items-start gap-2 sm:items-end">
-                    <div className="inline-flex items-center gap-1.5 text-[0.7rem] text-slate-500 sm:text-xs">
-                      <ClockIcon />
-                      <span>{job.postedAt}</span>
-                    </div>
-
-                    <Link
-                      href={`/talent-network?job=${encodeURIComponent(
-                        job.slug
-                      )}`}
-                      className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
-                      style={{ backgroundColor: brand.primaryColor }}
-                    >
-                      View details & express interest
-                      <span className="ml-1.5 text-[0.65rem]" aria-hidden="true">
-                        →
-                      </span>
-                    </Link>
-                  </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
 
