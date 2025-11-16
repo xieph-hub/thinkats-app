@@ -57,7 +57,6 @@ export async function POST(req: Request) {
         jobId,
         candidateId: candidate.id,
         status: "applied",
-        source: source ?? "job_board",
       },
     });
 
