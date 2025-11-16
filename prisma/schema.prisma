@@ -85,7 +85,7 @@ model Candidate {
   source                String?  // job_application, talent_network, referral
   status                String?  // active, inactive
 
-  applications          Application[]
+  applications          JobApplication[]
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
