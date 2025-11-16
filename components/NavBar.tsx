@@ -1,86 +1,92 @@
 "use client";
-import Link from "next/link";
-import Image from "next/image";
-import { useState, useEffect } from "react";
 
-export default function NavBar() {
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
+
+const navLinks = [
+  { href: "/", label: "Home" },
+  { href: "/jobs", label: "Jobs" },
+  { href: "/clients", label: "For Employers" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
+];
+
+export function Navbar() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const onResize = () => { if (window.innerWidth >= 768) setOpen(false); };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname?.startsWith(href);
 
   return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
-      <div className="max-w-7xl mx-auto flex items-center justify-between px-4 py-2 md:py-3">
-        {/* LOGO ONLY — larger */}
-        <Link href="/" className="flex items-center" aria-label="Go to homepage">
-          {/* Remove wrappers that constrain size; drive size from the image */}
-          <Image
-            src="/logo.svg"                 // ensure this exists in /public
-            alt="Resourcin logo"
-            width={84} height={84}          // intrinsic size for better rendering
-            priority
-            className="h-14 w-auto md:h-16 lg:h-20"  // ↑ 56px → 64px → 80px
-          />
+    <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/90 backdrop-blur">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        {/* Logo / Brand */}
+        <Link href="/" className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#172965] text-xs font-black tracking-tight text-white">
+            R
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-sm font-semibold text-[#172965]">
+              Resourcin
+            </span>
+            <span className="text-[11px] text-slate-500">
+              Talent &amp; HR Advisory
+            </span>
+          </div>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6 text-sm">
-          <Link href="/" className="hover:text-brand-blue">Home</Link>
-          <Link href="/services" className="hover:text-brand-blue">Services</Link>
-          <Link href="/jobs" className="text-gray-600 hover:text-gray-900">
-    Jobs
-  </Link>
-          <Link href="/employers" className="text-gray-600 hover:text-gray-900">
-    For Employers
-  </Link>
-          <Link href="/insights" className="hover:text-brand-blue">Insights</Link>
-          <Link href="/about" className="hover:text-brand-blue">About</Link>
-          <Link href="/contact" className="hover:text-brand-blue">Contact</Link>
-          <Link
-            href="/contact"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand-blue text-white hover:opacity-90 shadow-soft"
-          >
-            Request a Consultation
-          </Link>
-        </nav>
-
-        {/* Mobile hamburger */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="md:hidden p-2 rounded-lg border border-slate-300"
-          aria-label="Open menu"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none"
-               viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"
-                  d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Mobile panel */}
-      {open && (
-        <div className="md:hidden border-t border-slate-200 bg-white">
-          <div className="px-4 py-3 space-y-3 text-sm">
-            {[
-              ["Home","/"],["Services","/services"],["Jobs","/jobs"],
-              ["Insights","/insights"],["About","/about"],["Contact","/contact"]
-            ].map(([label,href])=>(
-              <Link key={href} href={href} className="block py-2" onClick={()=>setOpen(false)}>
-                {label}
-              </Link>
-            ))}
+        <div className="hidden items-center gap-6 md:flex">
+          {navLinks.map((link) => (
             <Link
-              href="/contact"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-pill bg-brand-blue text-white"
-              onClick={()=>setOpen(false)}
+              key={link.href}
+              href={link.href}
+              className={`text-sm font-medium transition ${
+                isActive(link.href)
+                  ? "text-[#172965]"
+                  : "text-slate-600 hover:text-[#172965]"
+              }`}
             >
-              Request a Consultation
+              {link.label}
             </Link>
+          ))}
+        </div>
+
+        {/* Mobile toggle */}
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          className="inline-flex items-center justify-center rounded-md border border-slate-200 px-2.5 py-1.5 text-sm font-medium text-[#172965] shadow-sm hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-2 md:hidden"
+          aria-label="Toggle navigation"
+          aria-expanded={open}
+        >
+          <span className="mr-1 text-xs">Menu</span>
+          <span className="text-lg">{open ? "✕" : "☰"}</span>
+        </button>
+      </nav>
+
+      {/* Mobile menu panel */}
+      {open && (
+        <div className="border-b border-slate-100 bg-white md:hidden">
+          <div className="mx-auto max-w-6xl px-4 pb-3 sm:px-6 lg:px-8">
+            <div className="flex flex-col space-y-1.5">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setOpen(false)}
+                  className={`block rounded-md px-2.5 py-2 text-sm font-medium ${
+                    isActive(link.href)
+                      ? "bg-[#172965]/5 text-[#172965]"
+                      : "text-slate-700 hover:bg-slate-50 hover:text-[#172965]"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       )}
