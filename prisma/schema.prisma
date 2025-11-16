@@ -22,7 +22,7 @@ datasource db {
 
 model ClientCompany {
   id          String   @id @default(cuid())
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenant      Tenant   @relation("TenantClientCompanies", fields: [tenantId], references: [id])
   tenantId    String
 
   name        String
@@ -44,7 +44,7 @@ model Job {
   id               String           @id @default(cuid())
 
   // Tenant / board this job belongs to
-  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  tenant           Tenant           @relation("TenantJobs", fields: [tenantId], references: [id])
   tenantId         String
 
   // Client company (employer) – optional so you can also post “Resourcin Anonymous” jobs
@@ -73,7 +73,7 @@ model Job {
 
 model Candidate {
   id                    String             @id @default(cuid())
-  tenant                Tenant             @relation(fields: [tenantId], references: [id])
+  tenant                Tenant             @relation("TenantCandidates", fields: [tenantId], references: [id])
   tenantId              String
 
   fullName              String
@@ -127,13 +127,20 @@ model JobApplication {
 }
 
 model Tenant {
-  id          String   @id @default(cuid())
+  id          String @id @default(cuid())
   name        String
-  slug        String   @unique
+  slug        String @unique
+
+  // keep any extra fields you already had here
+  // e.g. logoUrl, primaryColor, etc.
+
+  // Relations
+  jobs            Job[]           @relation("TenantJobs")
+  clientCompanies ClientCompany[] @relation("TenantClientCompanies")
+  candidates      Candidate[]     @relation("TenantCandidates")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  jobs        Job[]
 }
 
 enum ApplicationStatus {
