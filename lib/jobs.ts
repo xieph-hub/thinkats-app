@@ -12,7 +12,7 @@ export type Job = {
   location: string;
   workType: JobWorkType;
   type: JobType;
-  department: string;
+  department: string; // used as "Function" in filters
   seniority: JobSeniority;
   salaryRange?: string;
   postedAt: string;
@@ -25,6 +25,9 @@ export type Job = {
   niceToHave?: string[];
   benefits?: string[];
   hiringProcess?: string[];
+
+  // NEW: tags for search, related roles, SaaS metadata
+  tags: string[];
 };
 
 export const jobs: Job[] = [
@@ -72,6 +75,7 @@ export const jobs: Job[] = [
       "Case or product challenge with presentation to a small panel.",
       "Founder / leadership conversation, followed by references and offer.",
     ],
+    tags: ["Product", "Fintech", "Payments", "Lending", "Africa", "Senior"],
   },
   {
     slug: "backend-engineer-payments",
@@ -117,6 +121,7 @@ export const jobs: Job[] = [
       "Practical exercise or pair-programming session.",
       "Culture / team fit conversation and offer.",
     ],
+    tags: ["Engineering", "Backend", "Fintech", "Remote", "Payments"],
   },
   {
     slug: "people-ops-lead-multi-country",
@@ -163,6 +168,7 @@ export const jobs: Job[] = [
       "Practical exercise (e.g. policy or people-ops case).",
       "Conversation with group leadership and offer.",
     ],
+    tags: ["People Ops", "HR", "Multi-country", "Lead", "Tech & Services"],
   },
   {
     slug: "enterprise-sales-manager-b2b-saas",
@@ -209,6 +215,7 @@ export const jobs: Job[] = [
       "Panel presentation (pipeline plan or territory strategy).",
       "Founder / leadership conversation and offer.",
     ],
+    tags: ["Sales", "Enterprise", "B2B SaaS", "Infrastructure", "Senior"],
   },
   {
     slug: "senior-data-analyst-product-ops",
@@ -255,6 +262,7 @@ export const jobs: Job[] = [
       "Take-home or live analytics exercise.",
       "Stakeholder conversations and offer.",
     ],
+    tags: ["Data", "Analytics", "Product", "Operations", "Senior", "Fintech"],
   },
   {
     slug: "customer-success-lead-enterprise",
@@ -300,6 +308,7 @@ export const jobs: Job[] = [
       "Practical exercise or customer narrative presentation.",
       "Final conversation with leadership and offer.",
     ],
+    tags: ["Customer Success", "Enterprise", "SaaS", "Retention", "Lead"],
   },
 ];
 
