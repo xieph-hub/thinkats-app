@@ -1,5 +1,6 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
+import type { ReactNode, SVGProps } from "react";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -10,16 +11,13 @@ export const metadata: Metadata = {
 
 // -----------------------------------------------------------------------------
 // White-label friendly job board config
-// Later, this can be made tenant-specific (per employer) for the SaaS product.
 // -----------------------------------------------------------------------------
 
 const JOB_BOARD_CONFIG = {
   boardName: "Resourcin Talent Network",
-  // Current brand (Resourcin); in a white-label instance this becomes the client’s brand.
   primaryColor: "#172965",
   accentColor: "#64C247",
   background: "#F1F5F9",
-  // Where employers go if they want their own board / to post roles.
   employerCtaHref: "/request-talent",
   employerCtaLabel: "Use this board for your roles",
   poweredByLabel: "Powered by Resourcin",
@@ -29,7 +27,7 @@ type Job = {
   slug: string;
   title: string;
   employerName: string;
-  employerInitials: string; // for logo circle; in SaaS you’d swap for a real logo
+  employerInitials: string;
   location: string;
   workType: "Remote" | "Hybrid" | "On-site";
   type: "Full-time" | "Contract";
@@ -40,8 +38,6 @@ type Job = {
   highlight?: string;
 };
 
-// For now these are representative searches.
-// In the SaaS version, this becomes a DB/tenant-specific feed.
 const jobs: Job[] = [
   {
     slug: "senior-product-manager-fintech",
@@ -132,6 +128,108 @@ const jobs: Job[] = [
   },
 ];
 
+// -----------------------------------------------------------------------------
+// Small inline icon components (no extra dependencies)
+// -----------------------------------------------------------------------------
+
+function LocationIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+    >
+      <path
+        d="M12 2.75a6.25 6.25 0 0 0-6.25 6.25c0 4.39 4.76 9.19 5.96 10.37a.9.9 0 0 0 1.26 0c1.2-1.18 5.98-5.98 5.98-10.37A6.25 6.25 0 0 0 12 2.75Zm0 9.25a3 3 0 1 1 0-6.001 3 3 0 0 1 0 6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function BriefcaseIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+    >
+      <path
+        d="M9 4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6h3.25A1.75 1.75 0 0 1 20 7.75v9.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25v-9.5A1.75 1.75 0 0 1 5.75 6H9V4.5Zm1.5.25v1.25h3V4.75h-3Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function SparklesIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+    >
+      <path
+        d="M12 3.25 13.4 7l3.6 1.4L13.4 9.8 12 13.5 10.6 9.8 7 8.4 10.6 7 12 3.25Zm6.5 7.25.75 2 2 0.75-2 .75-.75 2-.75-2-2-.75 2-.75.75-2Zm-13 4.5.9 2.4 2.35.9-2.35.9-.9 2.35-.9-2.35L3.25 19l2.25-.9.9-2.4Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function CurrencyIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+    >
+      <path
+        d="M11 4.75h2a.75.75 0 0 1 0 1.5h-1.25v2h.5a4.25 4.25 0 1 1 0 8.5H11a.75.75 0 0 1 0-1.5h1.25v-2h-.5a4.25 4.25 0 1 1 0-8.5Zm.75 4v6.5h1a2.75 2.75 0 0 0 0-5.5h-1Zm-1.5 0h-1a2.75 2.75 0 0 0 0 5.5h1V8.75Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ClockIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+    >
+      <path
+        d="M12 3.25a8.75 8.75 0 1 0 0 17.5 8.75 8.75 0 0 0 0-17.5Zm-.75 4.5a.75.75 0 0 1 1.5 0V12l2.22 2.22a.75.75 0 1 1-1.06 1.06l-2.5-2.5A.75.75 0 0 1 11.25 12V7.75Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+// Simple pill component for icon + label
+function InfoPill({
+  icon,
+  label,
+}: {
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-[0.7rem] font-medium text-slate-600 ring-1 ring-slate-200">
+      <span className="text-slate-400">{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+// -----------------------------------------------------------------------------
+
 export default function JobsPage() {
   const brand = JOB_BOARD_CONFIG;
 
@@ -141,7 +239,7 @@ export default function JobsPage() {
       style={{ backgroundColor: brand.background }}
     >
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        {/* Board header – can be swapped per tenant in SaaS */}
+        {/* Board header */}
         <section className="mb-8">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
@@ -206,7 +304,7 @@ export default function JobsPage() {
           </div>
         </section>
 
-        {/* High-level summary – keeps it generic for SaaS */}
+        {/* Summary row */}
         <section className="mb-6">
           <div className="grid gap-3 text-xs sm:grid-cols-3 sm:text-sm">
             <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
@@ -236,7 +334,7 @@ export default function JobsPage() {
           </div>
         </section>
 
-        {/* Job list – designed like a reusable “board” component */}
+        {/* Job cards */}
         <section aria-label="Open roles" className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-[#172965] sm:text-lg">
@@ -251,20 +349,27 @@ export default function JobsPage() {
             {jobs.map((job) => (
               <article
                 key={job.slug}
-                className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200 sm:px-5"
+                className="relative overflow-hidden rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200/80 transition transform hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-300 sm:px-5"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  {/* Left section – employer + role */}
-                  <div className="space-y-2">
+                {/* Accent bar */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-0 h-1"
+                  style={{ backgroundImage: "linear-gradient(90deg,#64C247,#172965)" }}
+                />
+
+                <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  {/* Left section */}
+                  <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      {/* Employer avatar – in white-label mode this can become the tenant logo */}
+                      {/* Employer avatar (future: replace with logo in white-label mode) */}
                       <div
-                        className="flex h-9 w-9 items-center justify-center rounded-xl text-xs font-semibold text-white sm:h-10 sm:w-10"
+                        className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold text-white shadow-sm sm:h-11 sm:w-11"
                         style={{ backgroundColor: brand.primaryColor }}
                       >
                         {job.employerInitials}
                       </div>
-                      <div className="space-y-1">
+
+                      <div className="space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-sm font-semibold text-[#172965] sm:text-base">
                             {job.title}
@@ -279,48 +384,52 @@ export default function JobsPage() {
                       </div>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.7rem] text-slate-600 sm:text-xs">
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                        {job.location}
-                      </span>
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                        {job.workType} • {job.type}
-                      </span>
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                        {job.seniority} level
-                      </span>
+                    {/* Icon pills */}
+                    <div className="flex flex-wrap items-center gap-2 text-[0.7rem] sm:text-xs">
+                      <InfoPill
+                        icon={<LocationIcon className="text-slate-400" />}
+                        label={job.location}
+                      />
+                      <InfoPill
+                        icon={<BriefcaseIcon className="text-slate-400" />}
+                        label={`${job.workType} • ${job.type}`}
+                      />
+                      <InfoPill
+                        icon={<SparklesIcon className="text-slate-400" />}
+                        label={`${job.seniority} level`}
+                      />
+                      {job.salaryRange && (
+                        <InfoPill
+                          icon={<CurrencyIcon className="text-slate-400" />}
+                          label={job.salaryRange}
+                        />
+                      )}
                     </div>
 
-                    {job.salaryRange && (
-                      <p className="mt-2 text-xs text-slate-600 sm:text-sm">
-                        <span className="font-medium text-slate-700">
-                          Compensation (guidance):
-                        </span>{" "}
-                        {job.salaryRange}
-                      </p>
-                    )}
-
+                    {/* Short highlight */}
                     {job.highlight && (
-                      <p className="mt-2 text-xs text-slate-700 sm:text-sm">
+                      <p className="mt-1.5 text-xs text-slate-700 sm:text-sm">
                         {job.highlight}
                       </p>
                     )}
                   </div>
 
-                  {/* Right section – time & CTA */}
+                  {/* Right section */}
                   <div className="flex flex-col items-start gap-2 sm:items-end">
-                    <p className="text-[0.7rem] text-slate-500 sm:text-xs">
-                      {job.postedAt}
-                    </p>
+                    <div className="inline-flex items-center gap-1 text-[0.7rem] text-slate-500 sm:text-xs">
+                      <ClockIcon className="text-slate-400" />
+                      <span>{job.postedAt}</span>
+                    </div>
+
                     <Link
                       href={`/talent-network?job=${encodeURIComponent(
                         job.slug
                       )}`}
-                      className="inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
+                      className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
                       style={{ backgroundColor: brand.primaryColor }}
                     >
                       View details & express interest
-                      <span className="ml-1 text-[0.65rem]" aria-hidden="true">
+                      <span className="ml-1.5 text-[0.65rem]" aria-hidden="true">
                         →
                       </span>
                     </Link>
@@ -356,7 +465,7 @@ export default function JobsPage() {
           </div>
         </section>
 
-        {/* For employers – light SaaS hint */}
+        {/* For employers – SaaS hint */}
         <section className="mt-6 flex flex-col items-start justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-4 text-xs text-slate-600 sm:flex-row sm:items-center sm:px-6 sm:text-sm">
           <div>
             <p className="font-semibold text-slate-700">
