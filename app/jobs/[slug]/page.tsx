@@ -1,143 +1,123 @@
+import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { prisma } from "../../../lib/prisma";
 
-type JobPageProps = {
-  params: {
-    slug: string;
-  };
-};
+interface JobPageProps {
+  params: { slug: string };
+}
 
-export default async function JobPage({ params }: JobPageProps) {
-  const { slug } = params;
+export const dynamic = "force-dynamic";
 
-  const job = await prisma.job.findUnique({
-    where: { slug },
-    include: {
-      client: true, // ClientCompany, if linked
+export default async function JobDetailPage({ params }: JobPageProps) {
+  const job = await prisma.job.findFirst({
+    where: {
+      slug: params.slug,
+      status: "open",
+    },
+    select: {
+      title: true,
+      location: true,
+      function: true,
+      summary: true,
+      description: true,
+      salaryCurrency: true,
+      salaryMin: true,
+      salaryMax: true,
+      remoteOption: true,
     },
   });
 
-  // If no job or job is not open, 404
-  if (!job || job.status !== "open") {
+  if (!job) {
     notFound();
   }
 
+  const salary =
+    job.salaryMin && job.salaryMax
+      ? `${job.salaryCurrency} ${job.salaryMin.toLocaleString()} – ${job.salaryMax.toLocaleString()}`
+      : job.salaryMin
+      ? `${job.salaryCurrency} ${job.salaryMin.toLocaleString()}+`
+      : null;
+
   return (
-    <div className="max-w-4xl mx-auto py-16 px-4 space-y-8">
-      <nav className="text-xs text-neutral-500 mb-2">
-        <Link href="/jobs" className="hover:underline">
-          Jobs
-        </Link>{" "}
-        / <span className="text-neutral-300">{job.title}</span>
-      </nav>
+    <div className="bg-slate-50 min-h-screen">
+      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+        <Link
+          href="/jobs"
+          className="inline-flex items-center text-xs font-medium text-slate-600 hover:text-[#172965] hover:underline"
+        >
+          ← Back to all roles
+        </Link>
 
-      <header className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
-          Job details
-        </p>
-        <h1 className="text-3xl font-semibold">{job.title}</h1>
+        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <header className="border-b border-slate-100 pb-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[#306B34]">
+              Resourcin shortlists
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              {job.title}
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              {job.location && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                  📍 {job.location}
+                </span>
+              )}
+              {job.remoteOption && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                  🌐 {job.remoteOption === "hybrid" ? "Hybrid" : job.remoteOption}
+                </span>
+              )}
+              {job.function && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                  🧭 {job.function}
+                </span>
+              )}
+              {salary && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                  💰 {salary}
+                </span>
+              )}
+            </div>
+          </header>
 
-        <div className="flex flex-wrap gap-2 text-[11px] text-neutral-400">
-          {job.client?.name && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.client.name}
-            </span>
+          {job.summary && (
+            <p className="mt-4 text-sm font-medium text-slate-800">
+              {job.summary}
+            </p>
           )}
-          {job.location && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.location}
-            </span>
-          )}
-          {job.level && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.level}
-            </span>
-          )}
-          {job.jobType && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.jobType}
-            </span>
-          )}
-          {job.remoteOption && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.remoteOption}
-            </span>
-          )}
-          {job.function && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.function}
-            </span>
-          )}
-          {job.industry && (
-            <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-              {job.industry}
-            </span>
-          )}
-        </div>
 
-        {job.salaryCurrency && (job.salaryMin || job.salaryMax) && (
-          <p className="text-sm text-neutral-300">
-            Compensation:{" "}
-            <span className="font-medium">
-              {job.salaryCurrency}{" "}
-              {job.salaryMin
-                ? job.salaryMax && job.salaryMax !== job.salaryMin
-                  ? `${job.salaryMin.toLocaleString()} – ${job.salaryMax?.toLocaleString()}`
-                  : job.salaryMin.toLocaleString()
-                : job.salaryMax?.toLocaleString()}
-            </span>
-          </p>
-        )}
-      </header>
-
-      {job.summary && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-neutral-200">Summary</h2>
-          <p className="text-sm text-neutral-300">{job.summary}</p>
-        </section>
-      )}
-
-      {job.description && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-neutral-200">Role</h2>
-          <div className="prose prose-invert max-w-none text-sm">
+          <section className="mt-6 space-y-4 text-sm leading-relaxed text-slate-700">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Role overview
+            </h2>
             <p className="whitespace-pre-line">{job.description}</p>
-          </div>
-        </section>
-      )}
+          </section>
 
-      {job.requirements && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-neutral-200">
-            Requirements
-          </h2>
-          <div className="prose prose-invert max-w-none text-sm">
-            <p className="whitespace-pre-line">{job.requirements}</p>
-          </div>
+          <section className="mt-8 rounded-xl bg-slate-50 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+              How to apply
+            </h3>
+            <p className="mt-2 text-sm text-slate-700">
+              This role is managed by Resourcin on behalf of the hiring company.
+              Share your profile and we&apos;ll review for a potential shortlist.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link
+                href={`/apply/${encodeURIComponent(params.slug)}`}
+                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 transition"
+              >
+                Apply for this role
+              </Link>
+              <Link
+                href="/candidates/join"
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-800 hover:border-[#172965] hover:text-[#172965] transition"
+              >
+                Join Talent Network
+              </Link>
+            </div>
+          </section>
         </section>
-      )}
-
-      <section className="pt-4 border-t border-neutral-900 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <p className="text-xs text-neutral-500">
-          Ready to apply? You can submit your details on the main jobs page or
-          via our talent network while we hook up inline applications here.
-        </p>
-        <div className="flex gap-2">
-          <Link
-            href="/jobs"
-            className="text-xs rounded-full border border-neutral-700 px-4 py-1 hover:border-emerald-400/80 hover:text-emerald-200 transition"
-          >
-            Back to jobs
-          </Link>
-          <Link
-            href="/candidate"
-            className="text-xs rounded-full bg-emerald-500/90 text-neutral-900 px-4 py-1 font-medium hover:bg-emerald-400 transition"
-          >
-            Join talent network
-          </Link>
-        </div>
-      </section>
+      </main>
     </div>
   );
 }
