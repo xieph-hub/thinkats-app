@@ -48,8 +48,6 @@ export async function POST(req: Request) {
         fullName: name,
         email: normalizedEmail,
         phone: phone ?? null,
-        city: city ?? null,
-        country: country ?? null,
         cvUrl: cvUrl ?? null,
         source: source ?? "job_board",
         status: "active",
