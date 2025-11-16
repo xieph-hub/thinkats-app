@@ -1,53 +1,71 @@
+// lib/cms.ts
+
 import { Client } from "@notionhq/client";
 import { marked } from "marked";
-
-const NOTION_API_KEY = process.env.NOTION_API_KEY;
-const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
-
-const notion =
-  NOTION_API_KEY && NOTION_DATABASE_ID
-    ? new Client({ auth: NOTION_API_KEY })
-    : null;
-
-export const hasNotion = !!notion;
 
 export type CMSPost = {
   id: string;
   slug: string;
   title: string;
-  summary: string;
+  summary: string | null;
   date: string | null;
   publishedAt: string | null;
   tags: string[];
-  contentHtml?: string;
+  contentHtml: string | null;
 };
 
-function mapPageToPost(page: any): CMSPost {
-  const props = page.properties ?? {};
+const notionApiKey = process.env.NOTION_API_KEY;
+const notionDatabaseId = process.env.NOTION_DATABASE_ID;
+
+const hasNotion = !!notionApiKey && !!notionDatabaseId;
+const notion = hasNotion ? new Client({ auth: notionApiKey }) : null;
+
+/**
+ * Map a Notion page into our CMSPost shape
+ */
+function mapPageToPost(page: any): CMSPost | null {
+  if (!page || !page.properties) return null;
+
+  const props = page.properties;
+
+  const titleProp = props.Name || props.Title;
+  const slugProp = props.Slug;
+  const summaryProp = props.Summary || props.Description;
+  const publishedProp = props.PublishedAt || props.Published || props.Date;
+  const contentProp = props.Content || props.Body;
 
   const title =
-    props.Name?.title?.[0]?.plain_text ??
-    props.Title?.title?.[0]?.plain_text ??
-    "Untitled";
-
-  const slug =
-    props.Slug?.rich_text?.[0]?.plain_text ??
-    page.id.replace(/-/g, "").toLowerCase();
-
-  const summary =
-    props.Summary?.rich_text?.[0]?.plain_text ??
-    props.Description?.rich_text?.[0]?.plain_text ??
+    titleProp?.title?.[0]?.plain_text ??
+    titleProp?.rich_text?.[0]?.plain_text ??
     "";
 
+  const slug =
+    slugProp?.rich_text?.[0]?.plain_text ??
+    slugProp?.title?.[0]?.plain_text ??
+    "";
+
+  const summary =
+    summaryProp?.rich_text?.[0]?.plain_text ??
+    summaryProp?.title?.[0]?.plain_text ??
+    null;
+
   const publishedAt =
-    props.PublishedAt?.date?.start ??
-    props.Date?.date?.start ??
+    publishedProp?.date?.start ??
     page.created_time ??
-    page.last_edited_time ??
     null;
 
   const tags =
-    props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
+    (props.Tags?.multi_select ?? []).map((t: any) => t.name) ?? [];
+
+  let contentHtml: string | null = null;
+  if (contentProp?.rich_text?.length) {
+    const markdown = contentProp.rich_text
+      .map((t: any) => t.plain_text)
+      .join("\n\n");
+    contentHtml = marked.parse(markdown) as string;
+  }
+
+  if (!slug || !title) return null;
 
   return {
     id: page.id,
@@ -57,163 +75,73 @@ function mapPageToPost(page: any): CMSPost {
     date: publishedAt,
     publishedAt,
     tags,
+    contentHtml,
   };
 }
 
 /**
- * Get all posts for listings (Insights page) and sitemap.
+ * Fetch all posts from Notion.
+ * - Sorts by created_time (so we don’t depend on a custom property).
+ * - If Notion misbehaves, we just return [] so the build doesn’t fail.
  */
-export async function getAllPosts(): Promise<CMSPost[]> {
-  if (!notion || !NOTION_DATABASE_ID) {
+export async function getAllPostsCMS(): Promise<CMSPost[]> {
+  if (!notion || !notionDatabaseId) {
     console.warn(
-      "Notion is not configured (NOTION_API_KEY / NOTION_DATABASE_ID missing). getAllPosts() returning empty array."
+      "[cms] Notion is not configured (NOTION_API_KEY / NOTION_DATABASE_ID missing). Returning empty posts list."
     );
     return [];
   }
 
   try {
     const response = await notion.databases.query({
-      database_id: NOTION_DATABASE_ID,
-      // Safe sort that doesn't depend on a specific property name
+      database_id: notionDatabaseId,
       sorts: [
         {
-          timestamp: "last_edited_time",
+          timestamp: "created_time",
           direction: "descending",
         },
       ],
+      // You can add a filter here later, e.g. Status = "Published"
     });
 
-    return response.results.map((page: any) => mapPageToPost(page));
-  } catch (err) {
-    console.error("getAllPosts: failed to query Notion", err);
-    // Never break the build on Notion errors
+    return response.results
+      .map((page: any) => mapPageToPost(page))
+      .filter((p): p is CMSPost => !!p);
+  } catch (error) {
+    console.error("[cms] Error fetching posts from Notion:", error);
     return [];
   }
 }
 
 /**
- * Get a single post by slug for /insights/[slug].
+ * Fetch a single post by slug.
  */
-export async function getPost(slug: string): Promise<CMSPost | null> {
-  if (!notion || !NOTION_DATABASE_ID) {
-    console.warn("Notion is not configured. getPost() returning null.");
+export async function getPostCMS(slug: string): Promise<CMSPost | null> {
+  if (!notion || !notionDatabaseId) {
+    console.warn(
+      "[cms] Notion is not configured (NOTION_API_KEY / NOTION_DATABASE_ID missing). Returning null for post."
+    );
     return null;
   }
 
-  let page: any | null = null;
-
-  // Try query by Slug property (if it exists)
   try {
-    const bySlug = await notion.databases.query({
-      database_id: NOTION_DATABASE_ID,
+    const response = await notion.databases.query({
+      database_id: notionDatabaseId,
       filter: {
         property: "Slug",
-        rich_text: { equals: slug },
+        rich_text: {
+          equals: slug,
+        },
       },
       page_size: 1,
     });
 
-    if (bySlug.results.length > 0) {
-      page = bySlug.results[0];
-    }
-  } catch (err) {
-    console.warn(
-      `getPost: failed to query Notion by Slug for "${slug}", falling back to in-memory search.`,
-      err
-    );
+    const page = response.results[0] as any;
+    if (!page) return null;
+
+    return mapPageToPost(page);
+  } catch (error) {
+    console.error(`[cms] Error fetching post with slug "${slug}" from Notion:`, error);
+    return null;
   }
-
-  // Fallback: search in all posts by slug
-  if (!page) {
-    const all = await getAllPosts();
-    const match = all.find((p) => p.slug === slug);
-    if (!match) {
-      return null;
-    }
-
-    // Try retrieving the page to get blocks
-    try {
-      const notionPage = await notion.pages.retrieve({
-        page_id: match.id,
-      } as any);
-      page = notionPage;
-    } catch (err) {
-      console.warn(
-        `getPost: could not retrieve Notion page for id "${match.id}". Returning basic post data only.`,
-        err
-      );
-      return match;
-    }
-  }
-
-  const base = mapPageToPost(page);
-
-  // Fetch blocks and convert to HTML
-  let contentHtml = "";
-
-  try {
-    const markdownLines: string[] = [];
-    let cursor: string | undefined = undefined;
-
-    while (true) {
-      const resp = await notion.blocks.children.list({
-        block_id: page.id,
-        page_size: 100,
-        start_cursor: cursor,
-      });
-
-      for (const block of resp.results as any[]) {
-        const type = block.type;
-        const richTexts = block[type]?.rich_text ?? [];
-        const text = richTexts.map((t: any) => t.plain_text).join("");
-
-        if (!text) continue;
-
-        switch (type) {
-          case "heading_1":
-            markdownLines.push(`# ${text}`);
-            break;
-          case "heading_2":
-            markdownLines.push(`## ${text}`);
-            break;
-          case "heading_3":
-            markdownLines.push(`### ${text}`);
-            break;
-          case "bulleted_list_item":
-            markdownLines.push(`- ${text}`);
-            break;
-          case "numbered_list_item":
-            markdownLines.push(`1. ${text}`);
-            break;
-          default:
-            markdownLines.push(text);
-        }
-      }
-
-      if (!resp.has_more || !resp.next_cursor) break;
-      cursor = resp.next_cursor;
-    }
-
-    const markdown = markdownLines.join("\n\n");
-    contentHtml = markdown ? (marked as any)(markdown) : "";
-  } catch (err) {
-    console.warn(
-      `getPost: failed to load Notion blocks for page "${page.id}". Returning post without contentHtml.`,
-      err
-    );
-  }
-
-  return {
-    ...base,
-    contentHtml:
-      contentHtml ||
-      "<p>Full article coming soon. Check back shortly.</p>",
-  };
 }
-
-/**
- * Backwards-compatible exports for existing imports:
- * - getAllPostsCMS
- * - getPostCMS
- */
-export { getAllPosts as getAllPostsCMS, getPost as getPostCMS };
