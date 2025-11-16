@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Navbar } from "../components/Navbar";
-import { Footer } from "../components/Footer";
+import { Inter } from "next/font/google";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Resourcin – Human Capital Advisors",
+  title: "Resourcin | Human Capital Advisors",
   description:
-    "Resourcin helps growth-focused companies build lean teams, recruiting engines, and clean people operations across Africa and beyond.",
+    "Resourcin is a boutique human capital advisory and recruitment partner for growth-focused businesses.",
 };
 
 export default function RootLayout({
@@ -16,10 +19,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-slate-900 antialiased">
-        <Navbar />
-        <div className="min-h-screen">{children}</div>
-        <Footer />
+      <body
+        className={`${inter.className} min-h-screen bg-slate-50 text-slate-900 antialiased`}
+      >
+        <div className="flex min-h-screen flex-col">
+          <Navbar />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </div>
       </body>
     </html>
   );
