@@ -22,12 +22,18 @@ datasource db {
 
 model ClientCompany {
   id          String   @id @default(cuid())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId    String
+
   name        String
   slug        String   @unique
   logoUrl     String?
-  website     String?
-  description String?
+  websiteUrl  String?
+  location    String?
+  industry    String?
+  size        String?  // e.g. "11–50", "51–200"
 
+  // One client company can have many jobs
   jobs        Job[]
 
   createdAt   DateTime @default(now())
@@ -35,25 +41,34 @@ model ClientCompany {
 }
 
 model Job {
-  id          String   @id @default(cuid())
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  tenantId    String
+  id               String           @id @default(cuid())
 
-  title       String
-  slug        String   @unique
-  location    String
-  employmentType String   // e.g. "Full-time", "Contract"
-  seniority   String      // e.g. "Mid-level", "Senior"
-  function    String      // e.g. "Engineering", "Product", "Sales"
-  tags        String[]    // store tags as text[]
-  summary     String
-  description String
-  isPublished Boolean  @default(true)
+  // Tenant / board this job belongs to
+  tenant           Tenant           @relation(fields: [tenantId], references: [id])
+  tenantId         String
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  // Client company (employer) – optional so you can also post “Resourcin Anonymous” jobs
+  clientCompany    ClientCompany?   @relation(fields: [clientCompanyId], references: [id])
+  clientCompanyId  String?
 
-  applications JobApplication[]
+  title            String
+  slug             String           @unique
+  location         String
+  employmentType   String           // "Full-time", "Contract", etc.
+  seniority        String           // "Junior", "Mid", "Senior"
+  function         String           // "Engineering", "Product", "Sales", etc.
+  tags             String[]         // e.g. ["Remote", "Nigeria", "Fintech"]
+
+  summary          String           // short teaser / intro
+  description      String           // full job description (HTML/Markdown/plain)
+
+  isPublished      Boolean          @default(true)
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // One job → many applications
+  applications     JobApplication[]
 }
 
 model Candidate {
