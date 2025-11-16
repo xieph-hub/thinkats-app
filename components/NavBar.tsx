@@ -32,12 +32,12 @@ export function Navbar() {
               Resourcin
             </span>
             <span className="text-[11px] text-slate-500">
-              Talent &amp; HR Advisory
+              Human Capital Advisors
             </span>
           </div>
         </Link>
 
-        {/* Desktop nav */}
+        {/* Desktop navigation */}
         <div className="hidden items-center gap-6 md:flex">
           {navLinks.map((link) => (
             <Link
@@ -54,7 +54,7 @@ export function Navbar() {
           ))}
         </div>
 
-        {/* Mobile toggle */}
+        {/* Mobile menu button */}
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
