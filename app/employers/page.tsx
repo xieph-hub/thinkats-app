@@ -1,65 +1,42 @@
-import Link from "next/link";
-
 export default function EmployersPage() {
   return (
-    <div className="max-w-5xl mx-auto py-16 px-4 space-y-8">
-      <header className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
-          For Employers
-        </p>
-        <h1 className="text-3xl font-semibold">
-          African talent acquisition and employer of record, end to end
+    <main className="py-12">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-semibold text-slate-900 mb-4">
+          Talent Acquisition & EOR for African and Global Teams
         </h1>
-        <p className="text-sm text-neutral-400 max-w-3xl">
-          We help you design roles, run searches, manage assessments and employ
-          talent compliantly across African markets through our TA and EOR
-          solutions.
+        <p className="text-slate-600 mb-6">
+          Resourcin helps founders, HR leaders and global companies hire,
+          onboard and support talent across Africa and remote hubs.
         </p>
-      </header>
 
-      <section className="grid gap-6 md:grid-cols-3">
-        <Link
-          href="/services"
-          className="group rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 hover:border-emerald-400/70 hover:bg-neutral-900 transition"
-        >
-          <h2 className="text-base font-semibold mb-2">Services</h2>
-          <p className="text-xs text-neutral-400 mb-4">
-            Talent Acquisition, Recruitment Process Outsourcing, Employer of
-            Record and Executive Search across Africa.
-          </p>
-          <span className="text-[11px] font-medium text-emerald-300 group-hover:underline">
-            Explore services →
-          </span>
-        </Link>
-
-        <Link
-          href="/case-studies"
-          className="group rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 hover:border-emerald-400/70 hover:bg-neutral-900 transition"
-        >
-          <h2 className="text-base font-semibold mb-2">Case studies</h2>
-          <p className="text-xs text-neutral-400 mb-4">
-            See how we&apos;ve helped founders, HR leaders and CEOs build
-            teams, fix hiring bottlenecks and scale operations.
-          </p>
-          <span className="text-[11px] font-medium text-emerald-300 group-hover:underline">
-            View case studies →
-          </span>
-        </Link>
-
-        <Link
-          href="/request-talent"
-          className="group rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 hover:border-emerald-400/70 hover:bg-neutral-900 transition"
-        >
-          <h2 className="text-base font-semibold mb-2">Request talent</h2>
-          <p className="text-xs text-neutral-400 mb-4">
-            Share your brief for a single hire, a full team or an EOR
-            engagement and we&apos;ll get back with a structured plan.
-          </p>
-          <span className="text-[11px] font-medium text-emerald-300 group-hover:underline">
-            Submit a brief →
-          </span>
-        </Link>
-      </section>
-    </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900 mb-1">
+              Talent Acquisition
+            </h2>
+            <p className="text-xs text-slate-600">
+              Graduate programmes, experienced hires and leadership search.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900 mb-1">
+              Employer of Record (EOR)
+            </h2>
+            <p className="text-xs text-slate-600">
+              Hire talent compliantly in new markets without opening entities.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900 mb-1">
+              RPO & Embedded Pods
+            </h2>
+            <p className="text-xs text-slate-600">
+              On-demand recruiting squads plugged into your people operations.
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
