@@ -41,14 +41,12 @@ export async function POST(req: Request) {
         fullName: name,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        status: "active",
       },
       create: {
         fullName: name,
         email: normalizedEmail,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        status: "active",
       },
     });
 
