@@ -35,29 +35,25 @@ model ClientCompany {
 }
 
 model Job {
-  id             String   @id @default(cuid())
-  client         ClientCompany? @relation(fields: [clientId], references: [id])
-  clientId       String?
-  title          String
-  slug           String   @unique
-  location       String?
-  jobType        String?   // full-time, contract, internship
-  level          String?   // graduate, mid, senior, executive
-  function       String?   // e.g. Product, HR, Finance
-  industry       String?   // e.g. Fintech, Banking
-  summary        String?
-  description    String?
-  requirements   String?
-  salaryCurrency String?
-  salaryMin      Int?
-  salaryMax      Int?
-  remoteOption   String?   // remote, hybrid, onsite
-  status         String    @default("open") // open, on_hold, closed
+  id          String   @id @default(cuid())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId    String
 
-  applications   Application[]
+  title       String
+  slug        String   @unique
+  location    String
+  employmentType String   // e.g. "Full-time", "Contract"
+  seniority   String      // e.g. "Mid-level", "Senior"
+  function    String      // e.g. "Engineering", "Product", "Sales"
+  tags        String[]    // store tags as text[]
+  summary     String
+  description String
+  isPublished Boolean  @default(true)
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applications JobApplication[]
 }
 
 model Candidate {
@@ -95,17 +91,43 @@ model Candidate {
   updatedAt             DateTime @updatedAt
 }
 
-model Application {
-  id          String    @id @default(cuid())
-  job         Job       @relation(fields: [jobId], references: [id])
+model JobApplication {
+  id          String   @id @default(cuid())
+
+  job         Job      @relation(fields: [jobId], references: [id])
   jobId       String
-  candidate   Candidate @relation(fields: [candidateId], references: [id])
-  candidateId String
 
-  status      String    @default("applied") // applied, in_review, shortlisted, interview, offer, hired, rejected
-  source      String?   // job_board, internal, referral
-  notes       String?
+  fullName    String
+  email       String
+  phone       String?
+  location    String?
+  linkedinUrl String?
+  portfolioUrl String?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  cvUrl       String           // public URL from Supabase Storage
+  coverLetter String?          // optional text
+  source      String?          // e.g. "Website", "Referral"
+
+  status      ApplicationStatus @default(PENDING)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  jobs        Job[]
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  SHORTLISTED
+  REJECTED
+  HIRED
 }
