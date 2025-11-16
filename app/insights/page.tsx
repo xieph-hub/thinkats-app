@@ -1,95 +1,104 @@
 import Link from "next/link";
-import { getInsightPosts, type InsightPost } from "@/lib/notion";
+import { fetchInsights } from "@/lib/notion";
+import type { InsightPost } from "@/lib/notion";
 
 export const metadata = {
   title: "Insights | Resourcin",
   description:
-    "People, hiring, and leadership insights for founders, HR leaders, and investors scaling teams across Africa and beyond.",
+    "Operator-led hiring, people operations, and talent insights from Resourcin – practical notes for founders and HR leaders.",
 };
 
-// Revalidate periodically so Notion updates show up without redeploy
-export const revalidate = 300; // 5 minutes
-
 export default async function InsightsPage() {
-  let posts: InsightPost[] = [];
-
-  try {
-    posts = await getInsightPosts();
-  } catch (error) {
-    console.error("Failed to fetch Notion insights:", error);
-  }
-
+  const posts: InsightPost[] = await fetchInsights();
   const hasPosts = posts && posts.length > 0;
 
   return (
     <main className="bg-slate-50 min-h-screen">
-      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <header className="mb-8 max-w-3xl">
+      <section className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+        {/* Hero */}
+        <header className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#306B34]">
             Insights
           </p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            People, hiring, and leadership notes from the field.
+            Notes from the talent and people trenches.
           </h1>
           <p className="mt-3 text-sm text-slate-600 sm:text-base">
-            Short, useful pieces for founders, HR leaders, and investors
-            navigating hiring, people-costs, and culture in high-growth
-            environments.
+            Short, practical pieces on hiring, embedded people ops, and
+            building teams across Nigeria, Africa and remote markets — written
+            from the perspective of operators, not armchair theorists.
           </p>
         </header>
 
-        {!hasPosts ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-6 text-sm text-slate-600">
-            <p className="font-medium text-slate-800">No insights yet.</p>
-            <p className="mt-1">
-              Once your Notion database has published entries, they&apos;ll
-              appear here automatically. Check that:
-            </p>
-            <ul className="mt-2 list-disc pl-5 text-xs text-slate-500">
-              <li>Items are in the correct database (NOTION_INSIGHTS_DATABASE_ID).</li>
-              <li>
-                Their <span className="font-semibold">Status</span> is set to{" "}
-                <span className="font-semibold">Published</span>.
-              </li>
-            </ul>
-          </div>
-        ) : (
-          <div className="grid gap-5 md:grid-cols-3">
+        {/* Content */}
+        {hasPosts ? (
+          <div className="mt-8 grid gap-6 md:grid-cols-2">
             {posts.map((post) => (
-              <article
+              <Link
                 key={post.id}
-                className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm"
+                href={`/insights/${post.slug}`}
+                className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#172965]/60 hover:shadow-md"
               >
-                {post.tag && (
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#172965]">
-                    {post.tag}
-                  </p>
-                )}
-                <h2 className="mt-2 text-sm font-semibold text-slate-900">
-                  {post.title}
-                </h2>
-                {post.summary && (
-                  <p className="mt-2 flex-1 text-sm text-slate-600">
+                <div>
+                  {post.tags && post.tags.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-1">
+                      {post.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <h2 className="text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
+                    {post.title}
+                  </h2>
+                  <p className="mt-2 line-clamp-3 text-xs text-slate-600">
                     {post.summary}
                   </p>
-                )}
+                </div>
 
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                <div className="mt-4 flex items-center justify-between text-[11px] text-slate-500">
                   <span>
-                    {post.readingTime
-                      ? post.readingTime
-                      : post.publishedAt
-                      ? new Date(post.publishedAt).toLocaleDateString()
-                      : ""}
+                    {post.publishedAt
+                      ? new Date(post.publishedAt).toLocaleDateString(
+                          "en-US",
+                          {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          }
+                        )
+                      : "Draft"}
                   </span>
-                  {/* When you’re ready to do full article pages via /insights/[slug],
-                      you can swap 'Coming soon' for a real Link */}
-                  <span className="text-xs font-semibold text-[#172965]">
-                    Coming soon →
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#172965]">
+                    Read insight
+                    <span aria-hidden>↗</span>
                   </span>
                 </div>
-              </article>
+              </Link>
             ))}
+          </div>
+        ) : (
+          <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white/60 p-6 text-sm text-slate-600">
+            <p className="font-medium text-slate-800">
+              Insights are coming soon.
+            </p>
+            <p className="mt-2 text-xs text-slate-600">
+              We&apos;re wiring this space to your Notion database. Once{" "}
+              <code className="rounded bg-slate-100 px-1 py-[1px] text-[11px]">
+                NOTION_API_KEY
+              </code>{" "}
+              and{" "}
+              <code className="rounded bg-slate-100 px-1 py-[1px] text-[11px]">
+                NOTION_DATABASE_ID
+              </code>{" "}
+              are set in your Vercel environment, new posts published in Notion
+              will appear here automatically.
+            </p>
           </div>
         )}
       </section>
