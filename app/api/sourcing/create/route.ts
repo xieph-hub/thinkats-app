@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       level?: string;
       functions?: string;
       industries?: string;
-      skills?: string;
+      skills?: string | string[];
       preferredLocations?: string;
       workPreference?: string;
       salaryCurrency?: string;
@@ -54,6 +54,18 @@ export async function POST(req: Request) {
       source?: string;
       location?: string;
     };
+// Normalize skills into a string[]
+const rawSkills = skills as unknown;
+
+const parsedSkills =
+  typeof rawSkills === "string"
+    ? rawSkills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : Array.isArray(rawSkills)
+    ? rawSkills.map((s) => String(s).trim()).filter(Boolean)
+    : [];
 
     if (!fullName || !email) {
       return NextResponse.json(
@@ -80,7 +92,7 @@ export async function POST(req: Request) {
         level: level ?? null,
         functions: functions ?? null,
         industries: industries ?? null,
-        skills: skills ?? null,
+        skills: parsedSkills, // <-- changed
 
         preferredLocations: preferredLocations ?? null,
         workPreference: workPreference ?? null,
