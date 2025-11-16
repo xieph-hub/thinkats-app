@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import type { ReactNode, SVGProps } from "react";
 import Link from "next/link";
 import { SITE_URL } from "@/lib/site";
+import { jobs, type Job } from "@/lib/jobs";
 
 export const metadata: Metadata = {
   title: "Jobs | Resourcin",
@@ -35,111 +36,6 @@ const JOB_BOARD_CONFIG = {
   employerCtaLabel: "Use this board for your roles",
   poweredByLabel: "Powered by Resourcin",
 };
-
-type Job = {
-  slug: string;
-  title: string;
-  employerName: string;
-  employerInitials: string;
-  location: string;
-  workType: "Remote" | "Hybrid" | "On-site";
-  type: "Full-time" | "Contract";
-  department: string;
-  seniority: "Junior" | "Mid-level" | "Senior" | "Lead";
-  salaryRange?: string;
-  postedAt: string;
-  highlight?: string;
-};
-
-const jobs: Job[] = [
-  {
-    slug: "senior-product-manager-fintech",
-    title: "Senior Product Manager – Fintech Platform",
-    employerName: "Confidential Fintech (Africa)",
-    employerInitials: "CF",
-    location: "Lagos / Remote-friendly",
-    workType: "Hybrid",
-    type: "Full-time",
-    department: "Product",
-    seniority: "Senior",
-    salaryRange: "$50,000 – $75,000 / year (guidance)",
-    postedAt: "Posted 3 days ago",
-    highlight: "Own roadmap for core payments & lending experiences.",
-  },
-  {
-    slug: "backend-engineer-payments",
-    title: "Backend Engineer – Payments & Wallets",
-    employerName: "Growth-stage Paytech",
-    employerInitials: "GP",
-    location: "Remote (Africa)",
-    workType: "Remote",
-    type: "Full-time",
-    department: "Engineering",
-    seniority: "Mid-level",
-    salaryRange: "₦1.5m – ₦2.3m / month (guidance)",
-    postedAt: "Posted 1 week ago",
-    highlight: "Node.js / TypeScript, high-volume APIs, distributed systems.",
-  },
-  {
-    slug: "people-ops-lead-multi-country",
-    title: "People Operations Lead – Multi-country",
-    employerName: "Tech & Services Group",
-    employerInitials: "TS",
-    location: "Lagos (Hybrid)",
-    workType: "Hybrid",
-    type: "Full-time",
-    department: "People & Operations",
-    seniority: "Lead",
-    salaryRange: "₦1.2m – ₦1.8m / month (guidance)",
-    postedAt: "Posted 2 weeks ago",
-    highlight:
-      "Own people ops, policies and reporting across multiple subsidiaries.",
-  },
-  {
-    slug: "enterprise-sales-manager-b2b-saas",
-    title: "Enterprise Sales Manager – B2B SaaS",
-    employerName: "B2B SaaS / Infrastructure",
-    employerInitials: "SI",
-    location: "Lagos / Nairobi",
-    workType: "On-site",
-    type: "Full-time",
-    department: "Sales & Growth",
-    seniority: "Senior",
-    salaryRange: "$40,000 – $60,000 / year (base) + commissions",
-    postedAt: "Posted 2 weeks ago",
-    highlight:
-      "Own pipeline from prospecting to closing bank / telco / logistics logos.",
-  },
-  {
-    slug: "senior-data-analyst-product-ops",
-    title: "Senior Data Analyst – Product & Operations",
-    employerName: "Digital Financial Services",
-    employerInitials: "DF",
-    location: "Hybrid – Lagos",
-    workType: "Hybrid",
-    type: "Full-time",
-    department: "Data",
-    seniority: "Senior",
-    salaryRange: "₦900k – ₦1.5m / month (guidance)",
-    postedAt: "Posted 3 weeks ago",
-    highlight:
-      "Turn product & ops data into dashboards leaders actually use to decide.",
-  },
-  {
-    slug: "customer-success-lead-enterprise",
-    title: "Customer Success Lead – Enterprise Accounts",
-    employerName: "Vertical SaaS",
-    employerInitials: "VS",
-    location: "Remote / Hybrid",
-    workType: "Remote",
-    type: "Full-time",
-    department: "Customer Success",
-    seniority: "Lead",
-    salaryRange: "Competitive, plus performance bonus",
-    postedAt: "Posted 1 month ago",
-    highlight: "Own retention and expansion for a portfolio of enterprise clients.",
-  },
-];
 
 // -----------------------------------------------------------------------------
 // Icon components (with classic colors)
@@ -273,14 +169,7 @@ function WhatsAppIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-// Simple pill component for icon + label
-function InfoPill({
-  icon,
-  label,
-}: {
-  icon: ReactNode;
-  label: string;
-}) {
+function InfoPill({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-[0.7rem] font-medium text-slate-600 ring-1 ring-slate-200">
       <span className="flex items-center justify-center">{icon}</span>
@@ -373,7 +262,8 @@ export default function JobsPage() {
                 Functions
               </p>
               <p className="mt-1 text-slate-700">
-                Product, Engineering, Data, People, Ops, Sales & Customer Success.
+                Product, Engineering, Data, People, Ops, Sales & Customer
+                Success.
               </p>
             </div>
             <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
@@ -389,7 +279,8 @@ export default function JobsPage() {
                 Don&apos;t see your exact role?
               </p>
               <p className="mt-1 text-slate-700">
-                Share your profile once. We match you to live and upcoming briefs.
+                Share your profile once. We match you to live and upcoming
+                briefs.
               </p>
             </div>
           </div>
@@ -407,22 +298,22 @@ export default function JobsPage() {
           </div>
 
           <div className="space-y-3">
-            {jobs.map((job) => {
-              // Per-job UTM logic
+            {jobs.map((job: Job) => {
               const jobSlug = encodeURIComponent(job.slug);
+              const jobDetailPath = `/jobs/${job.slug}`;
               const utmBase = `utm_source=resourcin_job_board&utm_campaign=job_${jobSlug}`;
 
-              // Candidate CTA from card
-              const ctaHref = `/talent-network?job=${jobSlug}&${utmBase}&utm_medium=cta`;
+              const detailFromListUrl = `${jobDetailPath}?${utmBase}&utm_medium=job_list&utm_content=card_cta`;
 
-              // Social landing URLs (what people land on when they click shared links)
-              const linkedInLandingUrl = `${SITE_URL}/talent-network?job=${jobSlug}&${utmBase}&utm_medium=social&utm_content=linkedin`;
-              const xLandingUrl = `${SITE_URL}/talent-network?job=${jobSlug}&${utmBase}&utm_medium=social&utm_content=x`;
-              const whatsAppLandingUrl = `${SITE_URL}/talent-network?job=${jobSlug}&${utmBase}&utm_medium=social&utm_content=whatsapp`;
+              // Social landing = job detail page
+              const linkedInLandingUrl = `${SITE_URL}${jobDetailPath}?${utmBase}&utm_medium=social&utm_content=linkedin`;
+              const xLandingUrl = `${SITE_URL}${jobDetailPath}?${utmBase}&utm_medium=social&utm_content=x`;
+              const whatsAppLandingUrl = `${SITE_URL}${jobDetailPath}?${utmBase}&utm_medium=social&utm_content=whatsapp`;
 
-              const encodedLinkedInLanding = encodeURIComponent(linkedInLandingUrl);
+              const encodedLinkedInLanding = encodeURIComponent(
+                linkedInLandingUrl
+              );
               const encodedXLanding = encodeURIComponent(xLandingUrl);
-
               const shareText = encodeURIComponent(
                 `${job.title} – via Resourcin`
               );
@@ -439,7 +330,6 @@ export default function JobsPage() {
                   key={job.slug}
                   className="relative overflow-hidden rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200/80 transition transform hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-300 sm:px-5"
                 >
-                  {/* Accent bar */}
                   <div
                     className="pointer-events-none absolute inset-x-0 top-0 h-1"
                     style={{
@@ -452,19 +342,21 @@ export default function JobsPage() {
                     {/* Left section */}
                     <div className="space-y-3">
                       <div className="flex items-start gap-3">
-                        {/* Employer avatar (future: replace with logo in white-label mode) */}
                         <div
                           className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold text-white shadow-sm sm:h-11 sm:w-11"
-                          style={{ backgroundColor: brand.primaryColor }}
+                          style={{ backgroundColor: JOB_BOARD_CONFIG.primaryColor }}
                         >
                           {job.employerInitials}
                         </div>
 
                         <div className="space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-semibold text-[#172965] sm:text-base">
+                            <Link
+                              href={detailFromListUrl}
+                              className="text-sm font-semibold text-[#172965] hover:underline sm:text-base"
+                            >
                               {job.title}
-                            </h3>
+                            </Link>
                             <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[0.65rem] font-medium text-slate-600 ring-1 ring-slate-200">
                               {job.department}
                             </span>
@@ -475,12 +367,8 @@ export default function JobsPage() {
                         </div>
                       </div>
 
-                      {/* Icon pills */}
                       <div className="flex flex-wrap items-center gap-2 text-[0.7rem] sm:text-xs">
-                        <InfoPill
-                          icon={<LocationIcon />}
-                          label={job.location}
-                        />
+                        <InfoPill icon={<LocationIcon />} label={job.location} />
                         <InfoPill
                           icon={<BriefcaseIcon />}
                           label={`${job.workType} • ${job.type}`}
@@ -497,7 +385,6 @@ export default function JobsPage() {
                         )}
                       </div>
 
-                      {/* Short highlight */}
                       {job.highlight && (
                         <p className="mt-1.5 text-xs text-slate-700 sm:text-sm">
                           {job.highlight}
@@ -547,11 +434,11 @@ export default function JobsPage() {
                       </div>
 
                       <Link
-                        href={ctaHref}
+                        href={detailFromListUrl}
                         className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
-                        style={{ backgroundColor: brand.primaryColor }}
+                        style={{ backgroundColor: JOB_BOARD_CONFIG.primaryColor }}
                       >
-                        View details & express interest
+                        View full brief
                         <span
                           className="ml-1.5 text-[0.65rem]"
                           aria-hidden="true"
@@ -582,7 +469,7 @@ export default function JobsPage() {
             <Link
               href={TALENT_NETWORK_BOTTOM_URL}
               className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-[#0b1c3d] shadow-sm hover:brightness-105"
-              style={{ backgroundColor: brand.accentColor }}
+              style={{ backgroundColor: JOB_BOARD_CONFIG.accentColor }}
             >
               Join the talent network
               <span className="ml-2 text-xs" aria-hidden="true">
