@@ -11,6 +11,19 @@ export const metadata: Metadata = {
 };
 
 // -----------------------------------------------------------------------------
+// UTM constants for static CTAs
+// -----------------------------------------------------------------------------
+
+const TALENT_NETWORK_HERO_URL =
+  "/talent-network?utm_source=resourcin_job_board&utm_medium=hero_cta&utm_campaign=talent_network";
+
+const TALENT_NETWORK_BOTTOM_URL =
+  "/talent-network?utm_source=resourcin_job_board&utm_medium=bottom_cta&utm_campaign=talent_network";
+
+const EMPLOYER_CTA_URL =
+  "/request-talent?utm_source=resourcin_job_board&utm_medium=employer_cta&utm_campaign=request_talent";
+
+// -----------------------------------------------------------------------------
 // White-label friendly job board config
 // -----------------------------------------------------------------------------
 
@@ -19,7 +32,6 @@ const JOB_BOARD_CONFIG = {
   primaryColor: "#172965",
   accentColor: "#64C247",
   background: "#F1F5F9",
-  employerCtaHref: "/request-talent",
   employerCtaLabel: "Use this board for your roles",
   poweredByLabel: "Powered by Resourcin",
 };
@@ -245,6 +257,22 @@ function XIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function WhatsAppIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      {...props}
+      className={`h-3.5 w-3.5 text-[#25D366] ${props.className ?? ""}`}
+    >
+      <path
+        d="M12.04 3.25A8.76 8.76 0 0 0 3.25 12a8.7 8.7 0 0 0 1.26 4.52L3 21l4.61-1.47A8.76 8.76 0 1 0 12.04 3.25Zm0 1.5a7.25 7.25 0 0 1 6.16 11.11l-.18.28a7.24 7.24 0 0 1-9.19 2.37l-.2-.1-2.7.86.9-2.61-.13-.21A7.24 7.24 0 0 1 12.04 4.75Zm-3.1 3.3c-.17 0-.44.05-.68.34-.24.3-.9.88-.9 2.13 0 1.24.92 2.45 1.05 2.62.13.17 1.8 2.87 4.46 3.9 2.2.87 2.65.79 3.13.74.48-.04 1.54-.63 1.76-1.23.22-.6.22-1.12.16-1.23-.06-.11-.24-.18-.5-.32-.26-.13-1.54-.76-1.78-.84-.24-.09-.41-.13-.6.13-.19.25-.69.84-.85 1.02-.16.18-.32.2-.59.07-.26-.13-1.11-.41-2.11-1.31-.78-.7-1.3-1.56-1.46-1.82-.16-.25-.02-.4.12-.54.13-.13.3-.34.45-.51.15-.17.2-.3.3-.5.1-.2.05-.37 0-.51-.06-.13-.53-1.35-.73-1.84-.18-.45-.37-.46-.54-.47Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 // Simple pill component for icon + label
 function InfoPill({
   icon,
@@ -323,7 +351,7 @@ export default function JobsPage() {
                   </p>
                 </div>
                 <Link
-                  href="/talent-network"
+                  href={TALENT_NETWORK_HERO_URL}
                   className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs font-semibold text-[#0b1c3d] shadow-sm hover:brightness-105"
                   style={{ backgroundColor: brand.accentColor }}
                 >
@@ -380,16 +408,31 @@ export default function JobsPage() {
 
           <div className="space-y-3">
             {jobs.map((job) => {
-              const jobUrl = `${SITE_URL}/talent-network?job=${encodeURIComponent(
-                job.slug
-              )}`;
-              const encodedJobUrl = encodeURIComponent(jobUrl);
+              // Per-job UTM logic
+              const jobSlug = encodeURIComponent(job.slug);
+              const utmBase = `utm_source=resourcin_job_board&utm_campaign=job_${jobSlug}`;
+
+              // Candidate CTA from card
+              const ctaHref = `/talent-network?job=${jobSlug}&${utmBase}&utm_medium=cta`;
+
+              // Social landing URLs (what people land on when they click shared links)
+              const linkedInLandingUrl = `${SITE_URL}/talent-network?job=${jobSlug}&${utmBase}&utm_medium=social&utm_content=linkedin`;
+              const xLandingUrl = `${SITE_URL}/talent-network?job=${jobSlug}&${utmBase}&utm_medium=social&utm_content=x`;
+              const whatsAppLandingUrl = `${SITE_URL}/talent-network?job=${jobSlug}&${utmBase}&utm_medium=social&utm_content=whatsapp`;
+
+              const encodedLinkedInLanding = encodeURIComponent(linkedInLandingUrl);
+              const encodedXLanding = encodeURIComponent(xLandingUrl);
+
               const shareText = encodeURIComponent(
                 `${job.title} – via Resourcin`
               );
 
-              const linkedInShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedJobUrl}`;
-              const xShareUrl = `https://twitter.com/intent/tweet?url=${encodedJobUrl}&text=${shareText}`;
+              const linkedInShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedLinkedInLanding}`;
+              const xShareUrl = `https://twitter.com/intent/tweet?url=${encodedXLanding}&text=${shareText}`;
+              const whatsAppMessage = encodeURIComponent(
+                `${job.title} – via Resourcin\n${whatsAppLandingUrl}`
+              );
+              const whatsAppShareUrl = `https://wa.me/?text=${whatsAppMessage}`;
 
               return (
                 <article
@@ -484,6 +527,15 @@ export default function JobsPage() {
                           <XIcon />
                           <span>X</span>
                         </a>
+                        <a
+                          href={whatsAppShareUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200 hover:bg-slate-100"
+                        >
+                          <WhatsAppIcon />
+                          <span>WhatsApp</span>
+                        </a>
                       </div>
                     </div>
 
@@ -495,9 +547,7 @@ export default function JobsPage() {
                       </div>
 
                       <Link
-                        href={`/talent-network?job=${encodeURIComponent(
-                          job.slug
-                        )}`}
+                        href={ctaHref}
                         className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
                         style={{ backgroundColor: brand.primaryColor }}
                       >
@@ -530,7 +580,7 @@ export default function JobsPage() {
               </p>
             </div>
             <Link
-              href="/talent-network"
+              href={TALENT_NETWORK_BOTTOM_URL}
               className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-[#0b1c3d] shadow-sm hover:brightness-105"
               style={{ backgroundColor: brand.accentColor }}
             >
@@ -555,10 +605,10 @@ export default function JobsPage() {
             </p>
           </div>
           <Link
-            href={brand.employerCtaHref}
+            href={EMPLOYER_CTA_URL}
             className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 sm:text-sm"
           >
-            {brand.employerCtaLabel}
+            {JOB_BOARD_CONFIG.employerCtaLabel}
             <span className="ml-1.5 text-[0.7rem]" aria-hidden="true">
               →
             </span>
