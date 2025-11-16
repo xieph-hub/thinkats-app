@@ -10,9 +10,9 @@ const candidateLinks = [
 ];
 
 const employerLinks = [
-  { href: "/services", label: "Services" },
-  { href: "/case-studies", label: "Case Studies" },
-  { href: "/request-talent", label: "Request Talent" },
+  { href: "/for-employers/services", label: "Services" },
+  { href: "/for-employers/case-studies", label: "Case studies" },
+  { href: "/request-talent", label: "Request talent" },
 ];
 
 const mainLinks = [
