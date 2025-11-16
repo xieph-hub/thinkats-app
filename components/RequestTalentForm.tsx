@@ -15,17 +15,29 @@ export default function RequestTalentForm() {
 
     try {
       const formData = new FormData(e.currentTarget);
-      const payload = Object.fromEntries(formData.entries());
 
-      // TODO: replace this with real API / email integration
-      console.log("Request Talent submission:", payload);
+      const res = await fetch("/api/request-talent", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to submit brief");
+      }
 
       setStatus("success");
       e.currentTarget.reset();
     } catch (err) {
       console.error(err);
       setStatus("error");
-      setError("Something went wrong. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again."
+      );
+    } finally {
+      setStatus((prev) => (prev === "submitting" ? "idle" : prev));
     }
   }
 
