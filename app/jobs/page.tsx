@@ -1,97 +1,132 @@
 import Link from "next/link";
-import { prisma } from "../../lib/prisma";
+import prisma from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 export default async function JobsPage() {
-  // Fetch jobs from the database
   const jobs = await prisma.job.findMany({
-    where: { status: "open" },
-    orderBy: { createdAt: "desc" },
-    take: 50,
+    where: {
+      status: "open",
+    },
+    select: {
+      slug: true,
+      title: true,
+      location: true,
+      summary: true,
+      salaryCurrency: true,
+      salaryMin: true,
+      salaryMax: true,
+      remoteOption: true,
+      function: true,
+    },
   });
 
   return (
-    <div className="max-w-5xl mx-auto py-16 px-4 space-y-8">
-      <header className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
-          Jobs
-        </p>
-        <h1 className="text-3xl font-semibold">Open roles</h1>
-        <p className="text-sm text-neutral-400 max-w-2xl">
-          Browse roles curated by Resourcin across Africa and beyond. This list
-          is now coming directly from your database.
-        </p>
-      </header>
-
-      {jobs.length === 0 ? (
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-6 text-sm text-neutral-400">
-          No open roles yet. Once you add jobs in Supabase, they&apos;ll appear
-          here automatically.
-        </div>
-      ) : (
-        <section className="space-y-4">
-          <div className="text-xs text-neutral-500">
-            Showing {jobs.length} open role{jobs.length === 1 ? "" : "s"}
+    <div className="bg-slate-50 min-h-screen">
+      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+        <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold tracking-wide uppercase text-[#306B34]">
+              Opportunities
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+              Open roles curated by Resourcin
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              High-signal roles across Africa and global teams hiring in the region.
+            </p>
           </div>
+          <div className="text-xs text-slate-500">
+            Powered by{" "}
+            <span className="font-semibold text-[#172965]">
+              Resourcin Talent Network
+            </span>
+          </div>
+        </header>
 
-          <div className="space-y-3">
-            {jobs.map((job) => (
-              <article
-                key={job.id}
-                className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-5 hover:border-emerald-400/70 hover:bg-neutral-900 transition"
+        {jobs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-8 text-center">
+            <p className="text-sm font-medium text-slate-800">
+              No open roles yet.
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Join the Resourcin Talent Network so we can match you when new roles go
+              live.
+            </p>
+            <div className="mt-4 flex justify-center">
+              <Link
+                href="/candidates/join"
+                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 transition"
               >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold">
-                      <Link
-                        href={`/jobs/${job.slug}`}
-                        className="hover:underline"
-                      >
-                        {job.title}
-                      </Link>
-                    </h2>
+                Join Talent Network
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:gap-5">
+            {jobs.map((job) => {
+              const salary =
+                job.salaryMin && job.salaryMax
+                  ? `${job.salaryCurrency} ${job.salaryMin.toLocaleString()} – ${job.salaryMax.toLocaleString()}`
+                  : job.salaryMin
+                  ? `${job.salaryCurrency} ${job.salaryMin.toLocaleString()}+`
+                  : null;
 
-                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-neutral-400">
-                      {job.location && (
-                        <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-                          {job.location}
+              return (
+                <Link
+                  key={job.slug}
+                  href={`/jobs/${job.slug}`}
+                  className="group block cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#172965] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-2"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-base font-semibold tracking-tight text-slate-900 group-hover:text-[#172965]">
+                          {job.title}
+                        </h2>
+                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                          {job.function || "Role"}
                         </span>
-                      )}
-                      {job.level && (
-                        <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-                          {job.level}
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600 line-clamp-2">
+                        {job.summary}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        {job.location && (
+                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                            📍 {job.location}
+                          </span>
+                        )}
+                        {job.remoteOption && (
+                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                            🌐 {job.remoteOption === "hybrid" ? "Hybrid" : job.remoteOption}
+                          </span>
+                        )}
+                        {salary && (
+                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
+                            💰 {salary}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-end justify-between sm:flex-col sm:items-end sm:justify-between">
+                      <span className="text-xs font-medium uppercase tracking-wide text-[#306B34]">
+                        Actively hiring
+                      </span>
+                      <span className="mt-2 inline-flex items-center text-xs font-medium text-[#172965] group-hover:underline">
+                        View role
+                        <span className="ml-1 translate-y-px transition group-hover:translate-x-0.5">
+                          →
                         </span>
-                      )}
-                      {job.function && (
-                        <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-                          {job.function}
-                        </span>
-                      )}
-                      {job.remoteOption && (
-                        <span className="rounded-full border border-neutral-800 px-2 py-0.5">
-                          {job.remoteOption}
-                        </span>
-                      )}
+                      </span>
                     </div>
                   </div>
-
-                  <div className="text-xs text-neutral-500">
-                    Status:{" "}
-                    <span className="text-emerald-300 font-medium">
-                      {job.status}
-                    </span>
-                  </div>
-                </div>
-
-                {job.summary && (
-                  <p className="mt-3 text-sm text-neutral-400">
-                    {job.summary}
-                  </p>
-                )}
-              </article>
-            ))}
+                </Link>
+              );
+            })}
           </div>
-        </section>
-      )}
+        )}
+      </main>
     </div>
   );
 }
