@@ -13,7 +13,7 @@ function SocialIcon({ label, href, children }: SocialIconProps) {
       aria-label={label}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#FFC000] text-white text-sm font-semibold hover:bg-[#FFC000] hover:text-[#172965] transition-colors"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-xs font-semibold text-white hover:bg-white hover:text-[#172965] transition-colors"
     >
       {children}
     </a>
@@ -24,7 +24,7 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-16 border-t-4 border-[#FFC000] bg-[#172965] text-white">
+    <footer className="mt-16 border-t border-white/10 bg-[#172965] text-white">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {/* Top grid */}
         <div className="py-10 lg:py-12 grid gap-8 md:grid-cols-3">
@@ -35,10 +35,10 @@ export default function Footer() {
             </h3>
             <p className="mt-3 text-sm leading-relaxed text-white/80">
               African-focused talent acquisition and employer-of-record partner,
-              helping high-growth teams hire graduate, experienced and executive
+              helping high-growth teams hire graduate, experienced, and executive
               talent across markets.
             </p>
-            <p className="mt-3 inline-flex items-center rounded-full bg-[#306B34] px-3 py-1 text-xs font-medium tracking-wide text-white">
+            <p className="mt-3 inline-flex items-center rounded-full bg-[#306B34] px-3 py-1 text-xs font-medium tracking-wide text-white/90">
               Talent • Teams • Growth
             </p>
           </div>
@@ -46,14 +46,14 @@ export default function Footer() {
           {/* Navigation links */}
           <div className="grid grid-cols-2 gap-6 text-sm">
             <div>
-              <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+              <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">
                 For Candidates
               </h4>
               <ul className="mt-3 space-y-2">
                 <li>
                   <Link
                     href="/jobs"
-                    className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    className="text-white/80 hover:text-[#64C247] transition-colors"
                   >
                     Browse Jobs
                   </Link>
@@ -61,7 +61,7 @@ export default function Footer() {
                 <li>
                   <Link
                     href="/talent-network"
-                    className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    className="text-white/80 hover:text-[#64C247] transition-colors"
                   >
                     Join Talent Network
                   </Link>
@@ -70,14 +70,14 @@ export default function Footer() {
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+              <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">
                 For Employers
               </h4>
               <ul className="mt-3 space-y-2">
                 <li>
                   <Link
                     href="/employers"
-                    className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    className="text-white/80 hover:text-[#64C247] transition-colors"
                   >
                     Services
                   </Link>
@@ -85,7 +85,7 @@ export default function Footer() {
                 <li>
                   <Link
                     href="/request-talent"
-                    className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    className="text-white/80 hover:text-[#64C247] transition-colors"
                   >
                     Request Talent
                   </Link>
@@ -93,7 +93,7 @@ export default function Footer() {
                 <li>
                   <Link
                     href="/about"
-                    className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    className="text-white/80 hover:text-[#64C247] transition-colors"
                   >
                     About Resourcin
                   </Link>
@@ -101,7 +101,7 @@ export default function Footer() {
                 <li>
                   <Link
                     href="/contact"
-                    className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    className="text-white/80 hover:text-[#64C247] transition-colors"
                   >
                     Contact
                   </Link>
@@ -113,14 +113,14 @@ export default function Footer() {
           {/* Contact + social */}
           <div className="flex flex-col justify-between gap-4 md:items-end">
             <div className="text-sm md:text-right">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">
                 Talk to us
               </p>
               <p className="mt-2 text-white">
                 Phone:{" "}
                 <a
                   href="tel:+2347045572393"
-                  className="font-medium hover:text-[#FFC000] transition-colors"
+                  className="font-medium hover:text-[#64C247] transition-colors"
                 >
                   +234 704 557 2393
                 </a>
@@ -128,7 +128,7 @@ export default function Footer() {
             </div>
 
             <div className="md:text-right">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">
                 Follow Resourcin
               </p>
               <div className="mt-3 flex items-center gap-3 md:justify-end">
@@ -162,7 +162,7 @@ export default function Footer() {
             <span>Built for African & global teams.</span>
             <span className="h-1 w-1 rounded-full bg-[#64C247]" />
             <span className="text-[#64C247]">
-              Blue • Yellow • Green. Your talent stack.
+              Blue • Green. Your talent stack.
             </span>
           </p>
         </div>
