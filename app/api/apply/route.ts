@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 
-// Optional: fallback tenant for now
-const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID ?? "resourcin-main";
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -17,7 +14,6 @@ export async function POST(req: Request) {
       country,
       cvUrl,
       source,
-      tenantId: tenantIdFromBody,
     } = body as {
       jobId?: string;
       name?: string;
@@ -27,7 +23,6 @@ export async function POST(req: Request) {
       country?: string;
       cvUrl?: string;
       source?: string;
-      tenantId?: string;
     };
 
     if (!jobId || !name || !email) {
@@ -39,40 +34,46 @@ export async function POST(req: Request) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Resolve tenantId: body → header → default
-    const tenantId =
-      tenantIdFromBody ??
-      req.headers.get("x-tenant-id") ??
-      DEFAULT_TENANT_ID;
+    // TODO: once multi-tenant is wired: pull from session / header / env
+    const tenantId = process.env.DEFAULT_TENANT_ID ?? "default-tenant";
 
-    // Upsert candidate by *email only* (matches your current Prisma schema)
+    // Upsert candidate by email so the same person doesn't get duplicated
     const candidate = await prisma.candidate.upsert({
       where: {
-        email: normalizedEmail, // <- this exists in CandidateWhereUniqueInput
+        email: normalizedEmail,
       },
       update: {
-        tenantId, // keep this in sync
+        tenantId,
         fullName: name,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        // you can later add city / country / source to the Candidate model if you want
+        // city: city ?? null,
+        // country: country ?? null,
+        // source: source ?? "job_board",
       },
       create: {
-        tenantId, // required by your Candidate–Tenant relation
+        tenantId,
         fullName: name,
         email: normalizedEmail,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
+        // city: city ?? null,
+        // country: country ?? null,
+        // source: source ?? "job_board",
       },
     });
 
     const application = await prisma.jobApplication.create({
-  data: {
-    jobId,
-    candidateId: candidate.id,
-    // status: "applied", // optional if your schema has a default
-  },
-});
+      data: {
+        job: {
+          connect: { id: jobId },
+        },
+        candidate: {
+          connect: { id: candidate.id },
+        },
+        // status: "applied", // if you have a status field with default, you can omit
+      },
+    });
 
     return NextResponse.json(
       {
