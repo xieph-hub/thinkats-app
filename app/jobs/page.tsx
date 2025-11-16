@@ -1,5 +1,5 @@
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,8 @@ export default async function JobsPage() {
               Open roles curated by Resourcin
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              High-signal roles across Africa and global teams hiring in the region.
+              High-signal roles across Africa and global teams hiring in the
+              region.
             </p>
           </div>
           <div className="text-xs text-slate-500">
@@ -50,8 +51,8 @@ export default async function JobsPage() {
               No open roles yet.
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Join the Resourcin Talent Network so we can match you when new roles go
-              live.
+              Join the Resourcin Talent Network so we can match you when new
+              roles go live.
             </p>
             <div className="mt-4 flex justify-center">
               <Link
@@ -63,70 +64,3 @@ export default async function JobsPage() {
             </div>
           </div>
         ) : (
-          <div className="grid gap-4 md:gap-5">
-            {jobs.map((job) => {
-              const salary =
-                job.salaryMin && job.salaryMax
-                  ? `${job.salaryCurrency} ${job.salaryMin.toLocaleString()} – ${job.salaryMax.toLocaleString()}`
-                  : job.salaryMin
-                  ? `${job.salaryCurrency} ${job.salaryMin.toLocaleString()}+`
-                  : null;
-
-              return (
-                <Link
-                  key={job.slug}
-                  href={`/jobs/${job.slug}`}
-                  className="group block cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#172965] hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-2"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-base font-semibold tracking-tight text-slate-900 group-hover:text-[#172965]">
-                          {job.title}
-                        </h2>
-                        <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                          {job.function || "Role"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-600 line-clamp-2">
-                        {job.summary}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        {job.location && (
-                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
-                            📍 {job.location}
-                          </span>
-                        )}
-                        {job.remoteOption && (
-                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
-                            🌐 {job.remoteOption === "hybrid" ? "Hybrid" : job.remoteOption}
-                          </span>
-                        )}
-                        {salary && (
-                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
-                            💰 {salary}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-end justify-between sm:flex-col sm:items-end sm:justify-between">
-                      <span className="text-xs font-medium uppercase tracking-wide text-[#306B34]">
-                        Actively hiring
-                      </span>
-                      <span className="mt-2 inline-flex items-center text-xs font-medium text-[#172965] group-hover:underline">
-                        View role
-                        <span className="ml-1 translate-y-px transition group-hover:translate-x-0.5">
-                          →
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
