@@ -1,100 +1,107 @@
 // app/insights/page.tsx
-
 import Link from "next/link";
-import type { Metadata } from "next";
-import { getAllPostsCMS } from "@/lib/cms";
+import { getAllPosts } from "@/lib/cms";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Insights | Resourcin",
   description:
-    "Insights, playbooks, and commentary on recruiting, talent strategy, and people operations from Resourcin.",
+    "Insights on hiring, talent, and people operations from Resourcin.",
 };
 
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-NG", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+export const dynamic = "force-dynamic";
 
 export default async function InsightsPage() {
-  // This is the ONLY place we read posts for the listing page
-  const posts = await getAllPostsCMS();
+  const posts = await getAllPosts();
 
   return (
-    <div className="bg-slate-50 min-h-screen">
-      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-        <header className="mb-8">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:#306B34]">
+    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+      <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
             Insights
           </p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">
-            Insights for hiring leaders & talent teams
+          <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+            Ideas, playbooks & hiring notes
           </h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600">
-            Short, practical notes on recruiting, people operations, and the
-            realities of hiring in emerging markets.
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">
+            Long-form thinking on recruiting, talent pipelines, and people
+            operations — written for founders, HR leaders, and senior
+            recruiters.
           </p>
-        </header>
+        </div>
+      </header>
 
-        {posts.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white/70 p-6 text-sm text-slate-600">
-            No articles yet. Check back soon — we’re curating our first set of
-            briefs.
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            {posts.map((post) => {
-              const date = formatDate(post.publishedAt || post.date);
+      {posts.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          No published insights yet. Once your Notion database has content, it
+          will show up here automatically.
+        </p>
+      ) : (
+        <section className="grid gap-6 md:grid-cols-2">
+          {posts.map((post) => (
+            <article
+              key={post.id}
+              className="flex h-full flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              {post.coverImage && (
+                <div className="relative h-40 w-full overflow-hidden bg-slate-100">
+                  {/* Use plain img to avoid remote image config issues */}
+                  <img
+                    src={post.coverImage}
+                    alt={post.title}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              )}
 
-              return (
-                <Link
-                  key={post.id}
-                  href={`/insights/${post.slug}`}
-                  className="group flex flex-col rounded-2xl border border-slate-200 bg-white/80 p-5 shadow-sm transition hover:-translate-y-1 hover:border-[color:#172965] hover:shadow-md"
-                >
-                  {date && (
-                    <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-slate-500">
-                      {date}
-                    </p>
+              <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  {post.date && (
+                    <span>
+                      {new Date(post.date).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
                   )}
+                  {post.tags?.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
 
-                  <h2 className="mt-2 text-base font-semibold text-slate-900 group-hover:text-[color:#172965]">
+                <h2 className="text-base font-semibold text-slate-900">
+                  <Link href={`/insights/${post.slug}`} className="hover:underline">
                     {post.title}
-                  </h2>
+                  </Link>
+                </h2>
 
-                  {post.summary && (
-                    <p className="mt-2 line-clamp-3 text-xs text-slate-600">
-                      {post.summary}
-                    </p>
-                  )}
+                {post.excerpt && (
+                  <p className="line-clamp-3 text-sm text-slate-600">
+                    {post.excerpt}
+                  </p>
+                )}
 
-                  {post.tags && post.tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {post.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <span className="mt-3 inline-flex items-center text-xs font-medium text-[color:#172965] group-hover:underline">
+                <div className="mt-auto pt-2">
+                  <Link
+                    href={`/insights/${post.slug}`}
+                    className="inline-flex items-center text-sm font-medium text-[#172965] hover:underline"
+                  >
                     Read insight
-                    <span className="ml-1 text-[10px]">↗</span>
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </main>
-    </div>
+                    <span className="ml-1 text-xs">↗</span>
+                  </Link>
+                </div>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+    </main>
   );
 }
