@@ -51,7 +51,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh flex flex-col">
         <SiteHeader />
         <main className="flex-1">{children}</main>
-        <SiteFooter />
+        <footer className="mt-12 border-t border-slate-800 bg-brand-navy text-slate-100">
+          <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-8 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold">
+                Resourcin Human Capital Advisors
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                African-focused talent, recruiting & employer-of-record solutions.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs md:text-sm">
+              <a href="/jobs" className="hover:text-brand-yellow">
+                Jobs
+              </a>
+              <a href="/employers" className="hover:text-brand-yellow">
+                For Employers
+              </a>
+              <a href="/contact" className="hover:text-brand-yellow">
+                Contact
+              </a>
+            </div>
+          </div>
+        </footer>
       </body>
     </html>
   );
