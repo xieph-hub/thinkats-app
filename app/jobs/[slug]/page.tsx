@@ -1,4 +1,4 @@
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -64,7 +64,10 @@ export default async function JobDetailPage({ params }: JobPageProps) {
               )}
               {job.remoteOption && (
                 <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1">
-                  🌐 {job.remoteOption === "hybrid" ? "Hybrid" : job.remoteOption}
+                  🌐{" "}
+                  {job.remoteOption === "hybrid"
+                    ? "Hybrid"
+                    : job.remoteOption}
                 </span>
               )}
               {job.function && (
@@ -98,8 +101,9 @@ export default async function JobDetailPage({ params }: JobPageProps) {
               How to apply
             </h3>
             <p className="mt-2 text-sm text-slate-700">
-              This role is managed by Resourcin on behalf of the hiring company.
-              Share your profile and we&apos;ll review for a potential shortlist.
+              This role is managed by Resourcin on behalf of the hiring
+              company. Share your profile and we&apos;ll review for a potential
+              shortlist.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
