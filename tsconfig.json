@@ -14,10 +14,10 @@
     "jsx": "preserve",
     "incremental": true,
 
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./*"]
-    }
+     },
+    "plugins": [{ "name": "next" }]
+    // ...other options
+  }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
