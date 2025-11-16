@@ -10,11 +10,15 @@ export default function RequestTalentForm() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
+    // ✅ Store the form element BEFORE any await
+    const form = e.currentTarget;
+
     setStatus("submitting");
     setError(null);
 
     try {
-      const formData = new FormData(e.currentTarget);
+      const formData = new FormData(form);
 
       const res = await fetch("/api/request-talent", {
         method: "POST",
@@ -23,11 +27,11 @@ export default function RequestTalentForm() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to submit brief");
+        throw new Error(data?.error || "Failed to submit brief.");
       }
 
       setStatus("success");
-      e.currentTarget.reset();
+      form.reset(); // ✅ use the stored form, not e.currentTarget
     } catch (err) {
       console.error(err);
       setStatus("error");
@@ -36,8 +40,6 @@ export default function RequestTalentForm() {
           ? err.message
           : "Something went wrong. Please try again."
       );
-    } finally {
-      setStatus((prev) => (prev === "submitting" ? "idle" : prev));
     }
   }
 
