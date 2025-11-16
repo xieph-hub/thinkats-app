@@ -74,15 +74,13 @@ export async function getAllPosts(): Promise<CMSPost[]> {
   try {
     const response = await notion.databases.query({
       database_id: NOTION_DATABASE_ID,
-
-      // Safe sort: no hard-coded property names like "PublishedAt"
+      // Safe sort that doesn't depend on a specific property name
       sorts: [
         {
           timestamp: "last_edited_time",
           direction: "descending",
         },
       ],
-      // If you later add a Status property and want only Published, we can add a filter here.
     });
 
     return response.results.map((page: any) => mapPageToPost(page));
@@ -95,22 +93,16 @@ export async function getAllPosts(): Promise<CMSPost[]> {
 
 /**
  * Get a single post by slug for /insights/[slug].
- * Tries:
- *  1) Database filter by Slug property (if it exists & works),
- *  2) Fallback to getAllPosts() and match in memory.
- * Also tries to pull basic page content via blocks → markdown → HTML.
  */
 export async function getPost(slug: string): Promise<CMSPost | null> {
   if (!notion || !NOTION_DATABASE_ID) {
-    console.warn(
-      "Notion is not configured. getPost() returning null."
-    );
+    console.warn("Notion is not configured. getPost() returning null.");
     return null;
   }
 
   let page: any | null = null;
 
-  // --- Try query by Slug property (if it exists) ---
+  // Try query by Slug property (if it exists)
   try {
     const bySlug = await notion.databases.query({
       database_id: NOTION_DATABASE_ID,
@@ -125,14 +117,13 @@ export async function getPost(slug: string): Promise<CMSPost | null> {
       page = bySlug.results[0];
     }
   } catch (err) {
-    // validation_error usually means the "Slug" property doesn't exist
     console.warn(
-      `getPost: failed to query Notion by Slug property for "${slug}", falling back to in-memory search.`,
+      `getPost: failed to query Notion by Slug for "${slug}", falling back to in-memory search.`,
       err
     );
   }
 
-  // --- Fallback: search in all posts by slug ---
+  // Fallback: search in all posts by slug
   if (!page) {
     const all = await getAllPosts();
     const match = all.find((p) => p.slug === slug);
@@ -140,7 +131,7 @@ export async function getPost(slug: string): Promise<CMSPost | null> {
       return null;
     }
 
-    // We still need the Notion page object for blocks, so best-effort load by id
+    // Try retrieving the page to get blocks
     try {
       const notionPage = await notion.pages.retrieve({
         page_id: match.id,
@@ -151,13 +142,13 @@ export async function getPost(slug: string): Promise<CMSPost | null> {
         `getPost: could not retrieve Notion page for id "${match.id}". Returning basic post data only.`,
         err
       );
-      return match; // Without contentHtml
+      return match;
     }
   }
 
   const base = mapPageToPost(page);
 
-  // --- Try to fetch blocks and convert to HTML ---
+  // Fetch blocks and convert to HTML
   let contentHtml = "";
 
   try {
@@ -219,3 +210,10 @@ export async function getPost(slug: string): Promise<CMSPost | null> {
       "<p>Full article coming soon. Check back shortly.</p>",
   };
 }
+
+/**
+ * Backwards-compatible exports for existing imports:
+ * - getAllPostsCMS
+ * - getPostCMS
+ */
+export { getAllPosts as getAllPostsCMS, getPost as getPostCMS };
