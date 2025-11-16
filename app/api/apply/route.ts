@@ -41,7 +41,6 @@ export async function POST(req: Request) {
         fullName: name,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        source: source ?? "job_board",
         status: "active",
       },
       create: {
@@ -49,7 +48,6 @@ export async function POST(req: Request) {
         email: normalizedEmail,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        source: source ?? "job_board",
         status: "active",
       },
     });
