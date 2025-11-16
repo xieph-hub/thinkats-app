@@ -1,32 +1,36 @@
 // app/sitemap.ts
 import type { MetadataRoute } from "next";
-import { getAllPostsCMS } from "@/lib/cms";
+import { getAllPosts } from "@/lib/cms";
 import { SITE_URL } from "@/lib/site";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // Static pages
-  const staticPages: MetadataRoute.Sitemap = [
+  const baseUrl = SITE_URL || "https://resourcin.com";
+
+  // Core static routes you have in navigation
+  const staticRoutes: MetadataRoute.Sitemap = [
     "",
-    "/services",
     "/jobs",
+    "/talent-network",
+    "/for-candidates",
+    "/for-employers",
+    "/services",
+    "/case-studies",
     "/insights",
     "/about",
     "/contact",
-  ].map((p) => ({
-    url: `${SITE_URL}${p || "/"}`,
+    "/request-talent",
+    "/login",
+  ].map((path) => ({
+    url: `${baseUrl}${path}`,
     lastModified: new Date(),
-    changeFrequency: "weekly" as const,
-    priority: p === "" ? 1 : 0.7,
   }));
 
-  // Dynamic insight pages
-  const posts = await getAllPostsCMS();
-  const insightPages: MetadataRoute.Sitemap = posts.map((p) => ({
-    url: `${SITE_URL}/insights/${p.slug}`,
-    lastModified: p.date ? new Date(p.date) : new Date(),
-    changeFrequency: "weekly" as const,
-    priority: 0.6,
+  // Dynamic Insights posts from Notion
+  const posts = await getAllPosts();
+  const insightRoutes: MetadataRoute.Sitemap = posts.map((post) => ({
+    url: `${baseUrl}/insights/${post.slug}`,
+    lastModified: post.date ? new Date(post.date) : new Date(),
   }));
 
-  return [...staticPages, ...insightPages];
+  return [...staticRoutes, ...insightRoutes];
 }
