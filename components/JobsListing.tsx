@@ -34,7 +34,7 @@ export default function JobsListing({ initialJobs }: JobsListingProps) {
         search.trim().length === 0 ||
         job.title.toLowerCase().includes(search.toLowerCase()) ||
         job.summary.toLowerCase().includes(search.toLowerCase()) ||
-        job.company.toLowerCase().includes(search.toLowerCase());
+        job.employerName.toLowerCase().includes(search.toLowerCase());
 
       const matchesLocation =
         locationFilter === "All" || job.location === locationFilter;
