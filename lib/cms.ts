@@ -65,10 +65,22 @@ function normalizePostFromPage(page: any): CMSPost {
     props.Tags?.multi_select?.map((t: any) => t.name) ||
     (props.Tags?.select ? [props.Tags.select.name] : []);
 
-  const coverImage =
-    page.cover?.external?.url ||
-    page.cover?.file?.url ||
-    null;
+  let coverImage: string | null =
+    page.cover?.external?.url || page.cover?.file?.url || null;
+
+  // Fallback: image stored as a files property (Image / Cover / Hero)
+  if (!coverImage) {
+    const imageProp = props.Image || props.Cover || props.Hero;
+    if (imageProp?.type === "files" && Array.isArray(imageProp.files)) {
+      const file = imageProp.files[0];
+      if (file) {
+        coverImage =
+          file.external?.url ||
+          file.file?.url ||
+          null;
+      }
+    }
+  }
 
   return {
     id: page.id,
@@ -142,8 +154,21 @@ function blocksToMarkdown(blocks: any[]): string {
             "\n```"
         );
         break;
+      case "image": {
+        const image = b.image;
+        const url =
+          image?.type === "external"
+            ? image.external?.url
+            : image?.file?.url;
+        if (url) {
+          lines.push(`![](${url})`);
+        }
+        break;
+      }
+      case "callout":
+        lines.push(richTextToPlainText(b.callout.rich_text));
+        break;
       default:
-        // Fallback for any other block that still has rich_text
         if (b[b.type]?.rich_text) {
           lines.push(richTextToPlainText(b[b.type].rich_text));
         }
@@ -159,7 +184,7 @@ async function getAllPostsFromNotion(): Promise<CMSPost[]> {
 
   const response = await notion.databases.query({
     database_id: notionDatabaseId as string,
-    // No sorts here so we don't hit the "PublishedAt" validation_error again
+    // No sort by PublishedAt to avoid validation_error if that property is missing
   });
 
   return response.results
@@ -170,18 +195,81 @@ async function getAllPostsFromNotion(): Promise<CMSPost[]> {
 async function getPostFromNotion(slug: string): Promise<CMSPost | null> {
   if (!notion || !notionDatabaseId) return null;
 
-  // Reuse the same mapping logic to find the page by slug
   const allPosts = await getAllPostsFromNotion();
   const base = allPosts.find((p) => p.slug === slug);
   if (!base) return null;
 
-  const blocks = await getPageBlocks(base.id);
-  const markdown = blocksToMarkdown(blocks);
-  const html = markdown ? (marked.parse(markdown) as string) : "";
+  let contentHtml: string | null = null;
+
+  // 1) Try to read a long-form rich_text property
+  try {
+    const page: any = await notion.pages.retrieve({ page_id: base.id });
+    const props = page.properties || {};
+
+    const preferredProps = [
+      "Content (paste into Notion page body)", // your exact property name
+      "Content",
+      "Body",
+      "Article",
+      "Post",
+      "Text",
+      "Markdown",
+    ];
+
+    let contentText = "";
+
+    // First, check preferred property names (including your exact header)
+    for (const name of preferredProps) {
+      const prop: any = props[name];
+      if (
+        prop?.type === "rich_text" &&
+        Array.isArray(prop.rich_text) &&
+        prop.rich_text.length > 0
+      ) {
+        contentText = richTextToPlainText(prop.rich_text);
+        break;
+      }
+    }
+
+    // Fallback: pick the longest rich_text property that isn't obviously meta
+    if (!contentText) {
+      for (const key of Object.keys(props)) {
+        const prop: any = props[key];
+        if (
+          prop?.type === "rich_text" &&
+          !["Slug", "Excerpt", "Summary", "Name", "Title"].includes(key)
+        ) {
+          const txt = richTextToPlainText(prop.rich_text || []);
+          if (txt && txt.length > contentText.length) {
+            contentText = txt;
+          }
+        }
+      }
+    }
+
+    if (contentText && contentText.trim().length > 0) {
+      contentHtml = marked.parse(contentText) as string;
+    }
+  } catch (err) {
+    console.error("Error retrieving Notion page content", err);
+  }
+
+  // 2) If property-based content is empty, fall back to Notion blocks
+  if (!contentHtml) {
+    try {
+      const blocks = await getPageBlocks(base.id);
+      const markdown = blocksToMarkdown(blocks);
+      if (markdown && markdown.trim().length > 0) {
+        contentHtml = marked.parse(markdown) as string;
+      }
+    } catch (err) {
+      console.error("Error retrieving Notion page blocks", err);
+    }
+  }
 
   return {
     ...base,
-    content: html,
+    content: contentHtml,
   };
 }
 
