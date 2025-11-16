@@ -11,13 +11,12 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          blue: "#0A66C2",
-          yellow: "#FFC107",
-          green: "#10B981",
-          dark: "#0B1220",
-          light: "#F5F8FF",
-          navy: "#172965"
-        }
+         blue: "#172965",
+        yellow: "#FFC000",
+        greenDark: "#306B34",
+        green: "#64C247",
+        navy: "#000435",
+      },
       },
       boxShadow: {
         soft: "0 10px 30px rgba(10,102,194,0.12)"
