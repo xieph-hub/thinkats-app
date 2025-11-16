@@ -31,7 +31,12 @@ export default function NavBar() {
         <nav className="hidden md:flex items-center gap-6 text-sm">
           <Link href="/" className="hover:text-brand-blue">Home</Link>
           <Link href="/services" className="hover:text-brand-blue">Services</Link>
-          <Link href="/jobs" className="hover:text-brand-blue">Jobs</Link>
+          <Link href="/jobs" className="text-gray-600 hover:text-gray-900">
+    Jobs
+  </Link>
+          <Link href="/employers" className="text-gray-600 hover:text-gray-900">
+    For Employers
+  </Link>
           <Link href="/insights" className="hover:text-brand-blue">Insights</Link>
           <Link href="/about" className="hover:text-brand-blue">About</Link>
           <Link href="/contact" className="hover:text-brand-blue">Contact</Link>
