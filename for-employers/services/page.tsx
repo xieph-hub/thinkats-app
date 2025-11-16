@@ -22,7 +22,7 @@ const offerings = [
     ],
     outcomes: [
       "Well-defined role scorecards and interview plans.",
-      "Shortlisted candidates that actually match your stage and context.",
+      "Shortlisted candidates that match your stage and context.",
       "Closed hires with clean documentation and handover.",
     ],
   },
@@ -126,7 +126,7 @@ export default function EmployerServicesPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                     {offering.badge}
                   </p>
                   <h2 className="mt-1 text-base font-semibold text-slate-900">
@@ -139,7 +139,6 @@ export default function EmployerServicesPage() {
                 {offering.description}
               </p>
 
-              {/* Scenarios & outcomes */}
               <div className="mt-4 grid gap-4 text-xs text-slate-600 sm:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -188,7 +187,7 @@ export default function EmployerServicesPage() {
           ))}
         </section>
 
-        {/* Simple “How we work” strip */}
+        {/* How we work strip */}
         <section className="mt-10 rounded-3xl bg-[#172965] px-6 py-6 text-slate-50 sm:flex sm:items-center sm:justify-between sm:gap-8">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#64C247]">
