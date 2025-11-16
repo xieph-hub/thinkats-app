@@ -48,7 +48,7 @@ export function Footer() {
                 href="https://www.linkedin.com/company/resourcin"
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-50 ring-1 ring-white/15 hover:bg-white/10"
+                className="flex items-center gap-1.5 rounded-full bg.white/5 px-3 py-1.5 text-xs font-medium text-slate-50 ring-1 ring-white/15 hover:bg-white/10"
               >
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-bold text-[#172965]">
                   in
