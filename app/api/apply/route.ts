@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
 
-// Default tenant fallback (can be overridden by body or headers)
+// Optional: fallback tenant for now
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID ?? "resourcin-main";
 
 export async function POST(req: Request) {
@@ -45,28 +45,24 @@ export async function POST(req: Request) {
       req.headers.get("x-tenant-id") ??
       DEFAULT_TENANT_ID;
 
-    // Upsert candidate by (email, tenantId) so the same person isn't duplicated per tenant
+    // Upsert candidate by *email only* (matches your current Prisma schema)
     const candidate = await prisma.candidate.upsert({
       where: {
-        // relies on @@unique([email, tenantId], name: "email_tenantId") in your Prisma schema
-        email_tenantId: {
-          email: normalizedEmail,
-          tenantId,
-        },
+        email: normalizedEmail, // <- this exists in CandidateWhereUniqueInput
       },
       update: {
+        tenantId, // keep this in sync
         fullName: name,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        // you can add fields here later if you put city/country/source on Candidate
+        // you can later add city / country / source to the Candidate model if you want
       },
       create: {
-        tenantId, // 🔑 required for the Candidate–Tenant relation
+        tenantId, // required by your Candidate–Tenant relation
         fullName: name,
         email: normalizedEmail,
         phone: phone ?? null,
         cvUrl: cvUrl ?? null,
-        // city, country, source NOT set here because they don't exist on Candidate in your schema yet
       },
     });
 
@@ -75,8 +71,7 @@ export async function POST(req: Request) {
         jobId,
         candidateId: candidate.id,
         status: "applied",
-        // if your Application model has source / city / country fields,
-        // you can safely add them here instead:
+        // if your Application model has fields like source / city / country:
         // source: source ?? "job_board",
         // city,
         // country,
