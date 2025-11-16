@@ -1,67 +1,174 @@
-import { Linkedin, Twitter, Instagram, Mail, Phone } from "lucide-react";
+import Link from "next/link";
+import Container from "./Container";
+
+function SocialIcon({
+  label,
+  href,
+  children,
+}: {
+  label: string;
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      aria-label={label}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#FFC000] text-white text-sm font-semibold hover:bg-[#FFC000] hover:text-[#172965] transition-colors"
+    >
+      {children}
+    </a>
+  );
+}
 
 export default function Footer() {
-  const year = new Date().getFullYear();
   return (
-    <footer className="bg-[#172965] text-white">
-      <div className="max-w-7xl mx-auto px-4 py-10 grid md:grid-cols-3 gap-8">
-        {/* Brand (logo only) */}
-        <div>
-          <a href="/" aria-label="Resourcin — Home" className="inline-flex items-center">
-            <img src="/logo.svg" alt="Resourcin" className="h-12 w-auto md:h-14" />
-          </a>
-          <p className="mt-3 text-sm opacity-90">Connecting Talent with Opportunity, Redefining Workplaces and Careers</p>
+    <footer className="mt-16 border-t-4 border-[#FFC000] bg-[#172965] text-white">
+      <Container>
+        <div className="py-10 lg:py-12">
+          {/* Top section */}
+          <div className="grid gap-8 md:grid-cols-3">
+            {/* Brand & vision */}
+            <div>
+              <h3 className="text-lg font-semibold tracking-tight">
+                Resourcin
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-white/80">
+                African-focused talent acquisition and employer-of-record
+                partner, helping high-growth teams hire graduate, experienced
+                and executive talent across markets.
+              </p>
+            </div>
 
-          {/* Tiny social row */}
-          <div className="mt-4 flex items-center gap-2">
-            <a href="mailto:hello@resourcin.com" aria-label="Email Resourcin" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
-              <Mail className="h-4 w-4 text-white" />
-            </a>
-            <a href="tel:+2347045582393" aria-label="Call Resourcin" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
-              <Phone className="h-4 w-4 text-white" />
-            </a>
-            <a href="https://www.linkedin.com/company/resourcin" target="_blank" rel="noopener" aria-label="Resourcin on LinkedIn" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
-              <Linkedin className="h-4 w-4 text-white" />
-            </a>
-            <a href="https://x.com/resourcinhq" target="_blank" rel="noopener" aria-label="Resourcin on X" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
-              <Twitter className="h-4 w-4 text-white" />
-            </a>
-            <a href="https://www.instagram.com/resourcinhq/" target="_blank" rel="noopener" aria-label="Resourcin on Instagram" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
-              <Instagram className="h-4 w-4 text-white" />
-            </a>
+            {/* Navigation */}
+            <div className="grid grid-cols-2 gap-6 text-sm">
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+                  For Candidates
+                </h4>
+                <ul className="mt-3 space-y-2">
+                  <li>
+                    <Link
+                      href="/jobs"
+                      className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    >
+                      Browse Jobs
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/talent-network"
+                      className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    >
+                      Join Talent Network
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+                  For Employers
+                </h4>
+                <ul className="mt-3 space-y-2">
+                  <li>
+                    <Link
+                      href="/employers"
+                      className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    >
+                      Services
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/request-talent"
+                      className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    >
+                      Request Talent
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/about"
+                      className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    >
+                      About Resourcin
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      href="/contact"
+                      className="text-white/80 hover:text-[#FFC000] transition-colors"
+                    >
+                      Contact
+                    </Link>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Contact & social */}
+            <div className="flex flex-col justify-between gap-4 md:items-end">
+              <div className="text-sm md:text-right">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+                  Talk to us
+                </p>
+                <p className="mt-2 text-white">
+                  Phone:{" "}
+                  <a
+                    href="tel:+2347045572393"
+                    className="font-medium hover:text-[#FFC000] transition-colors"
+                  >
+                    +234 704 557 2393
+                  </a>
+                </p>
+              </div>
+
+              <div className="md:text-right">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+                  Follow Resourcin
+                </p>
+                <div className="mt-3 flex items-center gap-3 md:justify-end">
+                  <SocialIcon
+                    label="LinkedIn"
+                    href="https://www.linkedin.com/company/resourcin"
+                  >
+                    in
+                  </SocialIcon>
+                  <SocialIcon
+                    label="X (Twitter)"
+                    href="https://x.com/resourcinhq"
+                  >
+                    X
+                  </SocialIcon>
+                  <SocialIcon
+                    label="Instagram"
+                    href="https://www.instagram.com/resourcinhq/"
+                  >
+                    IG
+                  </SocialIcon>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div className="mt-8 border-t border-white/10 pt-4 text-xs text-white/60 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <p>
+              © {new Date().getFullYear()} Resourcin. All rights reserved.
+            </p>
+            <p className="flex flex-wrap items-center gap-2">
+              <span>Built for African & global teams</span>
+              <span className="hidden text-[#64C247] md:inline">•</span>
+              <span className="text-[#64C247] md:text-inherit">
+                Talent • Teams • Growth
+              </span>
+            </p>
           </div>
         </div>
-
-        {/* Site links */}
-        <div>
-          <p className="font-semibold">Site</p>
-          <ul className="mt-2 text-sm space-y-2">
-            {[
-              ["Home","/"],["Services","/services"],["Jobs","/jobs"],
-              ["Insights","/insights"],["About","/about"],["Contact","/contact"]
-            ].map(([label,href])=>(
-              <li key={href}>
-                <a className="hover:underline opacity-90 hover:opacity-100" href={href}>{label}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Legal */}
-        <div>
-          <p className="font-semibold">Legal</p>
-          <ul className="mt-2 text-sm space-y-2">
-            <li><a className="hover:underline opacity-90 hover:opacity-100" href="#">Terms</a></li>
-            <li><a className="hover:underline opacity-90 hover:opacity-100" href="#">Privacy</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="border-t border-white/15">
-        <div className="max-w-7xl mx-auto px-4 py-4 text-xs flex items-center justify-between opacity-90">
-          <p>© {year} Resourcin Human Capital Advisors.</p>
-        </div>
-      </div>
+      </Container>
     </footer>
   );
 }
