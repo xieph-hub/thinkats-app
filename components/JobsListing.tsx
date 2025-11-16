@@ -138,7 +138,7 @@ export default function JobsListing({ initialJobs }: JobsListingProps) {
                     {job.title}
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">
-                    {job.company} · {job.department}
+                    {job.employerName} · {job.department}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
                     {job.location} · {job.type}
