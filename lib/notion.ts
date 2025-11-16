@@ -1,80 +1,76 @@
 import { Client } from "@notionhq/client";
 
-const notionSecret = process.env.NOTION_API_KEY;
-const databaseId = process.env.NOTION_INSIGHTS_DATABASE_ID;
-
-if (!notionSecret) {
-  throw new Error("NOTION_API_KEY is not set in environment variables");
-}
-
-if (!databaseId) {
-  throw new Error("NOTION_INSIGHTS_DATABASE_ID is not set in environment variables");
-}
-
-const notion = new Client({ auth: notionSecret });
-
 export type InsightPost = {
   id: string;
-  slug: string;
   title: string;
-  tag?: string;
-  readingTime?: string;
-  summary?: string;
-  publishedAt?: string;
+  slug: string;
+  summary: string;
+  publishedAt: string | null;
+  tags: string[];
 };
 
-export async function getInsightPosts(): Promise<InsightPost[]> {
+const NOTION_API_KEY = process.env.NOTION_API_KEY;
+const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
+
+let notion: Client | null = null;
+
+if (NOTION_API_KEY && NOTION_DATABASE_ID) {
+  notion = new Client({ auth: NOTION_API_KEY });
+} else {
+  // Important: log, but DO NOT throw – so builds don’t crash
+  console.warn(
+    "Notion env vars missing (NOTION_API_KEY or NOTION_DATABASE_ID). Insights page will show placeholder content."
+  );
+}
+
+export async function fetchInsights(): Promise<InsightPost[]> {
+  // If there is no Notion client or DB ID, just return an empty list
+  if (!notion || !NOTION_DATABASE_ID) {
+    return [];
+  }
+
   const response = await notion.databases.query({
-    database_id: databaseId,
-    filter: {
-      property: "Status", // Notion property: Status
-      status: { equals: "Published" },
-    },
+    database_id: NOTION_DATABASE_ID,
     sorts: [
       {
-        property: "Published", // Notion property: Published (date)
+        property: "PublishedAt",
         direction: "descending",
       },
     ],
+    filter: {
+      property: "Status",
+      status: { equals: "Published" },
+    },
   });
 
-  return response.results
-    .map((page: any): InsightPost | null => {
-      const props = page.properties;
+  return response.results.map((page: any) => {
+    const props = page.properties;
 
-      const title =
-        props.Name?.title?.[0]?.plain_text ??
-        props.Title?.title?.[0]?.plain_text ??
-        null;
+    const title =
+      props.Name?.title?.[0]?.plain_text ??
+      props.Name?.title?.[0]?.plain_text ??
+      "Untitled";
 
-      if (!title) return null;
+    const slug =
+      props.Slug?.rich_text?.[0]?.plain_text ??
+      page.id.replace(/-/g, "").toLowerCase();
 
-      const slug =
-        props.Slug?.rich_text?.[0]?.plain_text ??
-        props.Slug?.formula?.string ??
-        page.id;
+    const summary =
+      props.Summary?.rich_text?.[0]?.plain_text ??
+      "No summary available yet.";
 
-      const tag = props.Tag?.select?.name;
-      const readingTime =
-        props["Reading time"]?.rich_text?.[0]?.plain_text ||
-        props["Reading Time"]?.rich_text?.[0]?.plain_text;
+    const publishedAt = props.PublishedAt?.date?.start ?? null;
 
-      const summary =
-        props.Summary?.rich_text?.[0]?.plain_text ??
-        props.Description?.rich_text?.[0]?.plain_text ??
-        "";
+    const tags =
+      props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
 
-      const publishedAt = props.Published?.date?.start ?? undefined;
-
-      return {
-        id: page.id,
-        slug,
-        title,
-        tag,
-        readingTime,
-        summary,
-        publishedAt,
-      };
-    })
-    .filter((p): p is InsightPost => p !== null);
+    return {
+      id: page.id,
+      title,
+      slug,
+      summary,
+      publishedAt,
+      tags,
+    } as InsightPost;
+  });
 }
