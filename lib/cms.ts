@@ -1,368 +1,221 @@
 import { Client } from "@notionhq/client";
 import { marked } from "marked";
-import { getAllPosts as getAllFromFiles, getPost as getFromFiles } from "./insights";
 
-const hasNotion = !!process.env.NOTION_TOKEN && !!process.env.NOTION_DATABASE_ID;
+const NOTION_API_KEY = process.env.NOTION_API_KEY;
+const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
+
+const notion =
+  NOTION_API_KEY && NOTION_DATABASE_ID
+    ? new Client({ auth: NOTION_API_KEY })
+    : null;
+
+export const hasNotion = !!notion;
 
 export type CMSPost = {
+  id: string;
   slug: string;
   title: string;
-  excerpt?: string;
-  date?: string; // ISO
-  category?: string;
-  cover?: string;
-  html?: string;
+  summary: string;
+  date: string | null;
+  publishedAt: string | null;
+  tags: string[];
+  contentHtml?: string;
 };
 
-function toISO(input: any): string | undefined {
-  if (!input) return undefined;
-  const d = new Date(input);
-  return isNaN(d.getTime()) ? undefined : d.toISOString();
-}
+function mapPageToPost(page: any): CMSPost {
+  const props = page.properties ?? {};
 
-export async function getAllPostsCMS(): Promise<CMSPost[]> {
-  if (!hasNotion) {
-    return getAllFromFiles().map((p) => ({
-      slug: p.slug,
-      title: p.title,
-      excerpt: p.excerpt,
-      date: p.date,
-      category: p.category,
-      cover: p.cover,
-    }));
-  }
+  const title =
+    props.Name?.title?.[0]?.plain_text ??
+    props.Title?.title?.[0]?.plain_text ??
+    "Untitled";
 
-  const notion = new Client({ auth: process.env.NOTION_TOKEN! });
-  const dbId = process.env.NOTION_DATABASE_ID!;
+  const slug =
+    props.Slug?.rich_text?.[0]?.plain_text ??
+    page.id.replace(/-/g, "").toLowerCase();
 
-  // No explicit sort; some DBs may not have a Date property
-  const res = await notion.databases.query({ database_id: dbId });
+  const summary =
+    props.Summary?.rich_text?.[0]?.plain_text ??
+    props.Description?.rich_text?.[0]?.plain_text ??
+    "";
 
-  const posts: CMSPost[] = res.results.map((page: any) => {
-    const props = page.properties || {};
+  const publishedAt =
+    props.PublishedAt?.date?.start ??
+    props.Date?.date?.start ??
+    page.created_time ??
+    page.last_edited_time ??
+    null;
 
-    const title =
-      props?.Title?.title?.[0]?.plain_text ??
-      props?.Name?.title?.[0]?.plain_text ??
-      "Untitled";
+  const tags =
+    props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
 
-    const slug =
-      props?.Slug?.rich_text?.[0]?.plain_text ??
-      title.toLowerCase().replace(/\s+/g, "-");
-
-    const excerpt = props?.Excerpt?.rich_text?.[0]?.plain_text ?? "";
-
-    const category =
-      props?.Category?.select?.name ??
-      props?.Category?.rich_text?.[0]?.plain_text ??
-      undefined;
-
-    // Prefer explicit Date; fallback to last_edited_time
-    const dateRaw = props?.Date?.date?.start ?? page.last_edited_time;
-    const dateISO = toISO(dateRaw);
-
-    // Cover priority: page cover → Cover (files) → CoverURL(Optional) URL/rich_text
-    let cover: string | undefined;
-    if (page.cover?.external?.url) cover = page.cover.external.url;
-    else if (page.cover?.file?.url) cover = page.cover.file.url;
-    else {
-      const files = props?.Cover?.files ?? [];
-      if (files[0]?.external?.url) cover = files[0].external.url;
-      if (files[0]?.file?.url) cover = files[0].file.url;
-    }
-    if (!cover) {
-      const urlProp = props?.["CoverURL(Optional)"];
-      if (urlProp?.url) cover = urlProp.url;
-      const rt = urlProp?.rich_text;
-      if (!cover && Array.isArray(rt) && rt[0]?.plain_text) {
-        cover = rt[0].plain_text;
-      }
-    }
-
-    return { slug, title, excerpt, category, date: dateISO, cover };
-  });
-
-  posts.sort((a, b) => Date.parse(b.date || "") - Date.parse(a.date || ""));
-  return posts;
-}
-
-export async function getPostCMS(
-  slug: string
-): Promise<{ frontmatter: any; html: string } | null> {
-  if (!hasNotion) {
-    const file = getFromFiles(slug);
-    if (!file) return null;
-
-    // marked@12 parse may be async
-    const htmlParsed = await marked.parse(file.content ?? "");
-    const html = typeof htmlParsed === "string" ? htmlParsed : String(htmlParsed);
-
-    return { frontmatter: file.frontmatter, html };
-  }
-
-  const notion = new Client({ auth: process.env.NOTION_TOKEN! });
-  const dbId = process.env.NOTION_DATABASE_ID!;
-
-  // Find the page by Slug exact match
-  const found = await notion.databases.query({
-    database_id: dbId,
-    filter: { property: "Slug", rich_text: { equals: slug } },
-    page_size: 1,
-  });
-
-  const page = found.results[0] as any;
-  if (!page) return null;
-
-  // --- Fetch blocks recursively (depth 2) ---
-  async function fetchChildren(blockId: string, depth = 0): Promise<any[]> {
-    const out: any[] = [];
-    let cursor: string | undefined;
-    do {
-      const r = await notion.blocks.children.list({
-        block_id: blockId,
-        start_cursor: cursor,
-        page_size: 100,
-      });
-      out.push(...r.results);
-      cursor = r.has_more ? (r.next_cursor as string) : undefined;
-    } while (cursor);
-
-    if (depth < 2) {
-      for (const b of out) {
-        if ((b as any).has_children) {
-          (b as any)._children = await fetchChildren(b.id, depth + 1);
-        }
-      }
-    }
-    return out;
-  }
-
-  const blocks = await fetchChildren(page.id);
-
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const plain = (rt: any[] = []) => rt.map((t: any) => t?.plain_text ?? "").join("");
-
-  function renderBlocks(bs: any[]): string {
-    const html: string[] = [];
-    let inUL = false,
-      inOL = false;
-
-    const closeLists = () => {
-      if (inUL) {
-        html.push("</ul>");
-        inUL = false;
-      }
-      if (inOL) {
-        html.push("</ol>");
-        inOL = false;
-      }
-    };
-
-    for (const b of bs) {
-      const t = b.type;
-      const o = (b as any)[t];
-      if (!o) continue;
-
-      const kids = (b as any)._children as any[] | undefined;
-      const openKids = kids && kids.length ? `<div>${renderBlocks(kids)}</div>` : "";
-
-      switch (t) {
-        case "paragraph":
-          closeLists();
-          html.push(`<p>${plain(o.rich_text)}</p>`);
-          break;
-
-        case "heading_1":
-          closeLists();
-          html.push(`<h1>${plain(o.rich_text)}</h1>`);
-          break;
-
-        case "heading_2":
-          closeLists();
-          html.push(`<h2>${plain(o.rich_text)}</h2>`);
-          break;
-
-        case "heading_3":
-          closeLists();
-          html.push(`<h3>${plain(o.rich_text)}</h3>`);
-          break;
-
-        case "bulleted_list_item":
-          if (!inUL) {
-            closeLists();
-            html.push("<ul>");
-            inUL = true;
-          }
-          html.push(`<li>${plain(o.rich_text)}${openKids}</li>`);
-          break;
-
-        case "numbered_list_item":
-          if (!inOL) {
-            closeLists();
-            html.push("<ol>");
-            inOL = true;
-          }
-          html.push(`<li>${plain(o.rich_text)}${openKids}</li>`);
-          break;
-
-        case "quote":
-          closeLists();
-          html.push(`<blockquote>${plain(o.rich_text)}</blockquote>`);
-          break;
-
-        case "callout": {
-          closeLists();
-          const icon =
-            o.icon?.emoji ? o.icon.emoji : o.icon?.type ? "💡" : "";
-          html.push(
-            `<div class="notion-callout"><span class="notion-callout-icon">${icon}</span><div>${plain(
-              o.rich_text
-            )}</div>${openKids}</div>`
-          );
-          break;
-        }
-
-        case "toggle":
-          closeLists();
-          html.push(
-            `<details><summary>${plain(o.rich_text)}</summary>${openKids}</details>`
-          );
-          break;
-
-        case "to_do":
-          closeLists();
-          html.push(
-            `<div class="notion-todo"><input type="checkbox" disabled ${
-              o.checked ? "checked" : ""
-            }/> <span>${plain(o.rich_text)}</span></div>`
-          );
-          break;
-
-        case "code": {
-          closeLists();
-          const lang = o.language || "text";
-          const code = o.rich_text?.map((r: any) => r.plain_text).join("") ?? "";
-          html.push(
-            `<pre><code class="language-${lang}">${esc(code)}</code></pre>`
-          );
-          break;
-        }
-
-        case "image": {
-          closeLists();
-          const src = o.type === "external" ? o.external?.url : o.file?.url;
-          const cap = plain(o.caption || []);
-          if (src)
-            html.push(
-              `<figure><img src="${src}" alt="${
-                cap || ""
-              }"/><figcaption>${cap || ""}</figcaption></figure>`
-            );
-          break;
-        }
-
-        case "divider":
-          closeLists();
-          html.push("<hr/>");
-          break;
-
-        // Extras
-        case "bookmark": {
-          closeLists();
-          const url = o.url;
-          html.push(
-            `<p><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>`
-          );
-          break;
-        }
-
-        case "table": {
-          closeLists();
-          const rows = kids || [];
-          html.push("<table>");
-          for (const row of rows) {
-            const cells = (row as any).table_row?.cells || [];
-            html.push("<tr>");
-            for (const cell of cells) {
-              const text = plain(cell);
-              html.push(`<td>${esc(text)}</td>`);
-            }
-            html.push("</tr>");
-          }
-          html.push("</table>");
-          break;
-        }
-
-        default:
-          if ((o as any)?.rich_text) {
-            closeLists();
-            html.push(`<p>${plain(o.rich_text)}</p>`);
-          }
-      }
-    }
-    closeLists();
-    return html.join("\n");
-  }
-
-  let html = renderBlocks(blocks);
-
-  // Fallbacks if the page body is empty:
-  if (!html || html.trim().length === 0) {
-    const props = page.properties || {};
-
-    // Try your exact property and common alternates as rich_text
-    const tryRich = (...keys: string[]) => {
-      for (const k of keys) {
-        const p = props?.[k];
-        const rt = p?.rich_text;
-        if (Array.isArray(rt) && rt.length) {
-          const txt = rt.map((t: any) => t?.plain_text ?? "").join("");
-          if (txt && txt.trim())
-            return `<p>${txt.replace(/\n/g, "<br/>")}</p>`;
-        }
-      }
-      return "";
-    };
-
-    // 1) Your exact field
-    html = tryRich("Content (paste into Notion page body)");
-
-    // 2) Common alternates
-    if (!html) html = tryRich("Content", "Body");
-
-    // 3) If it’s a URL field, link it
-    if (!html) {
-      const url =
-        props?.["Content (paste into Notion page body)"]?.url ??
-        props?.Content?.url ??
-        props?.Body?.url;
-      if (url) {
-        html = `<p><a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a></p>`;
-      }
-    }
-  }
-
-  const props = page.properties || {};
-  const frontmatter = {
-    title:
-      props?.Title?.title?.[0]?.plain_text ??
-      props?.Name?.title?.[0]?.plain_text ??
-      "Untitled",
-    category:
-      props?.Category?.select?.name ??
-      props?.Category?.rich_text?.[0]?.plain_text ??
-      undefined,
-    date: props?.Date?.date?.start ?? page.last_edited_time ?? undefined,
-    cover:
-      page.cover?.external?.url ||
-      page.cover?.file?.url ||
-      props?.["CoverURL(Optional)"]?.url ||
-      (Array.isArray(props?.["CoverURL(Optional)"]?.rich_text) &&
-        props?.["CoverURL(Optional)"]?.rich_text?.[0]?.plain_text) ||
-      undefined,
+  return {
+    id: page.id,
+    slug,
+    title,
+    summary,
+    date: publishedAt,
+    publishedAt,
+    tags,
   };
+}
 
-  return { frontmatter, html };
+/**
+ * Get all posts for listings (Insights page) and sitemap.
+ */
+export async function getAllPosts(): Promise<CMSPost[]> {
+  if (!notion || !NOTION_DATABASE_ID) {
+    console.warn(
+      "Notion is not configured (NOTION_API_KEY / NOTION_DATABASE_ID missing). getAllPosts() returning empty array."
+    );
+    return [];
+  }
+
+  try {
+    const response = await notion.databases.query({
+      database_id: NOTION_DATABASE_ID,
+
+      // Safe sort: no hard-coded property names like "PublishedAt"
+      sorts: [
+        {
+          timestamp: "last_edited_time",
+          direction: "descending",
+        },
+      ],
+      // If you later add a Status property and want only Published, we can add a filter here.
+    });
+
+    return response.results.map((page: any) => mapPageToPost(page));
+  } catch (err) {
+    console.error("getAllPosts: failed to query Notion", err);
+    // Never break the build on Notion errors
+    return [];
+  }
+}
+
+/**
+ * Get a single post by slug for /insights/[slug].
+ * Tries:
+ *  1) Database filter by Slug property (if it exists & works),
+ *  2) Fallback to getAllPosts() and match in memory.
+ * Also tries to pull basic page content via blocks → markdown → HTML.
+ */
+export async function getPost(slug: string): Promise<CMSPost | null> {
+  if (!notion || !NOTION_DATABASE_ID) {
+    console.warn(
+      "Notion is not configured. getPost() returning null."
+    );
+    return null;
+  }
+
+  let page: any | null = null;
+
+  // --- Try query by Slug property (if it exists) ---
+  try {
+    const bySlug = await notion.databases.query({
+      database_id: NOTION_DATABASE_ID,
+      filter: {
+        property: "Slug",
+        rich_text: { equals: slug },
+      },
+      page_size: 1,
+    });
+
+    if (bySlug.results.length > 0) {
+      page = bySlug.results[0];
+    }
+  } catch (err) {
+    // validation_error usually means the "Slug" property doesn't exist
+    console.warn(
+      `getPost: failed to query Notion by Slug property for "${slug}", falling back to in-memory search.`,
+      err
+    );
+  }
+
+  // --- Fallback: search in all posts by slug ---
+  if (!page) {
+    const all = await getAllPosts();
+    const match = all.find((p) => p.slug === slug);
+    if (!match) {
+      return null;
+    }
+
+    // We still need the Notion page object for blocks, so best-effort load by id
+    try {
+      const notionPage = await notion.pages.retrieve({
+        page_id: match.id,
+      } as any);
+      page = notionPage;
+    } catch (err) {
+      console.warn(
+        `getPost: could not retrieve Notion page for id "${match.id}". Returning basic post data only.`,
+        err
+      );
+      return match; // Without contentHtml
+    }
+  }
+
+  const base = mapPageToPost(page);
+
+  // --- Try to fetch blocks and convert to HTML ---
+  let contentHtml = "";
+
+  try {
+    const markdownLines: string[] = [];
+    let cursor: string | undefined = undefined;
+
+    while (true) {
+      const resp = await notion.blocks.children.list({
+        block_id: page.id,
+        page_size: 100,
+        start_cursor: cursor,
+      });
+
+      for (const block of resp.results as any[]) {
+        const type = block.type;
+        const richTexts = block[type]?.rich_text ?? [];
+        const text = richTexts.map((t: any) => t.plain_text).join("");
+
+        if (!text) continue;
+
+        switch (type) {
+          case "heading_1":
+            markdownLines.push(`# ${text}`);
+            break;
+          case "heading_2":
+            markdownLines.push(`## ${text}`);
+            break;
+          case "heading_3":
+            markdownLines.push(`### ${text}`);
+            break;
+          case "bulleted_list_item":
+            markdownLines.push(`- ${text}`);
+            break;
+          case "numbered_list_item":
+            markdownLines.push(`1. ${text}`);
+            break;
+          default:
+            markdownLines.push(text);
+        }
+      }
+
+      if (!resp.has_more || !resp.next_cursor) break;
+      cursor = resp.next_cursor;
+    }
+
+    const markdown = markdownLines.join("\n\n");
+    contentHtml = markdown ? (marked as any)(markdown) : "";
+  } catch (err) {
+    console.warn(
+      `getPost: failed to load Notion blocks for page "${page.id}". Returning post without contentHtml.`,
+      err
+    );
+  }
+
+  return {
+    ...base,
+    contentHtml:
+      contentHtml ||
+      "<p>Full article coming soon. Check back shortly.</p>",
+  };
 }
