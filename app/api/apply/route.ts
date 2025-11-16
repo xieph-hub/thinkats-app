@@ -66,7 +66,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const application = await prisma.application.create({
+    const application = await prisma.jobapplication.create({
       data: {
         jobId,
         candidateId: candidate.id,
