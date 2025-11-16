@@ -1,59 +1,15 @@
-import type { Metadata } from "next";
-import Container from "@/components/Container";
-import Link from "next/link";
-import Image from "next/image";
-import { getAllPostsCMS } from "@/lib/cms";
-import { SITE_URL } from "@/lib/site";
-
-export const metadata: Metadata = {
-  title: "Insights — HR Strategy, Workforce Trends, Career Growth",
-  description:
-    "Research, thought leadership, and HR trends shaping the future of work. Practical insights for employers and professionals.",
-  alternates: { canonical: SITE_URL + "/insights" },
-};
-
-export const dynamic = "force-dynamic"; // always fetch fresh from Notion
-
-export default async function Page() {
-  const posts = await getAllPostsCMS();
-
+export default function InsightsPage() {
   return (
-    <section className="py-12 md:py-20 bg-white border-y">
-      <Container>
-        <h2 className="text-3xl font-bold">Stay Ahead with Expert Insights</h2>
-        <p className="mt-2 text-slate-600 max-w-3xl">
-          Access research, thought leadership, and HR trends shaping the future of work.
+    <main className="py-12">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-semibold text-slate-900 mb-4">
+          Insights & Playbooks
+        </h1>
+        <p className="text-slate-600">
+          This will become your content hub: hiring playbooks, salary guides,
+          market reports and thought pieces on African talent & remote work.
         </p>
-
-        <div className="mt-8 grid md:grid-cols-3 gap-6">
-          {posts.map((p) => (
-            <Link
-              key={p.slug}
-              href={`/insights/${p.slug}`}
-              className="rounded-2xl border border-slate-200 hover:shadow-soft transition block"
-            >
-              {p.cover && (
-                <div className="relative w-full h-40 rounded-t-2xl overflow-hidden">
-                  <Image
-                    src={p.cover}
-                    alt={p.title}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-              )}
-              <div className="p-5">
-                <p className="text-xs text-slate-500">
-                  {(p.category ?? "Insight") + (p.date ? ` • ${new Date(p.date).toLocaleDateString()}` : "")}
-                </p>
-                <h3 className="font-semibold mt-1">{p.title}</h3>
-                <p className="text-sm text-slate-600 mt-2">{p.excerpt}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </Container>
-    </section>
+      </div>
+    </main>
   );
 }
