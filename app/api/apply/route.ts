@@ -38,31 +38,29 @@ export async function POST(req: Request) {
     // Later we’ll read this from session / domain / header.
     const tenantId = process.env.DEFAULT_TENANT_ID ?? "default-tenant";
 
-    // Upsert candidate by email so the same person doesn't get duplicated
-    const candidate = await prisma.candidate.upsert({
-      where: {
-        email: normalizedEmail,
-      },
-      update: {
-        tenantId,
-        fullName: name,
-        phone: phone ?? null,
-        cvUrl: cvUrl ?? null,
-        // city: city ?? null,
-        // country: country ?? null,
-        // source: source ?? "job_board",
-      },
-      create: {
-        tenantId,
-        fullName: name,
-        email: normalizedEmail,
-        phone: phone ?? null,
-        cvUrl: cvUrl ?? null,
-        // city: city ?? null,
-        // country: country ?? null,
-        // source: source ?? "job_board",
-      },
-    });
+    import { getDefaultTenant } from "@/lib/tenant"; // make sure this is at the top
+
+// somewhere near the top of POST handler
+const tenant = await getDefaultTenant();
+
+// …
+
+const candidate = await prisma.candidate.upsert({
+  where: {
+    tenantId_email: {
+      tenantId: tenant.id,
+      email: normalizedEmail,
+    },
+  },
+  update: {
+    // your existing update fields (fullName, phone, etc.)
+  },
+  create: {
+    tenantId: tenant.id,
+    email: normalizedEmail,
+    // your existing create fields (fullName, phone, etc.)
+  },
+});
 
     const application = await prisma.jobApplication.create({
       data: {
