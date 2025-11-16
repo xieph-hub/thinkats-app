@@ -66,17 +66,13 @@ export async function POST(req: Request) {
       },
     });
 
-    const application = await prisma.jobapplication.create({
-      data: {
-        jobId,
-        candidateId: candidate.id,
-        status: "applied",
-        // if your Application model has fields like source / city / country:
-        // source: source ?? "job_board",
-        // city,
-        // country,
-      },
-    });
+    const application = await prisma.jobApplication.create({
+  data: {
+    jobId,
+    candidateId: candidate.id,
+    // status: "applied", // optional if your schema has a default
+  },
+});
 
     return NextResponse.json(
       {
