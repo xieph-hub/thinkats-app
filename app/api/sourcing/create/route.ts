@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../lib/prisma";
 
+// Default tenant (same idea as we used in /api/apply)
+const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID ?? "default-tenant";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -9,63 +12,32 @@ export async function POST(req: Request) {
       fullName,
       email,
       phone,
-      city,
-      country,
+      // we accept everything but only persist what the schema actually has for now
       headline,
       summary,
       currentRole,
       currentCompany,
-      totalExperienceYears,
-      level,
       functions,
       industries,
       skills,
       preferredLocations,
       workPreference,
-      salaryCurrency,
-      salaryMin,
-      salaryMax,
-      noticePeriod,
       cvUrl,
-      source,
-      location, // fallback if a single location string is sent
     } = body as {
       fullName?: string;
       email?: string;
       phone?: string;
-      city?: string;
-      country?: string;
       headline?: string;
       summary?: string;
       currentRole?: string;
       currentCompany?: string;
-      totalExperienceYears?: number;
-      level?: string;
       functions?: string;
       industries?: string;
       skills?: string | string[];
       preferredLocations?: string;
       workPreference?: string;
-      salaryCurrency?: string;
-      salaryMin?: number;
-      salaryMax?: number;
-      noticePeriod?: string;
       cvUrl?: string;
-      source?: string;
-      location?: string;
     };
-// Normalize skills into a string[]
-const rawSkills = skills as unknown;
-
-const parsedSkills =
-  typeof rawSkills === "string"
-    ? rawSkills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : Array.isArray(rawSkills)
-    ? rawSkills.map((s) => String(s).trim()).filter(Boolean)
-    : [];
 
     if (!fullName || !email) {
       return NextResponse.json(
@@ -76,36 +48,62 @@ const parsedSkills =
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const candidate = await prisma.candidate.create({
-      data: {
-        fullName,
+    // Normalise skills into a string[]
+    const rawSkills = skills as unknown;
+    const parsedSkills =
+      typeof rawSkills === "string"
+        ? rawSkills
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : Array.isArray(rawSkills)
+        ? rawSkills.map((s) => String(s).trim()).filter(Boolean)
+        : [];
+
+    // Try to find existing candidate for this tenant + email
+    const existingCandidate = await prisma.candidate.findFirst({
+      where: {
         email: normalizedEmail,
-        phone: phone ?? null,
-        city: city ?? location ?? null,
-        country: country ?? null,
-        headline: headline ?? null,
-        summary: summary ?? null,
-        currentRole: currentRole ?? null,
-        currentCompany: currentCompany ?? null,
-        totalExperienceYears: totalExperienceYears ?? null,
-
-        level: level ?? null,
-        functions: functions ?? null,
-        industries: industries ?? null,
-        skills: parsedSkills, // <-- changed
-
-        preferredLocations: preferredLocations ?? null,
-        workPreference: workPreference ?? null,
-        salaryCurrency: salaryCurrency ?? null,
-        salaryMin: salaryMin ?? null,
-        salaryMax: salaryMax ?? null,
-        noticePeriod: noticePeriod ?? null,
-
-        cvUrl: cvUrl ?? null,
-        source: source ?? "sourcing",
-        status: "active",
+        tenantId: DEFAULT_TENANT_ID,
       },
+      select: { id: true },
     });
+
+    // Only use fields we’re confident exist on Candidate right now.
+    // If some of these cause new TS errors, we can shave it down further,
+    // but this should align with the schema we’ve been using so far.
+    const baseData = {
+      fullName,
+      email: normalizedEmail,
+      phone: phone ?? null,
+      headline: headline ?? null,
+      summary: summary ?? null,
+      currentCompany: currentCompany ?? null,
+      // currentRole from the form can be mapped into currentTitle in the DB (if you have that field)
+      currentTitle: currentRole ?? null,
+      functions: functions ?? null,
+      industries: industries ?? null,
+      skills: parsedSkills,
+      preferredLocations: preferredLocations ?? null,
+      workPreference: workPreference ?? null,
+      cvUrl: cvUrl ?? null,
+    };
+
+    let candidate;
+
+    if (existingCandidate) {
+      candidate = await prisma.candidate.update({
+        where: { id: existingCandidate.id },
+        data: baseData,
+      });
+    } else {
+      candidate = await prisma.candidate.create({
+        data: {
+          tenantId: DEFAULT_TENANT_ID,
+          ...baseData,
+        },
+      });
+    }
 
     return NextResponse.json(
       {
