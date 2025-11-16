@@ -1,67 +1,92 @@
-import fs from "fs";
-import path from "path";
-import matter from "gray-matter";
+import { Client } from "@notionhq/client";
 
-type DateLike = string | Date | undefined;
-
-export type Post = {
-  slug: string;
+export type InsightPost = {
+  id: string;
   title: string;
-  excerpt?: string;
-  /** ISO string used for rendering/sorting */
-  date?: string;
-  category?: string;
-  cover?: string;
+  slug: string;
+  summary: string;
+  publishedAt: string | null;
+  tags: string[];
 };
 
-const insightsDir = path.join(process.cwd(), "content", "insights");
+const NOTION_API_KEY = process.env.NOTION_API_KEY;
+const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
 
-function toISO(d: DateLike): string | undefined {
-  if (!d) return undefined;
-  if (d instanceof Date) return isNaN(d.getTime()) ? undefined : d.toISOString();
-  const parsed = new Date(d);
-  return isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+let notion: Client | null = null;
+
+if (NOTION_API_KEY && NOTION_DATABASE_ID) {
+  notion = new Client({ auth: NOTION_API_KEY });
+} else {
+  console.warn(
+    "Notion env vars missing (NOTION_API_KEY or NOTION_DATABASE_ID). Insights page will show placeholder content."
+  );
 }
 
-export function getAllPosts(): Post[] {
-  if (!fs.existsSync(insightsDir)) return [];
-  const files = fs.readdirSync(insightsDir).filter((f) => f.endsWith(".md"));
+export async function fetchInsights(): Promise<InsightPost[]> {
+  if (!notion || !NOTION_DATABASE_ID) {
+    // No Notion config → just show “coming soon” UI
+    return [];
+  }
 
-  const posts = files.map((file) => {
-    const slug = file.replace(/\.md$/, "");
-    const filePath = path.join(insightsDir, file);
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const { data, content } = matter(raw);
+  try {
+    const response = await notion.databases.query({
+      database_id: NOTION_DATABASE_ID,
 
-    const title = (data.title as string) ?? slug;
-    const excerpt =
-      (data.excerpt as string) ??
-      (content || "").slice(0, 160).replace(/\n/g, " ") + (content.length > 160 ? "..." : "");
+      // ✅ SAFE SORT: no custom property names, just last_edited_time
+      sorts: [
+        {
+          timestamp: "last_edited_time",
+          direction: "descending",
+        },
+      ],
 
-    const dateISO = toISO(data.date as DateLike);
+      // ✅ Filter only if the database actually has a Status property
+      // If your DB doesn't have "Status", just temporarily remove this filter.
+      filter: {
+        property: "Status",
+        status: { equals: "Published" },
+      },
+    });
 
-    return {
-      slug,
-      title,
-      excerpt,
-      date: dateISO,
-      category: (data.category as string) ?? undefined,
-      cover: (data.cover as string) ?? undefined
-    } as Post;
-  });
+    return response.results.map((page: any) => {
+      const props = page.properties ?? {};
 
-  // newest first; undated last
-  return posts.sort((a, b) => {
-    const aTime = a.date ? Date.parse(a.date) : -Infinity;
-    const bTime = b.date ? Date.parse(b.date) : -Infinity;
-    return bTime - aTime;
-  });
-}
+      const title =
+        props.Name?.title?.[0]?.plain_text ??
+        props.Title?.title?.[0]?.plain_text ??
+        "Untitled";
 
-export function getPost(slug: string): { frontmatter: any; content: string } | null {
-  const filePath = path.join(insightsDir, `${slug}.md`);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, "utf-8");
-  const { data, content } = matter(raw);
-  return { frontmatter: data, content };
+      const slug =
+        props.Slug?.rich_text?.[0]?.plain_text ??
+        page.id.replace(/-/g, "").toLowerCase();
+
+      const summary =
+        props.Summary?.rich_text?.[0]?.plain_text ??
+        props.Description?.rich_text?.[0]?.plain_text ??
+        "No summary available yet.";
+
+      const publishedAt =
+        props.PublishedAt?.date?.start ??
+        props.Date?.date?.start ??
+        page.created_time ??
+        page.last_edited_time ??
+        null;
+
+      const tags =
+        props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
+
+      return {
+        id: page.id,
+        title,
+        slug,
+        summary,
+        publishedAt,
+        tags,
+      } as InsightPost;
+    });
+  } catch (err) {
+    // ✅ Never let Notion errors break your build
+    console.error("Failed to fetch insights from Notion", err);
+    return [];
+  }
 }
