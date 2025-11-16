@@ -129,7 +129,7 @@ const jobs: Job[] = [
 ];
 
 // -----------------------------------------------------------------------------
-// Small inline icon components (no extra dependencies)
+// Small inline icon components with classic colors
 // -----------------------------------------------------------------------------
 
 function LocationIcon(props: SVGProps<SVGSVGElement>) {
@@ -138,7 +138,7 @@ function LocationIcon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       aria-hidden="true"
       {...props}
-      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+      className={`h-3.5 w-3.5 text-red-500 ${props.className ?? ""}`}
     >
       <path
         d="M12 2.75a6.25 6.25 0 0 0-6.25 6.25c0 4.39 4.76 9.19 5.96 10.37a.9.9 0 0 0 1.26 0c1.2-1.18 5.98-5.98 5.98-10.37A6.25 6.25 0 0 0 12 2.75Zm0 9.25a3 3 0 1 1 0-6.001 3 3 0 0 1 0 6Z"
@@ -154,7 +154,7 @@ function BriefcaseIcon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       aria-hidden="true"
       {...props}
-      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+      className={`h-3.5 w-3.5 text-amber-800 ${props.className ?? ""}`}
     >
       <path
         d="M9 4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6h3.25A1.75 1.75 0 0 1 20 7.75v9.5A1.75 1.75 0 0 1 18.25 19H5.75A1.75 1.75 0 0 1 4 17.25v-9.5A1.75 1.75 0 0 1 5.75 6H9V4.5Zm1.5.25v1.25h3V4.75h-3Z"
@@ -170,7 +170,7 @@ function SparklesIcon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       aria-hidden="true"
       {...props}
-      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+      className={`h-3.5 w-3.5 text-yellow-400 ${props.className ?? ""}`}
     >
       <path
         d="M12 3.25 13.4 7l3.6 1.4L13.4 9.8 12 13.5 10.6 9.8 7 8.4 10.6 7 12 3.25Zm6.5 7.25.75 2 2 0.75-2 .75-.75 2-.75-2-2-.75 2-.75.75-2Zm-13 4.5.9 2.4 2.35.9-2.35.9-.9 2.35-.9-2.35L3.25 19l2.25-.9.9-2.4Z"
@@ -186,7 +186,7 @@ function CurrencyIcon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       aria-hidden="true"
       {...props}
-      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+      className={`h-3.5 w-3.5 text-emerald-500 ${props.className ?? ""}`}
     >
       <path
         d="M11 4.75h2a.75.75 0 0 1 0 1.5h-1.25v2h.5a4.25 4.25 0 1 1 0 8.5H11a.75.75 0 0 1 0-1.5h1.25v-2h-.5a4.25 4.25 0 1 1 0-8.5Zm.75 4v6.5h1a2.75 2.75 0 0 0 0-5.5h-1Zm-1.5 0h-1a2.75 2.75 0 0 0 0 5.5h1V8.75Z"
@@ -202,7 +202,7 @@ function ClockIcon(props: SVGProps<SVGSVGElement>) {
       viewBox="0 0 24 24"
       aria-hidden="true"
       {...props}
-      className={`h-3.5 w-3.5 ${props.className ?? ""}`}
+      className={`h-3.5 w-3.5 text-sky-500 ${props.className ?? ""}`}
     >
       <path
         d="M12 3.25a8.75 8.75 0 1 0 0 17.5 8.75 8.75 0 0 0 0-17.5Zm-.75 4.5a.75.75 0 0 1 1.5 0V12l2.22 2.22a.75.75 0 1 1-1.06 1.06l-2.5-2.5A.75.75 0 0 1 11.25 12V7.75Z"
@@ -221,8 +221,8 @@ function InfoPill({
   label: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-[0.7rem] font-medium text-slate-600 ring-1 ring-slate-200">
-      <span className="text-slate-400">{icon}</span>
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-[0.7rem] font-medium text-slate-600 ring-1 ring-slate-200">
+      <span className="flex items-center justify-center">{icon}</span>
       <span>{label}</span>
     </span>
   );
@@ -387,20 +387,20 @@ export default function JobsPage() {
                     {/* Icon pills */}
                     <div className="flex flex-wrap items-center gap-2 text-[0.7rem] sm:text-xs">
                       <InfoPill
-                        icon={<LocationIcon className="text-slate-400" />}
+                        icon={<LocationIcon />}
                         label={job.location}
                       />
                       <InfoPill
-                        icon={<BriefcaseIcon className="text-slate-400" />}
+                        icon={<BriefcaseIcon />}
                         label={`${job.workType} • ${job.type}`}
                       />
                       <InfoPill
-                        icon={<SparklesIcon className="text-slate-400" />}
+                        icon={<SparklesIcon />}
                         label={`${job.seniority} level`}
                       />
                       {job.salaryRange && (
                         <InfoPill
-                          icon={<CurrencyIcon className="text-slate-400" />}
+                          icon={<CurrencyIcon />}
                           label={job.salaryRange}
                         />
                       )}
@@ -416,8 +416,8 @@ export default function JobsPage() {
 
                   {/* Right section */}
                   <div className="flex flex-col items-start gap-2 sm:items-end">
-                    <div className="inline-flex items-center gap-1 text-[0.7rem] text-slate-500 sm:text-xs">
-                      <ClockIcon className="text-slate-400" />
+                    <div className="inline-flex items-center gap-1.5 text-[0.7rem] text-slate-500 sm:text-xs">
+                      <ClockIcon />
                       <span>{job.postedAt}</span>
                     </div>
 
