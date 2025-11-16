@@ -167,6 +167,8 @@ model Tenant {
   clientCompanies ClientCompany[] @relation("TenantClientCompanies")
   candidates      Candidate[]     @relation("TenantCandidates")
 
+talentRequests TalentRequest[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
