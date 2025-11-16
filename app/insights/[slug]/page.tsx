@@ -1,103 +1,107 @@
 import type { Metadata } from "next";
-import Container from "@/components/Container";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getPostCMS } from "@/lib/cms";
 import { SITE_URL, SITE_NAME } from "@/lib/site";
 
-export const dynamic = "force-dynamic"; // render per-request
+export const dynamic = "force-dynamic";
 
-export async function generateMetadata(
-  { params }: { params: { slug: string } }
-): Promise<Metadata> {
+type Props = {
+  params: { slug: string };
+};
+
+export async function generateMetadata({
+  params,
+}: Props): Promise<Metadata> {
   const post = await getPostCMS(params.slug);
-  if (!post) return { title: "Not found" };
 
-  const title = post.frontmatter?.title
-    ? `${post.frontmatter.title} | Insights`
-    : `${params.slug} | Insights`;
+  if (!post) {
+    return {
+      title: "Post not found | Insights",
+      description: "The requested insight could not be found.",
+    };
+  }
+
+  const title = `${post.title} | Insights`;
   const description =
-    post.frontmatter?.excerpt ||
-    "Expert insight from Resourcin on HR, talent, and the future of work.";
-  const url = `${SITE_URL}/insights/${params.slug}`;
-  const og = post.frontmatter?.cover || "/api/og";
+    post.summary ||
+    `Read “${post.title}” on ${SITE_NAME} Insights.`;
+
+  const url = `${SITE_URL}/insights/${post.slug}`;
 
   return {
     title,
     description,
-    alternates: { canonical: url },
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
-      type: "article",
-      siteName: SITE_NAME,
-      url,
       title,
       description,
-      images: [{ url: og, width: 1200, height: 630 }],
+      url,
+      type: "article",
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: [og],
     },
   };
 }
 
-export default async function Page({ params }: { params: { slug: string } }) {
+export default async function InsightPage({ params }: Props) {
   const post = await getPostCMS(params.slug);
-  if (!post) return notFound();
 
-  const { frontmatter, html } = post;
-  const date = frontmatter?.date ? new Date(frontmatter.date).toLocaleDateString() : null;
-  const cover = typeof frontmatter?.cover === "string" ? frontmatter.cover : undefined;
-
-  // Optional: JSON-LD for Article rich results
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    headline: frontmatter?.title || params.slug,
-    datePublished: frontmatter?.date,
-    dateModified: frontmatter?.date,
-    mainEntityOfPage: `${SITE_URL}/insights/${params.slug}`,
-    image: cover ? [cover] : undefined,
-    author: { "@type": "Organization", name: SITE_NAME },
-    publisher: {
-      "@type": "Organization",
-      name: SITE_NAME,
-      logo: { "@type": "ImageObject", url: `${SITE_URL}/logo.svg` },
-    },
-    description: frontmatter?.excerpt,
-  };
+  if (!post) {
+    notFound();
+  }
 
   return (
-    <section className="py-12 md:py-20">
-      <Container>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-        <p className="text-sm text-slate-500">
-          {(frontmatter?.category ?? "Insight") + (date ? ` • ${date}` : "")}
-        </p>
-        <h1 className="text-3xl font-bold mt-2">{frontmatter?.title ?? params.slug}</h1>
+    <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+      <article className="prose prose-slate max-w-none">
+        <header className="mb-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600">
+            Insight
+          </p>
 
-        {cover && (
-          <div className="relative w-full h-64 md:h-80 rounded-2xl overflow-hidden mt-6">
-            <Image
-              src={cover}
-              alt={frontmatter?.title ?? params.slug}
-              fill
-              className="object-cover"
-              unoptimized
-            />
-          </div>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+            {post.title}
+          </h1>
+
+          {post.publishedAt && (
+            <p className="mt-2 text-sm text-slate-500">
+              {new Date(post.publishedAt).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })}
+            </p>
+          )}
+
+          {post.tags && post.tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {post.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </header>
+
+        {post.contentHtml ? (
+          <div
+            className="prose prose-slate max-w-none"
+            dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+          />
+        ) : (
+          <p className="text-sm text-slate-600">
+            Full article content will be available soon.
+          </p>
         )}
-
-        <article
-          className="prose prose-slate mt-6 max-w-none"
-          dangerouslySetInnerHTML={{ __html: (html || "") as string }}
-        />
-      </Container>
-    </section>
+      </article>
+    </main>
   );
 }
