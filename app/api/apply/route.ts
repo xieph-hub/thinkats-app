@@ -34,7 +34,8 @@ export async function POST(req: Request) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // TODO: once multi-tenant is wired: pull from session / header / env
+    // For now: simple default tenant.
+    // Later we’ll read this from session / domain / header.
     const tenantId = process.env.DEFAULT_TENANT_ID ?? "default-tenant";
 
     // Upsert candidate by email so the same person doesn't get duplicated
@@ -65,13 +66,22 @@ export async function POST(req: Request) {
 
     const application = await prisma.jobApplication.create({
       data: {
+        // relations
         job: {
           connect: { id: jobId },
         },
         candidate: {
           connect: { id: candidate.id },
         },
-        // status: "applied", // if you have a status field with default, you can omit
+
+        // required scalar snapshot fields on JobApplication model
+        fullName: name,
+        email: normalizedEmail,
+        cvUrl: cvUrl ?? "", // satisfies required `cvUrl` in schema
+
+        // if you have this in schema with default, you can omit it
+        // status: "applied",
+        // source: source ?? "job_board",
       },
     });
 
