@@ -4,6 +4,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")  // pooled
+  directUrl = env("DIRECT_URL")    // direct
+}
+
 enum ApplicationStage {
   APPLIED
   SCREENING
@@ -14,10 +20,27 @@ enum ApplicationStage {
   REJECTED
 }
 
-datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")  // pooled
-  directUrl = env("DIRECT_URL")    // direct
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  SHORTLISTED
+  REJECTED
+  HIRED
+}
+
+model Tenant {
+  id          String @id @default(cuid())
+  name        String
+  slug        String @unique
+
+  // Relations
+  jobs            Job[]           @relation("TenantJobs")
+  clientCompanies ClientCompany[] @relation("TenantClientCompanies")
+  candidates      Candidate[]     @relation("TenantCandidates")
+  talentRequests  TalentRequest[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ClientCompany {
@@ -26,7 +49,7 @@ model ClientCompany {
   tenantId    String
 
   name        String
-  slug        String   @unique
+  slug        String
   logoUrl     String?
   websiteUrl  String?
   location    String?
@@ -38,6 +61,10 @@ model ClientCompany {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Slug unique per tenant
+  @@unique([tenantId, slug])
+  @@index([tenantId])
 }
 
 model Job {
@@ -52,7 +79,7 @@ model Job {
   clientCompanyId  String?
 
   title            String
-  slug             String           @unique
+  slug             String
   location         String
   employmentType   String           // "Full-time", "Contract", etc.
   seniority        String           // "Junior", "Mid", "Senior"
@@ -64,11 +91,78 @@ model Job {
 
   isPublished      Boolean          @default(true)
 
+  // One job → many applications
+  applications     JobApplication[]
+
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  // One job → many applications
-  applications     JobApplication[]
+  // Slug unique per tenant
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+}
+
+model Candidate {
+  id                    String             @id @default(cuid())
+  tenant                Tenant             @relation("TenantCandidates", fields: [tenantId], references: [id])
+  tenantId              String
+
+  fullName              String
+  email                 String
+  phone                 String?
+  location              String?
+  linkedinUrl           String?
+  yearsOfExperience     Int?
+  currentRole           String?
+  currentCompany        String?
+  primaryFunction       String?            // "Engineering", "Product", etc.
+  seniority             String?            // "Junior", "Mid", "Senior"
+  skills                String[]           // e.g. ["Python", "SQL"]
+
+  cvUrl                 String?            // latest uploaded CV URL
+  notes                 String?            // internal notes
+
+  // One candidate → many applications
+  applications          JobApplication[]
+
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  // Email unique per tenant
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model JobApplication {
+  id           String             @id @default(cuid())
+
+  // Link back to job
+  job          Job                @relation(fields: [jobId], references: [id])
+  jobId        String
+
+  // Link back to candidate (optional – for one-off applications without full profile)
+  candidate    Candidate?         @relation(fields: [candidateId], references: [id])
+  candidateId  String?
+
+  fullName     String
+  email        String
+  phone        String?
+  location     String?
+  linkedinUrl  String?
+  portfolioUrl String?
+
+  cvUrl        String?            // stored file URL (e.g. Supabase Storage)
+  coverLetter  String?
+  source       String?            // "Website", "Referral", "LinkedIn", etc.
+
+  stage        ApplicationStage   @default(APPLIED)
+  status       ApplicationStatus  @default(PENDING)
+
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([jobId])
+  @@index([candidateId])
 }
 
 model TalentRequest {
@@ -97,86 +191,7 @@ model TalentRequest {
   status         String   @default("new")
 
   createdAt      DateTime @default(now())
-}
+  updatedAt      DateTime @updatedAt
 
-model Candidate {
-  id                    String             @id @default(cuid())
-  tenant                Tenant             @relation("TenantCandidates", fields: [tenantId], references: [id])
-  tenantId              String
-
-  fullName              String
-  email                 String             @unique
-  phone                 String?
-  location              String?
-  linkedinUrl           String?
-  yearsOfExperience     Int?
-  currentRole           String?
-  currentCompany        String?
-  primaryFunction       String?            // "Engineering", "Product", etc.
-  seniority             String?            // "Junior", "Mid", "Senior"
-  skills                String[]           // e.g. ["Python", "SQL"]
-
-  cvUrl                 String?            // latest uploaded CV URL
-  notes                 String?            // internal notes
-
-  // One candidate → many applications
-  applications          JobApplication[]
-
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-}
-
-model JobApplication {
-  id           String             @id @default(cuid())
-
-  // Link back to job
-  job          Job                @relation(fields: [jobId], references: [id])
-  jobId        String
-
-  // Link back to candidate (optional – for one-off applications without full profile)
-  candidate    Candidate?         @relation(fields: [candidateId], references: [id])
-  candidateId  String?
-
-  fullName     String
-  email        String
-  phone        String?
-  location     String?
-  linkedinUrl  String?
-  portfolioUrl String?
-
-  cvUrl        String             // stored file URL (e.g. Supabase Storage)
-  coverLetter  String?
-  source       String?            // "Website", "Referral", "LinkedIn", etc.
-
-  status       ApplicationStatus  @default(PENDING)
-
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-}
-
-model Tenant {
-  id          String @id @default(cuid())
-  name        String
-  slug        String @unique
-
-  // keep any extra fields you already had here
-  // e.g. logoUrl, primaryColor, etc.
-
-  // Relations
-  jobs            Job[]           @relation("TenantJobs")
-  clientCompanies ClientCompany[] @relation("TenantClientCompanies")
-  candidates      Candidate[]     @relation("TenantCandidates")
-
-talentRequests TalentRequest[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-enum ApplicationStatus {
-  PENDING
-  REVIEWING
-  SHORTLISTED
-  REJECTED
-  HIRED
+  @@index([tenantId])
 }
