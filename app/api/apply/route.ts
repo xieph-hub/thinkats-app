@@ -40,8 +40,6 @@ export async function POST(req: Request) {
       update: {
         fullName: name,
         phone: phone ?? null,
-        city: city ?? null,
-        country: country ?? null,
         cvUrl: cvUrl ?? null,
         source: source ?? "job_board",
         status: "active",
