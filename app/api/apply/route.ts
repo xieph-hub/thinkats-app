@@ -1,100 +1,111 @@
+// app/api/apply/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { getDefaultTenant } from "@/lib/tenant";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const tenant = await getDefaultTenant();
 
-    const {
-      jobId,
-      name,
-      email,
-      phone,
-      city,
-      country,
-      cvUrl,
-      source,
-    } = body as {
-      jobId?: string;
-      name?: string;
-      email?: string;
-      phone?: string;
-      city?: string;
-      country?: string;
-      cvUrl?: string;
-      source?: string;
-    };
+    const contentType = req.headers.get("content-type") ?? "";
+    let payload: Record<string, unknown>;
 
-    if (!jobId || !name || !email) {
+    if (contentType.includes("application/json")) {
+      payload = (await req.json()) as Record<string, unknown>;
+    } else {
+      const formData = await req.formData();
+      payload = Object.fromEntries(formData.entries());
+    }
+
+    const jobId = String(payload.jobId ?? "").trim();
+    const fullName = String(payload.fullName ?? "").trim();
+    const emailRaw = String(payload.email ?? "").trim();
+    const email = emailRaw.toLowerCase();
+    const phone = String(payload.phone ?? "").trim();
+    const location = String(payload.location ?? "").trim();
+    const linkedinUrl = String(payload.linkedinUrl ?? "").trim();
+    const portfolioUrl = String(payload.portfolioUrl ?? "").trim();
+    const coverLetter = String(payload.coverLetter ?? "").trim();
+    const source = String(payload.source ?? "Website").trim() || "Website";
+
+    if (!jobId || !fullName || !email) {
       return NextResponse.json(
-        { error: "jobId, name and email are required" },
+        { ok: false, error: "Missing required fields." },
         { status: 400 }
       );
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // For now: simple default tenant.
-    // Later we’ll read this from session / domain / header.
-    const tenantId = process.env.DEFAULT_TENANT_ID ?? "default-tenant";
-
-    import { getDefaultTenant } from "@/lib/tenant"; // make sure this is at the top
-
-// somewhere near the top of POST handler
-const tenant = await getDefaultTenant();
-
-// …
-
-const candidate = await prisma.candidate.upsert({
-  where: {
-    tenantId_email: {
-      tenantId: tenant.id,
-      email: normalizedEmail,
-    },
-  },
-  update: {
-    // your existing update fields (fullName, phone, etc.)
-  },
-  create: {
-    tenantId: tenant.id,
-    email: normalizedEmail,
-    // your existing create fields (fullName, phone, etc.)
-  },
-});
-
-    const application = await prisma.jobApplication.create({
-      data: {
-        // relations
-        job: {
-          connect: { id: jobId },
-        },
-        candidate: {
-          connect: { id: candidate.id },
-        },
-
-        // required scalar snapshot fields on JobApplication model
-        fullName: name,
-        email: normalizedEmail,
-        cvUrl: cvUrl ?? "", // satisfies required `cvUrl` in schema
-
-        // if you have this in schema with default, you can omit it
-        // status: "applied",
-        // source: source ?? "job_board",
+    // Make sure job exists for this tenant
+    const job = await prisma.job.findFirst({
+      where: {
+        id: jobId,
+        tenantId: tenant.id,
+        isPublished: true,
       },
     });
 
-    return NextResponse.json(
-      {
-        ok: true,
-        applicationId: application.id,
-        candidateId: candidate.id,
+    if (!job) {
+      return NextResponse.json(
+        { ok: false, error: "Job not found." },
+        { status: 404 }
+      );
+    }
+
+    // Upsert candidate by compound unique [tenantId, email]
+    const candidate = await prisma.candidate.upsert({
+      where: {
+        tenantId_email: {
+          tenantId: tenant.id,
+          email,
+        },
       },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("Error in /api/apply", error);
+      update: {
+        fullName,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        // extend with more fields if you collect them
+      },
+      create: {
+        tenantId: tenant.id,
+        fullName,
+        email,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        yearsOfExperience: null,
+        currentRole: null,
+        currentCompany: null,
+        primaryFunction: null,
+        seniority: null,
+        skills: [],
+        cvUrl: null,
+        notes: null,
+      },
+    });
+
+    await prisma.jobApplication.create({
+      data: {
+        jobId: job.id,
+        candidateId: candidate.id,
+        fullName,
+        email,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        portfolioUrl: portfolioUrl || null,
+        cvUrl: candidate.cvUrl ?? null,
+        coverLetter: coverLetter || null,
+        source,
+        // stage/status use defaults (ApplicationStage/APPLICATIONSTATUS)
+      },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Error submitting application:", err);
     return NextResponse.json(
-      { error: "Something went wrong submitting application" },
+      { ok: false, error: "Failed to submit application." },
       { status: 500 }
     );
   }
