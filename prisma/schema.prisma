@@ -71,6 +71,34 @@ model Job {
   applications     JobApplication[]
 }
 
+model TalentRequest {
+  id             String   @id @default(cuid())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId       String
+
+  companyName    String
+  contactName    String
+  contactEmail   String
+  contactPhone   String?
+
+  roleTitle      String
+  roleLevel      String?   // e.g. "Senior", "Manager"
+  function       String?   // e.g. "Engineering", "Sales"
+  location       String?
+  workType       String?   // "Onsite", "Remote", "Hybrid"
+  employmentType String?   // "Full-time", "Contract", etc.
+
+  budgetCurrency String?   // "USD", "NGN", etc.
+  budgetMin      Int?
+  budgetMax      Int?
+  hiresCount     Int?
+
+  notes          String?
+  status         String   @default("new")
+
+  createdAt      DateTime @default(now())
+}
+
 model Candidate {
   id                    String             @id @default(cuid())
   tenant                Tenant             @relation("TenantCandidates", fields: [tenantId], references: [id])
