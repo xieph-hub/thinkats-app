@@ -79,18 +79,28 @@ export async function POST(req: NextRequest) {
 
     const tenantId = job.tenantId;
 
-    // --- Upsert candidate (per tenant + email) ---
-    const candidate = await prisma.candidate.upsert({
+    // Upsert candidate by email so the same person doesn't get duplicated
+const candidate = await prisma.candidate.upsert({
   where: {
-    email,
+    email, // email must be unique in your Prisma schema (which it is)
   },
   update: {
-    // keep EXACTLY whatever you already have here
-    // e.g. fullName, phone, location, linkedinUrl, cvUrl, etc.
+    // when the candidate already exists, gently refresh some fields
+    fullName,
+    phone: phone || undefined,
+    location: location || undefined,
+    linkedinUrl: linkedinUrl || undefined,
+    cvUrl: cvUrl || undefined, // latest uploaded CV
   },
   create: {
-    // keep EXACTLY whatever you already have here
-    // just make sure tenantId is included here (it already should be)
+    // when the candidate does NOT exist, create a fresh one
+    tenantId, // <-- keep using whatever tenantId you already have defined above
+    fullName,
+    email,
+    phone: phone || undefined,
+    location: location || undefined,
+    linkedinUrl: linkedinUrl || undefined,
+    cvUrl: cvUrl || undefined,
   },
 });
 
