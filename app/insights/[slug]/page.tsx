@@ -3,29 +3,17 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAllPosts, getPost } from "@/lib/cms";
-import { SITE_URL, SITE_NAME } from "@/lib/site";
+import { getInsightBySlug } from "@/lib/notion-insights"; // or similar
 
-type PageProps = {
-  params: { slug: string };
-};
+export default async function InsightPage({ params }: { params: { slug: string } }) {
+  const insight = await getInsightBySlug(params.slug);
 
-export async function generateStaticParams() {
-  const posts = await getAllPosts();
-  return posts.map((post) => ({ slug: post.slug }));
-}
-
-export async function generateMetadata({
-  params,
-}: PageProps): Promise<Metadata> {
-  const post = await getPost(params.slug);
-
-  if (!post) {
-    return {
-      title: "Insight not found | Resourcin",
-      description: "The requested insight could not be found.",
-    };
+  if (!insight) {
+    notFound();
   }
+
+  // render...
+}
 
   const title = `${post.title} | Insights`;
   const description =
