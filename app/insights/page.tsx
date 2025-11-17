@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { getInsightsList } from "@/lib/insights";
 
-export const revalidate = 60; // ISR
+export const revalidate = 60; // ISR – revalidate every 60s
 
 export default async function InsightsPage() {
   const insights = await getInsightsList();
