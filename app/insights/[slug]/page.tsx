@@ -28,12 +28,7 @@ export default async function InsightPage({ params }: PageProps) {
     notFound();
   }
 
-  // Request Talent tracking link
-  const requestTalentHref = `/request-talent?via=insight&post=${encodeURIComponent(
-    insight.slug
-  )}`;
-
-  // Get body blocks + all insights for "Related"
+  // Fetch body blocks + all insights for "Related"
   const [blocks, allInsights] = await Promise.all([
     getInsightBlocks(insight.id),
     getInsightsList(),
@@ -49,12 +44,12 @@ export default async function InsightPage({ params }: PageProps) {
   const hasContentField = Boolean(insight.content);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,2.2fr)_minmax(260px,1fr)]">
+    <main className="mx-auto max-w-6xl px-4 py-10 font-sans lg:py-16">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,2.4fr)_minmax(260px,1fr)]">
         {/* MAIN ARTICLE */}
-        <article>
+        <article className="max-w-3xl">
           {insight.coverUrl && (
-            <div className="mb-6 overflow-hidden rounded-xl">
+            <div className="mb-8 overflow-hidden rounded-2xl shadow-sm">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={insight.coverUrl}
@@ -64,16 +59,17 @@ export default async function InsightPage({ params }: PageProps) {
             </div>
           )}
 
-          <header className="mb-6">
+          {/* Meta */}
+          <header className="mb-8">
             <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
               {insight.category && (
-                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium">
+                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium">
                   {insight.category}
                 </span>
               )}
 
               {insight.publishedAt && (
-                <span>
+                <span className="text-[11px] uppercase tracking-wide text-neutral-400">
                   {new Date(insight.publishedAt).toLocaleDateString(
                     undefined,
                     {
@@ -86,19 +82,22 @@ export default async function InsightPage({ params }: PageProps) {
               )}
             </div>
 
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--rcn-blue)]">
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--rcn-blue)] sm:text-4xl">
               {insight.title}
             </h1>
 
             {insight.excerpt && (
-              <p className="mt-3 text-sm text-neutral-700">
+              <p className="mt-4 text-sm text-neutral-700 sm:text-base">
                 {insight.excerpt}
               </p>
             )}
           </header>
 
+          {/* Divider */}
+          <div className="mb-8 h-px w-full bg-gradient-to-r from-neutral-200 via-neutral-100 to-transparent" />
+
           {/* BODY */}
-          <section className="space-y-4 text-[15px] leading-relaxed text-slate-800">
+          <section className="space-y-4 text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
             {/* Prefer the Content field from Notion if present */}
             {hasContentField && (
               <ContentFromField text={insight.content!} />
@@ -109,7 +108,7 @@ export default async function InsightPage({ params }: PageProps) {
               <NotionBlocks blocks={blocks} />
             )}
 
-            {/* If both exist, we render content field first, then any additional blocks */}
+            {/* If both exist, render content field first, then any additional blocks */}
             {hasContentField && hasBlocks && (
               <div className="pt-4">
                 <NotionBlocks blocks={blocks} />
@@ -122,30 +121,11 @@ export default async function InsightPage({ params }: PageProps) {
               </p>
             )}
           </section>
-
-          {/* REQUEST TALENT CTA with tracking */}
-          <section className="mt-10 rounded-xl border border-neutral-200 bg-neutral-50 px-5 py-4">
-            <h2 className="text-sm font-semibold text-[var(--rcn-blue)]">
-              Need to hire for a role like this?
-            </h2>
-            <p className="mt-2 text-xs text-neutral-600">
-              Share your requirements and we&apos;ll respond with a tailored shortlist.
-              This form will remember that you came from this insight.
-            </p>
-            <div className="mt-3">
-              <Link
-                href={requestTalentHref}
-                className="inline-flex items-center justify-center rounded-full bg-[var(--rcn-blue)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#101b4a]"
-              >
-                Request Talent
-              </Link>
-            </div>
-          </section>
         </article>
 
         {/* RELATED INSIGHTS */}
         <aside className="border-t border-neutral-200 pt-6 lg:border-t-0 lg:pt-0 lg:pl-4">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Related insights
           </h2>
 
@@ -160,7 +140,7 @@ export default async function InsightPage({ params }: PageProps) {
               <Link
                 key={item.id}
                 href={`/insights/${item.slug}`}
-                className="block rounded-lg border border-neutral-200/80 bg-white p-3 text-sm transition hover:border-[var(--rcn-blue)] hover:shadow-sm"
+                className="block rounded-xl border border-neutral-200/80 bg-white p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--rcn-blue)] hover:shadow-md"
               >
                 <p className="text-[11px] uppercase tracking-wide text-neutral-400">
                   {item.category || "Insight"}
@@ -169,19 +149,20 @@ export default async function InsightPage({ params }: PageProps) {
                   {item.title}
                 </p>
                 {item.excerpt && (
-                  <p className="mt-1 line-clamp-2 text-xs text-neutral-600">
+                  <p className="mt-1 line-clamp-3 text-[12px] text-neutral-600">
                     {item.excerpt}
                   </p>
                 )}
                 {item.publishedAt && (
-                  <p className="mt-1 text-[11px] text-neutral-400">
-                    {new Date(
-                      item.publishedAt
-                    ).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
+                  <p className="mt-2 text-[11px] text-neutral-400">
+                    {new Date(item.publishedAt).toLocaleDateString(
+                      undefined,
+                      {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      }
+                    )}
                   </p>
                 )}
               </Link>
@@ -230,7 +211,7 @@ function buildRelatedInsights(
  */
 function ContentFromField({ text }: { text: string }) {
   return (
-    <pre className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800">
+    <pre className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
       {text}
     </pre>
   );
@@ -258,7 +239,7 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       if (!text.trim()) return null;
-      return <p className="mb-3">{text}</p>;
+      return <p className="mb-4">{text}</p>;
     }
 
     case "heading_1": {
@@ -266,7 +247,7 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       return (
-        <h2 className="mt-8 mb-3 text-2xl font-semibold text-[var(--rcn-blue)]">
+        <h2 className="mt-10 mb-4 text-2xl font-semibold text-[var(--rcn-blue)]">
           {text}
         </h2>
       );
@@ -277,7 +258,7 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       return (
-        <h3 className="mt-6 mb-2 text-xl font-semibold text-[var(--rcn-blue)]">
+        <h3 className="mt-8 mb-3 text-xl font-semibold text-[var(--rcn-blue)]">
           {text}
         </h3>
       );
@@ -288,7 +269,7 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       return (
-        <h4 className="mt-4 mb-2 text-lg font-semibold text-[var(--rcn-blue)]">
+        <h4 className="mt-6 mb-2 text-lg font-semibold text-[var(--rcn-blue)]">
           {text}
         </h4>
       );
@@ -299,7 +280,7 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       return (
-        <blockquote className="my-4 border-l-2 border-[var(--rcn-dark-green)] pl-4 text-neutral-700">
+        <blockquote className="my-5 border-l-2 border-[var(--rcn-dark-green)] pl-4 text-[15px] italic text-neutral-700">
           {text}
         </blockquote>
       );
@@ -310,8 +291,8 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       return (
-        <p className="mb-2 ml-4 text-[15px] leading-relaxed">
-          • {text}
+        <p className="mb-2 ml-5 text-[15px] leading-relaxed before:mr-2 before:inline-block before:content-['•']">
+          {text}
         </p>
       );
     }
@@ -321,8 +302,8 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         .map((t) => t.plain_text)
         .join("");
       return (
-        <p className="mb-2 ml-4 text-[15px] leading-relaxed">
-          • {text}
+        <p className="mb-2 ml-5 text-[15px] leading-relaxed before:mr-2 before:inline-block before:content-['•']">
+          {text}
         </p>
       );
     }
@@ -337,12 +318,12 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
         block.image.caption?.map((t) => t.plain_text).join("") ?? "";
 
       return (
-        <figure className="my-6">
+        <figure className="my-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={src}
             alt={caption || "Insight image"}
-            className="rounded-lg"
+            className="w-full rounded-xl"
           />
           {caption && (
             <figcaption className="mt-2 text-center text-xs text-neutral-500">
