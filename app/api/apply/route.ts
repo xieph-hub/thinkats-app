@@ -80,8 +80,6 @@ export async function POST(req: NextRequest) {
     const tenantId = job.tenantId;
 
     // --- Upsert candidate (per tenant + email) ---
-    // Assumes in Prisma schema you have:
-    // @@unique([tenantId, email], name: "Candidate_tenantId_email")
     const candidate = await prisma.candidate.upsert({
       where: {
         tenantId_email: {
@@ -138,19 +136,25 @@ export async function POST(req: NextRequest) {
         objectPath,
         cvName: cv.name,
         cvType: cv.type,
-        cvSize: (cv as any).size,
+        // @ts-ignore
+        cvSize: cv.size,
       });
+
+      // 🔍 Send the real error message back so we can see it in the UI
+      const rawMessage =
+        (uploadError as any)?.message ||
+        (uploadError as any)?.error_description ||
+        JSON.stringify(uploadError);
 
       return NextResponse.json(
         {
-          error:
-            "Could not upload CV. Please try again in a moment, or email it directly if this persists.",
+          error: `CV upload failed: ${rawMessage}`,
         },
         { status: 500 }
       );
     }
 
-    const cvPath = uploadData.path; // path inside resourcin-uploads bucket
+    const cvPath = uploadData.path;
 
     // --- Create JobApplication record ---
     await prisma.jobApplication.create({
