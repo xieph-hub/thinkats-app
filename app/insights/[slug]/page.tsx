@@ -36,9 +36,7 @@ export async function generateMetadata(
   const url = `${SITE_URL}/insights/${post.slug}`;
 
   // Optional cover image support if you later add it to InsightPost
-  const images =
-    // @ts-expect-error optional field for now
-    post.coverImage ? [{ url: post.coverImage as string }] : undefined;
+  const images = post.coverImage ? [post.coverImage] : undefined;
 
   return {
     title,
