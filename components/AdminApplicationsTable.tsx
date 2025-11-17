@@ -18,6 +18,7 @@ export type AdminApplicationRow = {
   jobLocation?: string;
   jobSeniority?: string;
   cvUrl?: string;
+  clientName?: string;
 };
 
 type Props = {
@@ -61,6 +62,7 @@ function downloadCsv(rows: AdminApplicationRow[]) {
     "jobSlug",
     "jobLocation",
     "jobSeniority",
+    "clientName",
     "stage",
     "status",
     "source",
@@ -78,6 +80,7 @@ function downloadCsv(rows: AdminApplicationRow[]) {
     app.jobSlug ?? "",
     app.jobLocation ?? "",
     app.jobSeniority ?? "",
+    app.clientName ?? "",
     app.stage,
     app.status,
     app.source,
@@ -107,6 +110,10 @@ export default function AdminApplicationsTable({ applications }: Props) {
   const [stageFilter, setStageFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [jobFilter, setJobFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const stages = useMemo(
     () =>
@@ -132,8 +139,34 @@ export default function AdminApplicationsTable({ applications }: Props) {
     [applications]
   );
 
+  const jobOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    applications.forEach((a) => {
+      if (a.jobSlug && a.jobTitle) {
+        if (!map.has(a.jobSlug)) {
+          map.set(a.jobSlug, a.jobTitle);
+        }
+      }
+    });
+    return Array.from(map.entries())
+      .map(([slug, title]) => ({ slug, title }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [applications]);
+
+  const clientOptions = useMemo(() => {
+    const set = new Set<string>();
+    applications.forEach((a) => {
+      if (a.clientName && a.clientName.trim().length > 0) {
+        set.add(a.clientName);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [applications]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
+    const from = fromDate ? new Date(fromDate + "T00:00:00") : null;
+    const to = toDate ? new Date(toDate + "T23:59:59") : null;
 
     return applications.filter((app) => {
       if (term) {
@@ -142,7 +175,9 @@ export default function AdminApplicationsTable({ applications }: Props) {
           " " +
           (app.email ?? "") +
           " " +
-          (app.jobTitle ?? "")
+          (app.jobTitle ?? "") +
+          " " +
+          (app.clientName ?? "")
         )
           .toLowerCase()
           .trim();
@@ -153,14 +188,37 @@ export default function AdminApplicationsTable({ applications }: Props) {
       if (stageFilter !== "all" && app.stage !== stageFilter) return false;
       if (statusFilter !== "all" && app.status !== statusFilter) return false;
       if (sourceFilter !== "all" && app.source !== sourceFilter) return false;
+      if (jobFilter !== "all" && app.jobSlug !== jobFilter) return false;
+      if (
+        clientFilter !== "all" &&
+        (app.clientName ?? "") !== clientFilter
+      ) {
+        return false;
+      }
+
+      if (from || to) {
+        const created = new Date(app.createdAt);
+        if (from && created < from) return false;
+        if (to && created > to) return false;
+      }
 
       return true;
     });
-  }, [applications, search, stageFilter, statusFilter, sourceFilter]);
+  }, [
+    applications,
+    search,
+    stageFilter,
+    statusFilter,
+    sourceFilter,
+    jobFilter,
+    clientFilter,
+    fromDate,
+    toDate,
+  ]);
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6">
-      {/* Controls: search + filters + export */}
+      {/* Controls: search + export */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1">
           <label className="block text-xs font-medium text-slate-600">
@@ -170,7 +228,7 @@ export default function AdminApplicationsTable({ applications }: Props) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by candidate name, email, or job title…"
+            placeholder="Search by candidate name, email, job title, or client…"
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
           />
         </div>
@@ -189,8 +247,8 @@ export default function AdminApplicationsTable({ applications }: Props) {
         </div>
       </div>
 
-      {/* Filters row */}
-      <div className="mb-4 grid gap-3 text-xs sm:grid-cols-3">
+      {/* Filters row 1: stage / status / source */}
+      <div className="mb-3 grid gap-3 text-xs sm:grid-cols-3">
         <div>
           <label className="block text-[0.7rem] font-medium text-slate-600">
             Stage
@@ -246,6 +304,70 @@ export default function AdminApplicationsTable({ applications }: Props) {
         </div>
       </div>
 
+      {/* Filters row 2: job / client / date range */}
+      <div className="mb-4 grid gap-3 text-xs sm:grid-cols-3">
+        <div>
+          <label className="block text-[0.7rem] font-medium text-slate-600">
+            Job
+          </label>
+          <select
+            value={jobFilter}
+            onChange={(e) => setJobFilter(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-[#172965]"
+          >
+            <option value="all">All jobs</option>
+            {jobOptions.map((job) => (
+              <option key={job.slug} value={job.slug}>
+                {job.title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[0.7rem] font-medium text-slate-600">
+            Client
+          </label>
+          <select
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-[#172965]"
+          >
+            <option value="all">All clients</option>
+            {clientOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-[0.7rem] font-medium text-slate-600">
+              From
+            </label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-[#172965]"
+            />
+          </div>
+          <div>
+            <label className="block text-[0.7rem] font-medium text-slate-600">
+              To
+            </label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-900 outline-none focus:border-[#172965]"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Table / empty state */}
       {filtered.length === 0 ? (
         <p className="text-sm text-slate-500">
@@ -261,6 +383,9 @@ export default function AdminApplicationsTable({ applications }: Props) {
                 </th>
                 <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Job
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Client
                 </th>
                 <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Stage / Status
@@ -279,8 +404,7 @@ export default function AdminApplicationsTable({ applications }: Props) {
             <tbody className="divide-y divide-slate-100">
               {filtered.map((app) => {
                 const appliedAt = formatDate(app.createdAt);
-                const hasCv =
-                  app.cvUrl && app.cvUrl.startsWith("http" || "https");
+                const hasCv = !!app.cvUrl && app.cvUrl.startsWith("http");
 
                 return (
                   <tr key={app.id} className="hover:bg-slate-50/60">
@@ -323,6 +447,19 @@ export default function AdminApplicationsTable({ applications }: Props) {
                       ) : (
                         <span className="text-xs text-slate-400">
                           Job no longer available
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Client */}
+                    <td className="whitespace-nowrap px-3 py-2 align-top">
+                      {app.clientName ? (
+                        <span className="text-xs text-slate-700">
+                          {app.clientName}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">
+                          Not specified
                         </span>
                       )}
                     </td>
