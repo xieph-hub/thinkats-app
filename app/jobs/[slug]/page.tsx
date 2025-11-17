@@ -262,7 +262,7 @@ export default async function JobDetailPage({ params }: JobPageProps) {
           {/* Right: apply form & extras */}
           <aside className="space-y-4" id="apply">
             {/* Apply form wired to this specific job */}
-            <JobApplyForm jobId={job.id} />
+          <JobApplyForm jobId={job.id} jobTitle={job.title} />
 
             {/* Employer / anonymised context */}
             <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
