@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { Buffer } from "buffer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,13 +105,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // --- Upload CV to Supabase bucket: resourcin-uploads ---
+    // --- Prepare CV file for Supabase (Node: use Buffer) ---
     const fileExt =
       cv.name && cv.name.includes(".")
         ? cv.name.split(".").pop()!.toLowerCase()
         : "pdf";
 
-    // Path *inside* the bucket
     const objectPath = [
       "cvs",
       tenantId,
@@ -118,18 +118,29 @@ export async function POST(req: NextRequest) {
       `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`,
     ].join("/");
 
-    // Send the File directly (Next.js on Node has File available)
+    const arrayBuffer = await cv.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // --- Upload CV to Supabase bucket: resourcin-uploads ---
     const { data: uploadData, error: uploadError } =
       await supabaseAdmin.storage
         .from("resourcin-uploads")
-        .upload(objectPath, cv, {
+        .upload(objectPath, buffer, {
           cacheControl: "3600",
           upsert: false,
           contentType: cv.type || "application/octet-stream",
         });
 
     if (uploadError || !uploadData?.path) {
-      console.error("Supabase upload error:", uploadError);
+      console.error("Supabase upload error:", {
+        uploadError,
+        bucket: "resourcin-uploads",
+        objectPath,
+        cvName: cv.name,
+        cvType: cv.type,
+        cvSize: (cv as any).size,
+      });
+
       return NextResponse.json(
         {
           error:
@@ -139,7 +150,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const cvPath = uploadData.path; // e.g. "cvs/tenantId/jobId/filename.pdf"
+    const cvPath = uploadData.path; // path inside resourcin-uploads bucket
 
     // --- Create JobApplication record ---
     await prisma.jobApplication.create({
@@ -152,10 +163,10 @@ export async function POST(req: NextRequest) {
         location,
         linkedinUrl,
         portfolioUrl,
-        cvUrl: cvPath, // path we just stored in Storage
+        cvUrl: cvPath,
         coverLetter,
         source,
-        status: "PENDING", // ApplicationStatus enum
+        status: "PENDING",
       },
     });
 
