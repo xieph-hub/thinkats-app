@@ -1,85 +1,144 @@
-// components/JobApplyForm.tsx
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-type JobApplyFormProps = {
-  jobId: string;
-  jobTitle: string;
+export type JobApplyFormProps = {
+  jobId?: string;
+  jobTitle?: string;
 };
 
-type Status = "idle" | "submitting" | "success" | "error";
+export default function JobApplyForm({
+  jobId: jobIdFromProps,
+  jobTitle: jobTitleFromProps,
+}: JobApplyFormProps) {
+  const searchParams = useSearchParams();
 
-export default function JobApplyForm({ jobId, jobTitle }: JobApplyFormProps) {
-  const [status, setStatus] = useState<Status>("idle");
+  // Job context (from props or URL ?job=slug)
+  const jobId = jobIdFromProps ?? searchParams.get("job") ?? undefined;
+  const jobTitle = jobTitleFromProps ?? searchParams.get("jobTitle") ?? undefined;
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setStatus("submitting");
     setError(null);
+    setSuccess(null);
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
+    const formData = new FormData(e.currentTarget);
 
-    // Make sure jobId & source are always included
-    formData.set("jobId", jobId);
-    formData.set("source", "job_detail");
+    const fullName = String(formData.get("fullName") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim();
+    const phone = String(formData.get("phone") ?? "").trim();
+    const location = String(formData.get("location") ?? "").trim();
+    const linkedinUrl = String(formData.get("linkedinUrl") ?? "").trim();
+    const portfolioUrl = String(formData.get("portfolioUrl") ?? "").trim();
+    const coverLetter = String(formData.get("coverLetter") ?? "").trim();
+    const cvFile = formData.get("cv") as File | null; // 👈 name="cv" must match input
+
+    if (!fullName || !email) {
+      setError("Please add at least your name and email.");
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
-      const res = await fetch("/api/apply", {
+      let cvUrl: string | undefined;
+
+      // 1) Upload CV to Supabase (if present)
+      if (cvFile && cvFile.size > 0) {
+        const uploadForm = new FormData();
+        uploadForm.append("cv", cvFile);    // 👈 field name expected by /api/upload-cv
+        uploadForm.append("email", email);  // used to build a nice path
+
+        const uploadRes = await fetch("/api/upload-cv", {
+          method: "POST",
+          body: uploadForm,
+        });
+
+        if (!uploadRes.ok) {
+          console.error("Upload failed:", await uploadRes.text());
+          throw new Error("CV_UPLOAD_FAILED");
+        }
+
+        const uploadJson = await uploadRes.json();
+        cvUrl = uploadJson.url as string | undefined;
+      }
+
+      // 2) Submit application payload to /api/apply
+      const applyRes = await fetch("/api/apply", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId,        // may be undefined for general talent network
+          jobTitle,     // optional, for context
+          fullName,
+          email,
+          phone: phone || null,
+          location: location || null,
+          linkedinUrl: linkedinUrl || null,
+          portfolioUrl: portfolioUrl || null,
+          source: "Resourcin website",
+          coverLetter,
+          cvUrl,        // signed/public URL from Supabase (or undefined)
+        }),
       });
 
-      let json: any = null;
-      try {
-        json = await res.json();
-      } catch {
-        // ignore JSON parse errors, we'll just show a generic message
+      if (!applyRes.ok) {
+        console.error("Apply failed:", await applyRes.text());
+        throw new Error("APPLY_FAILED");
       }
 
-      if (!res.ok || !json?.ok) {
-        setStatus("error");
-        setError(
-          (json && typeof json.error === "string" && json.error) ||
-            "Something went wrong while submitting your application. Please try again."
-        );
-        return;
-      }
-
-      // Success
-      form.reset();
-      setStatus("success");
-    } catch (err) {
-      console.error(err);
-      setStatus("error");
-      setError(
-        "Something went wrong while submitting your application. Please try again."
+      setSuccess(
+        "Thanks — your profile is in. We'll be in touch if there's a strong match."
       );
+      e.currentTarget.reset();
+    } catch (err: any) {
+      console.error("Apply flow error:", err);
+
+      if (err?.message === "CV_UPLOAD_FAILED") {
+        setError(
+          "Could not upload CV. Please try again in a moment, or email it directly if this persists."
+        );
+      } else {
+        setError(
+          "Something went wrong while submitting your application. Please try again in a moment."
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      encType="multipart/form-data"
-      className="space-y-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5"
-    >
-      {/* Hidden jobId so it's always present */}
-      <input type="hidden" name="jobId" value={jobId} />
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Context line (optional) */}
+      {jobTitle && (
+        <p className="text-xs text-slate-500">
+          You&apos;re expressing interest in:{" "}
+          <span className="font-medium text-slate-900">{jobTitle}</span>
+        </p>
+      )}
 
-      <h2 className="text-sm font-semibold text-slate-900">
-        Apply for this role
-      </h2>
-      <p className="text-xs text-slate-500">
-        You&apos;re applying for{" "}
-        <span className="font-medium text-slate-900">{jobTitle}</span>. Share a
-        few details and your CV.
-      </p>
+      {error && (
+        <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          {success}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
+        <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
             Full name
           </label>
@@ -87,12 +146,11 @@ export default function JobApplyForm({ jobId, jobTitle }: JobApplyFormProps) {
             name="fullName"
             type="text"
             required
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
-            placeholder="Jane Doe"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
 
-        <div>
+        <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
             Email
           </label>
@@ -100,115 +158,95 @@ export default function JobApplyForm({ jobId, jobTitle }: JobApplyFormProps) {
             name="email"
             type="email"
             required
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
-            placeholder="you@email.com"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
 
-        <div>
+        <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
-            Phone / WhatsApp
+            Phone (optional)
           </label>
           <input
             name="phone"
             type="tel"
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
-            placeholder="+234…"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
 
-        <div>
+        <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
-            Location
+            Location (city, country)
           </label>
           <input
             name="location"
             type="text"
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
-            placeholder="Lagos, Remote, etc."
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
 
-        <div>
+        <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
-            LinkedIn profile
+            LinkedIn URL
           </label>
           <input
             name="linkedinUrl"
             type="url"
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
             placeholder="https://www.linkedin.com/in/..."
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
 
-        <div className="sm:col-span-2">
+        <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
-            Portfolio / GitHub (optional)
+            Portfolio / GitHub / Personal site (optional)
           </label>
           <input
             name="portfolioUrl"
             type="url"
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
-            placeholder="Portfolio, GitHub or website"
+            placeholder="https://..."
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-medium text-slate-700">
-            Short note / cover (optional)
-          </label>
-          <textarea
-            name="coverLetter"
-            rows={4}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965]"
-            placeholder="Context, reasons for exploring, notice period, salary expectations, etc."
-          />
-        </div>
-
-        <div className="sm:col-span-2">
-          <label className="block text-xs font-medium text-slate-700">
-            CV / Resume
-          </label>
-          <input
-            name="cv"
-            type="file"
-            required
-            accept=".pdf,.doc,.docx"
-            className="mt-1 block w-full text-xs text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-4 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#111c4c]"
-          />
-          <p className="mt-1 text-[0.7rem] text-slate-400">
-            PDF or Word. Max ~5MB.
-          </p>
         </div>
       </div>
 
-      <div className="flex items-center justify-between pt-1">
-        <p className="text-[0.7rem] text-slate-500">
-          One profile, multiple searches. We&apos;ll only share your CV with
-          clients when there&apos;s mutual interest.
+      <div className="space-y-1">
+        <label className="block text-xs font-medium text-slate-700">
+          CV / Resume
+        </label>
+        <input
+          name="cv"
+          type="file"
+          accept=".pdf,.doc,.docx"
+          className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-[#111c4c]"
+        />
+        <p className="mt-1 text-[0.7rem] text-slate-500">
+          PDF or DOC, up to ~5MB.
         </p>
-        <button
-          type="submit"
-          disabled={status === "submitting"}
-          className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#101b47] disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {status === "submitting" ? "Submitting…" : "Submit application"}
-        </button>
       </div>
 
-      {status === "error" && (
-        <div className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error ??
-            "Something went wrong while submitting your application. Please try again."}
-        </div>
-      )}
+      <div className="space-y-1">
+        <label className="block text-xs font-medium text-slate-700">
+          Anything you&apos;d like us to know? (optional)
+        </label>
+        <textarea
+          name="coverLetter"
+          rows={4}
+          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+        />
+      </div>
 
-      {status === "success" && (
-        <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          Thanks — your profile is in. We&apos;ll be in touch if there&apos;s a
-          strong match.
-        </div>
-      )}
+      <button
+        type="submit"
+        disabled={isSubmitting}
+        className="inline-flex w-full items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:bg-slate-400"
+      >
+        {isSubmitting ? "Submitting..." : "Submit profile"}
+      </button>
+
+      <p className="text-[0.7rem] text-slate-500">
+        We&apos;ll only reach out when there&apos;s a strong match on skills,
+        level and preferences. No spam.
+      </p>
     </form>
   );
 }
