@@ -14,6 +14,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 function getTenantId() {
+  // Single-tenant for now, but keeps you future-proof
   return process.env.DEFAULT_TENANT_ID ?? "resourcin";
 }
 
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
     const phone = formData.get("phone");
     const location = formData.get("location");
     const linkedinUrl = formData.get("linkedinUrl");
-    const portfolioUrl = formData.get("portfolioUrl"); // still read, but we won't save it to Prisma
+    const portfolioUrl = formData.get("portfolioUrl"); // still read from form, just not saved to Prisma
     const coverLetter = formData.get("coverLetter");
     const source = formData.get("source") ?? "job_detail";
 
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
     const normalizedEmail = email.toLowerCase().trim();
     const trimmedName = fullName.trim();
 
-    // --- Upsert candidate by email (single-tenant) ---
+    // --- Upsert candidate by email (single-tenant, but tenantId stored on Candidate) ---
     const candidate = await prisma.candidate.upsert({
       where: { email: normalizedEmail },
       update: {
@@ -123,7 +124,7 @@ export async function POST(req: Request) {
         cvUrl: cvUrl ?? undefined,
       },
       create: {
-        tenantId,
+        tenantId, // Candidate DOES have tenantId
         fullName: trimmedName,
         email: normalizedEmail,
         phone:
@@ -141,10 +142,9 @@ export async function POST(req: Request) {
       },
     });
 
-    // --- Create job application ---
+    // --- Create job application (NO tenantId here, your schema doesn't have it) ---
     await prisma.jobApplication.create({
       data: {
-        tenantId,
         jobId,
         candidateId: candidate.id,
         source:
