@@ -168,7 +168,11 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
       return (
         <figure className="my-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt={caption || "Insight image"} className="rounded-lg" />
+          <img
+            src={src}
+            alt={caption || "Insight image"}
+            className="rounded-lg"
+          />
           {caption && (
             <figcaption className="mt-2 text-center text-xs text-neutral-500">
               {caption}
