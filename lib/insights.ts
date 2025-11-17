@@ -5,17 +5,103 @@ import type {
   BlockObjectResponse,
 } from "@notionhq/client/build/src/api-endpoints";
 
-// ...types + helpers unchanged...
+export type InsightMeta = {
+  id: string;
+  slug: string;
+  title: string;
+  category: string | null;
+  excerpt: string | null;
+  coverUrl: string | null;
+  publishedAt: string | null;
+};
+
+export type InsightWithBlocks = InsightMeta & {
+  blocks: BlockObjectResponse[];
+};
+
+function getPlainText(
+  rich?: { plain_text: string }[] | null
+): string {
+  if (!rich || rich.length === 0) return "";
+  return rich.map((r) => r.plain_text).join("");
+}
+
+function getCoverFromProperty(props: any): string | null {
+  const coverProp = props.CoverURL;
+  if (!coverProp) return null;
+
+  // If CoverURL is a "url" property
+  if (coverProp.type === "url") {
+    return coverProp.url || null;
+  }
+
+  // If CoverURL is a "rich_text" property
+  if (coverProp.type === "rich_text") {
+    const fromRich = getPlainText(coverProp.rich_text);
+    return fromRich || null;
+  }
+
+  return null;
+}
+
+function getCoverFromPage(page: PageObjectResponse): string | null {
+  const cover = page.cover;
+  if (!cover) return null;
+
+  if (cover.type === "external") return cover.external.url;
+  if (cover.type === "file") return cover.file.url;
+  return null;
+}
+
+function mapInsightMeta(page: PageObjectResponse): InsightMeta {
+  const props = page.properties as any;
+
+  // Title (Title property)
+  const title =
+    getPlainText(props.Title?.title) || "Untitled insight";
+
+  // Slug (rich_text or fallback to page id)
+  const slug =
+    getPlainText(props.Slug?.rich_text) ||
+    page.id.replace(/-/g, "");
+
+  // Excerpt (rich_text)
+  const excerpt =
+    getPlainText(props.Excerpt?.rich_text) || null;
+
+  // Category (select)
+  const category = props.Category?.select?.name ?? null;
+
+  // Date (date field)
+  const publishedAt = props.Date?.date?.start || null;
+
+  // Prefer explicit CoverURL property, then page cover
+  const coverFromProp = getCoverFromProperty(props);
+  const coverFromPage = getCoverFromPage(page);
+  const coverUrl = coverFromProp || coverFromPage;
+
+  return {
+    id: page.id,
+    slug,
+    title,
+    category,
+    excerpt,
+    coverUrl,
+    publishedAt,
+  };
+}
 
 export async function getInsightsList(): Promise<InsightMeta[]> {
   if (!notion || !INSIGHTS_DB_ID) {
-    // Fail soft: no data instead of killing the build
-    console.warn("Notion insights not configured");
+    console.warn(
+      "[insights] Notion not configured – returning empty insights list."
+    );
     return [];
   }
 
   const response = await notion.databases.query({
     database_id: INSIGHTS_DB_ID,
+    // No Status filter – based on your schema
     sorts: [
       {
         property: "Date",
@@ -35,7 +121,9 @@ export async function getInsightBySlug(
   slug: string
 ): Promise<InsightMeta | null> {
   if (!notion || !INSIGHTS_DB_ID) {
-    console.warn("Notion insights not configured");
+    console.warn(
+      "[insights] Notion not configured – getInsightBySlug returning null."
+    );
     return null;
   }
 
@@ -60,7 +148,9 @@ export async function getInsightBlocks(
   pageId: string
 ): Promise<BlockObjectResponse[]> {
   if (!notion) {
-    console.warn("Notion client not configured");
+    console.warn(
+      "[insights] Notion not configured – getInsightBlocks returning empty array."
+    );
     return [];
   }
 
