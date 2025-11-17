@@ -7,6 +7,7 @@ export type InsightPost = {
   summary: string;
   publishedAt: string | null;
   tags: string[];
+  coverImage?: string | null; // optional, for OG/Twitter cards
 };
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
@@ -17,31 +18,27 @@ let notion: Client | null = null;
 if (NOTION_API_KEY && NOTION_DATABASE_ID) {
   notion = new Client({ auth: NOTION_API_KEY });
 } else {
+  // Important: log, but DO NOT throw – so builds don’t crash
   console.warn(
     "Notion env vars missing (NOTION_API_KEY or NOTION_DATABASE_ID). Insights page will show placeholder content."
   );
 }
 
 export async function fetchInsights(): Promise<InsightPost[]> {
+  // If there is no Notion client or DB ID, just return an empty list
   if (!notion || !NOTION_DATABASE_ID) {
-    // No Notion config → just show “coming soon” UI
     return [];
   }
 
   try {
     const response = await notion.databases.query({
       database_id: NOTION_DATABASE_ID,
-
-      // ✅ SAFE SORT: no custom property names, just last_edited_time
       sorts: [
         {
-          timestamp: "last_edited_time",
+          property: "PublishedAt",
           direction: "descending",
         },
       ],
-
-      // ✅ Filter only if the database actually has a Status property
-      // If your DB doesn't have "Status", just temporarily remove this filter.
       filter: {
         property: "Status",
         status: { equals: "Published" },
@@ -49,12 +46,10 @@ export async function fetchInsights(): Promise<InsightPost[]> {
     });
 
     return response.results.map((page: any) => {
-      const props = page.properties ?? {};
+      const props = page.properties;
 
       const title =
-        props.Name?.title?.[0]?.plain_text ??
-        props.Title?.title?.[0]?.plain_text ??
-        "Untitled";
+        props.Name?.title?.[0]?.plain_text ?? "Untitled";
 
       const slug =
         props.Slug?.rich_text?.[0]?.plain_text ??
@@ -62,18 +57,24 @@ export async function fetchInsights(): Promise<InsightPost[]> {
 
       const summary =
         props.Summary?.rich_text?.[0]?.plain_text ??
-        props.Description?.rich_text?.[0]?.plain_text ??
         "No summary available yet.";
 
-      const publishedAt =
-        props.PublishedAt?.date?.start ??
-        props.Date?.date?.start ??
-        page.created_time ??
-        page.last_edited_time ??
-        null;
+      const publishedAt = props.PublishedAt?.date?.start ?? null;
 
       const tags =
         props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
+
+      // Optional cover image support if you have a "CoverImage" property
+      let coverImage: string | null = null;
+      const coverProp = props.CoverImage;
+      if (coverProp?.files?.length) {
+        const file = coverProp.files[0];
+        if (file.type === "external") {
+          coverImage = file.external?.url ?? null;
+        } else if (file.type === "file") {
+          coverImage = file.file?.url ?? null;
+        }
+      }
 
       return {
         id: page.id,
@@ -82,11 +83,27 @@ export async function fetchInsights(): Promise<InsightPost[]> {
         summary,
         publishedAt,
         tags,
-      } as InsightPost;
+        coverImage,
+      };
     });
   } catch (err) {
-    // ✅ Never let Notion errors break your build
-    console.error("Failed to fetch insights from Notion", err);
+    // This is where the Notion 500s were killing your build before.
+    console.error("Error fetching insights from Notion", err);
     return [];
   }
+}
+
+export async function getInsightBySlug(
+  slug: string
+): Promise<InsightPost | null> {
+  const posts = await fetchInsights();
+  const normalizedSlug = slug.toLowerCase();
+
+  const match =
+    posts.find((p) => p.slug.toLowerCase() === normalizedSlug) ??
+    posts.find(
+      (p) => p.id.replace(/-/g, "").toLowerCase() === normalizedSlug
+    );
+
+  return match ?? null;
 }
