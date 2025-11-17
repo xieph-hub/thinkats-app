@@ -101,7 +101,6 @@ export async function getInsightsList(): Promise<InsightMeta[]> {
 
   const response = await notion.databases.query({
     database_id: INSIGHTS_DB_ID,
-    // No Status filter – based on your schema
     sorts: [
       {
         property: "Date",
@@ -151,8 +150,9 @@ export async function getInsightBlocks(
     console.warn(
       "[insights] Notion not configured – getInsightBlocks returning empty array."
     );
-    return [];
   }
+
+  if (!notion) return [];
 
   const blocks: BlockObjectResponse[] = [];
   let cursor: string | undefined = undefined;
