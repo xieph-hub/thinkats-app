@@ -4,14 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// Single-tenant helper: always attach candidates/applications to this tenant.
 const DEFAULT_TENANT_ID =
   process.env.DEFAULT_TENANT_ID || "default-tenant";
 
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
-
     if (!contentType.includes("multipart/form-data")) {
       return NextResponse.json(
         { error: "Invalid content type" },
@@ -27,8 +25,7 @@ export async function POST(req: NextRequest) {
     const phone = String(formData.get("phone") || "").trim();
     const location = String(formData.get("location") || "").trim();
     const linkedinUrl = String(formData.get("linkedinUrl") || "").trim();
-    // We currently do NOT persist portfolioUrl (schema doesn’t have it)
-    const portfolioUrl = String(formData.get("portfolioUrl") || "").trim();
+    // Currently NOT persisted (no column on Candidate)
     const sourceRaw = String(formData.get("source") || "DIRECT").trim();
     const coverLetter = String(formData.get("coverLetter") || "").trim();
     const file = formData.get("cv") as File | null;
@@ -40,15 +37,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- Upload CV to Supabase (best-effort, non-fatal if it fails) ---
+    // ---------- CV upload to Supabase (best-effort) ----------
     let cvUrl: string | null = null;
 
     if (file && file.size > 0 && supabaseAdmin) {
       try {
-        const fileExt = file.name.split(".").pop() || "pdf";
+        const ext = file.name.split(".").pop() || "pdf";
         const safeEmail = email.replace(/[^a-z0-9@._-]/gi, "");
-        const timestamp = Date.now();
-        const path = `cvs/${safeEmail}-${timestamp}.${fileExt}`;
+        const ts = Date.now();
+        const path = `cvs/${safeEmail}-${ts}.${ext}`;
 
         const { data, error } = await supabaseAdmin.storage
           .from("resourcin-uploads")
@@ -71,17 +68,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // --- Find candidate for this tenant (email + tenant) ---
+    // ---------- Candidate: find existing for this tenant by email ----------
     let candidate = await prisma.candidate.findFirst({
       where: {
         email,
-        // if multi-tenant is ever real, this keeps things scoped
+        // if you later go multi-tenant, this keeps things scoped
         tenant: { id: DEFAULT_TENANT_ID },
       },
     });
 
-    // --- Update existing candidate profile snapshot ---
     if (candidate) {
+      // Update profile snapshot
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
@@ -89,12 +86,11 @@ export async function POST(req: NextRequest) {
           phone: phone || null,
           location: location || null,
           linkedinUrl: linkedinUrl || null,
-          // portfolioUrl intentionally NOT saved (no column yet)
           ...(cvUrl ? { cvUrl } : {}),
         },
       });
     } else {
-      // --- Create new candidate, attaching to default tenant ---
+      // Create new candidate attached to default tenant
       candidate = await prisma.candidate.create({
         data: {
           fullName,
@@ -104,16 +100,13 @@ export async function POST(req: NextRequest) {
           linkedinUrl: linkedinUrl || null,
           cvUrl: cvUrl ?? null,
           tenant: {
-            connect: {
-              // Must match TenantWhereUniqueInput – typically "id"
-              id: DEFAULT_TENANT_ID,
-            },
+            connect: { id: DEFAULT_TENANT_ID },
           },
         },
       });
     }
 
-    // --- Create job application snapshot ---
+    // ---------- Job application snapshot ----------
     await prisma.jobApplication.create({
       data: {
         job: {
@@ -124,6 +117,7 @@ export async function POST(req: NextRequest) {
         },
         fullName: candidate.fullName,
         email: candidate.email,
+        // If ApplicationSource enum exists, "DIRECT" should match one of the values.
         source: (sourceRaw || "DIRECT") as any,
         coverLetter,
         cvUrl: cvUrl ?? (candidate as any).cvUrl ?? "",
