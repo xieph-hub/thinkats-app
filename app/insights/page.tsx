@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { getInsightsList } from "@/lib/insights";
 import InsightsBrowser from "./InsightsBrowser";
+import EmailCaptureInline from "./EmailCaptureInline";
 
 export const revalidate = 60;
 
@@ -86,6 +87,11 @@ export default async function InsightsPage() {
       <Suspense fallback={<InsightsBrowserSkeleton />}>
         <InsightsBrowser insights={insights} />
       </Suspense>
+
+      {/* Email capture at the bottom of the page, before the footer */}
+      <div className="mt-10 lg:mt-12">
+        <EmailCaptureInline />
+      </div>
     </main>
   );
 }
