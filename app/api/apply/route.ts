@@ -81,27 +81,18 @@ export async function POST(req: NextRequest) {
 
     // --- Upsert candidate (per tenant + email) ---
     const candidate = await prisma.candidate.upsert({
-      where: {
-        tenantId_email: {
-          tenantId,
-          email,
-        },
-      },
-      update: {
-        fullName,
-        phone,
-        location,
-        linkedinUrl,
-      },
-      create: {
-        tenantId,
-        fullName,
-        email,
-        phone,
-        location,
-        linkedinUrl,
-      },
-    });
+  where: {
+    email,
+  },
+  update: {
+    // keep EXACTLY whatever you already have here
+    // e.g. fullName, phone, location, linkedinUrl, cvUrl, etc.
+  },
+  create: {
+    // keep EXACTLY whatever you already have here
+    // just make sure tenantId is included here (it already should be)
+  },
+});
 
     // --- Prepare CV file for Supabase (Node: use Buffer) ---
     const fileExt =
