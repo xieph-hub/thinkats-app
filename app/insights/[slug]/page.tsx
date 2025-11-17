@@ -1,4 +1,5 @@
 // app/insights/[slug]/page.tsx
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   getInsightsList,
@@ -10,6 +11,8 @@ import Link from "next/link";
 
 export const revalidate = 60;
 
+type PageParams = { slug: string };
+
 export async function generateStaticParams() {
   const insights = await getInsightsList();
   return insights.map((insight) => ({
@@ -17,8 +20,63 @@ export async function generateStaticParams() {
   }));
 }
 
+export async function generateMetadata({
+  params,
+}: {
+  params: PageParams;
+}): Promise<Metadata> {
+  const insight = await getInsightBySlug(params.slug);
+
+  if (!insight) {
+    const fallbackTitle = "Insights | Resourcin";
+    const fallbackDescription =
+      "Thinking about hiring, talent and work – insights from Resourcin.";
+
+    return {
+      title: fallbackTitle,
+      description: fallbackDescription,
+      openGraph: {
+        title: fallbackTitle,
+        description: fallbackDescription,
+        type: "article",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: fallbackTitle,
+        description: fallbackDescription,
+      },
+    };
+  }
+
+  const baseTitle = `${insight.title} | Insights | Resourcin`;
+  const description =
+    insight.excerpt ||
+    "Thinking about hiring, talent and work – insights from Resourcin.";
+
+  const ogImages = insight.coverUrl
+    ? [{ url: insight.coverUrl }]
+    : undefined;
+
+  return {
+    title: baseTitle,
+    description,
+    openGraph: {
+      title: baseTitle,
+      description,
+      type: "article",
+      images: ogImages,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: baseTitle,
+      description,
+      images: insight.coverUrl ? [insight.coverUrl] : undefined,
+    },
+  };
+}
+
 type PageProps = {
-  params: { slug: string };
+  params: PageParams;
 };
 
 export default async function InsightPage({ params }: PageProps) {
@@ -43,11 +101,26 @@ export default async function InsightPage({ params }: PageProps) {
   const hasBlocks = blocks && blocks.length > 0;
   const hasContentField = Boolean(insight.content);
 
+  const readingTimeMinutes = estimateReadingTime(
+    insight.content || insight.excerpt || insight.title
+  );
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 font-sans lg:py-16">
       <div className="grid gap-10 lg:grid-cols-[minmax(0,2.4fr)_minmax(260px,1fr)]">
         {/* MAIN ARTICLE */}
         <article className="max-w-3xl">
+          {/* Breadcrumb */}
+          <nav className="mb-4 text-xs text-neutral-500">
+            <Link
+              href="/insights"
+              className="inline-flex items-center gap-1 hover:text-[var(--rcn-blue)]"
+            >
+              <span aria-hidden>←</span>
+              <span>Back to insights</span>
+            </Link>
+          </nav>
+
           {insight.coverUrl && (
             <div className="mb-8 overflow-hidden rounded-2xl shadow-sm">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -61,23 +134,28 @@ export default async function InsightPage({ params }: PageProps) {
 
           {/* Meta */}
           <header className="mb-8">
-            <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500">
               {insight.category && (
-                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-medium">
+                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-0.5 font-medium">
                   {insight.category}
                 </span>
               )}
 
               {insight.publishedAt && (
-                <span className="text-[11px] uppercase tracking-wide text-neutral-400">
-                  {new Date(insight.publishedAt).toLocaleDateString(
-                    undefined,
-                    {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    }
-                  )}
+                <span className="uppercase tracking-wide text-neutral-400">
+                  {new Date(
+                    insight.publishedAt
+                  ).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              )}
+
+              {readingTimeMinutes && (
+                <span className="text-neutral-400">
+                  {readingTimeMinutes} min read
                 </span>
               )}
             </div>
@@ -155,14 +233,13 @@ export default async function InsightPage({ params }: PageProps) {
                 )}
                 {item.publishedAt && (
                   <p className="mt-2 text-[11px] text-neutral-400">
-                    {new Date(item.publishedAt).toLocaleDateString(
-                      undefined,
-                      {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      }
-                    )}
+                    {new Date(
+                      item.publishedAt
+                    ).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </p>
                 )}
               </Link>
@@ -203,6 +280,19 @@ function buildRelatedInsights(
   }
 
   return related;
+}
+
+/**
+ * Estimate reading time from content text.
+ */
+function estimateReadingTime(
+  text: string | null | undefined
+): number | null {
+  if (!text) return null;
+  const words = text.trim().split(/\s+/).length;
+  if (!words) return null;
+  const minutes = Math.max(1, Math.round(words / 200));
+  return minutes;
 }
 
 /**
@@ -275,66 +365,4 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
       );
     }
 
-    case "quote": {
-      const text = block.quote.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <blockquote className="my-5 border-l-2 border-[var(--rcn-dark-green)] pl-4 text-[15px] italic text-neutral-700">
-          {text}
-        </blockquote>
-      );
-    }
-
-    case "bulleted_list_item": {
-      const text = block.bulleted_list_item.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <p className="mb-2 ml-5 text-[15px] leading-relaxed before:mr-2 before:inline-block before:content-['•']">
-          {text}
-        </p>
-      );
-    }
-
-    case "numbered_list_item": {
-      const text = block.numbered_list_item.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <p className="mb-2 ml-5 text-[15px] leading-relaxed before:mr-2 before:inline-block before:content-['•']">
-          {text}
-        </p>
-      );
-    }
-
-    case "image": {
-      const src =
-        block.image.type === "external"
-          ? block.image.external.url
-          : block.image.file.url;
-
-      const caption =
-        block.image.caption?.map((t) => t.plain_text).join("") ?? "";
-
-      return (
-        <figure className="my-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={src}
-            alt={caption || "Insight image"}
-            className="w-full rounded-xl"
-          />
-          {caption && (
-            <figcaption className="mt-2 text-center text-xs text-neutral-500">
-              {caption}
-            </figcaption>
-          )}
-        </figure>
-      );
-    }
-
-    default:
-      return null;
-  }
-}
+    case "quo
