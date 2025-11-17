@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const phone = formData.get("phone");
     const location = formData.get("location");
     const linkedinUrl = formData.get("linkedinUrl");
-    const portfolioUrl = formData.get("portfolioUrl");
+    const portfolioUrl = formData.get("portfolioUrl"); // still read, but we won't save it to Prisma
     const coverLetter = formData.get("coverLetter");
     const source = formData.get("source") ?? "job_detail";
 
@@ -56,7 +56,8 @@ export async function POST(req: Request) {
     let cvUrl: string | undefined;
 
     if (cvFile instanceof File && cvFile.size > 0) {
-      const safeName = cvFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_") || "cv.pdf";
+      const safeName =
+        cvFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_") || "cv.pdf";
       const path = `cvs/${jobId}/${Date.now()}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -71,14 +72,14 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             ok: false,
-            error: "Could not upload CV. Please try again in a moment, or email it directly if this persists.",
+            error:
+              "Could not upload CV. Please try again in a moment, or email it directly if this persists.",
           },
           { status: 500 }
         );
       }
 
-      const { data: publicData } = supabase
-        .storage
+      const { data: publicData } = supabase.storage
         .from("resourcin-uploads")
         .getPublicUrl(path);
 
@@ -118,10 +119,7 @@ export async function POST(req: Request) {
           typeof linkedinUrl === "string" && linkedinUrl.trim()
             ? linkedinUrl.trim()
             : undefined,
-        portfolioUrl:
-          typeof portfolioUrl === "string" && portfolioUrl.trim()
-            ? portfolioUrl.trim()
-            : undefined,
+        // portfolioUrl is NOT in the Prisma model, so we don't set it here
         cvUrl: cvUrl ?? undefined,
       },
       create: {
@@ -138,10 +136,7 @@ export async function POST(req: Request) {
           typeof linkedinUrl === "string" && linkedinUrl.trim()
             ? linkedinUrl.trim()
             : undefined,
-        portfolioUrl:
-          typeof portfolioUrl === "string" && portfolioUrl.trim()
-            ? portfolioUrl.trim()
-            : undefined,
+        // portfolioUrl is NOT in the Prisma model, so we don't set it here
         cvUrl: cvUrl ?? undefined,
       },
     });
@@ -161,7 +156,7 @@ export async function POST(req: Request) {
             ? coverLetter.trim()
             : null,
         cvUrl: cvUrl ?? candidate.cvUrl,
-        // stage/status will use their enum defaults (APPLIED / PENDING)
+        // stage/status use enum defaults (e.g. APPLIED / PENDING)
       },
     });
 
