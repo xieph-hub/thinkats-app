@@ -1,19 +1,34 @@
-// app/jobs/[slug]/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { getDefaultTenant } from "@/lib/tenant";
 import { SITE_URL } from "@/lib/site";
-import { getJobBySlug, jobs, type Job } from "@/lib/jobs";
+import JobApplyForm from "@/components/JobApplyForm";
 
-// ---------- Metadata ----------
 type JobPageProps = {
   params: { slug: string };
 };
 
+// ---------- Metadata (dynamic) ----------
 export async function generateMetadata(
   { params }: JobPageProps
 ): Promise<Metadata> {
-  const job = getJobBySlug(params.slug);
+  const tenant = await getDefaultTenant();
+
+  const job = await prisma.job.findFirst({
+    where: {
+      tenantId: tenant.id,
+      isPublished: true,
+      slug: params.slug,
+    },
+    select: {
+      title: true,
+      summary: true,
+      slug: true,
+    },
+  });
+
   if (!job) {
     return {
       title: "Role not found | Resourcin",
@@ -21,19 +36,20 @@ export async function generateMetadata(
     };
   }
 
+  const url = `${SITE_URL}/jobs/${job.slug}`;
+
   return {
     title: `${job.title} | Jobs | Resourcin`,
     description: job.summary ?? `Learn more about the ${job.title} role.`,
     openGraph: {
       title: `${job.title} | Resourcin`,
-      description: job.summary,
-      url: `${SITE_URL}/jobs/${job.slug}`,
+      description: job.summary ?? "",
+      url,
     },
   };
 }
 
 // ---------- Small helpers ----------
-
 function Section({
   title,
   children,
@@ -51,19 +67,6 @@ function Section({
   );
 }
 
-function BulletList({ items }: { items: string[] }) {
-  if (!items?.length) return null;
-  return (
-    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-700">
-      {items.map((item) => (
-        <li key={item}>{item}</li>
-      ))}
-    </ul>
-  );
-}
-
-// ---------- Simple badges / pills ----------
-
 function Pill({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[0.7rem] font-medium text-slate-600 ring-1 ring-slate-200">
@@ -73,16 +76,44 @@ function Pill({ children }: { children: React.ReactNode }) {
 }
 
 // ---------- Page ----------
+export default async function JobDetailPage({ params }: JobPageProps) {
+  const tenant = await getDefaultTenant();
 
-export default function JobDetailPage({ params }: JobPageProps) {
-  const job = getJobBySlug(params.slug);
-  if (!job) return notFound();
+  const job = await prisma.job.findFirst({
+    where: {
+      tenantId: tenant.id,
+      isPublished: true,
+      slug: params.slug,
+    },
+    include: {
+      clientCompany: true,
+    },
+  });
+
+  if (!job) {
+    notFound();
+  }
+
+  const companyName = job.clientCompany?.name ?? "Confidential client";
+  const employerInitials = companyName
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const postedAt = job.createdAt.toLocaleDateString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
   const jobSlug = encodeURIComponent(job.slug);
-  const utmBase = `utm_source=resourcin_job_board&utm_campaign=job_${jobSlug}`;
   const detailUrl = `${SITE_URL}/jobs/${job.slug}`;
+  const utmBase = `utm_source=resourcin_job_board&utm_campaign=job_${jobSlug}`;
 
-  // Social
+  // Social share landing URLs
   const linkedInLandingUrl = `${detailUrl}?${utmBase}&utm_medium=social&utm_content=linkedin`;
   const xLandingUrl = `${detailUrl}?${utmBase}&utm_medium=social&utm_content=x`;
   const whatsAppLandingUrl = `${detailUrl}?${utmBase}&utm_medium=social&utm_content=whatsapp`;
@@ -98,16 +129,19 @@ export default function JobDetailPage({ params }: JobPageProps) {
   );
   const whatsAppShareUrl = `https://wa.me/?text=${whatsAppMessage}`;
 
-  // Apply / I'm interested CTA
-  const applyUrl = `/talent-network?job=${jobSlug}&${utmBase}&utm_medium=job_detail&utm_content=primary_cta`;
-
-  // Simple related roles: same department or seniority
-  const related = jobs
-    .filter((j) => j.slug !== job.slug)
-    .filter(
-      (j) => j.department === job.department || j.seniority === job.seniority
-    )
-    .slice(0, 3);
+  // Simple "related roles" – same function or seniority
+  const related = await prisma.job.findMany({
+    where: {
+      tenantId: tenant.id,
+      isPublished: true,
+      NOT: { id: job.id },
+      OR: [
+        { function: job.function },
+        { seniority: job.seniority },
+      ],
+    },
+    take: 3,
+  });
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -126,43 +160,41 @@ export default function JobDetailPage({ params }: JobPageProps) {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#172965] text-sm font-semibold text-white shadow-sm sm:h-12 sm:w-12">
-                {job.employerInitials}
+                {employerInitials}
               </div>
               <div className="space-y-1.5">
                 <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">
                   {job.title}
                 </h1>
                 <p className="text-sm text-slate-600">
-                  {job.employerName}{" "}
-                  <span className="text-slate-400">•</span>{" "}
+                  {companyName} <span className="text-slate-400">•</span>{" "}
                   {job.location}
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <Pill>
-                    {job.workType} • {job.type}
-                  </Pill>
-                  <Pill>{job.department}</Pill>
-                  <Pill>{job.seniority} level</Pill>
-                  {job.salaryRange && <Pill>{job.salaryRange}</Pill>}
+                  {job.location && <Pill>{job.location}</Pill>}
+                  {job.employmentType && <Pill>{job.employmentType}</Pill>}
+                  {job.function && <Pill>{job.function}</Pill>}
+                  {job.seniority && <Pill>{job.seniority} level</Pill>}
                 </div>
                 <p className="pt-1 text-xs text-slate-500">
-                  {job.postedAt}
+                  Posted on {postedAt}
                 </p>
               </div>
             </div>
 
             {/* Apply block */}
             <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <Link
-                href={applyUrl}
+              {/* Scroll to apply form on same page */}
+              <a
+                href="#apply"
                 className="inline-flex items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#111c4c]"
               >
                 I&apos;m interested in this role
                 <span className="ml-1.5 text-xs" aria-hidden="true">
                   →
                 </span>
-              </Link>
-              <p className="text-[0.7rem] text-slate-500 sm:text-xs text-right">
+              </a>
+              <p className="text-right text-[0.7rem] text-slate-500 sm:text-xs">
                 One profile, multiple searches. We share full employer details
                 at the appropriate stage.
               </p>
@@ -205,51 +237,33 @@ export default function JobDetailPage({ params }: JobPageProps) {
           <div className="space-y-6 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 sm:p-6">
             <Section title="Role overview">
               <p>{job.summary}</p>
-              {job.highlight && (
-                <p className="text-sm text-slate-600">{job.highlight}</p>
-              )}
             </Section>
 
-            {job.responsibilities?.length ? (
-              <Section title="What you will be doing">
-                <BulletList items={job.responsibilities} />
-              </Section>
-            ) : null}
-
-            {job.requirements?.length ? (
-              <Section title="What you should have">
-                <BulletList items={job.requirements} />
-              </Section>
-            ) : null}
-
-            {job.niceToHave?.length ? (
-              <Section title="Nice to have">
-                <BulletList items={job.niceToHave} />
-              </Section>
-            ) : null}
-
-            {job.hiringProcess?.length ? (
-              <Section title="Hiring process">
-                <BulletList items={job.hiringProcess} />
-              </Section>
-            ) : null}
+            <Section title="Full description">
+              <div className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+                {job.description}
+              </div>
+            </Section>
 
             {/* CTA again at bottom for mobile scroll behaviour */}
             <div className="pt-4">
-              <Link
-                href={applyUrl}
+              <a
+                href="#apply"
                 className="inline-flex items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#111c4c]"
               >
                 I&apos;m interested in this role
                 <span className="ml-1.5 text-xs" aria-hidden="true">
                   →
                 </span>
-              </Link>
+              </a>
             </div>
           </div>
 
-          {/* Right: extras & related */}
-          <aside className="space-y-4">
+          {/* Right: apply form & extras */}
+          <aside className="space-y-4" id="apply">
+            {/* Apply form wired to this specific job */}
+            <JobApplyForm jobId={job.id} jobTitle={job.title} />
+
             {/* Employer / anonymised context */}
             <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
               <h2 className="text-sm font-semibold text-slate-900">
@@ -266,7 +280,7 @@ export default function JobDetailPage({ params }: JobPageProps) {
               </p>
             </div>
 
-            {/* Related insights CTA (ties back to funnel) */}
+            {/* Related insights CTA */}
             <div className="rounded-2xl bg-slate-900 p-4 text-slate-50 shadow-sm sm:p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
                 Related reading
@@ -301,7 +315,7 @@ export default function JobDetailPage({ params }: JobPageProps) {
                 </p>
                 <ul className="mt-3 space-y-2">
                   {related.map((r) => (
-                    <li key={r.slug}>
+                    <li key={r.id}>
                       <Link
                         href={`/jobs/${r.slug}?utm_source=job_detail&utm_medium=related_jobs&utm_campaign=job_${encodeURIComponent(
                           r.slug
