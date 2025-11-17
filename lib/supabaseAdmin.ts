@@ -1,22 +1,23 @@
 // lib/supabaseAdmin.ts
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; // fallback so it never ends up "undefined"
 
-let supabaseAdmin: SupabaseClient | null = null;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  // Do NOT throw here, just log.
-  console.error(
-    "Supabase admin client not initialised. Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY."
-  );
-} else {
-  supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      persistSession: false,
-    },
-  });
+if (!url) {
+  throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL for Supabase client");
 }
 
-export { supabaseAdmin };
+if (!serviceKey) {
+  throw new Error(
+    "Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY for Supabase client"
+  );
+}
+
+export const supabaseAdmin = createClient(url, serviceKey, {
+  auth: {
+    persistSession: false,
+  },
+});
