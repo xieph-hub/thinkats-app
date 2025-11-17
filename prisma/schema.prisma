@@ -108,7 +108,7 @@ model Candidate {
   tenantId              String
 
   fullName              String
-  email                 String
+  email                 String             @unique
   phone                 String?
   location              String?
   linkedinUrl           String?
@@ -122,15 +122,15 @@ model Candidate {
   cvUrl                 String?            // latest uploaded CV URL
   notes                 String?            // internal notes
 
+  // Auth / portal access
+  loginToken            String?            @unique
+  loginTokenExpiresAt   DateTime?
+
   // One candidate → many applications
   applications          JobApplication[]
 
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
-
-  // Email unique per tenant
-  @@unique([tenantId, email])
-  @@index([tenantId])
 }
 
 model JobApplication {
