@@ -1,166 +1,124 @@
 // app/api/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { Buffer } from "buffer";
+import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-function ensureString(value: FormDataEntryValue | null, field: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`Missing or invalid field: ${field}`);
-  }
-  return value.trim();
-}
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const CV_BUCKET = "resourcin-uploads";
 
-export async function POST(req: NextRequest) {
+// Server-side Supabase client (safe because we use the service role key only on the server)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+export async function POST(request: NextRequest) {
   try {
-    const formData = await req.formData();
+    const formData = await request.formData();
 
-    // --- Required fields ---
-    const jobId = ensureString(formData.get("jobId"), "jobId");
-    const fullName = ensureString(formData.get("fullName"), "fullName");
-    const emailRaw = ensureString(formData.get("email"), "email");
-    const email = emailRaw.toLowerCase();
+    const jobId = String(formData.get("jobId") ?? "").trim();
+    const fullName = String(formData.get("fullName") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const phone = formData.get("phone")
+      ? String(formData.get("phone"))
+      : undefined;
+    const location = formData.get("location")
+      ? String(formData.get("location"))
+      : undefined;
+    const linkedinUrl = formData.get("linkedinUrl")
+      ? String(formData.get("linkedinUrl"))
+      : undefined;
+    const portfolioUrl = formData.get("portfolioUrl")
+      ? String(formData.get("portfolioUrl"))
+      : undefined;
+    const coverLetter = formData.get("coverLetter")
+      ? String(formData.get("coverLetter"))
+      : undefined;
+    const source = formData.get("source")
+      ? String(formData.get("source"))
+      : "Website";
 
-    // --- Optional fields ---
-    const phone =
-      typeof formData.get("phone") === "string"
-        ? (formData.get("phone") as string).trim()
-        : null;
+    const file = formData.get("cv") as File | null;
 
-    const location =
-      typeof formData.get("location") === "string"
-        ? (formData.get("location") as string).trim()
-        : null;
-
-    const linkedinUrl =
-      typeof formData.get("linkedinUrl") === "string"
-        ? (formData.get("linkedinUrl") as string).trim()
-        : null;
-
-    const portfolioUrl =
-      typeof formData.get("portfolioUrl") === "string"
-        ? (formData.get("portfolioUrl") as string).trim()
-        : null;
-
-    const coverLetter =
-      typeof formData.get("coverLetter") === "string"
-        ? (formData.get("coverLetter") as string).trim()
-        : null;
-
-    const source =
-      typeof formData.get("source") === "string"
-        ? (formData.get("source") as string).trim()
-        : "Website";
-
-    // --- CV file (required) ---
-    const cv = formData.get("cv");
-    if (!(cv instanceof File)) {
+    if (!jobId || !fullName || !email) {
       return NextResponse.json(
-        { error: "Please upload your CV (PDF or DOC)." },
+        { ok: false, error: "Missing required fields." },
         { status: 400 }
       );
     }
 
-    // --- Find job (and tenant) ---
-    const job = await prisma.job.findUnique({
-      where: { id: jobId },
-      select: { id: true, tenantId: true, title: true },
-    });
+    // ---------------------------
+    // 1) Upload CV to Supabase
+    // ---------------------------
+    let cvUrl: string | undefined;
 
-    if (!job) {
-      return NextResponse.json(
-        { error: "This role no longer exists." },
-        { status: 404 }
-      );
-    }
-
-    const tenantId = job.tenantId;
-
-    // Upsert candidate by email so the same person doesn't get duplicated
-const candidate = await prisma.candidate.upsert({
-  where: {
-    email, // email must be unique in your Prisma schema (which it is)
-  },
-  update: {
-    // when the candidate already exists, gently refresh some fields
-    fullName,
-    phone: phone || undefined,
-    location: location || undefined,
-    linkedinUrl: linkedinUrl || undefined,
-    cvUrl: cvUrl || undefined, // latest uploaded CV
-  },
-  create: {
-    // when the candidate does NOT exist, create a fresh one
-    tenantId, // <-- keep using whatever tenantId you already have defined above
-    fullName,
-    email,
-    phone: phone || undefined,
-    location: location || undefined,
-    linkedinUrl: linkedinUrl || undefined,
-    cvUrl: cvUrl || undefined,
-  },
-});
-
-    // --- Prepare CV file for Supabase (Node: use Buffer) ---
-    const fileExt =
-      cv.name && cv.name.includes(".")
-        ? cv.name.split(".").pop()!.toLowerCase()
+    if (file && file.size > 0) {
+      const safeName = fullName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .slice(0, 50);
+      const extGuess = file.name.includes(".")
+        ? file.name.split(".").pop()
         : "pdf";
+      const path = `cvs/${jobId}/${Date.now()}-${safeName}.${extGuess}`;
 
-    const objectPath = [
-      "cvs",
-      tenantId,
-      job.id,
-      `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`,
-    ].join("/");
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
 
-    const arrayBuffer = await cv.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // --- Upload CV to Supabase bucket: resourcin-uploads ---
-    const { data: uploadData, error: uploadError } =
-      await supabaseAdmin.storage
-        .from("resourcin-uploads")
-        .upload(objectPath, buffer, {
-          cacheControl: "3600",
+      const { error: uploadError } = await supabase.storage
+        .from(CV_BUCKET)
+        .upload(path, buffer, {
+          contentType: file.type || "application/octet-stream",
           upsert: false,
-          contentType: cv.type || "application/octet-stream",
         });
 
-    if (uploadError || !uploadData?.path) {
-      console.error("Supabase upload error:", {
-        uploadError,
-        bucket: "resourcin-uploads",
-        objectPath,
-        cvName: cv.name,
-        cvType: cv.type,
-        // @ts-ignore
-        cvSize: cv.size,
-      });
+      if (uploadError) {
+        console.error("Supabase upload error:", uploadError);
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "Could not upload CV. Please try again in a moment, or email it directly if this persists.",
+          },
+          { status: 500 }
+        );
+      }
 
-      // 🔍 Send the real error message back so we can see it in the UI
-      const rawMessage =
-        (uploadError as any)?.message ||
-        (uploadError as any)?.error_description ||
-        JSON.stringify(uploadError);
-
-      return NextResponse.json(
-        {
-          error: `CV upload failed: ${rawMessage}`,
-        },
-        { status: 500 }
-      );
+      const { data } = supabase.storage.from(CV_BUCKET).getPublicUrl(path);
+      cvUrl = data.publicUrl;
     }
 
-    const cvPath = uploadData.path;
+    const tenantId = process.env.DEFAULT_TENANT_ID ?? "resourcin";
 
-    // --- Create JobApplication record ---
-    await prisma.jobApplication.create({
+    // ---------------------------
+    // 2) Upsert Candidate by email
+    // ---------------------------
+    const candidate = await prisma.candidate.upsert({
+      where: { email }, // email is unique in your schema
+      update: {
+        fullName,
+        phone,
+        location,
+        linkedinUrl,
+        cvUrl: cvUrl ?? undefined, // only overwrite if we have a fresh upload
+      },
+      create: {
+        tenantId,
+        fullName,
+        email,
+        phone,
+        location,
+        linkedinUrl,
+        cvUrl: cvUrl ?? "",
+      },
+    });
+
+    // ---------------------------
+    // 3) Create Job Application
+    // ---------------------------
+    const application = await prisma.jobApplication.create({
       data: {
-        jobId: job.id,
+        jobId,
         candidateId: candidate.id,
         fullName,
         email,
@@ -168,18 +126,23 @@ const candidate = await prisma.candidate.upsert({
         location,
         linkedinUrl,
         portfolioUrl,
-        cvUrl: cvPath,
         coverLetter,
         source,
+        cvUrl: cvUrl || "",
         status: "PENDING",
+        stage: "APPLIED",
       },
     });
 
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    console.error("Error in /api/apply:", error);
+    return NextResponse.json({
+      ok: true,
+      applicationId: application.id,
+    });
+  } catch (err) {
+    console.error("Apply route error:", err);
     return NextResponse.json(
       {
+        ok: false,
         error:
           "Something went wrong while submitting your application. Please try again.",
       },
