@@ -2,6 +2,7 @@
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { fetchInsights, getInsightBySlug } from "@/lib/insights";
 import { SITE_URL } from "@/lib/site";
 
@@ -22,27 +23,30 @@ export async function generateMetadata(
   if (!post) {
     return {
       title: "Insight not found | Resourcin",
+      description: "The requested insight could not be found.",
     };
   }
 
+  const title = post.title;
+  const description = post.summary;
   const url = `${SITE_URL}/insights/${post.slug}`;
 
   return {
-    title: post.title,
-    description: post.summary,
-    alternates: {
-      canonical: url,
-    },
+    title,
+    description,
     openGraph: {
-      type: "article",
+      title,
+      description,
       url,
-      title: post.title,
-      description: post.summary,
+      type: "article",
     },
     twitter: {
       card: "summary_large_image",
-      title: post.title,
-      description: post.summary,
+      title,
+      description,
+    },
+    alternates: {
+      canonical: url,
     },
   };
 }
@@ -55,45 +59,55 @@ export default async function InsightPage({ params }: PageProps) {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-16">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-        Insight
-      </p>
+    <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+      <nav className="mb-6 text-xs text-slate-500">
+        <Link
+          href="/insights"
+          className="inline-flex items-center hover:text-slate-700"
+        >
+          ← Back to insights
+        </Link>
+      </nav>
 
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-        {post.title}
-      </h1>
+      <article className="space-y-6">
+        <header className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-600">
+            Insight
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            {post.title}
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            {post.publishedAt && (
+              <span>
+                {new Date(post.publishedAt).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+            {post.tags.length > 0 && (
+              <span className="flex flex-wrap gap-2">
+                {post.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700 ring-1 ring-slate-200"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
+        </header>
 
-      {post.publishedAt && (
-        <p className="mt-2 text-xs text-slate-500">
-          {new Date(post.publishedAt).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })}
-        </p>
-      )}
-
-      {post.tags?.length ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {post.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="prose prose-slate mt-8">
-        <p>{post.summary}</p>
-        <p className="mt-6 text-sm text-slate-500">
-          Full article content will live here once you wire in a CMS or richer
-          body content.
-        </p>
-      </div>
+        {/* For now we render summary as the body.
+           If your Notion CMS has rich content per page, we can layer in a block renderer later. */}
+        <section className="prose prose-slate max-w-none text-sm sm:text-base">
+          <p>{post.summary}</p>
+        </section>
+      </article>
     </main>
   );
 }
