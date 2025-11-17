@@ -28,13 +28,22 @@ export default async function InsightPage({ params }: PageProps) {
     notFound();
   }
 
+  // Request Talent tracking link
+  const requestTalentHref = `/request-talent?via=insight&post=${encodeURIComponent(
+    insight.slug
+  )}`;
+
   // Get body blocks + all insights for "Related"
   const [blocks, allInsights] = await Promise.all([
     getInsightBlocks(insight.id),
     getInsightsList(),
   ]);
 
-  const related = buildRelatedInsights(insight.id, insight.category, allInsights);
+  const related = buildRelatedInsights(
+    insight.id,
+    insight.category,
+    allInsights
+  );
 
   const hasBlocks = blocks && blocks.length > 0;
   const hasContentField = Boolean(insight.content);
@@ -113,11 +122,30 @@ export default async function InsightPage({ params }: PageProps) {
               </p>
             )}
           </section>
+
+          {/* REQUEST TALENT CTA with tracking */}
+          <section className="mt-10 rounded-xl border border-neutral-200 bg-neutral-50 px-5 py-4">
+            <h2 className="text-sm font-semibold text-[var(--rcn-blue)]">
+              Need to hire for a role like this?
+            </h2>
+            <p className="mt-2 text-xs text-neutral-600">
+              Share your requirements and we&apos;ll respond with a tailored shortlist.
+              This form will remember that you came from this insight.
+            </p>
+            <div className="mt-3">
+              <Link
+                href={requestTalentHref}
+                className="inline-flex items-center justify-center rounded-full bg-[var(--rcn-blue)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#101b4a]"
+              >
+                Request Talent
+              </Link>
+            </div>
+          </section>
         </article>
 
         {/* RELATED INSIGHTS */}
         <aside className="border-t border-neutral-200 pt-6 lg:border-t-0 lg:pt-0 lg:pl-4">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             Related insights
           </h2>
 
@@ -132,7 +160,7 @@ export default async function InsightPage({ params }: PageProps) {
               <Link
                 key={item.id}
                 href={`/insights/${item.slug}`}
-                className="block rounded-lg border border-neutral-200/70 bg-white p-3 hover:border-[var(--rcn-blue)] hover:shadow-sm"
+                className="block rounded-lg border border-neutral-200/80 bg-white p-3 text-sm transition hover:border-[var(--rcn-blue)] hover:shadow-sm"
               >
                 <p className="text-[11px] uppercase tracking-wide text-neutral-400">
                   {item.category || "Insight"}
@@ -147,14 +175,13 @@ export default async function InsightPage({ params }: PageProps) {
                 )}
                 {item.publishedAt && (
                   <p className="mt-1 text-[11px] text-neutral-400">
-                    {new Date(item.publishedAt).toLocaleDateString(
-                      undefined,
-                      {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      }
-                    )}
+                    {new Date(
+                      item.publishedAt
+                    ).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </p>
                 )}
               </Link>
@@ -278,7 +305,6 @@ function NotionBlock({ block }: { block: BlockObjectResponse }) {
       );
     }
 
-    // Quick-and-clean list rendering as simple bullet paragraphs
     case "bulleted_list_item": {
       const text = block.bulleted_list_item.rich_text
         .map((t) => t.plain_text)
