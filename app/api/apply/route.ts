@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
     const phone = String(formData.get("phone") || "").trim();
     const location = String(formData.get("location") || "").trim();
     const linkedinUrl = String(formData.get("linkedinUrl") || "").trim();
+    // We can still read this from the form if you keep the field,
+    // but we won't save it yet because the schema doesn't have it.
     const portfolioUrl = String(formData.get("portfolioUrl") || "").trim();
     const sourceRaw = String(formData.get("source") || "DIRECT").trim();
     const coverLetter = String(formData.get("coverLetter") || "").trim();
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
           phone: phone || null,
           location: location || null,
           linkedinUrl: linkedinUrl || null,
-          portfolioUrl: portfolioUrl || null,
+          // portfolioUrl is NOT sent because it doesn't exist in your schema
           ...(cvUrl ? { cvUrl } : {}),
         },
       });
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
           phone: phone || null,
           location: location || null,
           linkedinUrl: linkedinUrl || null,
-          portfolioUrl: portfolioUrl || null,
+          // portfolioUrl is NOT sent because it doesn't exist in your schema
           cvUrl: cvUrl,
         },
       });
@@ -99,7 +101,6 @@ export async function POST(req: NextRequest) {
 
     // --- Create job application snapshot ---
     await prisma.jobApplication.create({
-      // `as any` to avoid Prisma enum literal friction (ApplicationSource, etc.)
       data: {
         job: {
           connect: { id: jobId },
