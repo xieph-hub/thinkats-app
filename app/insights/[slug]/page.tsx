@@ -140,7 +140,7 @@ export default async function InsightPage({ params }: PageProps) {
           <nav className="mb-4 text-xs text-neutral-500">
             <Link
               href="/insights"
-              className="inline-flex items-center gap-1 hover:text-[var(--rcn-blue)]"
+              className="inline-flex items-center gap-1 hover:text-[#172965]"
             >
               <span aria-hidden>←</span>
               <span>Back to insights</span>
@@ -148,12 +148,12 @@ export default async function InsightPage({ params }: PageProps) {
           </nav>
 
           {insight.coverUrl && (
-            <div className="mb-8 overflow-hidden rounded-2xl shadow-sm">
+            <div className="mb-8 overflow-hidden rounded-2xl border border-neutral-200/80 bg-[#000435]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={insight.coverUrl}
                 alt={insight.title}
-                className="h-auto w-full object-cover"
+                className="h-auto w-full object-cover opacity-[0.96]"
               />
             </div>
           )}
@@ -162,7 +162,7 @@ export default async function InsightPage({ params }: PageProps) {
           <header className="mb-6">
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500">
               {insight.category && (
-                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-0.5 font-medium">
+                <span className="inline-flex items-center rounded-full bg-[#1729650d] px-2.5 py-0.5 font-medium text-[#172965]">
                   {insight.category}
                 </span>
               )}
@@ -180,13 +180,13 @@ export default async function InsightPage({ params }: PageProps) {
               )}
 
               {readingTimeMinutes && (
-                <span className="text-neutral-400">
+                <span className="rounded-full bg-neutral-50 px-2 py-0.5 text-neutral-500">
                   {readingTimeMinutes} min read
                 </span>
               )}
             </div>
 
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--rcn-blue)] sm:text-4xl">
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#000435] sm:text-4xl">
               {insight.title}
             </h1>
 
@@ -206,7 +206,7 @@ export default async function InsightPage({ params }: PageProps) {
           </div>
 
           {/* Divider */}
-          <div className="mb-8 h-px w-full bg-gradient-to-r from-neutral-200 via-neutral-100 to-transparent" />
+          <div className="mb-8 h-px w-full bg-gradient-to-r from-[#1729651a] via-neutral-100 to-transparent" />
 
           {/* BODY */}
           <section className="space-y-4 text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
@@ -252,12 +252,12 @@ export default async function InsightPage({ params }: PageProps) {
               <Link
                 key={item.id}
                 href={`/insights/${item.slug}`}
-                className="block rounded-xl border border-neutral-200/80 bg-white p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--rcn-blue)] hover:shadow-md"
+                className="block rounded-xl border border-neutral-200/80 bg-white p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-[#172965] hover:shadow-md"
               >
                 <p className="text-[11px] uppercase tracking-wide text-neutral-400">
                   {item.category || "Insight"}
                 </p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
+                <p className="mt-1 text-sm font-semibold text-[#000435]">
                   {item.title}
                 </p>
                 {item.excerpt && (
@@ -286,7 +286,7 @@ export default async function InsightPage({ params }: PageProps) {
 }
 
 /**
- * Social sharing bar (X, LinkedIn, WhatsApp).
+ * Social sharing bar (X, LinkedIn, WhatsApp) with icons.
  */
 function ShareBar({ url, title }: { url: string; title: string }) {
   const encodedUrl = encodeURIComponent(url);
@@ -297,215 +297,71 @@ function ShareBar({ url, title }: { url: string; title: string }) {
     `${title} – ${url}`
   )}`;
 
+  const baseBtn =
+    "inline-flex items-center justify-center h-8 w-8 rounded-full border border-neutral-200 bg-white text-[#172965] shadow-sm transition hover:border-[#FFC000] hover:bg-[#172965] hover:text-white";
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-3">
       <span className="text-[11px] uppercase tracking-wide text-neutral-400">
         Share
       </span>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <a
           href={tweetHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center rounded-full border border-neutral-200 bg-white px-3 py-1 text-[11px] font-medium text-neutral-700 shadow-sm transition hover:border-[var(--rcn-blue)] hover:text-[var(--rcn-blue)]"
+          aria-label="Share on X / Twitter"
+          className={baseBtn}
         >
-          X / Twitter
+          <XIcon />
         </a>
         <a
           href={linkedinHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center rounded-full border border-neutral-200 bg-white px-3 py-1 text-[11px] font-medium text-neutral-700 shadow-sm transition hover:border-[var(--rcn-blue)] hover:text-[var(--rcn-blue)]"
+          aria-label="Share on LinkedIn"
+          className={baseBtn}
         >
-          LinkedIn
+          <LinkedInIcon />
         </a>
         <a
           href={whatsappHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center rounded-full border border-neutral-200 bg-white px-3 py-1 text-[11px] font-medium text-neutral-700 shadow-sm transition hover:border-[var(--rcn-blue)] hover:text-[var(--rcn-blue)]"
+          aria-label="Share on WhatsApp"
+          className={baseBtn}
         >
-          WhatsApp
+          <WhatsAppIcon />
         </a>
       </div>
     </div>
   );
 }
 
-/**
- * Build a small "related insights" list:
- * - Prefer same category.
- * - Fallback: most recent others.
- */
-function buildRelatedInsights(
-  currentId: string,
-  currentCategory: string | null,
-  all: Awaited<ReturnType<typeof getInsightsList>>
-) {
-  const others = all.filter((i) => i.id !== currentId);
-  if (others.length === 0) return [];
-
-  let related: typeof others = [];
-
-  if (currentCategory) {
-    related = others.filter((i) => i.category === currentCategory);
-  }
-
-  if (related.length < 3) {
-    const filler = others.filter(
-      (i) => !related.some((r) => r.id === i.id)
-    );
-    related = [...related, ...filler].slice(0, 3);
-  } else {
-    related = related.slice(0, 3);
-  }
-
-  return related;
-}
-
-/**
- * Estimate reading time from content text.
- */
-function estimateReadingTime(
-  text: string | null | undefined
-): number | null {
-  if (!text) return null;
-  const words = text.trim().split(/\s+/).length;
-  if (!words) return null;
-  const minutes = Math.max(1, Math.round(words / 200));
-  return minutes;
-}
-
-/**
- * Render the "Content (paste into Notion page body)" text nicely.
- * We preserve line breaks using whitespace-pre-wrap.
- */
-function ContentFromField({ text }: { text: string }) {
+/** X / Twitter icon */
+function XIcon() {
   return (
-    <pre className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
-      {text}
-    </pre>
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5"
+    >
+      <path
+        fill="currentColor"
+        d="M18.25 4.5h-2.02l-3.1 4.13L9.02 4.5H4.5l5.06 6.9L4.7 19.5h2.02l3.39-4.5 3.29 4.5h4.52l-5.1-6.92L18.25 4.5z"
+      />
+    </svg>
   );
 }
 
-/**
- * Simple renderer for Notion blocks (paragraphs, headings, quotes, lists, images).
- */
-function NotionBlocks({ blocks }: { blocks: BlockObjectResponse[] }) {
+/** LinkedIn icon */
+function LinkedInIcon() {
   return (
-    <>
-      {blocks.map((block) => (
-        <NotionBlock key={block.id} block={block} />
-      ))}
-    </>
-  );
-}
-
-function NotionBlock({ block }: { block: BlockObjectResponse }) {
-  const { type } = block;
-
-  switch (type) {
-    case "paragraph": {
-      const text = block.paragraph.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      if (!text.trim()) return null;
-      return <p className="mb-4">{text}</p>;
-    }
-
-    case "heading_1": {
-      const text = block.heading_1.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <h2 className="mt-10 mb-4 text-2xl font-semibold text-[var(--rcn-blue)]">
-          {text}
-        </h2>
-      );
-    }
-
-    case "heading_2": {
-      const text = block.heading_2.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <h3 className="mt-8 mb-3 text-xl font-semibold text-[var(--rcn-blue)]">
-          {text}
-        </h3>
-      );
-    }
-
-    case "heading_3": {
-      const text = block.heading_3.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <h4 className="mt-6 mb-2 text-lg font-semibold text-[var(--rcn-blue)]">
-          {text}
-        </h4>
-      );
-    }
-
-    case "quote": {
-      const text = block.quote.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <blockquote className="my-5 border-l-2 border-[var(--rcn-dark-green)] pl-4 text-[15px] italic text-neutral-700">
-          {text}
-        </blockquote>
-      );
-    }
-
-    case "bulleted_list_item": {
-      const text = block.bulleted_list_item.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <p className="mb-2 ml-5 text-[15px] leading-relaxed before:mr-2 before:inline-block before:content-['•']">
-          {text}
-        </p>
-      );
-    }
-
-    case "numbered_list_item": {
-      const text = block.numbered_list_item.rich_text
-        .map((t) => t.plain_text)
-        .join("");
-      return (
-        <p className="mb-2 ml-5 text-[15px] leading-relaxed before:mr-2 before:inline-block before:content-['•']">
-          {text}
-        </p>
-      );
-    }
-
-    case "image": {
-      const src =
-        block.image.type === "external"
-          ? block.image.external.url
-          : block.image.file.url;
-
-      const caption =
-        block.image.caption?.map((t) => t.plain_text).join("") ?? "";
-
-      return (
-        <figure className="my-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={src}
-            alt={caption || "Insight image"}
-            className="w-full rounded-xl"
-          />
-          {caption && (
-            <figcaption className="mt-2 text-center text-xs text-neutral-500">
-              {caption}
-            </figcaption>
-          )}
-        </figure>
-      );
-    }
-
-    default:
-      return null;
-  }
-}
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5"
+    >
+      <path
+        fill="currentColor"
+        d="M4.98 3.5C3.87 3.5 3 4.37 3 5.48c0 1.1.87 1.98 1.98 1.98h.02c1.11 0 1.98-.88 1.98-1.98A1.99 1.99 0 0 0
