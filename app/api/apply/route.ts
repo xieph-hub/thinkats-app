@@ -4,6 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+// Single-tenant helper: always attach candidates/applications to this tenant.
+const DEFAULT_TENANT_ID =
+  process.env.DEFAULT_TENANT_ID || "default-tenant";
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
@@ -23,8 +27,7 @@ export async function POST(req: NextRequest) {
     const phone = String(formData.get("phone") || "").trim();
     const location = String(formData.get("location") || "").trim();
     const linkedinUrl = String(formData.get("linkedinUrl") || "").trim();
-    // We can still read this from the form if you keep the field,
-    // but we won't save it yet because the schema doesn't have it.
+    // We currently do NOT persist portfolioUrl (schema doesn’t have it)
     const portfolioUrl = String(formData.get("portfolioUrl") || "").trim();
     const sourceRaw = String(formData.get("source") || "DIRECT").trim();
     const coverLetter = String(formData.get("coverLetter") || "").trim();
@@ -37,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- CV upload to Supabase (non-blocking) ---
+    // --- Upload CV to Supabase (best-effort, non-fatal if it fails) ---
     let cvUrl: string | null = null;
 
     if (file && file.size > 0 && supabaseAdmin) {
@@ -68,11 +71,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // --- Candidate: find or create, then update profile snapshot ---
+    // --- Find candidate for this tenant (email + tenant) ---
     let candidate = await prisma.candidate.findFirst({
-      where: { email },
+      where: {
+        email,
+        // if multi-tenant is ever real, this keeps things scoped
+        tenant: { id: DEFAULT_TENANT_ID },
+      },
     });
 
+    // --- Update existing candidate profile snapshot ---
     if (candidate) {
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
@@ -81,11 +89,12 @@ export async function POST(req: NextRequest) {
           phone: phone || null,
           location: location || null,
           linkedinUrl: linkedinUrl || null,
-          // portfolioUrl is NOT sent because it doesn't exist in your schema
+          // portfolioUrl intentionally NOT saved (no column yet)
           ...(cvUrl ? { cvUrl } : {}),
         },
       });
     } else {
+      // --- Create new candidate, attaching to default tenant ---
       candidate = await prisma.candidate.create({
         data: {
           fullName,
@@ -93,8 +102,13 @@ export async function POST(req: NextRequest) {
           phone: phone || null,
           location: location || null,
           linkedinUrl: linkedinUrl || null,
-          // portfolioUrl is NOT sent because it doesn't exist in your schema
-          cvUrl: cvUrl,
+          cvUrl: cvUrl ?? null,
+          tenant: {
+            connect: {
+              // Must match TenantWhereUniqueInput – typically "id"
+              id: DEFAULT_TENANT_ID,
+            },
+          },
         },
       });
     }
