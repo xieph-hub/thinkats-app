@@ -1,13 +1,13 @@
 // app/insights/[slug]/page.tsx
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import type { BlockObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import {
   getInsightsList,
   getInsightBySlug,
   getInsightBlocks,
 } from "@/lib/insights";
-import type { BlockObjectResponse } from "@notionhq/client/build/src/api-endpoints";
-import Link from "next/link";
 
 export const revalidate = 60;
 
@@ -112,7 +112,6 @@ export default async function InsightPage({ params }: PageProps) {
     ""
   )}/insights/${insight.slug}`;
 
-  // Fetch body blocks + all insights for "Related"
   const [blocks, allInsights] = await Promise.all([
     getInsightBlocks(insight.id),
     getInsightsList(),
@@ -131,8 +130,39 @@ export default async function InsightPage({ params }: PageProps) {
     insight.content || insight.excerpt || insight.title
   );
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: insight.title,
+    description:
+      insight.excerpt ||
+      "Thinking about hiring, talent and work – insights from Resourcin.",
+    datePublished: insight.publishedAt || undefined,
+    dateModified: insight.publishedAt || undefined,
+    image: insight.coverUrl ? [insight.coverUrl] : undefined,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonicalUrl,
+    },
+    url: canonicalUrl,
+    author: {
+      "@type": "Organization",
+      name: "Resourcin",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "Resourcin",
+    },
+  };
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 font-sans lg:py-16">
+      {/* JSON-LD for SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <div className="grid gap-10 lg:grid-cols-[minmax(0,2.4fr)_minmax(260px,1fr)]">
         {/* MAIN ARTICLE */}
         <article className="max-w-3xl">
@@ -147,7 +177,7 @@ export default async function InsightPage({ params }: PageProps) {
             </Link>
           </nav>
 
-          {/* ORIGINAL COVER IMAGE ON TOP */}
+          {/* COVER IMAGE */}
           {insight.coverUrl && (
             <div className="mb-8 overflow-hidden rounded-2xl border border-neutral-200/80 bg-[#000435]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -163,9 +193,14 @@ export default async function InsightPage({ params }: PageProps) {
           <header className="mb-6">
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500">
               {insight.category && (
-                <span className="inline-flex items-center rounded-full bg-[#1729650d] px-2.5 py-0.5 font-medium text-[#172965]">
+                <Link
+                  href={`/insights?category=${encodeURIComponent(
+                    insight.category
+                  )}`}
+                  className="inline-flex items-center rounded-full bg-[#1729650d] px-2.5 py-0.5 font-medium text-[#172965] hover:bg-[#1729651a]"
+                >
                   {insight.category}
-                </span>
+                </Link>
               )}
 
               {insight.publishedAt && (
@@ -201,7 +236,7 @@ export default async function InsightPage({ params }: PageProps) {
           {/* Share bar under header */}
           <div className="mb-8 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="text-neutral-400">
-              {/* reserved for future author/byline if you ever want it */}
+              {/* reserved for future author/byline */}
             </div>
             <ShareBar url={canonicalUrl} title={insight.title} />
           </div>
@@ -211,17 +246,14 @@ export default async function InsightPage({ params }: PageProps) {
 
           {/* BODY */}
           <section className="space-y-4 text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
-            {/* Prefer the Content field from Notion if present */}
             {hasContentField && (
               <ContentFromField text={insight.content!} />
             )}
 
-            {/* If there are Notion blocks, render them too (or alone if no Content field) */}
             {!hasContentField && hasBlocks && (
               <NotionBlocks blocks={blocks} />
             )}
 
-            {/* If both exist, render content field first, then any additional blocks */}
             {hasContentField && hasBlocks && (
               <div className="pt-4">
                 <NotionBlocks blocks={blocks} />
@@ -344,11 +376,7 @@ function ShareBar({ url, title }: { url: string; title: string }) {
 /** X / Twitter icon */
 function XIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-3.5 w-3.5"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5">
       <path
         fill="currentColor"
         d="M18.25 4.5h-2.02l-3.1 4.13L9.02 4.5H4.5l5.06 6.9L4.7 19.5h2.02l3.39-4.5 3.29 4.5h4.52l-5.1-6.92L18.25 4.5z"
@@ -360,11 +388,7 @@ function XIcon() {
 /** LinkedIn icon */
 function LinkedInIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-3.5 w-3.5"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5">
       <path
         fill="currentColor"
         d="M4.98 3.5C3.87 3.5 3 4.37 3 5.48c0 1.1.87 1.98 1.98 1.98h.02c1.11 0 1.98-.88 1.98-1.98A1.99 1.99 0 0 0 4.98 3.5zM3.25 8.75H6.7V20.5H3.25zM9.5 8.75H13v1.6h.05c.49-.93 1.7-1.9 3.5-1.9 3.75 0 4.45 2.47 4.45 5.68v6.37H17.5v-5.65c0-1.35-.03-3.08-1.88-3.08-1.88 0-2.17 1.47-2.17 2.98v5.75H9.5z"
@@ -376,11 +400,7 @@ function LinkedInIcon() {
 /** WhatsApp icon */
 function WhatsAppIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-3.5 w-3.5"
-    >
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5">
       <path
         fill="currentColor"
         d="M20.52 3.48A11.77 11.77 0 0 0 12.02 0C5.7 0 .54 5.16.54 11.5c0 2.03.53 4.01 1.54 5.76L0 24l6.93-2.02a11.5 11.5 0 0 0 5.09 1.25h.01c6.33 0 11.49-5.16 11.49-11.5 0-3.06-1.19-5.94-3.5-8.25zM12.02 21.3h-.01a9.8 9.8 0 0 1-4.99-1.37l-.36-.21-4.11 1.2 1.17-4.06-.24-.42a9.77 9.77 0 0 1-1.47-5.15c0-5.4 4.4-9.8 9.8-9.8 2.62 0 5.08 1.02 6.94 2.88a9.75 9.75 0 0 1 2.86 6.93c0 5.4-4.4 9.8-9.79 9.8zm5.38-7.34c-.3-.15-1.78-.88-2.05-.98-.27-.1-.47-.15-.68.15-.2.29-.78.97-.96 1.17-.18.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.47-.89-.79-1.49-1.76-1.66-2.06-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.52.15-.17.2-.29.3-.49.1-.2.05-.37-.02-.52-.07-.15-.68-1.63-.93-2.24-.24-.58-.49-.5-.68-.51h-.58c-.2 0-.52.07-.8.37-.27.29-1.04 1.02-1.04 2.5 0 1.47 1.07 2.9 1.22 3.1.15.2 2.11 3.23 5.12 4.53.72.31 1.28.5 1.72.64.72.23 1.37.2 1.88.12.57-.08 1.78-.73 2.03-1.44.25-.71.25-1.32.17-1.44-.07-.12-.27-.2-.57-.35z"
@@ -435,7 +455,6 @@ function estimateReadingTime(
 
 /**
  * Render the "Content (paste into Notion page body)" text nicely.
- * We preserve line breaks using whitespace-pre-wrap.
  */
 function ContentFromField({ text }: { text: string }) {
   return (
