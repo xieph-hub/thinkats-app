@@ -132,154 +132,164 @@ export default async function InsightPage({ params }: PageProps) {
   );
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 font-sans lg:py-16">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,2.4fr)_minmax(260px,1fr)]">
-        {/* MAIN ARTICLE */}
-        <article className="max-w-3xl">
-          {/* Breadcrumb */}
-          <nav className="mb-4 text-xs text-neutral-500">
-            <Link
-              href="/insights"
-              className="inline-flex items-center gap-1 hover:text-[#172965]"
-            >
-              <span aria-hidden>←</span>
-              <span>Back to insights</span>
-            </Link>
-          </nav>
+    <main className="bg-neutral-50">
+      <div className="mx-auto max-w-6xl px-4 py-10 font-sans lg:py-16">
+        {/* Breadcrumb */}
+        <nav className="mb-4 text-xs text-neutral-500">
+          <Link
+            href="/insights"
+            className="inline-flex items-center gap-1 hover:text-[#172965]"
+          >
+            <span aria-hidden>←</span>
+            <span>Back to insights</span>
+          </Link>
+        </nav>
 
-          {insight.coverUrl && (
-            <div className="mb-8 overflow-hidden rounded-2xl border border-neutral-200/80 bg-[#000435]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={insight.coverUrl}
-                alt={insight.title}
-                className="h-auto w-full object-cover opacity-[0.96]"
-              />
-            </div>
-          )}
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,2.4fr)_minmax(260px,1fr)]">
+          {/* MAIN ARTICLE COLUMN */}
+          <article className="space-y-6">
+            {/* HERO CARD */}
+            <section className="overflow-hidden rounded-3xl border border-[#1729651a] bg-gradient-to-br from-[#000435] via-[#172965] to-[#000435] text-white shadow-sm">
+              <div className="grid gap-6 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)]">
+                <div className="flex flex-col gap-4 px-5 py-6 sm:px-7 sm:py-7">
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-100/80">
+                    {insight.category && (
+                      <span className="inline-flex items-center rounded-full bg-white/10 px-2.5 py-0.5 font-medium text-[#FFC000]">
+                        {insight.category}
+                      </span>
+                    )}
 
-          {/* Meta */}
-          <header className="mb-6">
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-500">
-              {insight.category && (
-                <span className="inline-flex items-center rounded-full bg-[#1729650d] px-2.5 py-0.5 font-medium text-[#172965]">
-                  {insight.category}
-                </span>
-              )}
+                    {insight.publishedAt && (
+                      <span className="uppercase tracking-wide text-slate-100/70">
+                        {new Date(
+                          insight.publishedAt
+                        ).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    )}
 
-              {insight.publishedAt && (
-                <span className="uppercase tracking-wide text-neutral-400">
-                  {new Date(
-                    insight.publishedAt
-                  ).toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-              )}
+                    {readingTimeMinutes && (
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-slate-100/80">
+                        {readingTimeMinutes} min read
+                      </span>
+                    )}
+                  </div>
 
-              {readingTimeMinutes && (
-                <span className="rounded-full bg-neutral-50 px-2 py-0.5 text-neutral-500">
-                  {readingTimeMinutes} min read
-                </span>
-              )}
-            </div>
+                  <div>
+                    <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                      {insight.title}
+                    </h1>
+                    {insight.excerpt && (
+                      <p className="mt-3 text-sm text-slate-100/90 sm:text-[15px]">
+                        {insight.excerpt}
+                      </p>
+                    )}
+                  </div>
 
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#000435] sm:text-4xl">
-              {insight.title}
-            </h1>
+                  <div className="mt-2">
+                    <ShareBar
+                      url={canonicalUrl}
+                      title={insight.title}
+                      variant="onDark"
+                    />
+                  </div>
+                </div>
 
-            {insight.excerpt && (
-              <p className="mt-4 text-sm text-neutral-700 sm:text-base">
-                {insight.excerpt}
-              </p>
-            )}
-          </header>
-
-          {/* Share bar */}
-          <div className="mb-8 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="text-neutral-400">
-              {/* reserved for future author/byline */}
-            </div>
-            <ShareBar url={canonicalUrl} title={insight.title} />
-          </div>
-
-          {/* Divider */}
-          <div className="mb-8 h-px w-full bg-gradient-to-r from-[#1729651a] via-neutral-100 to-transparent" />
-
-          {/* BODY */}
-          <section className="space-y-4 text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
-            {/* Prefer the Content field from Notion if present */}
-            {hasContentField && (
-              <ContentFromField text={insight.content!} />
-            )}
-
-            {/* If there are Notion blocks, render them too (or alone if no Content field) */}
-            {!hasContentField && hasBlocks && (
-              <NotionBlocks blocks={blocks} />
-            )}
-
-            {/* If both exist, render content field first, then any additional blocks */}
-            {hasContentField && hasBlocks && (
-              <div className="pt-4">
-                <NotionBlocks blocks={blocks} />
+                {insight.coverUrl && (
+                  <div className="relative hidden h-full overflow-hidden border-l border-white/10 bg-[#000435] md:block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={insight.coverUrl}
+                      alt={insight.title}
+                      className="h-full w-full object-cover opacity-[0.95]"
+                    />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#000435]/60 via-transparent to-transparent" />
+                  </div>
+                )}
               </div>
-            )}
+            </section>
 
-            {!hasContentField && !hasBlocks && (
-              <p className="text-sm text-neutral-500">
-                No content available for this insight yet.
-              </p>
-            )}
-          </section>
-        </article>
+            {/* BODY CARD */}
+            <section className="rounded-2xl border border-neutral-200/80 bg-white px-4 py-6 shadow-sm sm:px-6 sm:py-7">
+              <div className="mb-6 h-px w-full bg-gradient-to-r from-[#1729651a] via-neutral-100 to-transparent" />
+              <section className="space-y-4 text-[15px] leading-relaxed text-slate-800 sm:text-[16px]">
+                {/* Prefer the Content field from Notion if present */}
+                {hasContentField && (
+                  <ContentFromField text={insight.content!} />
+                )}
 
-        {/* RELATED INSIGHTS */}
-        <aside className="border-t border-neutral-200 pt-6 lg:border-t-0 lg:pt-0 lg:pl-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Related insights
-          </h2>
+                {/* If there are Notion blocks, render them too (or alone if no Content field) */}
+                {!hasContentField && hasBlocks && (
+                  <NotionBlocks blocks={blocks} />
+                )}
 
-          {related.length === 0 && (
-            <p className="text-xs text-neutral-500">
-              No related insights yet.
-            </p>
-          )}
+                {/* If both exist, render content field first, then any additional blocks */}
+                {hasContentField && hasBlocks && (
+                  <div className="pt-4">
+                    <NotionBlocks blocks={blocks} />
+                  </div>
+                )}
 
-          <div className="space-y-4">
-            {related.map((item) => (
-              <Link
-                key={item.id}
-                href={`/insights/${item.slug}`}
-                className="block rounded-xl border border-neutral-200/80 bg-white p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-[#172965] hover:shadow-md"
-              >
-                <p className="text-[11px] uppercase tracking-wide text-neutral-400">
-                  {item.category || "Insight"}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-[#000435]">
-                  {item.title}
-                </p>
-                {item.excerpt && (
-                  <p className="mt-1 line-clamp-3 text-[12px] text-neutral-600">
-                    {item.excerpt}
+                {!hasContentField && !hasBlocks && (
+                  <p className="text-sm text-neutral-500">
+                    No content available for this insight yet.
                   </p>
                 )}
-                {item.publishedAt && (
-                  <p className="mt-2 text-[11px] text-neutral-400">
-                    {new Date(
-                      item.publishedAt
-                    ).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </p>
-                )}
-              </Link>
-            ))}
-          </div>
-        </aside>
+              </section>
+            </section>
+          </article>
+
+          {/* RELATED INSIGHTS COLUMN */}
+          <aside className="space-y-4">
+            <div className="rounded-2xl border border-neutral-200/80 bg-white px-4 py-5 shadow-sm sm:px-5">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Related insights
+              </h2>
+
+              {related.length === 0 && (
+                <p className="text-xs text-neutral-500">
+                  No related insights yet.
+                </p>
+              )}
+
+              <div className="space-y-4">
+                {related.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={`/insights/${item.slug}`}
+                    className="block rounded-xl border border-neutral-200/80 bg-white p-3 text-sm shadow-sm transition hover:-translate-y-0.5 hover:border-[#172965] hover:shadow-md"
+                  >
+                    <p className="text-[11px] uppercase tracking-wide text-neutral-400">
+                      {item.category || "Insight"}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-[#000435]">
+                      {item.title}
+                    </p>
+                    {item.excerpt && (
+                      <p className="mt-1 line-clamp-3 text-[12px] text-neutral-600">
+                        {item.excerpt}
+                      </p>
+                    )}
+                    {item.publishedAt && (
+                      <p className="mt-2 text-[11px] text-neutral-400">
+                        {new Date(
+                          item.publishedAt
+                        ).toLocaleDateString(undefined, {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </main>
   );
@@ -288,7 +298,15 @@ export default async function InsightPage({ params }: PageProps) {
 /**
  * Social sharing bar (X, LinkedIn, WhatsApp) with icons.
  */
-function ShareBar({ url, title }: { url: string; title: string }) {
+function ShareBar({
+  url,
+  title,
+  variant = "onLight",
+}: {
+  url: string;
+  title: string;
+  variant?: "onLight" | "onDark";
+}) {
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(title);
   const tweetHref = `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`;
@@ -297,14 +315,21 @@ function ShareBar({ url, title }: { url: string; title: string }) {
     `${title} – ${url}`
   )}`;
 
+  const isDark = variant === "onDark";
+
   const baseBtn =
-    "inline-flex items-center justify-center h-8 w-8 rounded-full border border-neutral-200 bg-white text-[#172965] shadow-sm transition hover:border-[#FFC000] hover:bg-[#172965] hover:text-white";
+    "inline-flex items-center justify-center h-8 w-8 rounded-full border text-[11px] font-medium shadow-sm transition " +
+    (isDark
+      ? "border-white/30 bg-white/10 text-white hover:border-[#FFC000] hover:bg-[#FFC000] hover:text-[#000435]"
+      : "border-neutral-200 bg-white text-[#172965] hover:border-[#FFC000] hover:bg-[#172965] hover:text-white");
+
+  const labelClass =
+    "text-[11px] uppercase tracking-wide " +
+    (isDark ? "text-slate-100/80" : "text-neutral-400");
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className="text-[11px] uppercase tracking-wide text-neutral-400">
-        Share
-      </span>
+      <span className={labelClass}>Share</span>
       <div className="flex flex-wrap items-center gap-2">
         <a
           href={tweetHref}
