@@ -5,9 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
-  // ...keep your existing logic here exactly as it was...
-}
- {
   try {
     const { searchParams } = new URL(req.url);
     const emailRaw = searchParams.get("email");
@@ -22,25 +19,21 @@ export async function GET(req: NextRequest) {
     const email = emailRaw.trim().toLowerCase();
 
     const applications = await prisma.jobApplication.findMany({
-      where: { email },
+      where: {
+        email,
+      },
       orderBy: { createdAt: "desc" },
       include: {
-        job: {
-          select: {
-            title: true,
-            clientCompany: {
-              select: { name: true },
-            },
-          },
-        },
+        job: true,
       },
     });
 
     const payload = applications.map((app) => ({
       id: app.id,
-      createdAt: app.createdAt.toISOString(),
-      jobTitle: app.job?.title ?? "Role",
-      clientName: app.job?.clientCompany?.name ?? null,
+      jobId: app.jobId,
+      jobTitle: app.job?.title ?? null,
+      appliedAt: app.createdAt,
+      source: app.source,
       stage: app.stage,
       status: app.status,
     }));
