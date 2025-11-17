@@ -21,7 +21,6 @@ export async function POST(req: NextRequest) {
     const jobId = ensureString(formData.get("jobId"), "jobId");
     const fullName = ensureString(formData.get("fullName"), "fullName");
     const emailRaw = ensureString(formData.get("email"), "email");
-
     const email = emailRaw.toLowerCase();
 
     // --- Optional fields ---
@@ -55,7 +54,7 @@ export async function POST(req: NextRequest) {
         ? (formData.get("source") as string).trim()
         : "Website";
 
-    // --- CV file ---
+    // --- CV file (required) ---
     const cv = formData.get("cv");
     if (!(cv instanceof File)) {
       return NextResponse.json(
@@ -80,9 +79,10 @@ export async function POST(req: NextRequest) {
     const tenantId = job.tenantId;
 
     // --- Upsert candidate (per tenant + email) ---
+    // Assumes in Prisma schema you have:
+    // @@unique([tenantId, email], name: "Candidate_tenantId_email")
     const candidate = await prisma.candidate.upsert({
       where: {
-        // assumes you have @@unique([tenantId, email], name: "Candidate_tenantId_email")
         tenantId_email: {
           tenantId,
           email,
@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
         ? cv.name.split(".").pop()!.toLowerCase()
         : "pdf";
 
+    // Path *inside* the bucket
     const objectPath = [
       "cvs",
       tenantId,
@@ -117,26 +118,28 @@ export async function POST(req: NextRequest) {
       `${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`,
     ].join("/");
 
-    const arrayBuffer = await cv.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
+    // Send the File directly (Next.js on Node has File available)
     const { data: uploadData, error: uploadError } =
       await supabaseAdmin.storage
         .from("resourcin-uploads")
-        .upload(objectPath, buffer, {
-          contentType: cv.type || "application/octet-stream",
+        .upload(objectPath, cv, {
+          cacheControl: "3600",
           upsert: false,
+          contentType: cv.type || "application/octet-stream",
         });
 
     if (uploadError || !uploadData?.path) {
       console.error("Supabase upload error:", uploadError);
       return NextResponse.json(
-        { error: "Could not upload CV. Please try again." },
+        {
+          error:
+            "Could not upload CV. Please try again in a moment, or email it directly if this persists.",
+        },
         { status: 500 }
       );
     }
 
-    const cvPath = uploadData.path; // path inside resourcin-uploads bucket
+    const cvPath = uploadData.path; // e.g. "cvs/tenantId/jobId/filename.pdf"
 
     // --- Create JobApplication record ---
     await prisma.jobApplication.create({
@@ -149,14 +152,12 @@ export async function POST(req: NextRequest) {
         location,
         linkedinUrl,
         portfolioUrl,
-        cvUrl: cvPath, // store internal path, not public URL
+        cvUrl: cvPath, // path we just stored in Storage
         coverLetter,
         source,
-        status: "PENDING", // from ApplicationStatus enum in Prisma schema
+        status: "PENDING", // ApplicationStatus enum
       },
     });
-
-    // (Optional: send notification email here if you want.)
 
     return NextResponse.json({ ok: true });
   } catch (error) {
