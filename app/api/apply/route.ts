@@ -13,8 +13,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// simple helper – single-tenant for now
 function getTenantId() {
-  // Single-tenant for now, but keeps you future-proof
   return process.env.DEFAULT_TENANT_ID ?? "resourcin";
 }
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const phone = formData.get("phone");
     const location = formData.get("location");
     const linkedinUrl = formData.get("linkedinUrl");
-    const portfolioUrl = formData.get("portfolioUrl"); // may exist on form but NOT saved to Prisma
+    const portfolioUrl = formData.get("portfolioUrl"); // may exist in form, but we don't save it
     const coverLetter = formData.get("coverLetter");
     const source = formData.get("source") ?? "job_detail";
 
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
     const normalizedEmail = email.toLowerCase().trim();
     const trimmedName = fullName.trim();
 
-    // --- Upsert candidate by email (single-tenant, but tenantId stored on Candidate) ---
+    // --- Upsert candidate by email ---
     const candidate = await prisma.candidate.upsert({
       where: { email: normalizedEmail },
       update: {
@@ -120,11 +120,11 @@ export async function POST(req: Request) {
           typeof linkedinUrl === "string" && linkedinUrl.trim()
             ? linkedinUrl.trim()
             : undefined,
-        // portfolioUrl is NOT a Prisma field, so we don't set it here
+        // portfolioUrl is NOT in your Prisma model, so we ignore it here
         cvUrl: cvUrl ?? undefined,
       },
       create: {
-        tenantId, // Candidate has tenantId in your schema
+        tenantId, // keep if Candidate has tenantId in your schema
         fullName: trimmedName,
         email: normalizedEmail,
         phone:
@@ -137,14 +137,21 @@ export async function POST(req: Request) {
           typeof linkedinUrl === "string" && linkedinUrl.trim()
             ? linkedinUrl.trim()
             : undefined,
-        // portfolioUrl is NOT a Prisma field, so we don't set it here
         cvUrl: cvUrl ?? undefined,
       },
     });
 
-    // --- Create job application (use relations, not raw jobId/candidateId fields) ---
+    // --- Create job application ---
+    // Your JobApplication model requires:
+    // - fullName (string)
+    // - email (string)
+    // - job relation
+    // - candidate relation
+    // - plus source, coverLetter, cvUrl (and stage/status via defaults)
     await prisma.jobApplication.create({
       data: {
+        fullName: trimmedName,
+        email: normalizedEmail,
         job: {
           connect: { id: jobId },
         },
@@ -159,8 +166,7 @@ export async function POST(req: Request) {
           typeof coverLetter === "string" && coverLetter.trim()
             ? coverLetter.trim()
             : null,
-        cvUrl: cvUrl ?? candidate.cvUrl,
-        // stage/status rely on enum defaults from your Prisma schema
+        cvUrl: cvUrl ?? candidate.cvUrl ?? null,
       },
     });
 
