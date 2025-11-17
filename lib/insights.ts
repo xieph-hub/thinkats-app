@@ -13,6 +13,7 @@ export type InsightMeta = {
   excerpt: string | null;
   coverUrl: string | null;
   publishedAt: string | null;
+  content: string | null; // <- main body from "Content (paste into Notion page body)"
 };
 
 export type InsightWithBlocks = InsightMeta & {
@@ -53,6 +54,21 @@ function getCoverFromPage(page: PageObjectResponse): string | null {
   return null;
 }
 
+function getContentFromProperty(props: any): string | null {
+  // Property name EXACTLY as it appears in the Notion DB:
+  // "Content (paste into Notion page body)"
+  const field = props["Content (paste into Notion page body)"];
+  if (!field) return null;
+
+  if (field.type === "rich_text") {
+    const txt = getPlainText(field.rich_text);
+    return txt || null;
+  }
+
+  // If you ever change it to "text" or "title", you can expand handling here.
+  return null;
+}
+
 function mapInsightMeta(page: PageObjectResponse): InsightMeta {
   const props = page.properties as any;
 
@@ -80,6 +96,9 @@ function mapInsightMeta(page: PageObjectResponse): InsightMeta {
   const coverFromPage = getCoverFromPage(page);
   const coverUrl = coverFromProp || coverFromPage;
 
+  // Main content from "Content (paste into Notion page body)" property
+  const content = getContentFromProperty(props);
+
   return {
     id: page.id,
     slug,
@@ -88,6 +107,7 @@ function mapInsightMeta(page: PageObjectResponse): InsightMeta {
     excerpt,
     coverUrl,
     publishedAt,
+    content,
   };
 }
 
@@ -150,9 +170,8 @@ export async function getInsightBlocks(
     console.warn(
       "[insights] Notion not configured – getInsightBlocks returning empty array."
     );
+    return [];
   }
-
-  if (!notion) return [];
 
   const blocks: BlockObjectResponse[] = [];
   let cursor: string | undefined = undefined;
