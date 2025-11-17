@@ -1,96 +1,151 @@
 // lib/insights.ts
-import { Client } from "@notionhq/client";
+import { notion, INSIGHTS_DB_ID } from "./notion";
+import type {
+  PageObjectResponse,
+  BlockObjectResponse,
+} from "@notionhq/client/build/src/api-endpoints";
 
-export type InsightPost = {
+export type InsightMeta = {
   id: string;
-  title: string;
   slug: string;
-  summary: string;
+  title: string;
+  category: string | null;
+  excerpt: string | null;
+  coverUrl: string | null;
   publishedAt: string | null;
-  tags: string[];
 };
 
-const NOTION_API_KEY = process.env.NOTION_API_KEY;
-const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
+export type InsightWithBlocks = InsightMeta & {
+  blocks: BlockObjectResponse[];
+};
 
-let notion: Client | null = null;
-
-if (NOTION_API_KEY && NOTION_DATABASE_ID) {
-  notion = new Client({ auth: NOTION_API_KEY });
-} else {
-  // Important: log, but DO NOT throw – so builds don’t crash
-  console.warn(
-    "Notion env vars missing (NOTION_API_KEY or NOTION_DATABASE_ID). Insights will fall back to empty lists."
-  );
+function getPlainText(
+  rich?: { plain_text: string }[] | null
+): string {
+  if (!rich || rich.length === 0) return "";
+  return rich.map((r) => r.plain_text).join("");
 }
 
-/**
- * Fetch all published insight posts from Notion.
- * Safe: on any error, returns [] instead of throwing.
- */
-export async function fetchInsights(): Promise<InsightPost[]> {
-  if (!notion || !NOTION_DATABASE_ID) {
-    return [];
+function getCoverFromProperty(props: any): string | null {
+  const coverProp = props.CoverURL;
+  if (!coverProp) return null;
+
+  // Handle both URL + rich_text property types
+  if (coverProp.type === "url") {
+    return coverProp.url ?? null;
   }
 
-  try {
-    const response = await notion.databases.query({
-      database_id: NOTION_DATABASE_ID,
-      sorts: [
-        {
-          property: "PublishedAt",
-          direction: "descending",
-        },
-      ],
-      filter: {
-        property: "Status",
-        status: { equals: "Published" },
+  if (coverProp.type === "rich_text") {
+    const val = getPlainText(coverProp.rich_text);
+    return val || null;
+  }
+
+  return null;
+}
+
+function getCoverFromPage(page: PageObjectResponse): string | null {
+  const cover = page.cover;
+  if (!cover) return null;
+
+  if (cover.type === "external") return cover.external.url;
+  if (cover.type === "file") return cover.file.url;
+  return null;
+}
+
+function mapInsightMeta(page: PageObjectResponse): InsightMeta {
+  const props = page.properties as any;
+
+  const title =
+    getPlainText(props.Title?.title) || "Untitled insight";
+
+  const slug =
+    getPlainText(props.Slug?.rich_text) ||
+    page.id.replace(/-/g, "");
+
+  const excerpt =
+    getPlainText(props.Excerpt?.rich_text) || null;
+
+  const category = props.Category?.select?.name ?? null;
+
+  const publishedAt = props.Date?.date?.start || null;
+
+  // Prefer CoverURL property, then page cover
+  const coverFromProp = getCoverFromProperty(props);
+  const coverFromPage = getCoverFromPage(page);
+  const coverUrl = coverFromProp || coverFromPage;
+
+  return {
+    id: page.id,
+    slug,
+    title,
+    category,
+    excerpt,
+    coverUrl,
+    publishedAt,
+  };
+}
+
+export async function getInsightsList(): Promise<InsightMeta[]> {
+  const response = await notion.databases.query({
+    database_id: INSIGHTS_DB_ID!,
+    // No Status filter – you didn't define one
+    sorts: [
+      {
+        property: "Date",
+        direction: "descending",
       },
-    });
+    ],
+  });
 
-    return response.results.map((page: any) => {
-      const props = page.properties ?? {};
+  const pages = response.results.filter(
+    (r): r is PageObjectResponse => r.object === "page"
+  );
 
-      const title =
-        props.Name?.title?.[0]?.plain_text ??
-        "Untitled";
-
-      const slug =
-        props.Slug?.rich_text?.[0]?.plain_text ??
-        page.id.replace(/-/g, "").toLowerCase();
-
-      const summary =
-        props.Summary?.rich_text?.[0]?.plain_text ??
-        "No summary available yet.";
-
-      const publishedAt = props.PublishedAt?.date?.start ?? null;
-
-      const tags =
-        props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
-
-      return {
-        id: page.id,
-        title,
-        slug,
-        summary,
-        publishedAt,
-        tags,
-      } as InsightPost;
-    });
-  } catch (err) {
-    console.error("[Notion] fetchInsights failed:", err);
-    // Critical: never break build – just return empty
-    return [];
-  }
+  return pages.map(mapInsightMeta);
 }
 
-/**
- * Find a single insight by slug.
- * Safe: returns null on error or not found.
- */
 export async function getInsightBySlug(
   slug: string
-): Promise<InsightPost | null> {
-  const posts = await fetchInsights();
-  return posts.find((p) => p.slug === slug) ?? null;
+): Promise<InsightMeta | null> {
+  const response = await notion.databases.query({
+    database_id: INSIGHTS_DB_ID!,
+    filter: {
+      property: "Slug",
+      rich_text: {
+        equals: slug,
+      },
+    },
+    page_size: 1,
+  });
+
+  if (response.results.length === 0) return null;
+
+  const page = response.results[0] as PageObjectResponse;
+  return mapInsightMeta(page);
+}
+
+export async function getInsightBlocks(
+  pageId: string
+): Promise<BlockObjectResponse[]> {
+  const blocks: BlockObjectResponse[] = [];
+  let cursor: string | undefined = undefined;
+
+  while (true) {
+    const res = await notion.blocks.children.list({
+      block_id: pageId,
+      start_cursor: cursor,
+      page_size: 100,
+    });
+
+    const typed = res.results.filter(
+      (b): b is BlockObjectResponse => b.object === "block"
+    );
+
+    blocks.push(...typed);
+
+    if (!res.has_more || !res.next_cursor) break;
+    cursor = res.next_cursor;
+  }
+
+  return blocks;
 }
