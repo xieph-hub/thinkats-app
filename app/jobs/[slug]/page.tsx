@@ -260,26 +260,16 @@ export default async function JobDetailPage({ params }: JobPageProps) {
           </div>
 
           {/* Right: apply form & extras */}
-          <aside className="space-y-4" id="apply">
-            {/* Apply form wired to this specific job */}
-            <JobApplyForm jobId={job.id} jobTitle={job.title} />
+         <aside className="space-y-4" id="apply">
+  {/* Apply form wired to this specific job */}
+  <JobApplyForm jobId={job.id} />
 
-            {/* Employer / anonymised context */}
-            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
-              <h2 className="text-sm font-semibold text-slate-900">
-                About the employer
-              </h2>
-              <p className="mt-2 text-sm text-slate-700">
-                This description is anonymised. Full details are shared once
-                we&apos;ve confirmed mutual interest and alignment on basics
-                (compensation, location, seniority).
-              </p>
-              <p className="mt-2 text-sm text-slate-700">
-                We prioritise teams with clear missions, reasonable expectations
-                and leadership that respect people and process.
-              </p>
-            </div>
-
+  {/* Employer / anonymised context */}
+  <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+    ...
+  </div>
+  ...
+</aside>       
             {/* Related insights CTA */}
             <div className="rounded-2xl bg-slate-900 p-4 text-slate-50 shadow-sm sm:p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
