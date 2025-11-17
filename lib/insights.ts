@@ -43,11 +43,11 @@ export async function getInsightsList(): Promise<InsightMeta[]> {
     sorts: [
       {
         property: "Date",
-#if your DB has "Status" or "Published" and you only want those,
-# we can add a filter later – leaving it simple for now
         direction: "descending",
       },
     ],
+    // If you later add a Status/Published property and want to
+    // only show published items, we can add a filter here.
   });
 
   const pages = response.results.filter(
