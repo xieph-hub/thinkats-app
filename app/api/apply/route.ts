@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getDefaultTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -19,6 +18,7 @@ export async function POST(req: NextRequest) {
     const source = formData.get("source") ?? "Website";
     const rawFile = formData.get("cv");
 
+    // --- Basic validation ---
     if (!jobId || typeof jobId !== "string") {
       return NextResponse.json(
         { error: "Missing or invalid jobId." },
@@ -42,15 +42,9 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const tenant = await getDefaultTenant();
-
-    // Make sure the job exists for this tenant
-    const job = await prisma.job.findFirst({
-      where: {
-        id: jobId,
-        tenantId: tenant.id,
-        isPublished: true,
-      },
+    // --- Get the job directly by id ---
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
     });
 
     if (!job) {
@@ -60,13 +54,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Basic note about the CV (real file upload will come later)
+    const tenantId = job.tenantId; // use the tenant from the job
+
+    // --- Light handling of CV file (no real upload yet) ---
     let fileNote: string | null = null;
     if (rawFile && typeof rawFile === "object" && "name" in rawFile) {
       const anyFile = rawFile as any;
       fileNote = `CV uploaded via website: ${anyFile.name ?? "unnamed file"}`;
-    } else {
-      fileNote = null;
     }
 
     // -----------------------------
@@ -74,7 +68,7 @@ export async function POST(req: NextRequest) {
     // -----------------------------
     const existingCandidate = await prisma.candidate.findFirst({
       where: {
-        tenantId: tenant.id,
+        tenantId,
         email: normalizedEmail,
       },
     });
@@ -89,13 +83,14 @@ export async function POST(req: NextRequest) {
           phone: typeof phone === "string" ? phone : undefined,
           location: typeof location === "string" ? location : undefined,
           linkedinUrl: typeof linkedinUrl === "string" ? linkedinUrl : undefined,
+          // don't overwrite any existing notes unless we have a file note
           ...(fileNote ? { notes: fileNote } : {}),
         },
       });
     } else {
       candidate = await prisma.candidate.create({
         data: {
-          tenantId: tenant.id,
+          tenantId,
           fullName: fullName.trim(),
           email: normalizedEmail,
           phone: typeof phone === "string" ? phone : null,
@@ -109,7 +104,7 @@ export async function POST(req: NextRequest) {
     // -----------------------------
     // Job application row
     // -----------------------------
-    // For now we set a placeholder cvUrl. Later we'll upload to Supabase Storage.
+    // Placeholder cvUrl for now, until we hook Supabase Storage
     const cvUrl = "pending-storage-upload";
 
     const application = await prisma.jobApplication.create({
@@ -138,12 +133,15 @@ export async function POST(req: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("Error in /api/apply", error);
+  } catch (error: any) {
+    console.error("Error in /api/apply:", error);
+
+    // Send a more useful error message back (for now)
     return NextResponse.json(
       {
         error:
-          "Something went wrong while submitting your application. Please try again.",
+          error?.message ||
+          "Something went wrong while submitting your application.",
       },
       { status: 500 }
     );
