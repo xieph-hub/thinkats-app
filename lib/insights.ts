@@ -43,6 +43,8 @@ export async function getInsightsList(): Promise<InsightMeta[]> {
     sorts: [
       {
         property: "Date",
+#if your DB has "Status" or "Published" and you only want those,
+# we can add a filter later – leaving it simple for now
         direction: "descending",
       },
     ],
@@ -118,7 +120,7 @@ async function mapPageToInsight(
     page,
     "Content (paste into Notion page body)"
   );
-  const coverUrl = getTextProperty(page, "CoverURL (optional)");
+  const coverUrl = getCoverUrl(page);
   const publishedAt = getDateProperty(page, "Date");
   const category = await getCategoryProperty(page);
 
@@ -173,6 +175,64 @@ function getDateProperty(
   const prop = (page.properties as any)[propertyName];
   if (!prop || prop.type !== "date" || !prop.date?.start) return null;
   return prop.date.start;
+}
+
+/**
+ * Robust cover resolver:
+ * 1) Try "CoverURL (optional)" / variants as URL, text, or files.
+ * 2) Fallback to the page cover (page.cover).
+ */
+function getCoverUrl(page: PageObjectResponse): string | null {
+  const props = page.properties as any;
+
+  const coverPropNames = [
+    "CoverURL (optional)",
+    "Cover URL (optional)",
+    "Cover URL",
+    "Cover",
+  ];
+
+  for (const name of coverPropNames) {
+    const prop = props[name];
+    if (!prop) continue;
+
+    // URL property
+    if (prop.type === "url" && prop.url) {
+      return prop.url;
+    }
+
+    // Rich text property
+    if (prop.type === "rich_text" && prop.rich_text?.length) {
+      const text = prop.rich_text
+        .map((t: any) => t.plain_text)
+        .join("")
+        .trim();
+      if (text) return text;
+    }
+
+    // Files & media property
+    if (prop.type === "files" && prop.files?.length) {
+      const file = prop.files[0];
+      if (file.type === "external") {
+        return file.external.url;
+      }
+      if (file.type === "file") {
+        return file.file.url;
+      }
+    }
+  }
+
+  // Fallback to Notion page cover
+  if (page.cover) {
+    if (page.cover.type === "external") {
+      return page.cover.external.url;
+    }
+    if (page.cover.type === "file") {
+      return page.cover.file.url;
+    }
+  }
+
+  return null;
 }
 
 /**
