@@ -9,7 +9,11 @@ export default async function ApplicationsAdminPage() {
   const applications = await prisma.jobApplication.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      job: true,
+      job: {
+        include: {
+          clientCompany: true,
+        },
+      },
     },
   });
 
@@ -28,6 +32,7 @@ export default async function ApplicationsAdminPage() {
     jobLocation: app.job?.location ?? "",
     jobSeniority: app.job?.seniority ?? "",
     cvUrl: app.cvUrl ?? "",
+    clientName: app.job?.clientCompany?.name ?? "",
   }));
 
   return (
@@ -44,7 +49,8 @@ export default async function ApplicationsAdminPage() {
             </h1>
             <p className="mt-2 max-w-xl text-sm text-slate-600">
               Lightweight admin view of all applications submitted via the
-              Resourcin website. Filter, download CVs, and export to CSV.
+              Resourcin website. Filter by job, client, date range, and export
+              to CSV.
             </p>
           </div>
           <div className="text-sm text-slate-500">
