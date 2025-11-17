@@ -1,21 +1,19 @@
 // app/insights/[slug]/page.tsx
+
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SITE_URL } from "@/lib/site";
 import { fetchInsights, getInsightBySlug } from "@/lib/insights";
+import { SITE_URL } from "@/lib/site";
 
 type PageProps = {
   params: { slug: string };
 };
 
-// Static params so Next can pre-generate insight pages
 export async function generateStaticParams() {
   const posts = await fetchInsights();
   return posts.map((post) => ({ slug: post.slug }));
 }
 
-// Metadata for SEO / social cards
 export async function generateMetadata(
   { params }: PageProps
 ): Promise<Metadata> {
@@ -24,38 +22,27 @@ export async function generateMetadata(
   if (!post) {
     return {
       title: "Insight not found | Resourcin",
-      description: "This insight is no longer available.",
     };
   }
 
-  const title = `${post.title} | Insights | Resourcin`;
-  const description =
-    post.summary ??
-    "Deep thinking on hiring, leadership and careers from Resourcin.";
-
   const url = `${SITE_URL}/insights/${post.slug}`;
 
-  // Optional cover image support if you later add it to InsightPost
-  const images = post.coverImage ? [post.coverImage] : undefined;
-
   return {
-    title,
-    description,
+    title: post.title,
+    description: post.summary,
+    alternates: {
+      canonical: url,
+    },
     openGraph: {
-      title,
-      description,
-      url,
       type: "article",
-      images,
+      url,
+      title: post.title,
+      description: post.summary,
     },
     twitter: {
       card: "summary_large_image",
-      title,
-      description,
-      images,
-    },
-    alternates: {
-      canonical: url,
+      title: post.title,
+      description: post.summary,
     },
   };
 }
@@ -68,52 +55,45 @@ export default async function InsightPage({ params }: PageProps) {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-      <Link
-        href="/insights"
-        className="mb-4 inline-flex items-center text-xs text-slate-500 hover:text-slate-800"
-      >
-        ← Back to insights
-      </Link>
+    <main className="mx-auto max-w-3xl px-4 py-16">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        Insight
+      </p>
 
-      <article className="prose prose-slate max-w-none">
-        <h1 className="mb-2 text-2xl font-semibold text-slate-900">
-          {post.title}
-        </h1>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+        {post.title}
+      </h1>
 
-        {post.publishedAt && (
-          <p className="text-xs text-slate-500">
-            Published{" "}
-            {new Date(post.publishedAt).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </p>
-        )}
+      {post.publishedAt && (
+        <p className="mt-2 text-xs text-slate-500">
+          {new Date(post.publishedAt).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
+        </p>
+      )}
 
-        {post.summary && (
-          <p className="mt-4 text-sm text-slate-700">{post.summary}</p>
-        )}
-
-        <div className="mt-8 rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-600">
-          Full long-form content will live here once the CMS is wired up. For
-          now, this keeps the SEO and navigation structure intact.
+      {post.tags?.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {post.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 ring-1 ring-slate-200"
+            >
+              {tag}
+            </span>
+          ))}
         </div>
+      ) : null}
 
-        {post.tags?.length > 0 && (
-          <div className="mt-6 flex flex-wrap gap-2 text-xs">
-            {post.tags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full bg-slate-100 px-2 py-1 text-slate-600"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-      </article>
+      <div className="prose prose-slate mt-8">
+        <p>{post.summary}</p>
+        <p className="mt-6 text-sm text-slate-500">
+          Full article content will live here once you wire in a CMS or richer
+          body content.
+        </p>
+      </div>
     </main>
   );
 }
