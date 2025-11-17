@@ -10,7 +10,7 @@ type JobPageProps = {
   params: { slug: string };
 };
 
-// ---------- Metadata (dynamic) ----------
+// ---------- Dynamic metadata ----------
 export async function generateMetadata(
   { params }: JobPageProps
 ): Promise<Metadata> {
@@ -113,7 +113,7 @@ export default async function JobDetailPage({ params }: JobPageProps) {
   const detailUrl = `${SITE_URL}/jobs/${job.slug}`;
   const utmBase = `utm_source=resourcin_job_board&utm_campaign=job_${jobSlug}`;
 
-  // Social share landing URLs
+  // Social landing URLs
   const linkedInLandingUrl = `${detailUrl}?${utmBase}&utm_medium=social&utm_content=linkedin`;
   const xLandingUrl = `${detailUrl}?${utmBase}&utm_medium=social&utm_content=x`;
   const whatsAppLandingUrl = `${detailUrl}?${utmBase}&utm_medium=social&utm_content=whatsapp`;
@@ -129,7 +129,7 @@ export default async function JobDetailPage({ params }: JobPageProps) {
   );
   const whatsAppShareUrl = `https://wa.me/?text=${whatsAppMessage}`;
 
-  // Simple "related roles" – same function or seniority
+  // Related roles (simple: same function or seniority)
   const related = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -260,38 +260,24 @@ export default async function JobDetailPage({ params }: JobPageProps) {
           </div>
 
           {/* Right: apply form & extras */}
-         <aside className="space-y-4" id="apply">
-  {/* Apply form wired to this specific job */}
-  <JobApplyForm jobId={job.id} />
+          <aside className="space-y-4" id="apply">
+            {/* Apply form wired to this specific job */}
+            <JobApplyForm jobId={job.id} />
 
-  {/* Employer / anonymised context */}
-  <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
-    ...
-  </div>
-  ...
-</aside>       
-            {/* Related insights CTA */}
-            <div className="rounded-2xl bg-slate-900 p-4 text-slate-50 shadow-sm sm:p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
-                Related reading
+            {/* Employer / anonymised context */}
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+              <h2 className="text-sm font-semibold text-slate-900">
+                About the employer
+              </h2>
+              <p className="mt-2 text-sm text-slate-700">
+                This description is anonymised. Full details are shared once
+                we&apos;ve confirmed mutual interest and alignment on basics
+                (compensation, location, seniority).
               </p>
-              <p className="mt-1.5 text-sm font-medium">
-                Want to think more deeply about your next move?
+              <p className="mt-2 text-sm text-slate-700">
+                We prioritise teams with clear missions, reasonable expectations
+                and leadership that respect people and process.
               </p>
-              <p className="mt-1.5 text-xs text-slate-200">
-                Explore insights on hiring, leadership and careers in our
-                content section. It&apos;s the same quality thinking we use when
-                advising clients.
-              </p>
-              <Link
-                href="/insights?utm_source=job_detail&utm_medium=sidebar_cta&utm_campaign=insights"
-                className="mt-3 inline-flex items-center justify-center rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-900 hover:bg-white"
-              >
-                Browse insights
-                <span className="ml-1.5 text-[0.65rem]" aria-hidden="true">
-                  →
-                </span>
-              </Link>
             </div>
 
             {/* Related roles */}
