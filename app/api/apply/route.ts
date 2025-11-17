@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const phone = formData.get("phone");
     const location = formData.get("location");
     const linkedinUrl = formData.get("linkedinUrl");
-    const portfolioUrl = formData.get("portfolioUrl"); // still read from form, just not saved to Prisma
+    const portfolioUrl = formData.get("portfolioUrl"); // may exist on form but NOT saved to Prisma
     const coverLetter = formData.get("coverLetter");
     const source = formData.get("source") ?? "job_detail";
 
@@ -120,11 +120,11 @@ export async function POST(req: Request) {
           typeof linkedinUrl === "string" && linkedinUrl.trim()
             ? linkedinUrl.trim()
             : undefined,
-        // portfolioUrl is NOT in the Prisma model, so we don't set it here
+        // portfolioUrl is NOT a Prisma field, so we don't set it here
         cvUrl: cvUrl ?? undefined,
       },
       create: {
-        tenantId, // Candidate DOES have tenantId
+        tenantId, // Candidate has tenantId in your schema
         fullName: trimmedName,
         email: normalizedEmail,
         phone:
@@ -137,16 +137,20 @@ export async function POST(req: Request) {
           typeof linkedinUrl === "string" && linkedinUrl.trim()
             ? linkedinUrl.trim()
             : undefined,
-        // portfolioUrl is NOT in the Prisma model, so we don't set it here
+        // portfolioUrl is NOT a Prisma field, so we don't set it here
         cvUrl: cvUrl ?? undefined,
       },
     });
 
-    // --- Create job application (NO tenantId here, your schema doesn't have it) ---
+    // --- Create job application (use relations, not raw jobId/candidateId fields) ---
     await prisma.jobApplication.create({
       data: {
-        jobId,
-        candidateId: candidate.id,
+        job: {
+          connect: { id: jobId },
+        },
+        candidate: {
+          connect: { id: candidate.id },
+        },
         source:
           typeof source === "string" && source
             ? source
@@ -156,7 +160,7 @@ export async function POST(req: Request) {
             ? coverLetter.trim()
             : null,
         cvUrl: cvUrl ?? candidate.cvUrl,
-        // stage/status use enum defaults (e.g. APPLIED / PENDING)
+        // stage/status rely on enum defaults from your Prisma schema
       },
     });
 
