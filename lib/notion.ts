@@ -1,4 +1,5 @@
-import { Client } from "@notionhq/client";
+// lib/insights.ts (or wherever this lives now)
+// No Notion imports. Completely local / static for now.
 
 export type InsightPost = {
   id: string;
@@ -9,68 +10,45 @@ export type InsightPost = {
   tags: string[];
 };
 
-const NOTION_API_KEY = process.env.NOTION_API_KEY;
-const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
+// Temporary local “blog database” so builds never touch Notion.
+// Add/edit posts here as needed.
+const LOCAL_INSIGHTS: InsightPost[] = [
+  {
+    id: "ai-in-hr-trends-2026",
+    title: "AI in HR: Trends for 2026",
+    slug: "ai-in-hr-trends-2026",
+    summary:
+      "A placeholder article on how AI is reshaping hiring, performance and learning. Full content will ship once we rebuild the insights stack.",
+    publishedAt: "2025-01-01",
+    tags: ["AI", "HR", "Trends"],
+  },
+  // You can add more posts here later:
+  // {
+  //   id: "another-post-id",
+  //   title: "Some other topic",
+  //   slug: "some-other-topic",
+  //   summary: "Short summary...",
+  //   publishedAt: "2025-02-15",
+  //   tags: ["Strategy"],
+  // },
+];
 
-let notion: Client | null = null;
-
-if (NOTION_API_KEY && NOTION_DATABASE_ID) {
-  notion = new Client({ auth: NOTION_API_KEY });
-} else {
-  // Important: log, but DO NOT throw – so builds don’t crash
-  console.warn(
-    "Notion env vars missing (NOTION_API_KEY or NOTION_DATABASE_ID). Insights page will show placeholder content."
-  );
+/**
+ * List all insights.
+ * Used by the /insights index page, generateStaticParams, etc.
+ */
+export async function fetchInsights(): Promise<InsightPost[]> {
+  // In future, you can swap this to fetch from a DB / MDX / wherever.
+  return LOCAL_INSIGHTS;
 }
 
-export async function fetchInsights(): Promise<InsightPost[]> {
-  // If there is no Notion client or DB ID, just return an empty list
-  if (!notion || !NOTION_DATABASE_ID) {
-    return [];
-  }
-
-  const response = await notion.databases.query({
-    database_id: NOTION_DATABASE_ID,
-    sorts: [
-      {
-        property: "PublishedAt",
-        direction: "descending",
-      },
-    ],
-    filter: {
-      property: "Status",
-      status: { equals: "Published" },
-    },
-  });
-
-  return response.results.map((page: any) => {
-    const props = page.properties;
-
-    const title =
-      props.Name?.title?.[0]?.plain_text ??
-      props.Name?.title?.[0]?.plain_text ??
-      "Untitled";
-
-    const slug =
-      props.Slug?.rich_text?.[0]?.plain_text ??
-      page.id.replace(/-/g, "").toLowerCase();
-
-    const summary =
-      props.Summary?.rich_text?.[0]?.plain_text ??
-      "No summary available yet.";
-
-    const publishedAt = props.PublishedAt?.date?.start ?? null;
-
-    const tags =
-      props.Tags?.multi_select?.map((t: any) => t.name) ?? [];
-
-    return {
-      id: page.id,
-      title,
-      slug,
-      summary,
-      publishedAt,
-      tags,
-    } as InsightPost;
-  });
+/**
+ * Get a single insight by slug.
+ * Safe helper for the [slug] page.
+ */
+export async function getInsightBySlug(
+  slug: string
+): Promise<InsightPost | null> {
+  const posts = await fetchInsights();
+  return posts.find((p) => p.slug === slug) ?? null;
 }
