@@ -4,98 +4,94 @@ import { FormEvent, useState } from "react";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
-interface JobApplyFormProps {
+type JobApplyFormProps = {
   jobId: string;
-  source?: string; // e.g. "Website", "Talent network"
-}
+};
 
-export default function JobApplyForm({
-  jobId,
-  source = "Website",
-}: JobApplyFormProps) {
+export default function JobApplyForm({ jobId }: JobApplyFormProps) {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = e.currentTarget;
-
     setStatus("submitting");
     setError(null);
 
-    try {
-      const formData = new FormData(form);
-      formData.append("jobId", jobId);
-      formData.append("source", source);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
+    // Make sure the API knows which job this is for
+    formData.set("jobId", jobId);
+
+    try {
       const res = await fetch("/api/apply", {
         method: "POST",
-        body: formData,
+        body: formData, // important: no manual Content-Type header
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to submit application.");
+        let message = "Failed to submit application.";
+        try {
+          const data = await res.json();
+          if (data?.error) message = data.error;
+        } catch {
+          // ignore JSON parse errors
+        }
+        throw new Error(message);
       }
 
-      setStatus("success");
       form.reset();
-    } catch (err) {
+      setStatus("success");
+    } catch (err: any) {
       console.error(err);
+      setError(err?.message || "Something went wrong. Please try again.");
       setStatus("error");
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please try again."
-      );
-    } finally {
-      setStatus((prev) => (prev === "submitting" ? "idle" : prev));
     }
   }
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      className="space-y-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5"
     >
+      <h2 className="text-sm font-semibold text-slate-900">
+        I&apos;m interested in this role
+      </h2>
+      <p className="text-xs text-slate-500">
+        Share a few details and your CV. If there&apos;s a fit, we&apos;ll
+        reach out with next steps.
+      </p>
+
+      {/* Full name */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-900">
-          Apply for this role
-        </h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Share a few details and we&apos;ll get back to you if there&apos;s a
-          strong fit.
-        </p>
+        <label className="block text-xs font-medium text-slate-700">
+          Full name
+        </label>
+        <input
+          name="fullName"
+          type="text"
+          required
+          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
+          placeholder="Jane Doe"
+        />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="block text-xs font-medium text-slate-700">
-            Full name
-          </label>
-          <input
-            name="fullName"
-            type="text"
-            required
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
-            placeholder="Jane Doe"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700">
-            Email
-          </label>
-          <input
-            name="email"
-            type="email"
-            required
-            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
-            placeholder="you@email.com"
-          />
-        </div>
+      {/* Email */}
+      <div>
+        <label className="block text-xs font-medium text-slate-700">
+          Email
+        </label>
+        <input
+          name="email"
+          type="email"
+          required
+          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
+          placeholder="you@example.com"
+        />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* Phone + Location */}
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="block text-xs font-medium text-slate-700">
             Phone / WhatsApp
@@ -115,71 +111,96 @@ export default function JobApplyForm({
             name="location"
             type="text"
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
-            placeholder="City, Country"
+            placeholder="Lagos, remote, etc."
           />
         </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-slate-700">
-          LinkedIn URL
-        </label>
-        <input
-          name="linkedinUrl"
-          type="url"
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
-          placeholder="https://linkedin.com/in/..."
-        />
+      {/* Links */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-xs font-medium text-slate-700">
+            LinkedIn URL
+          </label>
+          <input
+            name="linkedinUrl"
+            type="url"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
+            placeholder="https://www.linkedin.com/in/..."
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-700">
+            Portfolio / GitHub (optional)
+          </label>
+          <input
+            name="portfolioUrl"
+            type="url"
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
+            placeholder="https://..."
+          />
+        </div>
       </div>
 
+      {/* CV upload */}
       <div>
         <label className="block text-xs font-medium text-slate-700">
-          Portfolio / GitHub (optional)
+          CV / Resume (PDF or DOC)
         </label>
         <input
-          name="portfolioUrl"
-          type="url"
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
-          placeholder="Portfolio, GitHub, etc."
+          name="cv"
+          type="file"
+          required
+          accept=".pdf,.doc,.docx"
+          className="mt-1 block w-full text-xs text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#101b47]"
         />
+        <p className="mt-1 text-[0.7rem] text-slate-400">
+          We&apos;ll never share your CV without your consent.
+        </p>
       </div>
 
+      {/* Cover letter */}
       <div>
         <label className="block text-xs font-medium text-slate-700">
-          Cover letter / context (optional)
+          Brief note (optional)
         </label>
         <textarea
           name="coverLetter"
-          rows={4}
+          rows={3}
           className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#172965]"
-          placeholder="Tell us briefly why this role is a fit for you."
+          placeholder="Share a quick context about your experience and what you're looking for."
         />
       </div>
 
-      <div className="flex items-center justify-between gap-4 pt-2">
-        <p className="text-xs text-slate-500">
-          We&apos;ll email you if we&apos;d like to move you to the next stage.
+      {/* Hidden source field */}
+      <input type="hidden" name="source" value="Job detail page" />
+      {/* jobId is injected into FormData in handleSubmit */}
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        <p className="text-[0.7rem] text-slate-500">
+          We try to respond to strong fits within a few working days.
         </p>
         <button
           type="submit"
           disabled={status === "submitting"}
           className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#101b47] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {status === "submitting" ? "Submitting…" : "Submit application"}
+          {status === "submitting" ? "Sending..." : "Submit application"}
         </button>
       </div>
 
       {status === "success" && (
-        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          Thanks — your application is in. We&apos;ll be in touch if there&apos;s
-          a strong match.
-        </p>
+        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          Thanks — your profile is in. We&apos;ll be in touch if there&apos;s a
+          strong match.
+        </div>
       )}
 
       {status === "error" && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+        <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error ?? "Something went wrong. Please try again."}
-        </p>
+        </div>
       )}
     </form>
   );
