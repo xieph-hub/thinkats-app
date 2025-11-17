@@ -5,8 +5,19 @@ import type {
   PageObjectResponse,
 } from "@notionhq/client/build/src/api-endpoints";
 
+const notionToken =
+  process.env.NOTION_API_KEY ||
+  process.env.NOTION_TOKEN ||
+  process.env.NOTION_SECRET;
+
+if (!notionToken) {
+  throw new Error(
+    "Missing Notion API key. Set NOTION_API_KEY (or NOTION_TOKEN / NOTION_SECRET) in your env."
+  );
+}
+
 const notion = new Client({
-  auth: process.env.NOTION_TOKEN,
+  auth: notionToken,
 });
 
 const databaseId = process.env.NOTION_DATABASE_ID;
@@ -76,7 +87,6 @@ export async function getInsightBlocks(
   const blocks: BlockObjectResponse[] = [];
   let cursor: string | undefined;
 
-  // paginate through children
   while (true) {
     const response = await notion.blocks.children.list({
       block_id: pageId,
@@ -124,7 +134,7 @@ async function mapPageToInsight(
   };
 }
 
-// --- helpers ---
+// ---------- helpers ----------
 
 function getTextProperty(
   page: PageObjectResponse,
