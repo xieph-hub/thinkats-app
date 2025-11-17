@@ -1,12 +1,13 @@
+// app/admin/applications/cv/route.ts
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
-// ...rest of your existing imports and code
-// app/admin/applications/cv/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET(req: NextRequest) {
+  // ...keep your existing logic here exactly as it was...
+}
+{
   try {
     const { searchParams } = new URL(req.url);
     const path = searchParams.get("path");
