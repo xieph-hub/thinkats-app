@@ -3,18 +3,38 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getInsightBySlug } from "@/lib/notion-insights"; // or similar
+import { getInsightBySlug } from "@/lib/notion-insights"; // use your actual import
 
-export default async function InsightPage({ params }: { params: { slug: string } }) {
-  const insight = await getInsightBySlug(params.slug);
+// This tells Next not to try to fully statically “lock” this route
+export const dynamic = "force-dynamic";
 
-  if (!insight) {
-    notFound();
+export default async function InsightPage({
+  params,
+}: {
+  params: { slug: string };
+}) {
+  const { slug } = params;
+
+  let insight: any = null;
+
+  try {
+    insight = await getInsightBySlug(slug);
+  } catch (error) {
+    console.error("Error fetching insight from Notion for slug:", slug, error);
+    // If Notion blows up, we fail gracefully instead of killing the build
+    return notFound();
   }
 
-  // render...
-}
+  if (!insight) {
+    return notFound();
+  }
 
+  // --- Your existing render logic below this line ---
+  // e.g.
+  // return (
+  //   <article>...</article>
+  // );
+}
   const title = `${post.title} | Insights`;
   const description =
     post.excerpt ||
