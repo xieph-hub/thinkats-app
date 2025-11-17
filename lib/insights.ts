@@ -1,126 +1,34 @@
 // lib/insights.ts
-import { notion, INSIGHTS_DB_ID } from "./notion";
+import { Client } from "@notionhq/client";
 import type {
-  PageObjectResponse,
   BlockObjectResponse,
+  PageObjectResponse,
 } from "@notionhq/client/build/src/api-endpoints";
+
+const notion = new Client({
+  auth: process.env.NOTION_TOKEN,
+});
+
+const databaseId = process.env.NOTION_DATABASE_ID;
+
+if (!databaseId) {
+  throw new Error("Missing NOTION_DATABASE_ID in env");
+}
 
 export type InsightMeta = {
   id: string;
-  slug: string;
   title: string;
-  category: string | null;
+  slug: string;
   excerpt: string | null;
+  category: string | null;
   coverUrl: string | null;
   publishedAt: string | null;
-  content: string | null; // <- main body from "Content (paste into Notion page body)"
+  content: string | null;
 };
-
-export type InsightWithBlocks = InsightMeta & {
-  blocks: BlockObjectResponse[];
-};
-
-function getPlainText(
-  rich?: { plain_text: string }[] | null
-): string {
-  if (!rich || rich.length === 0) return "";
-  return rich.map((r) => r.plain_text).join("");
-}
-
-function getCoverFromProperty(props: any): string | null {
-  const coverProp = props.CoverURL;
-  if (!coverProp) return null;
-
-  // If CoverURL is a "url" property
-  if (coverProp.type === "url") {
-    return coverProp.url || null;
-  }
-
-  // If CoverURL is a "rich_text" property
-  if (coverProp.type === "rich_text") {
-    const fromRich = getPlainText(coverProp.rich_text);
-    return fromRich || null;
-  }
-
-  return null;
-}
-
-function getCoverFromPage(page: PageObjectResponse): string | null {
-  const cover = page.cover;
-  if (!cover) return null;
-
-  if (cover.type === "external") return cover.external.url;
-  if (cover.type === "file") return cover.file.url;
-  return null;
-}
-
-function getContentFromProperty(props: any): string | null {
-  // Property name EXACTLY as it appears in the Notion DB:
-  // "Content (paste into Notion page body)"
-  const field = props["Content (paste into Notion page body)"];
-  if (!field) return null;
-
-  if (field.type === "rich_text") {
-    const txt = getPlainText(field.rich_text);
-    return txt || null;
-  }
-
-  // If you ever change it to "text" or "title", you can expand handling here.
-  return null;
-}
-
-function mapInsightMeta(page: PageObjectResponse): InsightMeta {
-  const props = page.properties as any;
-
-  // Title (Title property)
-  const title =
-    getPlainText(props.Title?.title) || "Untitled insight";
-
-  // Slug (rich_text or fallback to page id)
-  const slug =
-    getPlainText(props.Slug?.rich_text) ||
-    page.id.replace(/-/g, "");
-
-  // Excerpt (rich_text)
-  const excerpt =
-    getPlainText(props.Excerpt?.rich_text) || null;
-
-  // Category (select)
-  const category = props.Category?.select?.name ?? null;
-
-  // Date (date field)
-  const publishedAt = props.Date?.date?.start || null;
-
-  // Prefer explicit CoverURL property, then page cover
-  const coverFromProp = getCoverFromProperty(props);
-  const coverFromPage = getCoverFromPage(page);
-  const coverUrl = coverFromProp || coverFromPage;
-
-  // Main content from "Content (paste into Notion page body)" property
-  const content = getContentFromProperty(props);
-
-  return {
-    id: page.id,
-    slug,
-    title,
-    category,
-    excerpt,
-    coverUrl,
-    publishedAt,
-    content,
-  };
-}
 
 export async function getInsightsList(): Promise<InsightMeta[]> {
-  if (!notion || !INSIGHTS_DB_ID) {
-    console.warn(
-      "[insights] Notion not configured – returning empty insights list."
-    );
-    return [];
-  }
-
   const response = await notion.databases.query({
-    database_id: INSIGHTS_DB_ID,
+    database_id: databaseId,
     sorts: [
       {
         property: "Date",
@@ -133,21 +41,19 @@ export async function getInsightsList(): Promise<InsightMeta[]> {
     (r): r is PageObjectResponse => r.object === "page"
   );
 
-  return pages.map(mapInsightMeta);
+  const insights = await Promise.all(pages.map(mapPageToInsight));
+
+  // Only keep pages that actually have a slug + title
+  return insights.filter((i) => i.slug && i.title);
 }
 
 export async function getInsightBySlug(
   slug: string
 ): Promise<InsightMeta | null> {
-  if (!notion || !INSIGHTS_DB_ID) {
-    console.warn(
-      "[insights] Notion not configured – getInsightBySlug returning null."
-    );
-    return null;
-  }
+  if (!slug) return null;
 
   const response = await notion.databases.query({
-    database_id: INSIGHTS_DB_ID,
+    database_id: databaseId,
     filter: {
       property: "Slug",
       rich_text: {
@@ -157,41 +63,173 @@ export async function getInsightBySlug(
     page_size: 1,
   });
 
-  if (response.results.length === 0) return null;
-
+  if (!response.results.length) return null;
   const page = response.results[0] as PageObjectResponse;
-  return mapInsightMeta(page);
+  return await mapPageToInsight(page);
 }
 
 export async function getInsightBlocks(
   pageId: string
 ): Promise<BlockObjectResponse[]> {
-  if (!notion) {
-    console.warn(
-      "[insights] Notion not configured – getInsightBlocks returning empty array."
-    );
-    return [];
-  }
+  if (!pageId) return [];
 
   const blocks: BlockObjectResponse[] = [];
-  let cursor: string | undefined = undefined;
+  let cursor: string | undefined;
 
+  // paginate through children
   while (true) {
-    const res = await notion.blocks.children.list({
+    const response = await notion.blocks.children.list({
       block_id: pageId,
       start_cursor: cursor,
       page_size: 100,
     });
 
-    const typed = res.results.filter(
-      (b): b is BlockObjectResponse => b.object === "block"
+    blocks.push(
+      ...response.results.filter(
+        (b): b is BlockObjectResponse => b.object === "block"
+      )
     );
 
-    blocks.push(...typed);
-
-    if (!res.has_more || !res.next_cursor) break;
-    cursor = res.next_cursor;
+    if (!response.has_more || !response.next_cursor) break;
+    cursor = response.next_cursor;
   }
 
   return blocks;
+}
+
+async function mapPageToInsight(
+  page: PageObjectResponse
+): Promise<InsightMeta> {
+  const title =
+    getTextProperty(page, "Title") ?? "Untitled insight";
+  const slug = getTextProperty(page, "Slug") ?? "";
+  const excerpt = getTextProperty(page, "Excerpt");
+  const content = getTextProperty(
+    page,
+    "Content (paste into Notion page body)"
+  );
+  const coverUrl = getTextProperty(page, "CoverURL (optional)");
+  const publishedAt = getDateProperty(page, "Date");
+  const category = await getCategoryProperty(page);
+
+  return {
+    id: page.id,
+    title,
+    slug,
+    excerpt,
+    content,
+    coverUrl,
+    publishedAt,
+    category,
+  };
+}
+
+// --- helpers ---
+
+function getTextProperty(
+  page: PageObjectResponse,
+  propertyName: string
+): string | null {
+  const prop = (page.properties as any)[propertyName];
+  if (!prop) return null;
+
+  if (prop.type === "title") {
+    const text = prop.title.map((t: any) => t.plain_text).join("");
+    return text.trim() || null;
+  }
+
+  if (prop.type === "rich_text") {
+    const text = prop.rich_text
+      .map((t: any) => t.plain_text)
+      .join("");
+    return text.trim() || null;
+  }
+
+  if (prop.type === "url") {
+    return prop.url ?? null;
+  }
+
+  if (prop.type === "formula" && prop.formula.type === "string") {
+    return prop.formula.string ?? null;
+  }
+
+  return null;
+}
+
+function getDateProperty(
+  page: PageObjectResponse,
+  propertyName: string
+): string | null {
+  const prop = (page.properties as any)[propertyName];
+  if (!prop || prop.type !== "date" || !prop.date?.start) return null;
+  return prop.date.start;
+}
+
+/**
+ * Category can be:
+ * - select / multi_select
+ * - relation to a Category table
+ * - plain rich_text (fallback)
+ */
+async function getCategoryProperty(
+  page: PageObjectResponse
+): Promise<string | null> {
+  const prop = (page.properties as any)["Category"];
+  if (!prop) return null;
+
+  // Simple select
+  if (prop.type === "select") {
+    return prop.select?.name ?? null;
+  }
+
+  // Multi-select (we take the first option for now)
+  if (prop.type === "multi_select") {
+    if (!prop.multi_select.length) return null;
+    return prop.multi_select[0].name ?? null;
+  }
+
+  // Relation to Category table – use the related page's title
+  if (prop.type === "relation") {
+    if (!prop.relation || !prop.relation.length) return null;
+    const first = prop.relation[0];
+    try {
+      const related = await notion.pages.retrieve({
+        page_id: first.id,
+      });
+
+      if (related.object === "page") {
+        const name = extractTitleFromAnyPage(
+          related as PageObjectResponse
+        );
+        return name;
+      }
+    } catch (err) {
+      console.error("Error resolving category relation", err);
+    }
+    return null;
+  }
+
+  // Fallback: treat as text
+  if (prop.type === "rich_text") {
+    const text = prop.rich_text
+      .map((t: any) => t.plain_text)
+      .join("");
+    return text.trim() || null;
+  }
+
+  return null;
+}
+
+function extractTitleFromAnyPage(
+  page: PageObjectResponse
+): string | null {
+  const props = page.properties as any;
+  for (const key of Object.keys(props)) {
+    const prop = props[key];
+    if (prop?.type === "title") {
+      const text = prop.title.map((t: any) => t.plain_text).join("");
+      return text.trim() || null;
+    }
+  }
+  return null;
 }
