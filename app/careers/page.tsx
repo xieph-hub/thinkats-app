@@ -1,6 +1,6 @@
 // app/careers/page.tsx
 import { headers } from "next/headers";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { createSupabaseServerClient } from "../../lib/supabaseServerClient";
 
 export default async function CareersPage() {
   const hdrs = headers();
@@ -13,7 +13,7 @@ export default async function CareersPage() {
         <h1 className="text-2xl font-semibold text-slate-900">Careers</h1>
         <p className="mt-2 text-sm text-slate-600">
           This careers page is accessed without a tenant subdomain.
-          To view a client&apos;s career site, visit a URL like
+          To view a client&apos;s career site, visit a URL like{" "}
           <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-[11px]">
             clientslug.resourcin.com/careers
           </code>
