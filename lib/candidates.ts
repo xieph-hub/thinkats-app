@@ -1,27 +1,27 @@
 // lib/candidates.ts
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from "./supabaseServerClient";
 
+/**
+ * Get full candidate detail:
+ * - candidate profile
+ * - applications + job context
+ * - notes + author info
+ */
 export async function getCandidateDetail(candidateId: string) {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: () => cookieStore }
-  );
+  const supabase = createSupabaseServerClient();
 
-  // candidate profile
+  // Candidate profile
   const { data: candidate, error: candError } = await supabase
-    .from('candidates')
-    .select('*')
-    .eq('id', candidateId)
+    .from("candidates")
+    .select("*")
+    .eq("id", candidateId)
     .single();
 
   if (candError) throw candError;
 
-  // applications + job context
+  // Applications + job info
   const { data: applications, error: appsError } = await supabase
-    .from('applications')
+    .from("applications")
     .select(
       `
       id,
@@ -36,31 +36,35 @@ export async function getCandidateDetail(candidateId: string) {
       )
     `
     )
-    .eq('candidate_id', candidateId)
-    .order('applied_at', { ascending: false });
+    .eq("candidate_id", candidateId)
+    .order("applied_at", { ascending: false });
 
   if (appsError) throw appsError;
 
-  // notes
+  // Notes (timeline)
   const { data: notes, error: notesError } = await supabase
-    .from('notes')
+    .from("notes")
     .select(
       `
       id,
       body,
       note_type,
       created_at,
+      application_id,
       author:users (
         id,
         full_name
-      ),
-      application_id
+      )
     `
     )
-    .eq('candidate_id', candidateId)
-    .order('created_at', { ascending: false });
+    .eq("candidate_id", candidateId)
+    .order("created_at", { ascending: false });
 
   if (notesError) throw notesError;
 
-  return { candidate, applications, notes };
+  return {
+    candidate,
+    applications: applications ?? [],
+    notes: notes ?? [],
+  };
 }
