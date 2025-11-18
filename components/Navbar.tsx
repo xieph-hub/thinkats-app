@@ -45,13 +45,13 @@ export default function Navbar() {
           className="flex items-center"
           aria-label="Resourcin home"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm sm:h-12 sm:w-12">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm sm:h-14 sm:w-14">
             <Image
               src="/logo.svg" // public/logo.svg
               alt="Resourcin"
-              width={40}
-              height={40}
-              className="h-8 w-8 sm:h-10 sm:w-10"
+              width={56}
+              height={56}
+              className="h-10 w-10 sm:h-12 sm:w-12"
               priority
             />
           </div>
