@@ -11,9 +11,9 @@ const candidateLinks = [
 ];
 
 const employerLinks = [
-  { href: "/for-employers/services", label: "Services" },
-  { href: "/for-employers/case-studies", label: "Case studies" },
-  { href: "/for-employers/request-talent", label: "Request talent" },
+  { href: "/services", label: "Services" },
+  { href: "/case-studies", label: "Case studies" },
+  { href: "/request-talent", label: "Request talent" },
 ];
 
 const mainLinks = [
@@ -40,17 +40,15 @@ export default function Navbar() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo */}
-<Link
-  href="/"
-  className="flex items-center"
-  aria-label="Resourcin home"
->
-  <img
-    src="/logo.svg"
-    alt="Resourcin"
-    className="h-12 w-auto sm:h-14"
-  />
-</Link>
+        <Link href="/" className="flex items-center" aria-label="Resourcin home">
+          <Image
+            src="/logo.svg"
+            alt="Resourcin"
+            width={140}
+            height={56}
+            className="h-12 w-auto sm:h-14"
+          />
+        </Link>
 
         {/* Desktop navigation */}
         <div className="hidden flex-1 items-center justify-between md:flex">
