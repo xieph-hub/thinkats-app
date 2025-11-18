@@ -4,14 +4,14 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 /**
  * Server-side Supabase client using the ANON key.
- * Safe for server components and RLS-protected queries.
+ * Safe for server components, RLS-protected queries, and route handlers.
  */
 export function createSupabaseServerClient() {
   const cookieStore = cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,       // ✅ matches your env var
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // ✅ matches your env var
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,       // your Supabase URL
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // your anon key
     {
       cookies: {
         getAll() {
@@ -23,8 +23,8 @@ export function createSupabaseServerClient() {
               cookieStore.set(name, value, options as CookieOptions);
             });
           } catch {
-            // In some server contexts cookies are read-only.
-            // It's okay to ignore errors here.
+            // In some server contexts (e.g. during static generation),
+            // cookies are read-only. It's safe to ignore.
           }
         },
       },
