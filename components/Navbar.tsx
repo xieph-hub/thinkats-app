@@ -51,14 +51,6 @@ export default function Navbar() {
               priority
             />
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold text-slate-900">
-              Resourcin
-            </span>
-            <span className="text-[11px] text-slate-500">
-              Human Capital Advisors
-            </span>
-          </div>
         </Link>
 
         {/* Desktop navigation */}
