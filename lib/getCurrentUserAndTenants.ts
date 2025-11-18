@@ -20,7 +20,7 @@ export async function getCurrentUserAndTenants() {
     };
   }
 
-  // 1) Get user profile from public.users
+  // Get user profile from public.users
   const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("*")
@@ -31,7 +31,7 @@ export async function getCurrentUserAndTenants() {
     throw profileError;
   }
 
-  // 2) Get tenant memberships from user_tenant_roles
+  // Get tenant memberships from user_tenant_roles
   const { data: roles, error: rolesError } = await supabase
     .from("user_tenant_roles")
     .select(
