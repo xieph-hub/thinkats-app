@@ -1,17 +1,14 @@
 // lib/jobs.ts
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from "./supabaseServerClient";
 
+/**
+ * Get all jobs for a given tenant.
+ */
 export async function getJobsForTenant(tenantId: string) {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: () => cookieStore }
-  );
+  const supabase = createSupabaseServerClient();
 
   const { data, error } = await supabase
-    .from('jobs')
+    .from("jobs")
     .select(
       `
       id,
@@ -25,26 +22,26 @@ export async function getJobsForTenant(tenantId: string) {
       created_at
     `
     )
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false });
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
   return data ?? [];
 }
 
-// lib/jobs.ts
+/**
+ * Get a single job and its pipeline:
+ * - job
+ * - stages
+ * - applications + candidate info
+ */
 export async function getJobWithPipeline(jobId: string) {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: () => cookieStore }
-  );
+  const supabase = createSupabaseServerClient();
 
-  // 1. Get job
+  // 1) Job
   const { data: job, error: jobError } = await supabase
-    .from('jobs')
+    .from("jobs")
     .select(
       `
       id,
@@ -59,23 +56,23 @@ export async function getJobWithPipeline(jobId: string) {
       created_at
     `
     )
-    .eq('id', jobId)
+    .eq("id", jobId)
     .single();
 
   if (jobError) throw jobError;
 
-  // 2. Get stages for this job
+  // 2) Stages
   const { data: stages, error: stagesError } = await supabase
-    .from('job_stages')
-    .select('id, name, position, is_terminal')
-    .eq('job_id', jobId)
-    .order('position', { ascending: true });
+    .from("job_stages")
+    .select("id, name, position, is_terminal")
+    .eq("job_id", jobId)
+    .order("position", { ascending: true });
 
   if (stagesError) throw stagesError;
 
-  // 3. Get all applications + candidates for this job
+  // 3) Applications + candidates
   const { data: applications, error: appsError } = await supabase
-    .from('applications')
+    .from("applications")
     .select(
       `
       id,
@@ -98,9 +95,13 @@ export async function getJobWithPipeline(jobId: string) {
       )
     `
     )
-    .eq('job_id', jobId);
+    .eq("job_id", jobId);
 
   if (appsError) throw appsError;
 
-  return { job, stages, applications };
+  return {
+    job,
+    stages: stages ?? [],
+    applications: applications ?? [],
+  };
 }
