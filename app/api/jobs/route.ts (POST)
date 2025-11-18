@@ -1,0 +1,56 @@
+// app/api/jobs/route.ts (POST)
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/auth-helpers-nextjs';
+
+export async function POST(req: Request) {
+  const cookieStore = cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: () => cookieStore }
+  );
+
+  const body = await req.json();
+  const {
+    title,
+    department,
+    location,
+    employment_type,
+    seniority,
+    description,
+    tenant_id,
+  } = body;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data: job, error } = await supabase
+    .from('jobs')
+    .insert({
+      tenant_id,
+      title,
+      department,
+      location,
+      employment_type,
+      seniority,
+      description,
+      status: 'open',
+      visibility: 'public',
+      created_by: user.id,
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error(error);
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  // Optionally: call helper to insert default stages for this job
+  // using supabase.from('job_stages').insert([...])
+
+  return NextResponse.json({ job });
+}
