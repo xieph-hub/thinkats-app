@@ -1,34 +1,39 @@
 // lib/getCurrentUserAndTenants.ts
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from "./supabaseServerClient";
 
 export async function getCurrentUserAndTenants() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: () => cookieStore }
-  );
+  const supabase = createSupabaseServerClient();
 
+  // Get authenticated user (from auth.users)
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) return { user: null, tenants: [] };
+  if (userError || !user) {
+    return {
+      user: null,
+      profile: null,
+      roles: [],
+      tenants: [],
+      currentTenant: null,
+    };
+  }
 
-  // Get user profile (public.users)
+  // 1) Get user profile from public.users
   const { data: profile, error: profileError } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', user.id)
+    .from("users")
+    .select("*")
+    .eq("id", user.id)
     .single();
 
-  if (profileError) throw profileError;
+  if (profileError) {
+    throw profileError;
+  }
 
-  // Get all tenant memberships
+  // 2) Get tenant memberships from user_tenant_roles
   const { data: roles, error: rolesError } = await supabase
-    .from('user_tenant_roles')
+    .from("user_tenant_roles")
     .select(
       `
       id,
@@ -42,15 +47,21 @@ export async function getCurrentUserAndTenants() {
       )
     `
     )
-    .eq('user_id', user.id);
+    .eq("user_id", user.id);
 
-  if (rolesError) throw rolesError;
+  if (rolesError) {
+    throw rolesError;
+  }
 
-  const tenants = roles?.map((r) => r.tenant) ?? [];
-
-  // Pick a "current" tenant (e.g. primary, or first)
+  const tenants = roles?.map((r: any) => r.tenant) ?? [];
   const currentTenant =
-    roles?.find((r) => r.is_primary)?.tenant ?? tenants[0] ?? null;
+    roles?.find((r: any) => r.is_primary)?.tenant ?? tenants[0] ?? null;
 
-  return { user, profile, roles, tenants, currentTenant };
+  return {
+    user,
+    profile,
+    roles: roles ?? [],
+    tenants,
+    currentTenant,
+  };
 }
