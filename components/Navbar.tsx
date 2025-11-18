@@ -38,9 +38,15 @@ export default function Navbar() {
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#172965] text-sm font-semibold text-white">
-            R
-          </div>
+           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm sm:h-10 sm:w-10">
+            <Image
+              src="/logo.svg"        // <- this uses public/logo.svg
+              alt="Resourcin"
+              width={28}
+              height={28}
+              className="h-auto w-auto"
+              priority
+            />
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-slate-900">
               Resourcin
