@@ -40,22 +40,17 @@ export default function Navbar() {
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo */}
-        <Link
-          href="/"
-          className="flex items-center"
-          aria-label="Resourcin home"
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm sm:h-14 sm:w-14">
-            <Image
-              src="/logo.svg" // public/logo.svg
-              alt="Resourcin"
-              width={56}
-              height={56}
-              className="h-10 w-10 sm:h-12 sm:w-12"
-              priority
-            />
-          </div>
-        </Link>
+<Link
+  href="/"
+  className="flex items-center"
+  aria-label="Resourcin home"
+>
+  <img
+    src="/logo.svg"
+    alt="Resourcin"
+    className="h-12 w-auto sm:h-14"
+  />
+</Link>
 
         {/* Desktop navigation */}
         <div className="hidden flex-1 items-center justify-between md:flex">
