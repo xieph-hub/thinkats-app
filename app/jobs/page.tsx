@@ -3,7 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import JobBoardClient from "./JobBoardClient";
 import type { Job } from "@/lib/jobs";
 
-// Use your existing env vars (as you told me)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -13,15 +12,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Server-side Supabase client (safe for read-only public data)
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// -----------------------------------------------------------------------------
-// Load jobs from existing Supabase "Job" table
-// -----------------------------------------------------------------------------
-
+// Load jobs from your existing Supabase "Job" table
 async function getPublicJobs(): Promise<Job[]> {
-  // 1) Fetch ALL rows from Job table (no filters yet so we definitely see data)
   const { data, error } = await supabase.from("Job").select("*");
 
   if (error) {
@@ -36,8 +30,6 @@ async function getPublicJobs(): Promise<Job[]> {
 
   console.log(`Loaded ${data.length} jobs from Supabase`);
 
-  // 2) Map Supabase rows into the Job shape used by JobBoardClient
-  //    We add fallbacks so it doesn't crash even if some columns are missing/nullable.
   const mappedJobs: Job[] = data.map((row: any, index: number) => {
     const id = String(
       row.id ?? row.job_id ?? row.uuid ?? `generated-${index}`
@@ -54,11 +46,9 @@ async function getPublicJobs(): Promise<Job[]> {
       "Untitled role";
 
     return {
-      // required by your Job type
       id,
       slug,
 
-      // display fields
       title,
 
       employerInitials:
@@ -89,9 +79,7 @@ async function getPublicJobs(): Promise<Job[]> {
         row.short_summary ??
         null,
 
-      tags:
-        (row.tags as string[]) ??
-        [],
+      tags: (row.tags as string[]) ?? [],
 
       postedAt: row.postedAt
         ? String(row.postedAt)
@@ -108,15 +96,7 @@ async function getPublicJobs(): Promise<Job[]> {
   return mappedJobs;
 }
 
-// -----------------------------------------------------------------------------
-// Page component
-// -----------------------------------------------------------------------------
-
 export default async function JobsPage() {
   const jobs = await getPublicJobs();
-
-  // IMPORTANT: this assumes JobBoardClient currently takes `jobs` as prop.
-// If your JobBoardClient still expects `initialJobs`, change this line to:
-//   return <JobBoardClient initialJobs={jobs} />;
   return <JobBoardClient jobs={jobs} />;
 }
