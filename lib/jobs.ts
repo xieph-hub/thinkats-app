@@ -37,7 +37,7 @@ export type Job = {
  * Get all jobs for a given tenant.
  */
 export async function getJobsForTenant(tenantId: string): Promise<Job[]> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase
     .from("jobs")
@@ -77,7 +77,7 @@ export async function getJobWithPipeline(jobId: string): Promise<{
   stages: any[];
   applications: any[];
 }> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // 1) Job
   const { data: job, error: jobError } = await supabase
