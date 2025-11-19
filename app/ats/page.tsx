@@ -11,11 +11,12 @@ type AtsJob = {
   department: string | null;
   location: string | null;
   employmentType: string | null;
+  seniority: string | null;
   status: string;
   createdAt: string | null;
 };
 
-// Load jobs for the current tenant from the `jobs` table
+// Load jobs for the current tenant from the ATS `jobs` table
 async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
   const supabase = await createSupabaseServerClient();
 
@@ -27,15 +28,14 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
         title,
         department,
         location,
-        employmentType,
-        isPublished,
+        employment_type,
+        seniority,
         status,
-        createdAt,
-        tenantId
+        created_at
       `
     )
-    .eq("tenantId", tenantId)
-    .order("createdAt", { ascending: false });
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
 
   if (error || !data) {
     console.error("Error loading ATS jobs for tenant", error);
@@ -47,9 +47,10 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
     title: row.title,
     department: row.department ?? null,
     location: row.location ?? null,
-    employmentType: row.employmentType ?? null,
-    status: row.status || (row.isPublished ? "Open" : "Draft"),
-    createdAt: row.createdAt ?? null,
+    employmentType: row.employment_type ?? null,
+    seniority: row.seniority ?? null,
+    status: row.status ?? "open",
+    createdAt: row.created_at ?? null,
   }));
 }
 
@@ -58,11 +59,12 @@ export const revalidate = 0; // always fresh per request
 export default async function AtsPage() {
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
+  // If not logged in as a client, push back to login with redirect to /ats
   if (!user || !currentTenant) {
     redirect("/login?role=client&redirect=/ats");
   }
 
-  const jobs = await loadTenantJobs(currentTenant.id);
+  const jobs = await loadTenantJobs(currentTenant.id as string);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -102,6 +104,7 @@ export default async function AtsPage() {
                 <th className="py-2 pr-4">Department</th>
                 <th className="py-2 pr-4">Location</th>
                 <th className="py-2 pr-4">Employment</th>
+                <th className="py-2 pr-4">Seniority</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Created</th>
                 <th className="py-2 text-right"> </th>
@@ -117,6 +120,11 @@ export default async function AtsPage() {
                     })
                   : "";
 
+                const statusLabel = job.status || "open";
+                const isOpen =
+                  statusLabel.toLowerCase() === "open" ||
+                  statusLabel.toLowerCase() === "active";
+
                 return (
                   <tr key={job.id} className="align-middle">
                     <td className="py-3 pr-4 font-medium text-slate-900">
@@ -131,15 +139,18 @@ export default async function AtsPage() {
                     <td className="py-3 pr-4 text-slate-700">
                       {job.employmentType ?? "—"}
                     </td>
+                    <td className="py-3 pr-4 text-slate-700">
+                      {job.seniority ?? "—"}
+                    </td>
                     <td className="py-3 pr-4">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          job.status.toLowerCase() === "open"
+                          isOpen
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-slate-100 text-slate-600"
                         }`}
                       >
-                        {job.status}
+                        {statusLabel}
                       </span>
                     </td>
                     <td className="py-3 pr-4 text-xs text-slate-600">
@@ -160,7 +171,7 @@ export default async function AtsPage() {
               {jobs.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="py-6 text-center text-sm text-slate-500"
                   >
                     No jobs yet. Click &quot;New job&quot; to create your first
