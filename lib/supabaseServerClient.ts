@@ -1,41 +1,35 @@
 // lib/supabaseServerClient.ts
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
-/**
- * Server-side Supabase client for use in Server Components / server utilities.
- *
- * - Uses the official getAll/setAll pattern for cookies (no get/set/remove).
- * - Safe to call from Server Components (setAll is wrapped in try/catch).
- */
 export async function createSupabaseServerClient() {
-  const cookieStore = await cookies();
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
     throw new Error(
-      'Supabase env vars NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are not set'
+      "Supabase env vars NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set"
     );
   }
 
+  // Next.js app router cookie store
+  const cookieStore = cookies();
+
   return createServerClient(url, anonKey, {
     cookies: {
+      // Read all cookies for Supabase
       getAll() {
         return cookieStore.getAll();
       },
+      // Write cookies (auth tokens) – safe in route handlers / middleware.
       setAll(cookiesToSet) {
-        // In Server Components, writes can throw – Supabase docs recommend
-        // catching and ignoring, as long as middleware or route handlers
-        // refresh sessions.
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Called from a context where cookies can't be written (e.g. RSC).
-          // It's safe to ignore; auth still works based on existing cookies.
+          // When called from a Server Component, cookies() is read-only.
+          // We can safely ignore in that context.
         }
       },
     },
