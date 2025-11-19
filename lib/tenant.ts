@@ -1,19 +1,14 @@
 // lib/tenant.ts
-import { prisma } from "./prisma";
 
-const DEFAULT_TENANT_SLUG =
-  process.env.RESOURCIN_TENANT_SLUG || "resourcin";
+// The real tenant ID for Resourcin (from Supabase.tenants)
+const RESOURCIN_TENANT_ID = "3fe28b51-7e27-4d8a-b1e3-dab3966450e1"
 
-export async function getDefaultTenant() {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: DEFAULT_TENANT_SLUG },
-  });
-
-  if (!tenant) {
-    throw new Error(
-      `Tenant with slug "${DEFAULT_TENANT_SLUG}" not found. Make sure you've seeded it in the database.`
-    );
-  }
-
-  return tenant;
+/**
+ * Returns the current tenant ID.
+ * In v1, this always returns the Resourcin tenant.
+ * Later, we’ll update it to resolve dynamically
+ * via subdomain or user session.
+ */
+export function getCurrentTenantId(): string {
+  return RESOURCIN_TENANT_ID
 }
