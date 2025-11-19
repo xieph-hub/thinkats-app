@@ -1,109 +1,83 @@
 // lib/getCurrentUserAndTenants.ts
-import { createSupabaseServerClient } from './supabaseServerClient';
+import { createSupabaseServerClient } from "./supabaseServerClient";
 
-export type Tenant = {
+type TenantRow = {
   id: string;
   name: string | null;
   slug: string | null;
 };
 
-export type CurrentUserAndTenants = {
-  user: {
-    id: string;
-    email: string | null;
-  } | null;
-  tenants: Tenant[];
-  currentTenant: Tenant | null;
+type TenantRoleRow = {
+  id: string;
+  user_id: string;
+  tenant_id: string;
+  role: string;
+  tenant: TenantRow[] | null; // Supabase returns join as array
 };
 
-/**
- * Reads the current authenticated user (from Supabase auth cookies)
- * plus the tenants they belong to.
- *
- * This function is defensive: any error just returns { user: null, tenants: [] }.
- */
-export async function getCurrentUserAndTenants(): Promise<CurrentUserAndTenants> {
-  try {
-    const supabase = await createSupabaseServerClient();
+export async function getCurrentUserAndTenants() {
+  // 🔑 NEW: await the Supabase server client
+  const supabase = await createSupabaseServerClient();
 
-    // 1) Current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-    if (userError) {
-      console.error('Supabase getUser error', userError);
-    }
+  if (userError) {
+    console.error("Error getting auth user", userError);
+  }
 
-    if (!user) {
-      // Not logged in
-      return {
-        user: null,
-        tenants: [],
-        currentTenant: null,
-      };
-    }
-
-    // 2) Tenant roles for this user
-    const {
-      data: rolesRaw,
-      error: rolesError,
-    } = await supabase
-      .from('user_tenant_roles')
-      .select('id, user_id, tenant_id, role')
-      .eq('user_id', user.id);
-
-    if (rolesError) {
-      console.error('Supabase user_tenant_roles error', rolesError);
-    }
-
-    const tenantIds: string[] =
-      rolesRaw
-        ?.map((r: any) => r.tenant_id)
-        .filter((id: any) => !!id)
-        .map((id: any) => String(id)) ?? [];
-
-    // 3) Fetch tenants
-    let tenants: Tenant[] = [];
-
-    if (tenantIds.length > 0) {
-      const {
-        data: tenantsRaw,
-        error: tenantsError,
-      } = await supabase
-        .from('tenants')
-        .select('id, name, slug')
-        .in('id', tenantIds);
-
-      if (tenantsError) {
-        console.error('Supabase tenants error', tenantsError);
-      }
-
-      tenants =
-        tenantsRaw?.map((t: any) => ({
-          id: String(t.id),
-          name: t.name ?? null,
-          slug: t.slug ?? null,
-        })) ?? [];
-    }
-
-    const currentTenant = tenants.length > 0 ? tenants[0] : null;
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email ?? null,
-      },
-      tenants,
-      currentTenant,
-    };
-  } catch (err) {
-    console.error('getCurrentUserAndTenants fatal error', err);
+  if (!user) {
     return {
       user: null,
-      tenants: [],
-      currentTenant: null,
+      roles: [] as TenantRoleRow[],
+      tenants: [] as TenantRow[],
+      currentTenant: null as TenantRow | null,
     };
   }
+
+  const { data: roles, error: rolesError } = await supabase
+    .from("user_tenant_roles")
+    .select(
+      `
+      id,
+      user_id,
+      tenant_id,
+      role,
+      tenant:tenants (
+        id,
+        name,
+        slug
+      )
+    `
+    )
+    .eq("user_id", user.id);
+
+  if (rolesError) {
+    console.error("Error loading user_tenant_roles", rolesError);
+    return {
+      user,
+      roles: [] as TenantRoleRow[],
+      tenants: [] as TenantRow[],
+      currentTenant: null as TenantRow | null,
+    };
+  }
+
+  const typedRoles = (roles ?? []) as TenantRoleRow[];
+
+  // tenant is an array from the join; flatten it.
+  const tenants: TenantRow[] = typedRoles.flatMap(
+    (r) => r.tenant ?? []
+  );
+
+  const currentTenant: TenantRow | null =
+    tenants.length > 0 ? tenants[0] : null;
+
+  return {
+    user,
+    roles: typedRoles,
+    tenants,
+    currentTenant,
+  };
 }
