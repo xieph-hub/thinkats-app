@@ -1,232 +1,229 @@
-// app/jobs/[slug]/ApplyFormClient.tsx
 "use client";
 
 import { useState } from "react";
 
-type Props = {
+type ApplyFormClientProps = {
   jobId: string;
   jobTitle: string;
 };
 
-type FormState = {
-  full_name: string;
-  email: string;
-  phone: string;
-  location: string;
-  linkedin_url: string;
-  portfolio_url: string;
-  cover_letter: string;
-};
+export default function ApplyFormClient({
+  jobId,
+  jobTitle,
+}: ApplyFormClientProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-export default function ApplyFormClient({ jobId, jobTitle }: Props) {
-  const [form, setForm] = useState<FormState>({
-    full_name: "",
-    email: "",
-    phone: "",
-    location: "",
-    linkedin_url: "",
-    portfolio_url: "",
-    cover_letter: "",
-  });
-
-  const [status, setStatus] = useState<
-    "idle" | "submitting" | "success" | "error"
-  >("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isSubmitting) return;
 
-    if (!form.full_name || !form.email) {
-      setErrorMessage("Please provide at least your name and email.");
+    setIsSubmitting(true);
+    setError(null);
+    setSuccess(false);
+
+    const formData = new FormData(e.currentTarget);
+
+    const payload = {
+      fullName: (formData.get("fullName") ?? "").toString().trim(),
+      email: (formData.get("email") ?? "").toString().trim(),
+      phone: (formData.get("phone") ?? "").toString().trim() || null,
+      location: (formData.get("location") ?? "").toString().trim() || null,
+      linkedinUrl:
+        (formData.get("linkedinUrl") ?? "").toString().trim() || null,
+      portfolioUrl:
+        (formData.get("portfolioUrl") ?? "").toString().trim() || null,
+      cvUrl: (formData.get("cvUrl") ?? "").toString().trim() || null, // still link for now
+      coverLetter:
+        (formData.get("coverLetter") ?? "").toString().trim() || null,
+      source: "Job apply form",
+    };
+
+    if (!payload.fullName || !payload.email) {
+      setError("Please add your full name and email.");
+      setIsSubmitting(false);
       return;
     }
 
-    setStatus("submitting");
-    setErrorMessage(null);
-
     try {
-      const res = await fetch(
-        `/api/jobs/${encodeURIComponent(jobId)}/apply`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...form,
-            source: "Resourcin job board",
-          }),
-        }
-      );
+      const res = await fetch(`/api/jobs/${jobId}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setErrorMessage(
-          data?.error ||
-            "Something went wrong while submitting your application. Please try again."
+        setError(
+          data.error ||
+            data.message ||
+            "Unexpected error while submitting application."
         );
-        setStatus("error");
         return;
       }
 
-      setStatus("success");
-      // Simple reset of form after success
-      setForm({
-        full_name: "",
-        email: "",
-        phone: "",
-        location: "",
-        linkedin_url: "",
-        portfolio_url: "",
-        cover_letter: "",
-      });
+      setSuccess(true);
+      e.currentTarget.reset();
     } catch (err) {
-      console.error("Error submitting application", err);
-      setErrorMessage("Network error. Please try again.");
-      setStatus("error");
+      console.error("Apply error", err);
+      setError("Unexpected error while submitting application.");
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  const isSubmitting = status === "submitting";
+  }
 
   return (
-    <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">
-        Apply for {jobTitle}
-      </h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Share a few details and we&apos;ll review your application for this
-        role.
-      </p>
-
-      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Section: basic info */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-slate-900">
+          Your details
+        </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
+          <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-slate-700">
               Full name *
             </label>
             <input
+              name="fullName"
               type="text"
-              name="full_name"
-              value={form.full_name}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
               required
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
           </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-700">
               Email *
             </label>
             <input
-              type="email"
               name="email"
-              value={form.email}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+              type="email"
               required
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
           </div>
-        </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              Phone
+              Phone / WhatsApp
             </label>
             <input
-              type="text"
               name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+              type="text"
+              placeholder="+234…"
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
           </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              Location
+              Current location (City, Country)
             </label>
             <input
-              type="text"
               name="location"
-              value={form.location}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+              type="text"
+              placeholder="Lagos, Nigeria"
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
           </div>
         </div>
+      </div>
 
+      {/* Section: links */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-slate-900">
+          Profiles & CV
+        </h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              LinkedIn URL
+              LinkedIn
             </label>
             <input
+              name="linkedinUrl"
               type="url"
-              name="linkedin_url"
-              value={form.linkedin_url}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-              placeholder="https://www.linkedin.com/in/..."
+              placeholder="https://www.linkedin.com/in/…"
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
           </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              Portfolio / website
+              Portfolio / GitHub / Personal site
             </label>
             <input
+              name="portfolioUrl"
               type="url"
-              name="portfolio_url"
-              value={form.portfolio_url}
-              onChange={handleChange}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-              placeholder="https://"
+              placeholder="https://…"
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
           </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-slate-700">
+              CV / Resume link
+            </label>
+            <input
+              name="cvUrl"
+              type="url"
+              placeholder="Google Drive, Dropbox, etc."
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            />
+            <p className="mt-1 text-[0.7rem] text-slate-500">
+              We’ll wire proper file upload + storage next; for now, a
+              shareable link is perfect.
+            </p>
+          </div>
         </div>
+      </div>
 
-        <div>
-          <label className="block text-xs font-medium text-slate-700">
-            Cover letter / brief note
-          </label>
-          <textarea
-            name="cover_letter"
-            value={form.cover_letter}
-            onChange={handleChange}
-            rows={4}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-            placeholder="Tell us briefly why you’re a good fit for this role."
-          />
+      {/* Section: value & notes */}
+      <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-slate-900">
+          Where you create the most value
+        </h2>
+        <p className="text-xs text-slate-500">
+          Think of this as the real version of your CV headline — what
+          you&apos;ve actually driven, not just your title.
+        </p>
+        <textarea
+          name="coverLetter"
+          rows={6}
+          placeholder={`In 4–6 bullet points, tell us where you create the most value for a role like "${jobTitle}".`}
+          className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+        />
+      </div>
+
+      {/* Status + submit */}
+      {error && (
+        <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
         </div>
+      )}
 
-        {errorMessage && (
-          <p className="text-xs text-red-600">{errorMessage}</p>
-        )}
-
-        {status === "success" && (
-          <p className="text-xs text-emerald-600">
-            Thank you. Your application has been received.
-          </p>
-        )}
-
-        <div className="pt-2">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? "Submitting..." : "Submit application"}
-          </button>
+      {success && (
+        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          Thanks — your application has been received. We&apos;ll be in
+          touch if there&apos;s a strong match.
         </div>
-      </form>
-    </section>
+      )}
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="inline-flex items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {isSubmitting ? "Submitting…" : "Submit application"}
+        </button>
+        <p className="text-[0.7rem] text-slate-500">
+          By submitting, you agree that we can store your details and reach
+          out when we see a strong match. No spam, no list-selling.
+        </p>
+      </div>
+    </form>
   );
 }
