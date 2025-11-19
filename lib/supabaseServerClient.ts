@@ -1,33 +1,31 @@
 // lib/supabaseServerClient.ts
 import { cookies } from "next/headers";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import {
+  createServerClient,
+  type CookieOptions,
+} from "@supabase/ssr";
 
-/**
- * Server-side Supabase client using the ANON key.
- * Safe for server components, RLS-protected queries, and route handlers.
- */
 export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,       // your Supabase URL
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // your anon key
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options as CookieOptions);
-            });
-          } catch {
-            // In some server contexts (e.g. during static generation),
-            // cookies are read-only. It's safe to ignore.
-          }
-        },
+  if (!url || !anonKey) {
+    throw new Error(
+      "Supabase env vars NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set"
+    );
+  }
+
+  return createServerClient(url, anonKey, {
+    cookies: {
+      get(name: string) {
+        return cookies().get(name)?.value;
       },
-    }
-  );
+      set(name: string, value: string, options: CookieOptions) {
+        cookies().set(name, value, options);
+      },
+      remove(name: string, options: CookieOptions) {
+        cookies().set(name, "", options);
+      },
+    },
+  });
 }
