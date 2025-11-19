@@ -1,10 +1,14 @@
 // app/ats/page.tsx
+
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import AtsSignOutButton from "./AtsSignOutButton";
 
+export const revalidate = 0; // Always fetch fresh data per request
+
+// Shape we use in the UI layer
 type AtsJob = {
   id: string;
   title: string;
@@ -15,7 +19,7 @@ type AtsJob = {
   createdAt: string | null;
 };
 
-// Load jobs for the current tenant from the NEW `jobs` table
+// Load jobs for the current tenant from the `jobs` table
 async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
   const supabase = await createSupabaseServerClient();
 
@@ -23,14 +27,15 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
     .from("jobs")
     .select(
       `
-      id,
-      title,
-      location,
-      employment_type,
-      function,
-      is_published,
-      created_at
-    `
+        id,
+        title,
+        location,
+        employment_type,
+        function,
+        is_published,
+        created_at,
+        tenant_id
+      `
     )
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
@@ -40,6 +45,7 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
     return [];
   }
 
+  // Map raw Supabase rows into a clean AtsJob shape for the UI
   return data.map((row: any) => ({
     id: row.id,
     title: row.title,
@@ -51,16 +57,16 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
   }));
 }
 
-export const revalidate = 0; // always fresh per request
-
 export default async function AtsPage() {
+  // Get logged-in user and the current tenant context
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // If not logged in as a client, push back to login with redirect to /ats
+  // If not logged in as a client, send them to login (and come back to /ats after)
   if (!user || !currentTenant) {
     redirect("/login?role=client&redirect=/ats");
   }
 
+  // Load jobs only for this tenant from the `jobs` table
   const jobs = await loadTenantJobs(currentTenant.id);
 
   return (
@@ -103,7 +109,7 @@ export default async function AtsPage() {
                 <th className="py-2 pr-4">Employment</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Created</th>
-                <th className="py-2 text-right"> </th>
+                <th className="py-2 text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
