@@ -150,3 +150,290 @@ export default function NewJobForm() {
         </div>
 
         <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Location
+          </label>
+          <input
+            name="location"
+            type="text"
+            placeholder="Lagos, Nigeria · Hybrid"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Classification */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Department
+          </label>
+          <input
+            name="department"
+            type="text"
+            placeholder="Operations"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Job type
+          </label>
+          <select
+            name="jobType"
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          >
+            <option value="">Select...</option>
+            <option value="Full-time">Full-time</option>
+            <option value="Part-time">Part-time</option>
+            <option value="Contract">Contract</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Level / seniority
+          </label>
+          <select
+            name="seniority"
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          >
+            <option value="">Select...</option>
+            <option value="Junior">Junior</option>
+            <option value="Mid">Mid</option>
+            <option value="Senior">Senior</option>
+            <option value="Lead">Lead</option>
+            <option value="Director">Director</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Function
+          </label>
+          <input
+            name="function"
+            type="text"
+            placeholder="Operations, Sales, Engineering..."
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Remote option
+          </label>
+          <select
+            name="remoteOption"
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          >
+            <option value="">Select...</option>
+            <option value="Onsite">Onsite</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Remote">Remote</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Industry
+          </label>
+          <input
+            name="industry"
+            type="text"
+            placeholder="Fintech, Oil & Gas..."
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Compensation */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Currency
+          </label>
+          <input
+            name="salaryCurrency"
+            type="text"
+            placeholder="NGN, USD..."
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Min salary
+          </label>
+          <input
+            name="salaryMin"
+            type="number"
+            min={0}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Max salary
+          </label>
+          <input
+            name="salaryMax"
+            type="number"
+            min={0}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Max experience (years)
+          </label>
+          <input
+            name="experienceMax"
+            type="number"
+            min={0}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Client context */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Client name
+          </label>
+          <input
+            name="clientName"
+            type="text"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Client slug
+          </label>
+          <input
+            name="clientSlug"
+            type="text"
+            placeholder="acme-inc"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Client company ID
+          </label>
+          <input
+            name="clientCompanyId"
+            type="text"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Copy fields */}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Short summary
+          </label>
+          <textarea
+            name="summary"
+            rows={2}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Full description
+          </label>
+          <textarea
+            name="description"
+            rows={4}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Requirements
+          </label>
+          <textarea
+            name="requirements"
+            rows={3}
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Tags & status */}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Tags
+          </label>
+          <input
+            name="tags"
+            type="text"
+            placeholder="shipping, logistics, operations"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Comma-separated. Used for search and filtering.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <input
+              id="isPublished"
+              name="isPublished"
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+            />
+            <label
+              htmlFor="isPublished"
+              className="text-sm font-medium text-slate-700"
+            >
+              Publish this role
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500">
+              Status
+            </label>
+            <select
+              name="status"
+              defaultValue="open"
+              className="mt-1 block w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            >
+              <option value="open">Open</option>
+              <option value="on_hold">On hold</option>
+              <option value="closed">Closed</option>
+              <option value="draft">Draft</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-3 pt-4">
+        <button
+          type="button"
+          onClick={() => router.push("/ats")}
+          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a] disabled:opacity-70"
+        >
+          {isSubmitting ? "Creating..." : "Create job"}
+        </button>
+      </div>
+    </form>
+  );
+}
