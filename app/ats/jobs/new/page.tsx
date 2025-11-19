@@ -17,13 +17,13 @@ export default async function NewJobPage() {
           ThinkATS
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-          Create a new role
+          Publish a new role
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          This form creates a new job in your core <strong>Jobs</strong> table
-          for tenant <span className="font-medium">{currentTenant.name}</span>.
-          You can later manage its pipeline and publishing status from the ATS
-          dashboard.
+          Fill in the core details. We&apos;ll generate the slug, status and
+          timestamps, and store everything in the{" "}
+          <strong>Jobs</strong> table for tenant{" "}
+          <span className="font-medium">{currentTenant.name}</span>.
         </p>
       </header>
 
