@@ -21,7 +21,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // -----------------------------------------------------------------------------
 
 async function getPublicJobs(): Promise<Job[]> {
-  // 1) Fetch ALL rows from Job table (no filter first, so we definitely see something)
+  // 1) Fetch ALL rows from Job table (no filters yet so we definitely see data)
   const { data, error } = await supabase.from("Job").select("*");
 
   if (error) {
@@ -38,10 +38,15 @@ async function getPublicJobs(): Promise<Job[]> {
 
   // 2) Map Supabase rows into the Job shape used by JobBoardClient
   //    We add fallbacks so it doesn't crash even if some columns are missing/nullable.
-  const mappedJobs: Job[] = data.map((row: any) => {
+  const mappedJobs: Job[] = data.map((row: any, index: number) => {
+    const id = String(
+      row.id ?? row.job_id ?? row.uuid ?? `generated-${index}`
+    );
+
     const slug =
       row.slug ??
-      String(row.id ?? row.job_id ?? row.uuid ?? crypto.randomUUID());
+      row.job_slug ??
+      id;
 
     const title =
       row.title ??
@@ -49,14 +54,18 @@ async function getPublicJobs(): Promise<Job[]> {
       "Untitled role";
 
     return {
+      // required by your Job type
+      id,
       slug,
 
+      // display fields
       title,
 
       employerInitials:
         row.employerInitials ??
         row.employer_initials ??
         (row.employerName ?? row.employer_name ?? "??")
+          .toString()
           .split(" ")
           .map((p: string) => p[0])
           .join("")
@@ -106,6 +115,8 @@ async function getPublicJobs(): Promise<Job[]> {
 export default async function JobsPage() {
   const jobs = await getPublicJobs();
 
-  // This feeds your existing design component
+  // IMPORTANT: this assumes JobBoardClient currently takes `jobs` as prop.
+// If your JobBoardClient still expects `initialJobs`, change this line to:
+//   return <JobBoardClient initialJobs={jobs} />;
   return <JobBoardClient jobs={jobs} />;
 }
