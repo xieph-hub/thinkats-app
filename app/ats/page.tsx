@@ -1,22 +1,17 @@
 // app/ats/page.tsx
-
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import AtsSignOutButton from "./AtsSignOutButton";
 
-export const revalidate = 0; // Always fetch fresh data per request
-
-// Shape used in UI layer
 type AtsJob = {
   id: string;
-  slug: string;
   title: string;
   department: string | null;
   location: string | null;
   employmentType: string | null;
-  status: "Open" | "Closed";
+  status: string;
   createdAt: string | null;
 };
 
@@ -29,12 +24,12 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
     .select(
       `
         id,
-        slug,
         title,
         department,
         location,
         employmentType,
         isPublished,
+        status,
         createdAt,
         tenantId
       `
@@ -43,21 +38,22 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
     .order("createdAt", { ascending: false });
 
   if (error || !data) {
-    console.error("Error loading ATS jobs for tenant from Jobs table", error);
+    console.error("Error loading ATS jobs for tenant", error);
     return [];
   }
 
   return data.map((row: any) => ({
     id: row.id,
-    slug: row.slug,
     title: row.title,
     department: row.department ?? null,
     location: row.location ?? null,
     employmentType: row.employmentType ?? null,
-    status: row.isPublished ? "Open" : "Closed",
+    status: row.status || (row.isPublished ? "Open" : "Draft"),
     createdAt: row.createdAt ?? null,
   }));
 }
+
+export const revalidate = 0; // always fresh per request
 
 export default async function AtsPage() {
   const { user, currentTenant } = await getCurrentUserAndTenants();
@@ -67,7 +63,6 @@ export default async function AtsPage() {
     redirect("/login?role=client&redirect=/ats");
   }
 
-  // Jobs now come from `Jobs` table, not `jobs`
   const jobs = await loadTenantJobs(currentTenant.id);
 
   return (
@@ -82,8 +77,8 @@ export default async function AtsPage() {
             {currentTenant.name}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Central view of all roles you&apos;re hiring for. Click a job to see
-            its pipeline.
+            Central view of all roles you&apos;re hiring for. Click a job to
+            see its pipeline.
           </p>
         </div>
 
@@ -110,7 +105,7 @@ export default async function AtsPage() {
                 <th className="py-2 pr-4">Employment</th>
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Created</th>
-                <th className="py-2 text-right"></th>
+                <th className="py-2 text-right"> </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -140,7 +135,7 @@ export default async function AtsPage() {
                     <td className="py-3 pr-4">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                          job.status === "Open"
+                          job.status.toLowerCase() === "open"
                             ? "bg-emerald-50 text-emerald-700"
                             : "bg-slate-100 text-slate-600"
                         }`}
