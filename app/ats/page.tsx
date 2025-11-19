@@ -4,7 +4,8 @@ import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { getJobsForTenant } from "@/lib/jobs";
 
 export default async function AtsDashboardPage() {
-  const { user, currentTenant } = await getCurrentUserAndTenants();
+  const { user, currentTenant } =
+    await getCurrentUserAndTenants();
 
   // Not logged in → ask them to sign in as a client.
   if (!user) {
@@ -14,8 +15,9 @@ export default async function AtsDashboardPage() {
           ThinkATS – sign in to continue
         </h1>
         <p className="text-sm text-slate-600">
-          You need to be signed in to access the ATS. Use your client or
-          internal Resourcin account to continue.
+          You need to be signed in to access the ATS. Use
+          your client or internal Resourcin account to
+          continue.
         </p>
         <div>
           <Link
@@ -37,8 +39,9 @@ export default async function AtsDashboardPage() {
           ThinkATS – no tenant configured
         </h1>
         <p className="text-sm text-slate-600">
-          Your user is authenticated but not linked to any ATS tenant yet.
-          Please make sure your account has a tenant assignment in Supabase
+          Your user is authenticated but not linked to any
+          ATS tenant yet. Please make sure your account has
+          a tenant assignment in Supabase
           (user_tenant_roles and tenants tables).
         </p>
       </main>
@@ -46,7 +49,9 @@ export default async function AtsDashboardPage() {
   }
 
   // We have a tenant → load jobs for it.
-  const jobs = await getJobsForTenant(currentTenant.id as string);
+  const jobs = await getJobsForTenant(
+    currentTenant.id as string
+  );
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -60,8 +65,8 @@ export default async function AtsDashboardPage() {
             {currentTenant.name ?? "Current tenant"}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Central view of all roles you&apos;re hiring for. Click a job to
-            see its pipeline.
+            Central view of all roles you&apos;re hiring
+            for. Click a job to see its pipeline.
           </p>
         </div>
 
@@ -82,8 +87,9 @@ export default async function AtsDashboardPage() {
             No jobs yet
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Once you start creating roles in ThinkATS, they&apos;ll appear here
-            with quick access to their pipelines.
+            Once you start creating roles in ThinkATS,
+            they&apos;ll appear here with quick access to
+            their pipelines.
           </p>
         </section>
       ) : (
@@ -125,7 +131,9 @@ export default async function AtsDashboardPage() {
                   </td>
                   <td className="px-4 py-3 align-top text-xs">
                     {job.created_at
-                      ? new Date(job.created_at).toLocaleDateString()
+                      ? new Date(
+                          job.created_at
+                        ).toLocaleDateString()
                       : "—"}
                   </td>
                   <td className="px-4 py-3 align-top text-right text-xs">
@@ -133,7 +141,8 @@ export default async function AtsDashboardPage() {
                       href={`/ats/jobs/${job.id}`}
                       className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-[#172965] hover:bg-slate-100"
                     >
-                      View pipeline<span className="ml-1">↗</span>
+                      View pipeline
+                      <span className="ml-1">↗</span>
                     </Link>
                   </td>
                 </tr>
