@@ -1,16 +1,20 @@
 // lib/getCurrentUserAndTenants.ts
 import { createSupabaseServerClient } from "./supabaseServerClient";
 
+type TenantRow = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+};
+
 type TenantRoleRow = {
   id: string;
   user_id: string;
   tenant_id: string;
   role: string;
-  tenant: {
-    id: string;
-    name: string | null;
-    slug: string | null;
-  } | null;
+  // Supabase returns this join as an array type in the generated types,
+  // so we treat it as an array and then flatten below.
+  tenant: TenantRow[] | null;
 };
 
 export async function getCurrentUserAndTenants() {
@@ -29,8 +33,8 @@ export async function getCurrentUserAndTenants() {
     return {
       user: null,
       roles: [] as TenantRoleRow[],
-      tenants: [] as TenantRoleRow["tenant"][],
-      currentTenant: null as TenantRoleRow["tenant"] | null,
+      tenants: [] as TenantRow[],
+      currentTenant: null as TenantRow | null,
     };
   }
 
@@ -42,7 +46,7 @@ export async function getCurrentUserAndTenants() {
       user_id,
       tenant_id,
       role,
-      tenant:tenants(
+      tenant:tenants (
         id,
         name,
         slug
@@ -55,21 +59,23 @@ export async function getCurrentUserAndTenants() {
     console.error("Error loading user_tenant_roles", rolesError);
     return {
       user,
-      roles: [],
-      tenants: [],
-      currentTenant: null,
+      roles: [] as TenantRoleRow[],
+      tenants: [] as TenantRow[],
+      currentTenant: null as TenantRow | null,
     };
   }
 
-  const tenants =
-    roles?.map((r: TenantRoleRow) => r.tenant).filter(Boolean) ?? [];
+  const typedRoles = (roles ?? []) as TenantRoleRow[];
 
-  const currentTenant =
+  // Supabase gives us tenant as an array; flatten into a simple list of tenants.
+  const tenants: TenantRow[] = typedRoles.flatMap((r) => r.tenant ?? []);
+
+  const currentTenant: TenantRow | null =
     tenants.length > 0 ? tenants[0] : null;
 
   return {
     user,
-    roles: (roles as TenantRoleRow[]) ?? [],
+    roles: typedRoles,
     tenants,
     currentTenant,
   };
