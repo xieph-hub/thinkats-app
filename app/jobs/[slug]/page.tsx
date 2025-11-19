@@ -1,5 +1,6 @@
 // app/jobs/[slug]/page.tsx
 
+import JobApplyForm from "../JobApplyForm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
