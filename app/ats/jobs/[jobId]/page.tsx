@@ -1,4 +1,5 @@
 // app/ats/jobs/[jobId]/page.tsx
+
 import Link from "next/link";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
@@ -8,34 +9,41 @@ type PageProps = {
   params: { jobId: string };
 };
 
-// Helper – get job + its applications scoped to the current tenant (from `jobs`)
+// Helper – get job + its applications scoped to the current tenant from canonical tables
 async function getJobAndApplications(jobId: string, tenantId: string) {
   const supabase = await createSupabaseServerClient();
 
-  // Fetch the job from `jobs` table (ATS), no `function` here
+  // ✅ Fetch the job from `Jobs` (canonical)
   const { data: job, error: jobError } = await supabase
-    .from("jobs")
+    .from("Jobs")
     .select(
       `
         id,
+        slug,
         title,
+        department,
         location,
-        employment_type,
-        is_published,
-        created_at,
-        tenant_id
+        employmentType,
+        isPublished,
+        clientName,
+        clientSlug,
+        summary,
+        description,
+        createdAt,
+        updatedAt,
+        tenantId
       `
     )
     .eq("id", jobId)
-    .eq("tenant_id", tenantId)
+    .eq("tenantId", tenantId)
     .single();
 
   if (jobError || !job) {
-    console.error("❌ Job not found or tenant mismatch:", jobError);
+    console.error("❌ Job not found or tenant mismatch (Jobs):", jobError);
     return { job: null, applications: [] };
   }
 
-  // Fetch applications for this job (assuming `applications` table is already ATS-scoped)
+  // ✅ Fetch applications for this job (assuming `applications` has tenantId + jobId)
   const { data: applications, error: appError } = await supabase
     .from("applications")
     .select(
@@ -106,7 +114,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // Load job + applications from ATS tables
+  // Load job + applications from canonical tables
   const { job, applications } = await getJobAndApplications(
     params.jobId,
     currentTenant.id
@@ -119,8 +127,8 @@ export default async function JobPipelinePage({ params }: PageProps) {
           Job not found
         </h1>
         <p className="text-sm text-slate-600">
-          This job either doesn&apos;t exist, doesn&apos;t belong to your tenant,
-          or has been removed.
+          This job either doesn&apos;t exist, doesn&apos;t belong to your
+          tenant, or has been removed.
         </p>
         <Link
           href="/ats"
@@ -155,9 +163,14 @@ export default async function JobPipelinePage({ params }: PageProps) {
               {job.location}
             </span>
           )}
-          {job.employment_type && (
+          {job.employmentType && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.employment_type}
+              {job.employmentType}
+            </span>
+          )}
+          {job.department && (
+            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
+              {job.department}
             </span>
           )}
         </div>
