@@ -4,24 +4,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/site";
-import { prisma } from "@/lib/prisma";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export const dynamic = "force-dynamic";
 
 async function fetchJobBySlugOrId(slugOrId: string) {
-  // 1) Try by slug
+  // Try by slug
   let job = await prisma.job.findFirst({
-    where: { slug: slugOrId, isPublished: true },
+    where: { slug: slugOrId },
     include: {
       tenant: true,
       clientCompany: true,
     },
   });
 
-  // 2) Fallback by id
+  // Fallback by id
   if (!job) {
-    job = await prisma.job.findFirst({
-      where: { id: slugOrId, isPublished: true },
+    job = await prisma.job.findUnique({
+      where: { id: slugOrId },
       include: {
         tenant: true,
         clientCompany: true,
@@ -95,223 +97,202 @@ export default async function JobDetailPage({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
+      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
         {/* Back link */}
-        <div>
+        <div className="mb-4 flex items-center justify-between gap-3">
           <Link
             href="/jobs"
             className="inline-flex items-center text-xs font-medium text-slate-600 hover:text-slate-900"
           >
             ← Back to all roles
           </Link>
+
+          <Link
+            href={applyPath}
+            className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] sm:text-sm"
+          >
+            Apply for this role
+            <span className="ml-1.5 text-[0.7rem]" aria-hidden="true">
+              →
+            </span>
+          </Link>
         </div>
 
-        {/* Hero / summary header */}
-        <section className="rounded-2xl bg-white px-5 py-6 shadow-sm ring-1 ring-slate-200 sm:px-7">
-          <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-start">
+        {/* Header card */}
+        <section className="mb-6 rounded-2xl bg-white px-5 py-6 shadow-sm ring-1 ring-slate-200 sm:px-7">
+          <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
             <div className="flex gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#172965] text-sm font-semibold text-white shadow-sm">
                 {initials}
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-slate-900 sm:text-2xl">
+                <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">
                   {job.title}
                 </h1>
                 <p className="mt-1 text-sm text-slate-600">
                   {employerName} · {job.location}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2 text-[0.7rem] text-slate-600 sm:text-xs">
-                  {job.function && (
-                    <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                      {job.function}
-                    </span>
-                  )}
-                  {job.employmentType && (
-                    <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                      {job.employmentType}
-                    </span>
-                  )}
-                  {job.seniority && (
-                    <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                      {job.seniority} level
-                    </span>
-                  )}
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full bg-slate-100 px-2 py-0.5 text-[0.65rem] text-slate-600"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
               </div>
             </div>
 
-            <div className="flex flex-col items-start gap-3 text-xs text-slate-500 sm:items-end">
+            <div className="flex flex-col items-start gap-1 text-xs text-slate-500 sm:items-end">
               <span>Posted {postedAt}</span>
-              <Link
-                href={applyPath}
-                className="inline-flex items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] sm:text-sm"
-              >
-                Apply for this role
-                <span className="ml-1.5 text-[0.7rem]" aria-hidden="true">
-                  →
-                </span>
-              </Link>
+              <span>Managed by Resourcin</span>
             </div>
           </div>
-        </section>
 
-        {/* Snapshot cards */}
-        <section className="grid gap-3 text-xs sm:grid-cols-3 sm:text-sm">
-          <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-              Role snapshot
-            </p>
-            <p className="mt-1 text-slate-700">
-              {job.function || "Multi-disciplinary"} ·{" "}
-              {job.seniority || "All levels"} · {job.employmentType || "Full-time"}
-            </p>
-          </div>
-          <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-              Location & ways of working
-            </p>
-            <p className="mt-1 text-slate-700">
-              {job.location}. Remote / hybrid specifics are usually agreed with
-              the hiring team during process.
-            </p>
-          </div>
-          <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
-              How we hire
-            </p>
-            <p className="mt-1 text-slate-700">
-              Structured stages, clear feedback where possible, and no black
-              holes. We aim for a concise, respectful process.
-            </p>
+          <div className="mt-4 flex flex-wrap gap-2 text-[0.7rem] text-slate-600 sm:text-xs">
+            {job.function && (
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
+                {job.function}
+              </span>
+            )}
+            {job.employmentType && (
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
+                {job.employmentType}
+              </span>
+            )}
+            {job.seniority && (
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
+                {job.seniority} level
+              </span>
+            )}
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-[0.65rem] text-slate-600"
+              >
+                #{tag}
+              </span>
+            ))}
           </div>
         </section>
 
-        {/* Main content grid: left = sections, right = sidebar */}
-        <section className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          {/* Left: rich sections */}
-          <div className="space-y-8">
-            {/* About the role */}
-            <section>
-              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
+        {/* Body layout: main + sidebar */}
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          {/* Main column */}
+          <div className="space-y-6">
+            {/* Snapshot / summary */}
+            {job.summary && (
+              <div className="rounded-2xl bg-white px-5 py-4 text-sm text-slate-800 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-sm font-semibold text-[#172965] sm:text-base">
+                  Role snapshot
+                </h2>
+                <p className="mt-2 leading-relaxed">{job.summary}</p>
+              </div>
+            )}
+
+            {/* Description */}
+            <div className="rounded-2xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+              <h2 className="text-sm font-semibold text-[#172965] sm:text-base">
                 About the role
               </h2>
-              <p className="mt-2 text-sm text-slate-700">
-                {job.summary ||
-                  "This search is being run by Resourcin on behalf of a growth-focused team. Below is the full brief shared with shortlisted candidates."}
-              </p>
-            </section>
-
-            {/* Full brief / description */}
-            <section>
-              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
-                Full brief
-              </h2>
-              <div className="mt-3 prose prose-sm max-w-none text-slate-800 prose-headings:text-slate-900 prose-a:text-[#172965]">
+              <article className="prose prose-sm mt-3 max-w-none text-slate-800 prose-headings:text-slate-900 prose-a:text-[#172965]">
                 {job.description ? (
-                  <div dangerouslySetInnerHTML={{ __html: job.description }} />
+                  <div
+                    // description is assumed to already be safe HTML/Markdown
+                    dangerouslySetInnerHTML={{ __html: job.description }}
+                  />
                 ) : (
                   <p>
                     Full description will be shared at screening. This role is
                     currently in active search via Resourcin.
                   </p>
                 )}
-              </div>
-            </section>
+              </article>
+            </div>
 
-            {/* How Resourcin works with candidates */}
-            <section>
-              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
-                How we work with candidates
+            {/* How to work with Resourcin / process */}
+            <div className="rounded-2xl bg-white px-5 py-5 shadow-sm ring-1 ring-slate-200">
+              <h2 className="text-sm font-semibold text-[#172965] sm:text-base">
+                How the process works
               </h2>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-700">
-                <li>No spam and no CV-blast. We only approach you for real, active briefs.</li>
+              <ol className="mt-3 space-y-2 text-sm text-slate-700">
                 <li>
-                  We try to share context on the team, reporting lines and expectations
-                  before you commit to a process.
+                  <span className="font-semibold text-[#172965]">1.</span> You
+                  submit a short, structured application with your CV and core
+                  context.
                 </li>
                 <li>
-                  Where we can, we offer honest feedback to help you calibrate future
-                  applications.
+                  <span className="font-semibold text-[#172965]">2.</span> We
+                  review against the brief and reach out if there&apos;s a
+                  strong match.
                 </li>
-              </ul>
-            </section>
+                <li>
+                  <span className="font-semibold text-[#172965]">3.</span> You
+                  get a clear outline of the role, context on the team, and the
+                  interview stages.
+                </li>
+              </ol>
+
+              <div className="mt-4">
+                <Link
+                  href={applyPath}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111c4c]"
+                >
+                  Start application
+                  <span className="ml-1.5 text-xs" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              </div>
+            </div>
           </div>
 
-          {/* Right: sidebar */}
-          <aside className="space-y-6">
-            <section className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200 sm:px-5">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Key details
+          {/* Sidebar */}
+          <aside className="space-y-4">
+            <div className="rounded-2xl bg-white px-4 py-4 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Quick facts
               </h3>
-              <dl className="mt-3 space-y-2 text-xs text-slate-700">
+              <dl className="mt-3 space-y-2">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">Employer</dt>
-                  <dd className="text-right">{employerName}</dd>
+                  <dt className="text-xs text-slate-500">Company</dt>
+                  <dd className="text-xs font-medium text-slate-800 text-right">
+                    {employerName}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-slate-500">Location</dt>
-                  <dd className="text-right">{job.location}</dd>
+                  <dt className="text-xs text-slate-500">Location</dt>
+                  <dd className="text-xs font-medium text-slate-800 text-right">
+                    {job.location}
+                  </dd>
                 </div>
-                {job.function && (
+                {job.employmentType && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Function</dt>
-                    <dd className="text-right">{job.function}</dd>
+                    <dt className="text-xs text-slate-500">Type</dt>
+                    <dd className="text-xs font-medium text-slate-800 text-right">
+                      {job.employmentType}
+                    </dd>
                   </div>
                 )}
                 {job.seniority && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Seniority</dt>
-                    <dd className="text-right">{job.seniority}</dd>
-                  </div>
-                )}
-                {job.employmentType && (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-slate-500">Employment type</dt>
-                    <dd className="text-right">{job.employmentType}</dd>
+                    <dt className="text-xs text-slate-500">Seniority</dt>
+                    <dd className="text-xs font-medium text-slate-800 text-right">
+                      {job.seniority}
+                    </dd>
                   </div>
                 )}
               </dl>
+            </div>
 
-              <Link
-                href={applyPath}
-                className="mt-4 inline-flex w-full items-center justify-center rounded-lg bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] sm:text-sm"
-              >
-                Apply for this role
-                <span className="ml-1.5 text-[0.7rem]" aria-hidden="true">
-                  →
-                </span>
-              </Link>
-            </section>
-
-            <section className="rounded-2xl bg-slate-900 px-4 py-4 text-xs text-slate-100 shadow-sm sm:px-5">
-              <h3 className="text-sm font-semibold text-white">
-                Not quite this role?
+            <div className="rounded-2xl bg-white px-4 py-4 text-sm text-slate-700 shadow-sm ring-1 ring-slate-200">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Apply via Resourcin
               </h3>
-              <p className="mt-2 text-slate-100/90">
-                You can still share your profile once via the talent network.
-                When we run searches that match your experience, we reach out
-                with a clear brief.
+              <p className="mt-2 text-xs leading-relaxed text-slate-600">
+                We&apos;ll use your application to understand your experience,
+                career direction and constraints, and then map you against this
+                brief.
               </p>
               <Link
-                href={`/talent-network?utm_source=job_detail&utm_campaign=${encodeURIComponent(
-                  job.slug ?? params.slug
-                )}`}
-                className="mt-3 inline-flex items-center justify-center rounded-lg bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-slate-900 hover:bg-slate-100"
+                href={applyPath}
+                className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c]"
               >
-                Join the talent network
-                <span className="ml-1.5 text-[0.7rem]" aria-hidden="true">
-                  →
-                </span>
+                Apply for this role
               </Link>
-            </section>
+            </div>
           </aside>
         </section>
       </main>
