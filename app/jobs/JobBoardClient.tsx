@@ -5,12 +5,6 @@ import Link from "next/link";
 import { SITE_URL } from "@/lib/site";
 import type { Job, JobSeniority } from "@/lib/jobs";
 
-export default function JobBoardClient({ jobs }: JobBoardClientProps) {
-  console.log("JobBoardClient received jobs:", jobs.length, jobs[0]);
-  const brand = JOB_BOARD_CONFIG;
-  ...
-}
-
 // -----------------------------------------------------------------------------
 // Board config (still single-tenant for now)
 // -----------------------------------------------------------------------------
@@ -250,13 +244,12 @@ type JobBoardClientProps = {
 };
 
 export default function JobBoardClient({ jobs }: JobBoardClientProps) {
+  console.log("JobBoardClient received jobs:", jobs.length, jobs[0]);
   const brand = JOB_BOARD_CONFIG;
 
   // Build unique filter options
   const locations = Array.from(new Set(jobs.map((j) => j.location))).sort();
-
   const functions = Array.from(new Set(jobs.map((j) => j.department))).sort();
-
   const seniorities = Array.from(new Set(jobs.map((j) => j.seniority))).sort();
 
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
@@ -315,7 +308,7 @@ export default function JobBoardClient({ jobs }: JobBoardClientProps) {
                 "linear-gradient(120deg, #172965, #172965 55%, #203b99)",
             }}
           >
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items	end lg:justify-between">
               <div className="max-w-xl">
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   Roles from teams that actually ship work.
@@ -433,7 +426,7 @@ export default function JobBoardClient({ jobs }: JobBoardClientProps) {
 
         {/* Job cards */}
         <section aria-label="Open roles" className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap itemscenter justify-between gap-3">
             <h2 className="text-base font-semibold text-[#172965] sm:text-lg">
               Representative searches & open roles
             </h2>
@@ -608,7 +601,7 @@ export default function JobBoardClient({ jobs }: JobBoardClientProps) {
 
                         <Link
                           href={detailFromListUrl}
-                          className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
+                          className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium textwhite shadow-sm sm:text-xs"
                           style={{
                             backgroundColor: JOB_BOARD_CONFIG.primaryColor,
                           }}
