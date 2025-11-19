@@ -5,6 +5,12 @@ import Link from "next/link";
 import { SITE_URL } from "@/lib/site";
 import type { Job, JobSeniority } from "@/lib/jobs";
 
+export default function JobBoardClient({ jobs }: JobBoardClientProps) {
+  console.log("JobBoardClient received jobs:", jobs.length, jobs[0]);
+  const brand = JOB_BOARD_CONFIG;
+  ...
+}
+
 // -----------------------------------------------------------------------------
 // Board config (still single-tenant for now)
 // -----------------------------------------------------------------------------
