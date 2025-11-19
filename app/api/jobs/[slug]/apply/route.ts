@@ -1,23 +1,47 @@
 // app/api/jobs/[slug]/apply/route.ts
 
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import {
+  PrismaClient,
+  ApplicationStage,
+  ApplicationStatus,
+} from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const prisma = new PrismaClient();
 
 export async function POST(
   req: Request,
   { params }: { params: { slug: string } }
 ) {
   try {
-    const slugOrId = params.slug;
+    const formData = await req.formData();
 
-    // 1) Find the job by slug OR id (no extra filters for now)
+    const fullName = String(formData.get("fullName") || "").trim();
+    const email = String(formData.get("email") || "").trim();
+    const phone = String(formData.get("phone") || "").trim();
+    const location = String(formData.get("location") || "").trim();
+    const linkedinUrl = String(formData.get("linkedinUrl") || "").trim();
+    const portfolioUrl = String(formData.get("portfolioUrl") || "").trim();
+    const headline = String(formData.get("headline") || "").trim();
+    const notes = String(formData.get("notes") || "").trim();
+    let cvUrlRaw = String(formData.get("cvUrl") || "").trim() || null;
+
+    const cvFile = formData.get("cvFile") as File | null;
+
+    if (!fullName || !email) {
+      return NextResponse.json(
+        { error: "Full name and email are required." },
+        { status: 400 }
+      );
+    }
+
+    // Find job by slug or id
     const job = await prisma.job.findFirst({
       where: {
-        OR: [{ slug: slugOrId }, { id: slugOrId }],
+        OR: [{ slug: params.slug }, { id: params.slug }],
       },
     });
 
@@ -28,39 +52,73 @@ export async function POST(
       );
     }
 
-    // 2) Parse JSON body
-    const body = await req.json();
-
-    const fullName = (body.fullName ?? "").toString().trim();
-    const email = (body.email ?? "").toString().trim();
-
-    if (!fullName || !email) {
-      return NextResponse.json(
-        { error: "Full name and email are required." },
-        { status: 400 }
-      );
+    // If a file is uploaded, store it as a data URL in cvUrl (works without extra infra)
+    if (cvFile && cvFile.size > 0) {
+      const arrayBuffer = await cvFile.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64 = buffer.toString("base64");
+      const mimeType = cvFile.type || "application/octet-stream";
+      cvUrlRaw = `data:${mimeType};base64,${base64}`;
     }
 
-    // 3) Create JobApplication (stage/status use Prisma defaults)
-    const application = await prisma.jobApplication.create({
-      data: {
-        jobId: job.id,
-        fullName,
+    // Find or create candidate by email + tenant
+    let candidate = await prisma.candidate.findFirst({
+      where: {
         email,
-        phone: body.phone?.toString().trim() || null,
-        location: body.location?.toString().trim() || null,
-        linkedinUrl: body.linkedinUrl?.toString().trim() || null,
-        portfolioUrl: body.portfolioUrl?.toString().trim() || null,
-        cvUrl: body.cvUrl?.toString().trim() || null,
-        coverLetter: body.coverLetter?.toString().trim() || null,
-        source: body.source?.toString().trim() || "Job detail form",
-        // stage/status left out – Prisma + DB defaults handle them
+        tenantId: job.tenantId,
       },
     });
 
-    return NextResponse.json({ ok: true, id: application.id });
-  } catch (error) {
-    console.error("Job application error:", error);
+    if (!candidate) {
+      candidate = await prisma.candidate.create({
+        data: {
+          tenantId: job.tenantId,
+          fullName,
+          email,
+          phone: phone || null,
+          location: location || null,
+          linkedinUrl: linkedinUrl || null,
+          primaryFunction: job.function || null,
+          seniority: job.seniority || null,
+          cvUrl: cvUrlRaw,
+          notes: headline || notes || null,
+        },
+      });
+    } else {
+      candidate = await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          fullName,
+          phone: phone || candidate.phone,
+          location: location || candidate.location,
+          linkedinUrl: linkedinUrl || candidate.linkedinUrl,
+          cvUrl: cvUrlRaw || candidate.cvUrl,
+          notes: headline || notes || candidate.notes,
+        },
+      });
+    }
+
+    await prisma.jobApplication.create({
+      data: {
+        jobId: job.id,
+        candidateId: candidate.id,
+        fullName,
+        email,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        portfolioUrl: portfolioUrl || null,
+        cvUrl: cvUrlRaw,
+        coverLetter: headline || null,
+        source: "Website",
+        stage: ApplicationStage.APPLIED,
+        status: ApplicationStatus.PENDING,
+      },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Application submit error", err);
     return NextResponse.json(
       { error: "Unexpected error while submitting application." },
       { status: 500 }
