@@ -1,10 +1,34 @@
 // lib/jobs.ts
 import { createSupabaseServerClient } from "./supabaseServerClient";
 
+// -----------------------------------------------------------------------------
+// Types
+// -----------------------------------------------------------------------------
+
+// For now keep this simple — you can tighten this later if you like.
+export type JobSeniority = string;
+
+export type Job = {
+  id: string;
+  tenant_id: string;
+  title: string;
+  department: string | null;
+  location: string | null;
+  employment_type: string | null;
+  seniority: JobSeniority | null;
+  status: string | null;
+  visibility: string | null;
+  created_at: string;
+};
+
+// -----------------------------------------------------------------------------
+// Queries
+// -----------------------------------------------------------------------------
+
 /**
  * Get all jobs for a given tenant.
  */
-export async function getJobsForTenant(tenantId: string) {
+export async function getJobsForTenant(tenantId: string): Promise<Job[]> {
   const supabase = createSupabaseServerClient();
 
   const { data, error } = await supabase
@@ -12,6 +36,7 @@ export async function getJobsForTenant(tenantId: string) {
     .select(
       `
       id,
+      tenant_id,
       title,
       department,
       location,
@@ -27,7 +52,7 @@ export async function getJobsForTenant(tenantId: string) {
 
   if (error) throw error;
 
-  return data ?? [];
+  return (data ?? []) as Job[];
 }
 
 /**
@@ -35,8 +60,14 @@ export async function getJobsForTenant(tenantId: string) {
  * - job
  * - stages
  * - applications + candidate info
+ *
+ * Types are kept loose (any[]) for now to avoid extra friction.
  */
-export async function getJobWithPipeline(jobId: string) {
+export async function getJobWithPipeline(jobId: string): Promise<{
+  job: Job | null;
+  stages: any[];
+  applications: any[];
+}> {
   const supabase = createSupabaseServerClient();
 
   // 1) Job
@@ -100,7 +131,7 @@ export async function getJobWithPipeline(jobId: string) {
   if (appsError) throw appsError;
 
   return {
-    job,
+    job: (job as Job) ?? null,
     stages: stages ?? [],
     applications: applications ?? [],
   };
