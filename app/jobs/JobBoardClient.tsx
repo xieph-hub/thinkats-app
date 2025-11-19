@@ -349,7 +349,7 @@ export default function JobBoardClient({ jobs }: JobBoardClientProps) {
         {/* Summary row */}
         <section className="mb-6">
           <div className="grid gap-3 text-xs sm:grid-cols-3 sm:text-sm">
-            <div className="rounded-xl bg:white px-4 py-3 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
               <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
                 Functions
               </p>
