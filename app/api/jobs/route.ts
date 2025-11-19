@@ -1,62 +1,133 @@
 // app/api/jobs/route.ts
-import { NextRequest, NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { getCurrentTenantId } from "@/lib/tenant"  // ✅ your existing tenant helper
+import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 
+/**
+ * POST /api/jobs
+ * Creates a new job under the current tenant.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    // Get the logged-in user and their tenant
+    const { user, currentTenant } = await getCurrentUserAndTenants();
+
+    if (!user || !currentTenant) {
+      return NextResponse.json(
+        { error: "You must be logged in and linked to a tenant to create jobs." },
+        { status: 401 }
+      );
+    }
+
+    // Parse the incoming JSON body
+    const body = await req.json();
 
     const {
-      clientCompanyId,
       title,
-      slug,
       location,
       function: jobFunction,
-      employmentType,
+      employment_type,
       seniority,
       summary,
       description,
       tags,
-    } = body
+      is_published,
+    } = body;
 
-    // Basic validation
-    if (!title || !slug || !location) {
+    if (!title || !location) {
       return NextResponse.json(
-        { error: "title, slug, and location are required" },
+        { error: "Missing required fields: title and location" },
         { status: 400 }
-      )
+      );
     }
 
-    // ✅ Use tenant UUID from Supabase
-    const tenantId = getCurrentTenantId()
+    const supabase = await createSupabaseServerClient();
 
-    // ✅ Create job and connect to tenant
-    const job = await prisma.job.create({
-      data: {
-        clientCompanyId: clientCompanyId ?? null,
-        title,
-        slug,
-        location,
-        function: jobFunction ?? null,
-        employmentType: employmentType ?? null,
-        seniority: seniority ?? null,
-        summary: summary ?? null,
-        description: description ?? null,
-        tags: tags ?? [],
-        isPublished: false,
-        tenant: {
-          connect: { id: tenantId }, // 👈 fixes the “Argument tenant is missing” error
+    // ✅ Insert the job into Supabase, linked to this tenant
+    const { data, error } = await supabase
+      .from("jobs")
+      .insert([
+        {
+          tenant_id: currentTenant.id,
+          title,
+          location,
+          function: jobFunction ?? null,
+          employment_type: employment_type ?? null,
+          seniority: seniority ?? null,
+          summary: summary ?? null,
+          description: description ?? null,
+          tags: tags ?? [],
+          is_published: is_published ?? false,
         },
-      },
-    })
+      ])
+      .select()
+      .single();
 
-    return NextResponse.json(job, { status: 201 })
-  } catch (error) {
-    console.error("❌ Error creating job:", error)
+    if (error) {
+      console.error("❌ Error creating job:", error);
+      return NextResponse.json(
+        { error: "Failed to create job. Check logs for details." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (err) {
+    console.error("❌ Unexpected error in /api/jobs:", err);
     return NextResponse.json(
-      { error: "Failed to create job" },
+      { error: "An unexpected error occurred while creating the job." },
       { status: 500 }
-    )
+    );
+  }
+}
+
+/**
+ * GET /api/jobs
+ * Returns a list of jobs for the current tenant.
+ */
+export async function GET() {
+  try {
+    const { user, currentTenant } = await getCurrentUserAndTenants();
+
+    if (!user || !currentTenant) {
+      return NextResponse.json(
+        { error: "You must be logged in and linked to a tenant." },
+        { status: 401 }
+      );
+    }
+
+    const supabase = await createSupabaseServerClient();
+
+    const { data, error } = await supabase
+      .from("jobs")
+      .select(
+        `
+          id,
+          title,
+          location,
+          function,
+          employment_type,
+          is_published,
+          created_at
+        `
+      )
+      .eq("tenant_id", currentTenant.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("⚠️ Error fetching jobs:", error);
+      return NextResponse.json(
+        { error: "Unable to load jobs" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data, { status: 200 });
+  } catch (err) {
+    console.error("⚠️ Unexpected error in GET /api/jobs:", err);
+    return NextResponse.json(
+      { error: "Unexpected server error" },
+      { status: 500 }
+    );
   }
 }
