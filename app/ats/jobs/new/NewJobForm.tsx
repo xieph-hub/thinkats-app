@@ -21,30 +21,34 @@ export default function NewJobForm() {
       const formData = new FormData(form);
 
       const title = String(formData.get("title") || "").trim();
-      const slug = String(formData.get("slug") || "").trim();
       const location = String(formData.get("location") || "").trim();
 
       if (!title) {
-        setApiError("Title is required.");
+        setApiError("Job title is required.");
         setIsSubmitting(false);
         return;
       }
 
-      // Build payload matching /api/jobs (and Jobs table)
+      if (!location) {
+        setApiError("Location is required.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Build payload to send to /api/jobs
       const payload: any = {
         title,
-        slug: slug || undefined, // server will slugify if empty
-        location: location || null,
-        department: String(formData.get("department") || "").trim() || null,
-        jobType: String(formData.get("jobType") || "").trim() || null,
-        level: String(formData.get("level") || "").trim() || null,
-        function: String(formData.get("function") || "").trim() || null,
-        industry: String(formData.get("industry") || "").trim() || null,
-        remoteOption:
-          String(formData.get("remoteOption") || "").trim() || null,
+        location,
+        slug: String(formData.get("slug") || "").trim() || undefined,
+        department:
+          String(formData.get("department") || "").trim() || null,
         employmentType:
           String(formData.get("employmentType") || "").trim() || null,
-        seniority: String(formData.get("seniority") || "").trim() || null,
+        seniority:
+          String(formData.get("seniority") || "").trim() || null,
+        remoteOption:
+          String(formData.get("remoteOption") || "").trim() || null,
+        jobType: String(formData.get("jobType") || "").trim() || null,
         salaryCurrency:
           String(formData.get("salaryCurrency") || "").trim() || null,
         salaryMin: String(formData.get("salaryMin") || "").trim() || null,
@@ -52,14 +56,10 @@ export default function NewJobForm() {
         experienceMax:
           String(formData.get("experienceMax") || "").trim() || null,
         summary: String(formData.get("summary") || "").trim() || null,
-        description: String(formData.get("description") || "").trim() || null,
+        description:
+          String(formData.get("description") || "").trim() || null,
         requirements:
           String(formData.get("requirements") || "").trim() || null,
-        clientName: String(formData.get("clientName") || "").trim() || null,
-        clientSlug: String(formData.get("clientSlug") || "").trim() || null,
-        clientCompanyId:
-          String(formData.get("clientCompanyId") || "").trim() || null,
-        status: String(formData.get("status") || "").trim() || "draft",
         isPublished: formData.get("isPublished") === "on",
       };
 
@@ -73,9 +73,7 @@ export default function NewJobForm() {
 
       const res = await fetch("/api/jobs", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -86,8 +84,8 @@ export default function NewJobForm() {
           if (json && json.error) {
             message = json.error;
           }
-        } catch (error) {
-          // ignore JSON parse errors
+        } catch {
+          // ignore
         }
         setApiError(message);
         setIsSubmitting(false);
@@ -96,7 +94,7 @@ export default function NewJobForm() {
 
       const job = await res.json();
 
-      // Redirect straight to the new job's pipeline
+      // Redirect: go straight to ATS pipeline, or fallback to ATS dashboard
       if (job && job.id) {
         router.push(`/ats/jobs/${job.id}`);
       } else {
@@ -105,7 +103,6 @@ export default function NewJobForm() {
     } catch (err) {
       console.error("Error submitting job form:", err);
       setApiError("Unexpected error while creating job.");
-    } finally {
       setIsSubmitting(false);
     }
   }
@@ -136,7 +133,20 @@ export default function NewJobForm() {
 
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Slug
+            Location<span className="text-red-500">*</span>
+          </label>
+          <input
+            name="location"
+            type="text"
+            required
+            placeholder="Lagos, Nigeria · Hybrid"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Slug (optional)
           </label>
           <input
             name="slug"
@@ -147,18 +157,6 @@ export default function NewJobForm() {
           <p className="mt-1 text-xs text-slate-500">
             Leave blank to auto-generate from the title.
           </p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Location
-          </label>
-          <input
-            name="location"
-            type="text"
-            placeholder="Lagos, Nigeria · Hybrid"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
         </div>
       </div>
 
@@ -177,21 +175,22 @@ export default function NewJobForm() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Job type
+            Employment type
           </label>
           <select
-            name="jobType"
+            name="employmentType"
             className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           >
             <option value="">Select...</option>
             <option value="Full-time">Full-time</option>
             <option value="Part-time">Part-time</option>
             <option value="Contract">Contract</option>
+            <option value="Internship">Internship</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Level / seniority
+            Seniority
           </label>
           <select
             name="seniority"
@@ -203,6 +202,7 @@ export default function NewJobForm() {
             <option value="Senior">Senior</option>
             <option value="Lead">Lead</option>
             <option value="Director">Director</option>
+            <option value="Executive">Executive</option>
           </select>
         </div>
       </div>
@@ -213,7 +213,7 @@ export default function NewJobForm() {
             Function
           </label>
           <input
-            name="function"
+            name="jobType"
             type="text"
             placeholder="Operations, Sales, Engineering..."
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
@@ -221,7 +221,7 @@ export default function NewJobForm() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Remote option
+            Remote mode
           </label>
           <select
             name="remoteOption"
@@ -235,12 +235,12 @@ export default function NewJobForm() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Industry
+            Max experience (years)
           </label>
           <input
-            name="industry"
-            type="text"
-            placeholder="Fintech, Oil & Gas..."
+            name="experienceMax"
+            type="number"
+            min={0}
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
@@ -281,52 +281,6 @@ export default function NewJobForm() {
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Max experience (years)
-          </label>
-          <input
-            name="experienceMax"
-            type="number"
-            min={0}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-      </div>
-
-      {/* Client context */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Client name
-          </label>
-          <input
-            name="clientName"
-            type="text"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Client slug
-          </label>
-          <input
-            name="clientSlug"
-            type="text"
-            placeholder="acme-inc"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Client company ID
-          </label>
-          <input
-            name="clientCompanyId"
-            type="text"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
       </div>
 
       {/* Copy fields */}
@@ -338,6 +292,7 @@ export default function NewJobForm() {
           <textarea
             name="summary"
             rows={2}
+            placeholder="One or two lines that describe the role."
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
@@ -349,6 +304,7 @@ export default function NewJobForm() {
           <textarea
             name="description"
             rows={4}
+            placeholder="What this role exists to do, the team, etc."
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
@@ -360,12 +316,13 @@ export default function NewJobForm() {
           <textarea
             name="requirements"
             rows={3}
+            placeholder="Skills, experience, and traits you care about."
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
       </div>
 
-      {/* Tags & status */}
+      {/* Tags & publish */}
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700">
@@ -378,41 +335,23 @@ export default function NewJobForm() {
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
           <p className="mt-1 text-xs text-slate-500">
-            Comma-separated. Used for search and filtering.
+            Comma-separated keywords that help you filter later.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <input
-              id="isPublished"
-              name="isPublished"
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-            />
-            <label
-              htmlFor="isPublished"
-              className="text-sm font-medium text-slate-700"
-            >
-              Publish this role
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-500">
-              Status
-            </label>
-            <select
-              name="status"
-              defaultValue="open"
-              className="mt-1 block w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-            >
-              <option value="open">Open</option>
-              <option value="on_hold">On hold</option>
-              <option value="closed">Closed</option>
-              <option value="draft">Draft</option>
-            </select>
-          </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="isPublished"
+            name="isPublished"
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+          />
+          <label
+            htmlFor="isPublished"
+            className="text-sm font-medium text-slate-700"
+          >
+            Publish this role now (otherwise it will be saved as draft)
+          </label>
         </div>
       </div>
 
