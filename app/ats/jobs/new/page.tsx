@@ -22,7 +22,7 @@ export default async function NewJobPage() {
         <p className="mt-1 text-sm text-slate-600">
           Fill in the core details. We&apos;ll generate the slug, status and
           timestamps, and store everything in the{" "}
-          <strong>Jobs</strong> table for tenant{" "}
+          <strong>jobs</strong> table for tenant{" "}
           <span className="font-medium">{currentTenant.name}</span>.
         </p>
       </header>
