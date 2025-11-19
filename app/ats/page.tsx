@@ -15,12 +15,12 @@ type AtsJob = {
   createdAt: string | null;
 };
 
-// Load jobs for the current tenant from the canonical `Jobs` table
+// Load jobs for the current tenant from the `jobs` table
 async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase
-    .from("Jobs")
+    .from("jobs")
     .select(
       `
         id,
@@ -58,7 +58,6 @@ export const revalidate = 0; // always fresh per request
 export default async function AtsPage() {
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // If not logged in as a client, push back to login with redirect to /ats
   if (!user || !currentTenant) {
     redirect("/login?role=client&redirect=/ats");
   }
