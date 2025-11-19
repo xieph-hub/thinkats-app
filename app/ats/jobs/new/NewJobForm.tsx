@@ -46,9 +46,12 @@ export default function NewJobForm() {
           String(formData.get("employmentType") || "").trim() || null,
         seniority:
           String(formData.get("seniority") || "").trim() || null,
+        function:
+          String(formData.get("function") || "").trim() || null,
+        industry:
+          String(formData.get("industry") || "").trim() || null,
         remoteOption:
           String(formData.get("remoteOption") || "").trim() || null,
-        jobType: String(formData.get("jobType") || "").trim() || null,
         salaryCurrency:
           String(formData.get("salaryCurrency") || "").trim() || null,
         salaryMin: String(formData.get("salaryMin") || "").trim() || null,
@@ -213,7 +216,7 @@ export default function NewJobForm() {
             Function
           </label>
           <input
-            name="jobType"
+            name="function"
             type="text"
             placeholder="Operations, Sales, Engineering..."
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
@@ -221,7 +224,7 @@ export default function NewJobForm() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Remote mode
+            Work mode
           </label>
           <select
             name="remoteOption"
@@ -235,7 +238,7 @@ export default function NewJobForm() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Max experience (years)
+            Minimum years of experience
           </label>
           <input
             name="experienceMax"
@@ -283,8 +286,20 @@ export default function NewJobForm() {
         </div>
       </div>
 
-      {/* Copy fields */}
+      {/* Industry & copy fields */}
       <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Industry
+          </label>
+          <input
+            name="industry"
+            type="text"
+            placeholder="Fintech, Logistics, Healthcare..."
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-slate-700">
             Short summary
@@ -326,16 +341,16 @@ export default function NewJobForm() {
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Tags
+            Tags / skills
           </label>
           <input
             name="tags"
             type="text"
-            placeholder="shipping, logistics, operations"
+            placeholder="shipping, logistics, operations, excel"
             className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
           <p className="mt-1 text-xs text-slate-500">
-            Comma-separated keywords that help you filter later.
+            Comma-separated keywords (your skills/competency taxonomy v1).
           </p>
         </div>
 
