@@ -8,11 +8,11 @@ type PageProps = {
   params: { jobId: string };
 };
 
-// Helper – get job + its applications scoped to the current tenant
+// Helper – get job + its applications scoped to the current tenant (from `jobs`)
 async function getJobAndApplications(jobId: string, tenantId: string) {
   const supabase = await createSupabaseServerClient();
 
-  // ✅ Fetch the job (making sure it belongs to this tenant)
+  // Fetch the job from `jobs` table (ATS), no `function` here
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select(
@@ -21,7 +21,6 @@ async function getJobAndApplications(jobId: string, tenantId: string) {
         title,
         location,
         employment_type,
-        function,
         is_published,
         created_at,
         tenant_id
@@ -36,7 +35,7 @@ async function getJobAndApplications(jobId: string, tenantId: string) {
     return { job: null, applications: [] };
   }
 
-  // ✅ Fetch all applications for this job under the same tenant
+  // Fetch applications for this job (assuming `applications` table is already ATS-scoped)
   const { data: applications, error: appError } = await supabase
     .from("applications")
     .select(
@@ -64,7 +63,7 @@ async function getJobAndApplications(jobId: string, tenantId: string) {
 export default async function JobPipelinePage({ params }: PageProps) {
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // 🚪 Not signed in
+  // Not signed in
   if (!user) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -72,7 +71,8 @@ export default async function JobPipelinePage({ params }: PageProps) {
           ThinkATS – sign in to view this job
         </h1>
         <p className="text-sm text-slate-600">
-          You need to be signed in as a client or internal Resourcin user to view job pipelines in ThinkATS.
+          You need to be signed in as a client or internal Resourcin user to
+          view job pipelines in ThinkATS.
         </p>
         <Link
           href="/login?role=client"
@@ -84,7 +84,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // 🚫 No tenant configured
+  // No tenant configured
   if (!currentTenant) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -92,8 +92,9 @@ export default async function JobPipelinePage({ params }: PageProps) {
           ThinkATS – no tenant configured
         </h1>
         <p className="text-sm text-slate-600">
-          You&apos;re authenticated but your user isn&apos;t linked to any ATS tenant yet.
-          Please make sure your account has a tenant assignment in Supabase.
+          You&apos;re authenticated but your user isn&apos;t linked to any ATS
+          tenant yet. Please make sure your account has a tenant assignment in
+          Supabase.
         </p>
         <Link
           href="/ats"
@@ -105,13 +106,12 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // ✅ Load job + applications
+  // Load job + applications from ATS tables
   const { job, applications } = await getJobAndApplications(
     params.jobId,
     currentTenant.id
   );
 
-  // 🕳️ Not found or tenant mismatch
   if (!job) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -132,9 +132,9 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // ✅ Page layout – job header + applications table
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
+      {/* Page header */}
       <header className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -158,11 +158,6 @@ export default async function JobPipelinePage({ params }: PageProps) {
           {job.employment_type && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
               {job.employment_type}
-            </span>
-          )}
-          {job.function && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.function}
             </span>
           )}
         </div>
