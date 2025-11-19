@@ -1,73 +1,61 @@
 // app/jobs/page.tsx
+import Link from "next/link";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
-import JobBoardClient from "./JobBoardClient";
-import { PrismaClient } from "@prisma/client";
+type PublicJob = {
+  id: string;
+  slug: string | null;
+  title: string;
+  clientName: string | null;
+  location: string | null;
+  employmentType: string | null;
+  remoteOption: string | null;
+  summary: string | null;
+  postedAt: string | null;
+  status: string;
+};
 
-const prisma = new PrismaClient();
+async function loadPublicJobs(): Promise<PublicJob[]> {
+  const supabase = await createSupabaseServerClient();
 
-export const dynamic = "force-dynamic";
+  const { data, error } = await supabase
+    .from("jobs") // ✅ canonical table
+    .select(
+      `
+        id,
+        slug,
+        title,
+        clientName,
+        location,
+        employmentType,
+        remoteOption,
+        summary,
+        postedAt,
+        status,
+        isPublished
+      `
+    )
+    .eq("isPublished", true)
+    .eq("status", "open") // only open roles on public board
+    .order("postedAt", { ascending: false });
 
-export default async function JobsPage() {
-  // 1) Load published jobs from Prisma
-  const jobs = await prisma.job.findMany({
-    where: {
-      isPublished: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    include: {
-      tenant: true,
-      clientCompany: true,
-    },
-  });
+  if (error || !data) {
+    console.error("Error loading public jobs from jobs table:", error);
+    return [];
+  }
 
-  // 2) Map to the shape the JobBoardClient expects
-  const mappedJobs = jobs.map((job) => {
-    const employerName =
-      job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin search";
-
-    const nameForInitials =
-      job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin";
-
-    const initials = nameForInitials
-      .split(" ")
-      .filter(Boolean)
-      .map((w) => w[0])
-      .join("")
-      .slice(0, 3)
-      .toUpperCase();
-
-    const postedAt = new Intl.DateTimeFormat("en-GB", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(job.createdAt);
-
-    // SIMPLE heuristic for work type from tags
-    const workTypeFromTags = (() => {
-      const tags = job.tags ?? [];
-      if (tags.some((t) => t.toLowerCase().includes("remote"))) return "Remote";
-      if (tags.some((t) => t.toLowerCase().includes("hybrid"))) return "Hybrid";
-      return "Onsite";
-    })();
-
-    return {
-      slug: job.slug,
-      title: job.title,
-      employerInitials: initials,
-      employerName,
-      department: job.function ?? "General",
-      location: job.location ?? "Not specified",
-      workType: workTypeFromTags,
-      type: job.employmentType ?? "Full-time",
-      seniority: job.seniority ?? "Unspecified",
-      salaryRange: null as string | null,
-      highlight: job.summary ?? null,
-      tags: job.tags ?? [],
-      postedAt,
-    };
-  });
-
-  return <JobBoardClient jobs={mappedJobs} />;
+  return data.map((row: any) => ({
+    id: row.id,
+    slug: row.slug ?? null,
+    title: row.title,
+    clientName: row.clientName ?? null,
+    location: row.location ?? null,
+    employmentType: row.employmentType ?? null,
+    remoteOption: row.remoteOption ?? null,
+    summary: row.summary ?? null,
+    postedAt: row.postedAt ?? null,
+    status: row.status || (row.isPublished ? "open" : "draft"),
+  }));
 }
+
+export const revalidate = 6
