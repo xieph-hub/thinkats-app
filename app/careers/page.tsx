@@ -23,7 +23,7 @@ export default async function CareersPage() {
     );
   }
 
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   // Tenant
   const { data: tenant, error: tenantError } = await supabase
