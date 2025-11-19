@@ -240,24 +240,18 @@ function FilterGroup({
 // -----------------------------------------------------------------------------
 
 type JobBoardClientProps = {
-  initialJobs: Job[];
+  jobs: Job[];
 };
 
-export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
+export default function JobBoardClient({ jobs }: JobBoardClientProps) {
   const brand = JOB_BOARD_CONFIG;
 
   // Build unique filter options
-  const locations = Array.from(
-    new Set(initialJobs.map((j) => j.location))
-  ).sort();
+  const locations = Array.from(new Set(jobs.map((j) => j.location))).sort();
 
-  const functions = Array.from(
-    new Set(initialJobs.map((j) => j.department))
-  ).sort();
+  const functions = Array.from(new Set(jobs.map((j) => j.department))).sort();
 
-  const seniorities = Array.from(
-    new Set(initialJobs.map((j) => j.seniority))
-  ).sort();
+  const seniorities = Array.from(new Set(jobs.map((j) => j.seniority))).sort();
 
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedFunction, setSelectedFunction] = useState<string | null>(null);
@@ -270,7 +264,7 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
     setSelectedSeniority(null);
   };
 
-  const filteredJobs = initialJobs.filter((job) => {
+  const filteredJobs = jobs.filter((job) => {
     const matchLocation =
       !selectedLocation || job.location === selectedLocation;
     const matchFunction =
@@ -355,7 +349,7 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
         {/* Summary row */}
         <section className="mb-6">
           <div className="grid gap-3 text-xs sm:grid-cols-3 sm:text-sm">
-            <div className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
+            <div className="rounded-xl bg:white px-4 py-3 shadow-sm ring-1 ring-slate-200">
               <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-slate-500">
                 Functions
               </p>
@@ -462,7 +456,6 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
 
                 const detailFromListUrl = `${jobDetailPath}?${utmBase}&utm_medium=job_list&utm_content=card_cta`;
 
-                // Social landing = job detail page
                 const linkedInLandingUrl = `${SITE_URL}${jobDetailPath}?${utmBase}&utm_medium=social&utm_content=linkedin`;
                 const xLandingUrl = `${SITE_URL}${jobDetailPath}?${utmBase}&utm_medium=social&utm_content=x`;
                 const whatsAppLandingUrl = `${SITE_URL}${jobDetailPath}?${utmBase}&utm_medium=social&utm_content=whatsapp`;
@@ -501,7 +494,9 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
                         <div className="flex items-start gap-3">
                           <div
                             className="flex h-10 w-10 items-center justify-center rounded-xl text-xs font-semibold text-white shadow-sm sm:h-11 sm:w-11"
-                            style={{ backgroundColor: JOB_BOARD_CONFIG.primaryColor }}
+                            style={{
+                              backgroundColor: JOB_BOARD_CONFIG.primaryColor,
+                            }}
                           >
                             {job.employerInitials}
                           </div>
@@ -551,7 +546,6 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
                           </p>
                         )}
 
-                        {/* Tags */}
                         {job.tags?.length ? (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {job.tags.map((tag) => (
@@ -565,7 +559,6 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
                           </div>
                         ) : null}
 
-                        {/* Social sharing */}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.7rem] text-slate-500 sm:text-xs">
                           <span className="font-medium text-slate-600">
                             Share:
@@ -610,7 +603,9 @@ export default function JobBoardClient({ initialJobs }: JobBoardClientProps) {
                         <Link
                           href={detailFromListUrl}
                           className="inline-flex items-center justify-center rounded-lg px-3.5 py-1.5 text-[0.7rem] font-medium text-white shadow-sm sm:text-xs"
-                          style={{ backgroundColor: JOB_BOARD_CONFIG.primaryColor }}
+                          style={{
+                            backgroundColor: JOB_BOARD_CONFIG.primaryColor,
+                          }}
                         >
                           View full brief
                           <span
