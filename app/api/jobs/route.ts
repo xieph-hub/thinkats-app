@@ -13,7 +13,7 @@ function slugify(input: string): string {
     .replace(/-+/g, "-"); // collapse multiple dashes
 }
 
-// POST /api/jobs  → create a new job in Jobs
+// POST /api/jobs  → create a new job in `jobs`
 export async function POST(req: NextRequest) {
   try {
     const { user, currentTenant } = await getCurrentUserAndTenants();
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // 1. REQUIRED fields (keep this tiny and sane)
+    // === REQUIRED FIELDS ===
     const rawTitle =
       typeof body.title === "string" ? body.title.trim() : "";
     const rawLocation =
@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Optional fields from the form
+    // === OPTIONAL FIELDS FROM FORM ===
+
     const rawSlug =
       typeof body.slug === "string" ? body.slug.trim() : "";
     const slug = slugify(rawSlug || rawTitle);
@@ -71,15 +72,20 @@ export async function POST(req: NextRequest) {
         ? body.seniority.trim()
         : null;
 
+    const jobFunction =
+      typeof body.function === "string" && body.function.trim().length
+        ? body.function.trim()
+        : null;
+
+    const industry =
+      typeof body.industry === "string" && body.industry.trim().length
+        ? body.industry.trim()
+        : null;
+
     const remoteOption =
       typeof body.remoteOption === "string" &&
       body.remoteOption.trim().length
         ? body.remoteOption.trim()
-        : null;
-
-    const jobType =
-      typeof body.jobType === "string" && body.jobType.trim().length
-        ? body.jobType.trim()
         : null;
 
     const salaryCurrency =
@@ -150,12 +156,11 @@ export async function POST(req: NextRequest) {
 
     const isPublished = Boolean(body.isPublished);
 
-    // If caller sends an explicit status, use it; otherwise set from isPublished
     const rawStatus =
       typeof body.status === "string" ? body.status.trim() : "";
     const status = rawStatus || (isPublished ? "open" : "draft");
 
-    // Tags can be comma-separated or array
+    // Tags = your skill / keyword taxonomy for now
     let tags: string[] | null = null;
     if (Array.isArray(body.tags)) {
       tags = body.tags
@@ -173,7 +178,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createSupabaseServerClient();
 
-    // 3. Build a clean payload ONLY with real columns from `Jobs`
+    // === INSERT INTO `jobs` USING YOUR REAL COLUMN NAMES ===
     const insertPayload: any = {
       slug,
       title: rawTitle,
@@ -182,23 +187,27 @@ export async function POST(req: NextRequest) {
       description,
       summary,
       requirements,
-      jobType,
-      employmentType,
-      seniority,
+      // jobType & level left null for now – we’ll use them later if needed
+      jobType: null,
+      level: null,
+      function: jobFunction,
+      industry,
       remoteOption,
+      experienceMax,
       salaryCurrency,
       salaryMin,
       salaryMax,
-      experienceMax,
-      clientName,
-      clientSlug,
-      clientCompanyId,
       isPublished,
       status,
       postedAt,
-      tenantId: currentTenant.id,
       createdAt: nowIso,
       updatedAt: nowIso,
+      tenantId: currentTenant.id,
+      employmentType,
+      seniority,
+      clientName,
+      clientSlug,
+      clientCompanyId,
     };
 
     if (tags && tags.length) {
@@ -206,13 +215,13 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from("Jobs") // canonical job table
+      .from("jobs") // ✅ LOWERCASE jobs
       .insert([insertPayload])
       .select()
       .single();
 
     if (error) {
-      console.error("❌ Error creating job in Jobs table:", error);
+      console.error("❌ Error creating job in jobs table:", error);
       return NextResponse.json(
         {
           error:
@@ -238,7 +247,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/jobs  → list jobs for current tenant from Jobs
+// GET /api/jobs  → list jobs for current tenant from `jobs`
 export async function GET() {
   try {
     const { user, currentTenant } = await getCurrentUserAndTenants();
@@ -253,11 +262,10 @@ export async function GET() {
     const supabase = await createSupabaseServerClient();
 
     const { data, error } = await supabase
-      .from("Jobs")
+      .from("jobs")
       .select(
         `
           id,
-          slug,
           title,
           department,
           location,
@@ -272,7 +280,7 @@ export async function GET() {
       .order("createdAt", { ascending: false });
 
     if (error) {
-      console.error("⚠️ Error fetching jobs from Jobs table:", error);
+      console.error("⚠️ Error fetching jobs from jobs table:", error);
       return NextResponse.json(
         { error: "Unable to load jobs" },
         { status: 500 }
