@@ -20,8 +20,13 @@ export type Job = {
   status: string | null;
   visibility: string | null;
   created_at: string;
+
   // UI-only / derived fields that some components may use:
   employerInitials?: string | null;
+  employerName?: string | null;
+
+  // Allow extra fields (for JobBoardClient, etc.)
+  [key: string]: any;
 };
 
 // -----------------------------------------------------------------------------
