@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { getJobWithApplicationsForTenant } from "@/lib/jobApplications";
+import ApplicationsTableClient from "./ApplicationsTableClient";
 
 type PageProps = {
   params: {
@@ -9,11 +10,8 @@ type PageProps = {
   };
 };
 
-export default async function JobPipelinePage({
-  params,
-}: PageProps) {
-  const { user, currentTenant } =
-    await getCurrentUserAndTenants();
+export default async function JobPipelinePage({ params }: PageProps) {
+  const { user, currentTenant } = await getCurrentUserAndTenants();
 
   if (!user) {
     return (
@@ -23,8 +21,7 @@ export default async function JobPipelinePage({
         </h1>
         <p className="text-sm text-slate-600">
           You need to be signed in as a client or internal
-          Resourcin user to view job pipelines in
-          ThinkATS.
+          Resourcin user to view job pipelines in ThinkATS.
         </p>
         <div>
           <Link
@@ -47,8 +44,7 @@ export default async function JobPipelinePage({
         <p className="text-sm text-slate-600">
           You&apos;re authenticated but your user isn&apos;t
           linked to any ATS tenant yet. Please make sure
-          your account has a tenant assignment in
-          Supabase.
+          your account has a tenant assignment in Supabase.
         </p>
         <div>
           <Link
@@ -62,11 +58,10 @@ export default async function JobPipelinePage({
     );
   }
 
-  const { job, applications } =
-    await getJobWithApplicationsForTenant(
-      params.jobId,
-      currentTenant.id as string
-    );
+  const { job, applications } = await getJobWithApplicationsForTenant(
+    params.jobId,
+    currentTenant.id as string
+  );
 
   if (!job) {
     return (
@@ -126,97 +121,8 @@ export default async function JobPipelinePage({
         </div>
       </header>
 
-      {/* Applications table / empty state */}
-      {applications.length === 0 ? (
-        <section className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-          <h2 className="text-base font-semibold text-slate-900">
-            No applications yet
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Once candidates start applying via your
-            job page, they&apos;ll appear here with their
-            details and stage.
-          </p>
-          <div className="mt-4">
-            <Link
-              href="/jobs"
-              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              View public job board
-            </Link>
-          </div>
-        </section>
-      ) : (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <table className="min-w-full text-left text-xs text-slate-700">
-            <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3">Candidate</th>
-                <th className="px-4 py-3">Contact</th>
-                <th className="px-4 py-3">Location</th>
-                <th className="px-4 py-3">Stage</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Applied</th>
-              </tr>
-            </thead>
-            <tbody>
-              {applications.map((app) => (
-                <tr
-                  key={app.id}
-                  className="border-t border-slate-100 hover:bg-slate-50/60"
-                >
-                  <td className="px-4 py-3 align-top">
-                    <div className="text-sm font-medium text-slate-900">
-                      {app.full_name}
-                    </div>
-                    {app.source && (
-                      <div className="mt-0.5 text-[11px] text-slate-500">
-                        Source: {app.source}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 align-top text-xs">
-                    <div>{app.email}</div>
-                    {app.phone && (
-                      <div className="mt-0.5 text-[11px] text-slate-500">
-                        {app.phone}
-                      </div>
-                    )}
-                    {app.linkedin_url && (
-                      <div className="mt-0.5 text-[11px]">
-                        <a
-                          href={app.linkedin_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[#172965] hover:underline"
-                        >
-                          LinkedIn ↗
-                        </a>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 align-top text-xs">
-                    {app.location ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 align-top text-xs">
-                    {app.stage ?? "APPLIED"}
-                  </td>
-                  <td className="px-4 py-3 align-top text-xs">
-                    {app.status ?? "PENDING"}
-                  </td>
-                  <td className="px-4 py-3 align-top text-xs">
-                    {app.created_at
-                      ? new Date(
-                          app.created_at
-                        ).toLocaleString()
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+      {/* Applications table (client-side) */}
+      <ApplicationsTableClient applications={applications as any} />
     </main>
   );
 }
