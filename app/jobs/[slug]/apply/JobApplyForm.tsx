@@ -42,7 +42,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         );
       } else {
         setSuccessMessage(
-          "Thanks — your application has been received. We'll be in touch if there's a strong match."
+          "Thank you for your interest in the role. Your application has been received. We'll be in touch if there's a strong match."
         );
         form.reset();
       }
