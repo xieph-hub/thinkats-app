@@ -19,6 +19,7 @@ export default function ApplyFormClient({
     e.preventDefault();
     if (isSubmitting) return;
 
+    // reset state for a fresh submission
     setIsSubmitting(true);
     setError(null);
     setSuccess(false);
@@ -53,21 +54,32 @@ export default function ApplyFormClient({
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json().catch(() => ({}));
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // ignore JSON parse errors
+      }
+
+      console.log("Apply response:", res.status, data);
 
       if (!res.ok) {
-        setError(
-          data.error ||
-            data.message ||
-            "Unexpected error while submitting application."
-        );
+        const message =
+          data?.error ||
+          data?.message ||
+          "Unexpected error while submitting application.";
+        setSuccess(false);
+        setError(message);
         return;
       }
 
+      // ✅ success path – make sure error is cleared
+      setError(null);
       setSuccess(true);
       e.currentTarget.reset();
     } catch (err) {
       console.error("Apply error", err);
+      setSuccess(false);
       setError("Unexpected error while submitting application.");
     } finally {
       setIsSubmitting(false);
@@ -78,9 +90,7 @@ export default function ApplyFormClient({
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Section: basic info */}
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">
-          Your details
-        </h2>
+        <h2 className="text-sm font-semibold text-slate-900">Your details</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-slate-700">
@@ -173,7 +183,7 @@ export default function ApplyFormClient({
               className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             />
             <p className="mt-1 text-[0.7rem] text-slate-500">
-              We’ll wire proper file upload + storage next; for now, a
+              We’ll wire proper file upload + storage later; for now, a
               shareable link is perfect.
             </p>
           </div>
@@ -198,16 +208,16 @@ export default function ApplyFormClient({
       </div>
 
       {/* Status + submit */}
-      {error && (
+      {error && !success && (
         <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       )}
 
-      {success && (
+      {success && !error && (
         <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-          Thanks — your application has been received. We&apos;ll be in
-          touch if there&apos;s a strong match.
+          Thanks — your application has been received. We&apos;ll be in touch
+          if there&apos;s a strong match.
         </div>
       )}
 
