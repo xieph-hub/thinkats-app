@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       tenant_id,
     } = body;
 
-    const supabase = createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
 
     // Get current user (must be logged in)
     const {
