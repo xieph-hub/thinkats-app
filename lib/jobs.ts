@@ -11,6 +11,7 @@ export type JobSeniority = string;
 export type Job = {
   id: string;
   tenant_id: string;
+  slug: string | null; // 👈 add slug so JobBoardClient can use job.slug
   title: string;
   department: string | null;
   location: string | null;
@@ -37,6 +38,7 @@ export async function getJobsForTenant(tenantId: string): Promise<Job[]> {
       `
       id,
       tenant_id,
+      slug,
       title,
       department,
       location,
@@ -77,6 +79,7 @@ export async function getJobWithPipeline(jobId: string): Promise<{
       `
       id,
       tenant_id,
+      slug,
       title,
       department,
       location,
