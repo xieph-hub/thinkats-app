@@ -19,7 +19,7 @@ type AtsJob = {
   createdAt: string | null;
 };
 
-// Load jobs for the current tenant from the `jobs` table
+// Load jobs for the current tenant from the `jobs` table (ATS)
 async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
   const supabase = await createSupabaseServerClient();
 
@@ -31,10 +31,8 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
         title,
         location,
         employment_type,
-        function,
         is_published,
-        created_at,
-        tenant_id
+        created_at
       `
     )
     .eq("tenant_id", tenantId)
@@ -45,11 +43,11 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
     return [];
   }
 
-  // Map raw Supabase rows into a clean AtsJob shape for the UI
   return data.map((row: any) => ({
     id: row.id,
     title: row.title,
-    department: row.function ?? null,
+    // We are not using 'function' for now; keep department null
+    department: null,
     location: row.location ?? null,
     employmentType: row.employment_type ?? null,
     status: row.is_published ? "Open" : "Closed",
@@ -58,15 +56,13 @@ async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
 }
 
 export default async function AtsPage() {
-  // Get logged-in user and the current tenant context
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // If not logged in as a client, send them to login (and come back to /ats after)
+  // If not logged in as a client, push back to login with redirect to /ats
   if (!user || !currentTenant) {
     redirect("/login?role=client&redirect=/ats");
   }
 
-  // Load jobs only for this tenant from the `jobs` table
   const jobs = await loadTenantJobs(currentTenant.id);
 
   return (
