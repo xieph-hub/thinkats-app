@@ -6,41 +6,38 @@ type PublicJob = {
   id: string;
   slug: string | null;
   title: string;
-  clientName: string | null;
+  department: string | null;
   location: string | null;
   employmentType: string | null;
-  remoteOption: string | null;
-  summary: string | null;
-  postedAt: string | null;
+  seniority: string | null;
   status: string;
+  createdAt: string | null;
 };
 
-// Revalidate every 60 seconds (static-ish but kept fresh)
+// Revalidate every 60 seconds
 export const revalidate = 60;
 
 export default async function JobsPage() {
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase
-    .from("jobs") // ✅ canonical table
+    .from("jobs")
     .select(
       `
         id,
         slug,
         title,
-        clientName,
+        department,
         location,
-        employmentType,
-        remoteOption,
-        summary,
-        postedAt,
+        employment_type,
+        seniority,
         status,
-        isPublished
+        created_at
       `
     )
-    .eq("isPublished", true)
-    .eq("status", "open")
-    .order("postedAt", { ascending: false });
+    // show only open roles; adjust if your status values differ
+    .in("status", ["open", "OPEN", "Open"])
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error loading public jobs from jobs table:", error);
@@ -51,13 +48,12 @@ export default async function JobsPage() {
       id: row.id,
       slug: row.slug ?? null,
       title: row.title,
-      clientName: row.clientName ?? null,
+      department: row.department ?? null,
       location: row.location ?? null,
-      employmentType: row.employmentType ?? null,
-      remoteOption: row.remoteOption ?? null,
-      summary: row.summary ?? null,
-      postedAt: row.postedAt ?? null,
-      status: row.status || (row.isPublished ? "open" : "draft"),
+      employmentType: row.employment_type ?? null,
+      seniority: row.seniority ?? null,
+      status: row.status ?? "open",
+      createdAt: row.created_at ?? null,
     })) ?? [];
 
   return (
@@ -84,13 +80,18 @@ export default async function JobsPage() {
       <div className="space-y-4">
         {jobs.map((job) => {
           const href = `/jobs/${job.slug || job.id}`;
-          const postedLabel = job.postedAt
-            ? new Date(job.postedAt).toLocaleDateString("en-US", {
+          const postedLabel = job.createdAt
+            ? new Date(job.createdAt).toLocaleDateString("en-US", {
                 year: "numeric",
                 month: "short",
                 day: "2-digit",
               })
             : null;
+
+          const isOpen =
+            job.status &&
+            (job.status.toLowerCase() === "open" ||
+              job.status.toLowerCase() === "active");
 
           return (
             <Link
@@ -104,9 +105,9 @@ export default async function JobsPage() {
                     {job.title}
                   </h2>
                   <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-slate-600">
-                    {job.clientName && (
+                    {job.department && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.clientName}
+                        {job.department}
                       </span>
                     )}
                     {job.location && (
@@ -119,23 +120,24 @@ export default async function JobsPage() {
                         {job.employmentType}
                       </span>
                     )}
-                    {job.remoteOption && (
+                    {job.seniority && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.remoteOption}
+                        {job.seniority}
                       </span>
                     )}
                   </div>
-                  {job.summary && (
-                    <p className="mt-2 text-sm text-slate-600 line-clamp-2">
-                      {job.summary}
-                    </p>
-                  )}
                 </div>
 
                 <div className="flex flex-col items-end gap-1 text-xs text-slate-500">
-                  {postedLabel && <span>Posted {postedLabel}</span>}
-                  <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                    Open
+                  {postedLabel && <span>Created {postedLabel}</span>}
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                      isOpen
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {isOpen ? "Open" : job.status || "Draft"}
                   </span>
                 </div>
               </div>
