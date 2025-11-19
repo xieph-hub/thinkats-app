@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { getJobsForTenant } from "@/lib/jobs";
-
+import AtsSignOutButton from "./AtsSignOutButton";
 export default async function AtsDashboardPage() {
   const { user, currentTenant } =
     await getCurrentUserAndTenants();
@@ -57,28 +57,29 @@ export default async function AtsDashboardPage() {
     <main className="mx-auto max-w-6xl px-4 py-8">
       {/* Page header */}
       <header className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            ThinkATS
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            {currentTenant.name ?? "Current tenant"}
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Central view of all roles you&apos;re hiring
-            for. Click a job to see its pipeline.
-          </p>
-        </div>
+  <div>
+    <p className="text-xs uppercase tracking-wide text-slate-500">
+      ThinkATS
+    </p>
+    <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+      {currentTenant.name ?? "Current tenant"}
+    </h1>
+    <p className="mt-1 text-sm text-slate-600">
+      Central view of all roles you&apos;re hiring
+      for. Click a job to see its pipeline.
+    </p>
+  </div>
 
-        <div className="flex gap-2">
-          <Link
-            href="/ats/jobs/new"
-            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
-          >
-            + New job
-          </Link>
-        </div>
-      </header>
+  <div className="flex gap-2">
+    <AtsSignOutButton />
+    <Link
+      href="/ats/jobs/new"
+      className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
+    >
+      + New job
+    </Link>
+  </div>
+</header>
 
       {/* Jobs table / empty state */}
       {jobs.length === 0 ? (
