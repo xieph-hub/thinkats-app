@@ -5,9 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/site";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +156,7 @@ export default async function JobDetailPage({
           </div>
         </section>
 
-        {/* Body */}
+        {/* Body + how to express interest */}
         <section className="space-y-6 rounded-2xl bg-white px-5 py-6 shadow-sm ring-1 ring-slate-200 sm:px-7">
           {job.summary && (
             <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
@@ -168,9 +166,7 @@ export default async function JobDetailPage({
 
           <article className="prose prose-sm max-w-none text-slate-800 prose-headings:text-slate-900 prose-a:text-[#172965]">
             {job.description ? (
-              <div
-                dangerouslySetInnerHTML={{ __html: job.description }}
-              />
+              <div dangerouslySetInnerHTML={{ __html: job.description }} />
             ) : (
               <p>
                 Full description will be shared at screening. This role is
@@ -184,7 +180,9 @@ export default async function JobDetailPage({
               How to express interest
             </p>
             <p className="mt-1">
-              Use the{" "}
+              The easiest way is to use the application form below so we can
+              match you directly to this role. If you’d rather share your
+              details more broadly, you can also use the{" "}
               <Link
                 href={`/talent-network?utm_source=job_detail&utm_campaign=${encodeURIComponent(
                   job.slug ?? params.slug
@@ -193,11 +191,13 @@ export default async function JobDetailPage({
               >
                 talent network form
               </Link>{" "}
-              and mention this role in the notes, or reply directly if you
-              received this via email from Resourcin.
+              and mention this role in the notes.
             </p>
           </div>
         </section>
+
+        {/* Application form (new) */}
+        <JobApplyForm jobSlug={job.slug} jobTitle={job.title} />
       </main>
     </div>
   );
