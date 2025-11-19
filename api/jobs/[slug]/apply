@@ -1,0 +1,125 @@
+// app/api/jobs/[slug]/apply/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+type ApplyBody = {
+  jobSlug?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  linkedinUrl?: string;
+  portfolioUrl?: string;
+  cvUrl?: string;
+  coverLetter?: string;
+};
+
+export async function POST(
+  req: Request,
+  { params }: { params: { slug: string } }
+) {
+  try {
+    const body = (await req.json()) as ApplyBody;
+
+    const {
+      fullName,
+      email,
+      phone,
+      location,
+      linkedinUrl,
+      portfolioUrl,
+      cvUrl,
+      coverLetter,
+      jobSlug,
+    } = body;
+
+    if (!fullName || !email) {
+      return NextResponse.json(
+        { error: "Full name and email are required." },
+        { status: 400 }
+      );
+    }
+
+    const slug = (jobSlug || params.slug).trim();
+
+    // 1) Find the Resourcin tenant (you can change this if you use another slug)
+    const tenant = await prisma.tenant.findFirst({
+      where: { slug: "resourcin" },
+    });
+
+    if (!tenant) {
+      return NextResponse.json(
+        { error: "Tenant configuration missing (resourcin)." },
+        { status: 500 }
+      );
+    }
+
+    // 2) Find the job by slug within this tenant
+    const job = await prisma.job.findFirst({
+      where: {
+        slug,
+        tenantId: tenant.id,
+      },
+    });
+
+    if (!job) {
+      return NextResponse.json(
+        { error: "Job not found for this slug." },
+        { status: 404 }
+      );
+    }
+
+    // 3) Upsert candidate (one per email per tenant)
+    const candidate = await prisma.candidate.upsert({
+      where: { email }, // email is unique in your schema
+      create: {
+        tenantId: tenant.id,
+        fullName,
+        email,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        cvUrl: cvUrl || null,
+      },
+      update: {
+        fullName,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        cvUrl: cvUrl || null,
+      },
+    });
+
+    // 4) Create JobApplication
+    const application = await prisma.jobApplication.create({
+      data: {
+        jobId: job.id,
+        candidateId: candidate.id,
+        fullName,
+        email,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        portfolioUrl: portfolioUrl || null,
+        cvUrl: cvUrl || null,
+        coverLetter: coverLetter || null,
+        source: "Website", // you can adjust this later (e.g. include UTM or referrer)
+        // stage/status will use your enum defaults (APPLIED / PENDING)
+      },
+    });
+
+    return NextResponse.json(
+      { ok: true, applicationId: application.id },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Error creating application", error);
+    return NextResponse.json(
+      {
+        error:
+          "Unexpected error while creating your application. Please try again.",
+      },
+      { status: 500 }
+    );
+  }
+}
