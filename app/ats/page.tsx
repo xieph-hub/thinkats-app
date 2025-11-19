@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import SignOutButton from "./SignOutButton";
+import AtsSignOutButton from "./AtsSignOutButton";
 
 type AtsJob = {
   id: string;
@@ -81,7 +81,7 @@ export default async function AtsPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <SignOutButton />
+          <AtsSignOutButton />
           <Link
             href="/ats/jobs/new"
             className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
