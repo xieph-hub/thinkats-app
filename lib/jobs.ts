@@ -1,46 +1,23 @@
 // lib/jobs.ts
+import { prisma } from "@/lib/prisma"
+import { getCurrentTenantId } from "@/lib/tenant"
 
-// High-level seniority buckets for filtering / labelling
-export type JobSeniority =
-  | "Internship"
-  | "Entry"
-  | "Junior"
-  | "Mid"
-  | "Senior"
-  | "Lead"
-  | "Manager"
-  | "Director"
-  | "Executive";
+// List all jobs for current tenant
+export async function listJobsForCurrentTenant() {
+  const tenantId = getCurrentTenantId()
+  return prisma.job.findMany({
+    where: { tenant: { id: tenantId } },
+    orderBy: { createdAt: "desc" },
+  })
+}
 
-export const JOB_SENIORITY_OPTIONS: JobSeniority[] = [
-  "Internship",
-  "Entry",
-  "Junior",
-  "Mid",
-  "Senior",
-  "Lead",
-  "Manager",
-  "Director",
-  "Executive",
-];
-
-// Base Job type used by the public job board UI (JobBoardClient).
-// We keep this loose and allow extra fields so the UI can read
-// any additional props without TypeScript complaining.
-export type Job = {
-  id: string;
-  title: string;
-  slug: string;
-
-  // Display fields used on the public job board
-  department?: string | null;       // maps from jobs.function
-  location?: string | null;
-  employment_type?: string | null;  // "full_time", "contract", etc.
-  work_type?: string | null;        // "Remote", "Hybrid", "Onsite"
-  summary?: string | null;
-  tags?: string[] | null;
-  created_at?: string;
-
-  // Any extra fields the UI might access
-  [key: string]: any;
-};
+// Get a single job by slug for current tenant
+export async function getJobForCurrentTenantBySlug(slug: string) {
+  const tenantId = getCurrentTenantId()
+  return prisma.job.findFirst({
+    where: {
+      slug,
+      tenant: { id: tenantId },
+    },
+  })
+}
