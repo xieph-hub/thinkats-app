@@ -5,31 +5,32 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// We want this to always fetch fresh data from the DB
 export const dynamic = "force-dynamic";
 
 export default async function JobsPage() {
-  // 1) Read from the *new* Prisma Job table
-  const dbJobs = await prisma.job.findMany({
-    where: { isPublished: true },
-    include: {
-      tenant: true,
-      clientCompany: true,
+  // 1) Load published jobs from Prisma
+  const jobs = await prisma.job.findMany({
+    where: {
+      isPublished: true,
     },
     orderBy: {
       createdAt: "desc",
     },
+    include: {
+      tenant: true,
+      clientCompany: true,
+    },
   });
 
-  // 2) Map Prisma rows into the shape your JobBoardClient expects
-  const jobs = dbJobs.map((job) => {
+  // 2) Map to the shape the JobBoardClient expects
+  const mappedJobs = jobs.map((job) => {
     const employerName =
       job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin search";
 
     const nameForInitials =
       job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin";
 
-    const employerInitials = nameForInitials
+    const initials = nameForInitials
       .split(" ")
       .filter(Boolean)
       .map((w) => w[0])
@@ -38,36 +39,35 @@ export default async function JobsPage() {
       .toUpperCase();
 
     const postedAt = new Intl.DateTimeFormat("en-GB", {
-      day: "2-digit",
-      month: "short",
       year: "numeric",
+      month: "short",
+      day: "numeric",
     }).format(job.createdAt);
 
-    // Prisma `tags` is String[]
-    const tags = job.tags ?? [];
+    // SIMPLE heuristic for work type from tags
+    const workTypeFromTags = (() => {
+      const tags = job.tags ?? [];
+      if (tags.some((t) => t.toLowerCase().includes("remote"))) return "Remote";
+      if (tags.some((t) => t.toLowerCase().includes("hybrid"))) return "Hybrid";
+      return "Onsite";
+    })();
 
     return {
-      // required by your UI Job type
-      id: job.id,
       slug: job.slug,
       title: job.title,
-      employerInitials,
+      employerInitials: initials,
       employerName,
-      // map Prisma fields → UI fields
-      department: job.function,
-      location: job.location,
-      workType: job.employmentType,
-      // you also have `type` on the UI Job – we’ll mirror employmentType
-      type: job.employmentType,
-      seniority: job.seniority,
-      // you don’t have salary range / highlight in Prisma, so we keep them null/summary
-      salaryRange: null,
-      highlight: job.summary,
-      tags,
+      department: job.function ?? "General",
+      location: job.location ?? "Not specified",
+      workType: workTypeFromTags,
+      type: job.employmentType ?? "Full-time",
+      seniority: job.seniority ?? "Unspecified",
+      salaryRange: null as string | null,
+      highlight: job.summary ?? null,
+      tags: job.tags ?? [],
       postedAt,
     };
   });
 
-  // cast to any to avoid TS being fussy about the exact Job type shape
-  return <JobBoardClient jobs={jobs as any} />;
+  return <JobBoardClient jobs={mappedJobs} />;
 }
