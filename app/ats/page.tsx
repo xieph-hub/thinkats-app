@@ -8,50 +8,54 @@ import AtsSignOutButton from "./AtsSignOutButton";
 
 export const revalidate = 0; // Always fetch fresh data per request
 
-// Shape we use in the UI layer
+// Shape used in UI layer
 type AtsJob = {
   id: string;
+  slug: string;
   title: string;
   department: string | null;
   location: string | null;
   employmentType: string | null;
-  status: string;
+  status: "Open" | "Closed";
   createdAt: string | null;
 };
 
-// Load jobs for the current tenant from the `jobs` table (ATS)
+// Load jobs for the current tenant from the canonical `Jobs` table
 async function loadTenantJobs(tenantId: string): Promise<AtsJob[]> {
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase
-    .from("jobs")
+    .from("Jobs")
     .select(
       `
         id,
+        slug,
         title,
+        department,
         location,
-        employment_type,
-        is_published,
-        created_at
+        employmentType,
+        isPublished,
+        createdAt,
+        tenantId
       `
     )
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
+    .eq("tenantId", tenantId)
+    .order("createdAt", { ascending: false });
 
   if (error || !data) {
-    console.error("Error loading ATS jobs for tenant", error);
+    console.error("Error loading ATS jobs for tenant from Jobs table", error);
     return [];
   }
 
   return data.map((row: any) => ({
     id: row.id,
+    slug: row.slug,
     title: row.title,
-    // We are not using 'function' for now; keep department null
-    department: null,
+    department: row.department ?? null,
     location: row.location ?? null,
-    employmentType: row.employment_type ?? null,
-    status: row.is_published ? "Open" : "Closed",
-    createdAt: row.created_at ?? null,
+    employmentType: row.employmentType ?? null,
+    status: row.isPublished ? "Open" : "Closed",
+    createdAt: row.createdAt ?? null,
   }));
 }
 
@@ -63,6 +67,7 @@ export default async function AtsPage() {
     redirect("/login?role=client&redirect=/ats");
   }
 
+  // Jobs now come from `Jobs` table, not `jobs`
   const jobs = await loadTenantJobs(currentTenant.id);
 
   return (
@@ -77,8 +82,8 @@ export default async function AtsPage() {
             {currentTenant.name}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Central view of all roles you&apos;re hiring for. Click a job to
-            see its pipeline.
+            Central view of all roles you&apos;re hiring for. Click a job to see
+            its pipeline.
           </p>
         </div>
 
