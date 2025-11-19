@@ -11,7 +11,7 @@ export type JobSeniority = string;
 export type Job = {
   id: string;
   tenant_id: string;
-  slug: string | null; // 👈 add slug so JobBoardClient can use job.slug
+  slug: string | null; // used for /jobs/[slug] paths
   title: string;
   department: string | null;
   location: string | null;
@@ -20,6 +20,8 @@ export type Job = {
   status: string | null;
   visibility: string | null;
   created_at: string;
+  // UI-only / derived fields that some components may use:
+  employerInitials?: string | null;
 };
 
 // -----------------------------------------------------------------------------
