@@ -1,68 +1,39 @@
 // app/jobs/[slug]/page.tsx
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/site";
-import { createClient } from "@/lib/supabase/server";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export const dynamic = "force-dynamic";
 
-type JobRow = {
-  id: string;
-  slug: string | null;
-  title: string | null;
-  employer_name?: string | null;
-  employer_initials?: string | null;
-  department?: string | null;
-  location?: string | null;
-  work_type?: string | null;
-  type?: string | null;
-  seniority?: string | null;
-  salary_range?: string | null;
-  highlight?: string | null;
-  description?: string | null;
-  created_at?: string | null;
-  posted_at?: string | null;
-  tags?: string[] | string | null;
-};
-
-const JOB_SELECT =
-  "id, slug, title, employer_name, employer_initials, department, location, work_type, type, seniority, salary_range, highlight, description, created_at, posted_at, tags";
-
-async function fetchJobBySlugOrId(slug: string): Promise<JobRow | null> {
-  const supabase = createClient();
-
+async function fetchJobBySlugOrId(slugOrId: string) {
   // 1) Try match by slug
-  let { data, error } = await supabase
-    .from("Job")
-    .select(JOB_SELECT)
-    .eq("slug", slug)
-    .single();
+  let job = await prisma.job.findFirst({
+    where: { slug: slugOrId },
+    include: {
+      tenant: true,
+      clientCompany: true,
+    },
+  });
 
-  // If it's just "no rows" or slug is null in DB, try fallback by id
-  if (error) {
-    // console for your server logs, but don't break the page
-    console.warn("Job lookup by slug failed, trying id:", slug, error);
-
-    const byId = await supabase
-      .from("Job")
-      .select(JOB_SELECT)
-      .eq("id", slug)
-      .single();
-
-    if (byId.error) {
-      console.error("Job lookup by id also failed:", slug, byId.error);
-      return null;
-    }
-
-    data = byId.data as JobRow;
+  // 2) Fallback: if nothing by slug, try by id
+  if (!job) {
+    job = await prisma.job.findUnique({
+      where: { id: slugOrId },
+      include: {
+        tenant: true,
+        clientCompany: true,
+      },
+    });
   }
 
-  if (!data) return null;
-  return data as JobRow;
+  return job;
 }
 
-// Optional: nicer tab title / SEO
 export async function generateMetadata({
   params,
 }: {
@@ -76,10 +47,13 @@ export async function generateMetadata({
     };
   }
 
+  const employerName =
+    job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin search";
+
   return {
-    title: `${job.title ?? "Role"} – ${job.employer_name ?? "Resourcin"} · Jobs`,
+    title: `${job.title} – ${employerName} · Jobs`,
     description:
-      job.highlight ??
+      job.summary ??
       "Executive and specialist roles across product, engineering, data, operations and growth.",
     alternates: {
       canonical: `${SITE_URL}/jobs/${job.slug ?? params.slug}`,
@@ -98,33 +72,27 @@ export default async function JobDetailPage({
     notFound();
   }
 
-  const postedInput = job.posted_at || job.created_at;
-  const postedAt = postedInput
-    ? new Intl.DateTimeFormat("en-GB", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      }).format(new Date(postedInput))
-    : "Recently";
+  const employerName =
+    job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin search";
 
-  const tags: string[] = Array.isArray(job.tags)
-    ? job.tags
-    : typeof job.tags === "string"
-    ? job.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
+  const nameForInitials =
+    job.clientCompany?.name ?? job.tenant?.name ?? "Resourcin";
 
-  const employerName = job.employer_name || "Resourcin search";
-  const initials =
-    job.employer_initials ||
-    employerName
-      .split(" ")
-      .map((w) => w[0])
-      .join("")
-      .slice(0, 3)
-      .toUpperCase();
+  const initials = nameForInitials
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+
+  const postedAt = new Intl.DateTimeFormat("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(job.createdAt);
+
+  const tags = job.tags ?? [];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -148,38 +116,29 @@ export default async function JobDetailPage({
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-slate-900 sm:text-xl">
-                  {job.title ?? "Role"}
+                  {job.title}
                 </h1>
                 <p className="mt-1 text-sm text-slate-600">
-                  {employerName} · {job.location || "Flexible location"}
+                  {employerName} · {job.location}
                 </p>
               </div>
             </div>
 
             <div className="flex flex-col items-start gap-2 text-xs text-slate-500 sm:items-end">
               <span>Posted {postedAt}</span>
-              {job.salary_range && (
-                <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-1 text-[0.7rem] font-medium text-slate-700 ring-1 ring-slate-200">
-                  {job.salary_range}
-                </span>
-              )}
+              {/* you don’t have salary_range on new table, so we skip it */}
             </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2 text-[0.7rem] text-slate-600 sm:text-xs">
-            {job.department && (
+            {job.function && (
               <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                {job.department}
+                {job.function}
               </span>
             )}
-            {job.work_type && (
+            {job.employmentType && (
               <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                {job.work_type}
-              </span>
-            )}
-            {job.type && (
-              <span className="rounded-full bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
-                {job.type}
+                {job.employmentType}
               </span>
             )}
             {job.seniority && (
@@ -200,9 +159,9 @@ export default async function JobDetailPage({
 
         {/* Body */}
         <section className="space-y-6 rounded-2xl bg-white px-5 py-6 shadow-sm ring-1 ring-slate-200 sm:px-7">
-          {job.highlight && (
+          {job.summary && (
             <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              {job.highlight}
+              {job.summary}
             </div>
           )}
 
