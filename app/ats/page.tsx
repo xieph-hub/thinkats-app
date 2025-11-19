@@ -66,13 +66,11 @@ export default async function AtsDashboardPage() {
         </div>
 
         <div className="flex gap-2">
-          {/* This will later go to a full job creation flow */}
           <Link
-            href="#"
-            aria-disabled
-            className="inline-flex cursor-not-allowed items-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-400"
+            href="/ats/jobs/new"
+            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
           >
-            + New job (coming soon)
+            + New job
           </Link>
         </div>
       </header>
