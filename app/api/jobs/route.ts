@@ -5,27 +5,29 @@ import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 
 /**
  * POST /api/jobs
- * Creates a new job under the current tenant.
+ * Creates a new ATS job under the current tenant (in the `jobs` table).
  */
 export async function POST(req: NextRequest) {
   try {
-    // Get the logged-in user and their tenant
+    // 1) Make sure user + tenant are present
     const { user, currentTenant } = await getCurrentUserAndTenants();
 
     if (!user || !currentTenant) {
       return NextResponse.json(
-        { error: "You must be logged in and linked to a tenant to create jobs." },
+        {
+          error:
+            "You must be logged in and linked to a tenant to create jobs.",
+        },
         { status: 401 }
       );
     }
 
-    // Parse the incoming JSON body
+    // 2) Read the JSON body from the request
     const body = await req.json();
 
     const {
       title,
       location,
-      function: jobFunction,
       employment_type,
       seniority,
       summary,
@@ -34,6 +36,7 @@ export async function POST(req: NextRequest) {
       is_published,
     } = body;
 
+    // 3) Basic validation
     if (!title || !location) {
       return NextResponse.json(
         { error: "Missing required fields: title and location" },
@@ -43,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createSupabaseServerClient();
 
-    // ✅ Insert the job into Supabase, linked to this tenant
+    // 4) Insert into the lowercase `jobs` table (ATS), WITHOUT `function`
     const { data, error } = await supabase
       .from("jobs")
       .insert([
@@ -51,7 +54,6 @@ export async function POST(req: NextRequest) {
           tenant_id: currentTenant.id,
           title,
           location,
-          function: jobFunction ?? null,
           employment_type: employment_type ?? null,
           seniority: seniority ?? null,
           summary: summary ?? null,
@@ -64,16 +66,17 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) {
-      console.error("❌ Error creating job:", error);
+      console.error("❌ Error creating ATS job:", error);
       return NextResponse.json(
         { error: "Failed to create job. Check logs for details." },
         { status: 500 }
       );
     }
 
+    // 5) Return the created job row
     return NextResponse.json(data, { status: 201 });
   } catch (err) {
-    console.error("❌ Unexpected error in /api/jobs:", err);
+    console.error("❌ Unexpected error in POST /api/jobs:", err);
     return NextResponse.json(
       { error: "An unexpected error occurred while creating the job." },
       { status: 500 }
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
 
 /**
  * GET /api/jobs
- * Returns a list of jobs for the current tenant.
+ * Returns a list of jobs for the current tenant from the `jobs` table.
  */
 export async function GET() {
   try {
@@ -105,7 +108,6 @@ export async function GET() {
           id,
           title,
           location,
-          function,
           employment_type,
           is_published,
           created_at
@@ -115,7 +117,7 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("⚠️ Error fetching jobs:", error);
+      console.error("⚠️ Error fetching ATS jobs:", error);
       return NextResponse.json(
         { error: "Unable to load jobs" },
         { status: 500 }
