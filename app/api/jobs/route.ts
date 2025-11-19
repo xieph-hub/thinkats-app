@@ -5,11 +5,10 @@ import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 
 /**
  * POST /api/jobs
- * Creates a new ATS job under the current tenant (in the `jobs` table).
+ * Creates a new job under the current tenant in the canonical `Jobs` table.
  */
 export async function POST(req: NextRequest) {
   try {
-    // 1) Make sure user + tenant are present
     const { user, currentTenant } = await getCurrentUserAndTenants();
 
     if (!user || !currentTenant) {
@@ -22,58 +21,93 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2) Read the JSON body from the request
     const body = await req.json();
 
     const {
+      slug,
       title,
       location,
-      employment_type,
-      seniority,
+      department,
+      jobType,
+      level,
+      function: jobFunction, // still available if you want to store it
+      industry,
+      remoteOption,
+      experienceMax,
+      salaryCurrency,
+      salaryMin,
+      salaryMax,
       summary,
       description,
+      requirements,
+      clientName,
+      clientSlug,
+      clientCompanyId,
+      employmentType,
+      seniority,
       tags,
-      is_published,
+      isPublished,
+      status,
     } = body;
 
-    // 3) Basic validation
-    if (!title || !location) {
+    // Basic required fields – tighten as you wish
+    if (!title || !slug || !location) {
       return NextResponse.json(
-        { error: "Missing required fields: title and location" },
+        { error: "Missing required fields: title, slug and location" },
         { status: 400 }
       );
     }
 
     const supabase = await createSupabaseServerClient();
 
-    // 4) Insert into the lowercase `jobs` table (ATS), WITHOUT `function`
+    // ✅ Insert into the canonical `Jobs` table (the one you pasted the columns for)
     const { data, error } = await supabase
-      .from("jobs")
+      .from("Jobs")
       .insert([
         {
-          tenant_id: currentTenant.id,
+          slug,
           title,
+          excerpt: summary ?? null, // optional – or keep null
+          department: department ?? null,
           location,
-          employment_type: employment_type ?? null,
-          seniority: seniority ?? null,
-          summary: summary ?? null,
           description: description ?? null,
+          postedAt: new Date().toISOString(), // or null if you prefer
+          isPublished: isPublished ?? false,
+          clientName: clientName ?? null,
+          clientSlug: clientSlug ?? null,
+          status: status ?? "draft",
+          ClientID: null, // if you’re not using this yet
+          jobType: jobType ?? null,
+          level: level ?? null,
+          function: jobFunction ?? null,
+          industry: industry ?? null,
+          remoteOption: remoteOption ?? null,
+          experienceMax: experienceMax ?? null,
+          salaryCurrency: salaryCurrency ?? null,
+          salaryMin: salaryMin ?? null,
+          salaryMax: salaryMax ?? null,
+          summary: summary ?? null,
+          requirements: requirements ?? null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tenantId: currentTenant.id, // 🔑 tie to current tenant
+          clientCompanyId: clientCompanyId ?? null,
+          employmentType: employmentType ?? null,
+          seniority: seniority ?? null,
           tags: tags ?? [],
-          is_published: is_published ?? false,
         },
       ])
       .select()
       .single();
 
     if (error) {
-      console.error("❌ Error creating ATS job:", error);
+      console.error("❌ Error creating job in Jobs table:", error);
       return NextResponse.json(
         { error: "Failed to create job. Check logs for details." },
         { status: 500 }
       );
     }
 
-    // 5) Return the created job row
     return NextResponse.json(data, { status: 201 });
   } catch (err) {
     console.error("❌ Unexpected error in POST /api/jobs:", err);
@@ -86,7 +120,7 @@ export async function POST(req: NextRequest) {
 
 /**
  * GET /api/jobs
- * Returns a list of jobs for the current tenant from the `jobs` table.
+ * Returns a list of jobs for the current tenant from `Jobs`.
  */
 export async function GET() {
   try {
@@ -102,29 +136,32 @@ export async function GET() {
     const supabase = await createSupabaseServerClient();
 
     const { data, error } = await supabase
-      .from("jobs")
+      .from("Jobs")
       .select(
         `
           id,
+          slug,
           title,
+          department,
           location,
-          employment_type,
-          is_published,
-          created_at
+          employmentType,
+          isPublished,
+          createdAt,
+          tenantId
         `
       )
-      .eq("tenant_id", currentTenant.id)
-      .order("created_at", { ascending: false });
+      .eq("tenantId", currentTenant.id)
+      .order("createdAt", { ascending: false });
 
     if (error) {
-      console.error("⚠️ Error fetching ATS jobs:", error);
+      console.error("⚠️ Error fetching jobs from Jobs table:", error);
       return NextResponse.json(
         { error: "Unable to load jobs" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json(data, { status: 200 });
+    return NextResponse.json(data ?? [], { status: 200 });
   } catch (err) {
     console.error("⚠️ Unexpected error in GET /api/jobs:", err);
     return NextResponse.json(
