@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 export async function POST(req: Request) {
-  const supabase = createSupabaseServerClient();
+  // 🔑 await the Supabase server client
+  const supabase = await createSupabaseServerClient();
 
   let body: any;
   try {
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // At this point, Supabase has set the auth cookies via our cookie adapter.
+  // Auth cookies are handled by Supabase via our cookie adapter.
   return NextResponse.json({
     success: true,
     user: data.user,
