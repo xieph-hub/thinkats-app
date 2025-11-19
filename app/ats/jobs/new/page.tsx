@@ -4,7 +4,8 @@ import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import NewJobForm from "./NewJobForm";
 
 export default async function NewJobPage() {
-  const { user, currentTenant } = await getCurrentUserAndTenants();
+  const { user, currentTenant } =
+    await getCurrentUserAndTenants();
 
   if (!user) {
     return (
@@ -13,8 +14,8 @@ export default async function NewJobPage() {
           ThinkATS – sign in to create a job
         </h1>
         <p className="text-sm text-slate-600">
-          You need to be signed in as a client or internal Resourcin user to
-          create roles in ThinkATS.
+          You need to be signed in as a client or internal
+          Resourcin user to create roles in ThinkATS.
         </p>
         <div>
           <Link
@@ -35,9 +36,11 @@ export default async function NewJobPage() {
           ThinkATS – no tenant configured
         </h1>
         <p className="text-sm text-slate-600">
-          Your user is authenticated but not linked to any ATS tenant yet.
-          Please make sure your account has a tenant assignment in Supabase
-          (user_tenant_roles and tenants tables) before creating jobs.
+          Your user is authenticated but not linked to any
+          ATS tenant yet. Please make sure your account has
+          a tenant assignment in Supabase
+          (user_tenant_roles and tenants tables) before
+          creating jobs.
         </p>
         <div>
           <Link
@@ -65,7 +68,8 @@ export default async function NewJobPage() {
           <span className="font-semibold">
             {currentTenant.name ?? "this tenant"}
           </span>{" "}
-          and will show up on your ATS dashboard and job board (if public).
+          and will show up on your ATS dashboard and job
+          board (if public).
         </p>
       </header>
 
