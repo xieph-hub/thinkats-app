@@ -1,34 +1,26 @@
 // app/api/jobs/[slug]/apply/route.ts
 
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { ApplicationStage, ApplicationStatus } from "@prisma/client";
-import { uploadCvFile } from "@/lib/uploadCv";
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
 
-async function findJobBySlugOrId(slugOrId: string) {
-  // Prefer slug
-  let job = await prisma.job.findFirst({
-    where: { slug: slugOrId, isPublished: true },
-  });
+const prisma = new PrismaClient();
 
-  if (!job) {
-    job = await prisma.job.findFirst({
-      where: { id: slugOrId, isPublished: true },
-    });
-  }
-
-  return job;
-}
+export const dynamic = "force-dynamic";
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { slug: string } }
 ) {
   try {
-    const formData = await req.formData();
-    const slugOrId = params.slug;
+    const { slug } = params;
 
-    const job = await findJobBySlugOrId(slugOrId);
+    // 1) Look up the job by slug (and published state)
+    const job = await prisma.job.findFirst({
+      where: {
+        slug,
+        isPublished: true,
+      },
+    });
 
     if (!job) {
       return NextResponse.json(
@@ -37,102 +29,59 @@ export async function POST(
       );
     }
 
-    const fullName = String(formData.get("fullName") || "").trim();
-    const email = String(formData.get("email") || "").trim().toLowerCase();
-    const phone = String(formData.get("phone") || "").trim() || null;
-    const location = String(formData.get("location") || "").trim() || null;
-    const linkedinUrl =
-      String(formData.get("linkedinUrl") || "").trim() || null;
-    const portfolioUrl =
-      String(formData.get("portfolioUrl") || "").trim() || null;
-    const source = String(formData.get("source") || "").trim() || "Website";
-    const coverLetter =
-      String(formData.get("coverLetter") || "").trim() || null;
+    // 2) Read form data
+    const formData = await req.formData();
 
-    if (!fullName || !email) {
+    const get = (key: string) => {
+      const v = formData.get(key);
+      return typeof v === "string" ? v.trim() : "";
+    };
+
+    // tolerant to slightly different field names
+    const fullName = get("fullName") || get("name") || "Unknown";
+    const email = get("email");
+    const phone = get("phone") || get("phoneNumber");
+    const location = get("location") || get("currentLocation");
+    const linkedinUrl = get("linkedinUrl") || get("linkedin");
+    const portfolioUrl = get("portfolioUrl") || get("portfolio");
+    const coverLetter = get("coverLetter") || get("notes") || "";
+
+    // For now we treat CV as a URL/string. We can wire real file uploads later.
+    const cvUrl =
+      get("cvUrl") ||
+      get("cv") ||
+      get("resumeUrl") ||
+      get("resume") ||
+      "";
+
+    if (!email) {
       return NextResponse.json(
-        { error: "Full name and email are required." },
+        { error: "Email is required." },
         { status: 400 }
       );
     }
 
-    const cvUrlField = String(formData.get("cvUrl") || "").trim();
-    const cvFile = formData.get("cvFile");
-
-    let finalCvUrl: string | null = cvUrlField || null;
-
-    // Upload file if provided
-    if (cvFile instanceof File && cvFile.size > 0) {
-      const uploadedUrl = await uploadCvFile(cvFile, job.id);
-      if (uploadedUrl) {
-        finalCvUrl = uploadedUrl;
-      }
-    }
-
-    // Candidate upsert by email (global unique in your schema)
-    const existingCandidate = await prisma.candidate.findUnique({
-      where: { email },
-    });
-
-    let candidate;
-    if (existingCandidate) {
-      candidate = await prisma.candidate.update({
-        where: { email },
-        data: {
-          fullName,
-          phone: phone ?? existingCandidate.phone,
-          location: location ?? existingCandidate.location,
-          linkedinUrl: linkedinUrl ?? existingCandidate.linkedinUrl,
-          portfolioUrl: portfolioUrl ?? existingCandidate.portfolioUrl,
-          cvUrl: finalCvUrl ?? existingCandidate.cvUrl,
-          primaryFunction: existingCandidate.primaryFunction,
-          seniority: existingCandidate.seniority,
-        },
-      });
-    } else {
-      candidate = await prisma.candidate.create({
-        data: {
-          tenantId: job.tenantId,
-          fullName,
-          email,
-          phone,
-          location,
-          linkedinUrl,
-          portfolioUrl,
-          cvUrl: finalCvUrl,
-        },
-      });
-    }
-
-    const application = await prisma.jobApplication.create({
+    // 3) Create JobApplication row
+    await prisma.jobApplication.create({
       data: {
         jobId: job.id,
-        candidateId: candidate.id,
         fullName,
         email,
-        phone,
-        location,
-        linkedinUrl,
-        portfolioUrl,
-        cvUrl: finalCvUrl,
-        coverLetter,
-        source,
-        stage: ApplicationStage.APPLIED,
-        status: ApplicationStatus.PENDING,
+        phone: phone || null,
+        location: location || null,
+        linkedinUrl: linkedinUrl || null,
+        portfolioUrl: portfolioUrl || null,
+        cvUrl: cvUrl || null,
+        coverLetter: coverLetter || null,
+        source: "Website",
       },
     });
 
-    return NextResponse.json({
-      ok: true,
-      applicationId: application.id,
-    });
+    return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("Job application error:", err);
+    console.error("Error creating application", err);
     return NextResponse.json(
-      {
-        error:
-          "Something went wrong while submitting your application. Please try again.",
-      },
+      { error: "Unexpected error while submitting application." },
       { status: 500 }
     );
   }
