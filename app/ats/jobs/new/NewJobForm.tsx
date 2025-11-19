@@ -1,15 +1,13 @@
 // app/ats/jobs/new/NewJobForm.tsx
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-
-type ApiError = string | null;
 
 export default function NewJobForm() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [apiError, setApiError] = useState<ApiError>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -20,58 +18,22 @@ export default function NewJobForm() {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
-      const title = String(formData.get("title") || "").trim();
-      const location = String(formData.get("location") || "").trim();
-
-      if (!title) {
-        setApiError("Job title is required.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      if (!location) {
-        setApiError("Location is required.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Build payload to send to /api/jobs
-      const payload: any = {
-        title,
-        location,
-        slug: String(formData.get("slug") || "").trim() || undefined,
-        department:
-          String(formData.get("department") || "").trim() || null,
-        employmentType:
-          String(formData.get("employmentType") || "").trim() || null,
-        seniority:
-          String(formData.get("seniority") || "").trim() || null,
-        function:
-          String(formData.get("function") || "").trim() || null,
-        industry:
-          String(formData.get("industry") || "").trim() || null,
-        remoteOption:
-          String(formData.get("remoteOption") || "").trim() || null,
-        salaryCurrency:
-          String(formData.get("salaryCurrency") || "").trim() || null,
-        salaryMin: String(formData.get("salaryMin") || "").trim() || null,
-        salaryMax: String(formData.get("salaryMax") || "").trim() || null,
-        experienceMax:
-          String(formData.get("experienceMax") || "").trim() || null,
-        summary: String(formData.get("summary") || "").trim() || null,
-        description:
-          String(formData.get("description") || "").trim() || null,
-        requirements:
-          String(formData.get("requirements") || "").trim() || null,
-        isPublished: formData.get("isPublished") === "on",
+      const payload = {
+        title: (formData.get("title") || "").toString().trim(),
+        department: (formData.get("department") || "").toString().trim(),
+        location: (formData.get("location") || "").toString().trim(),
+        employmentType: (formData.get("employmentType") || "").toString().trim(),
+        seniority: (formData.get("seniority") || "").toString().trim(),
+        description: (formData.get("description") || "").toString().trim(),
+        tags: (formData.get("tags") || "").toString(),
+        visibility: (formData.get("visibility") || "").toString().trim(),
+        publishNow: formData.get("publishNow") === "on",
       };
 
-      const tagsRaw = String(formData.get("tags") || "").trim();
-      if (tagsRaw) {
-        payload.tags = tagsRaw
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean);
+      if (!payload.title || !payload.location) {
+        setApiError("Please enter at least a job title and location.");
+        setIsSubmitting(false);
+        return;
       }
 
       const res = await fetch("/api/jobs", {
@@ -81,90 +43,50 @@ export default function NewJobForm() {
       });
 
       if (!res.ok) {
-        let message = "Failed to create job.";
-        try {
-          const json = await res.json();
-          if (json && json.error) {
-            message = json.error;
-          }
-        } catch {
-          // ignore
-        }
-        setApiError(message);
+        const data = await res.json().catch(() => ({}));
+        setApiError(data.error || "Failed to create job. Please try again.");
         setIsSubmitting(false);
         return;
       }
 
-      const job = await res.json();
+      const data = await res.json();
 
-      // Redirect: go straight to ATS pipeline, or fallback to ATS dashboard
-      if (job && job.id) {
-        router.push(`/ats/jobs/${job.id}`);
+      // Redirect to the newly created job's pipeline
+      if (data.id) {
+        router.push(`/ats/jobs/${data.id}`);
       } else {
         router.push("/ats");
       }
     } catch (err) {
-      console.error("Error submitting job form:", err);
-      setApiError("Unexpected error while creating job.");
+      console.error("Error submitting job form", err);
+      setApiError("Something went wrong. Please try again.");
       setIsSubmitting(false);
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Error banner */}
       {apiError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {apiError}
-        </div>
+        </p>
       )}
 
-      {/* Basic info */}
+      {/* Job basics */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label className="block text-sm font-medium text-slate-700">
-            Job title<span className="text-red-500">*</span>
+            Job title *
           </label>
           <input
             name="title"
             type="text"
             required
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
             placeholder="Head of Shipping"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Location<span className="text-red-500">*</span>
-          </label>
-          <input
-            name="location"
-            type="text"
-            required
-            placeholder="Lagos, Nigeria · Hybrid"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Slug (optional)
-          </label>
-          <input
-            name="slug"
-            type="text"
-            placeholder="head-of-shipping"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Leave blank to auto-generate from the title.
-          </p>
-        </div>
-      </div>
-
-      {/* Classification */}
-      <div className="grid gap-4 sm:grid-cols-3">
         <div>
           <label className="block text-sm font-medium text-slate-700">
             Department
@@ -172,218 +94,110 @@ export default function NewJobForm() {
           <input
             name="department"
             type="text"
-            placeholder="Operations"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            placeholder="Operations, Engineering, etc."
           />
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Location *
+          </label>
+          <input
+            name="location"
+            type="text"
+            required
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            placeholder="Lagos, Hybrid, etc."
+          />
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-slate-700">
             Employment type
           </label>
-          <select
+          <input
             name="employmentType"
-            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          >
-            <option value="">Select...</option>
-            <option value="Full-time">Full-time</option>
-            <option value="Part-time">Part-time</option>
-            <option value="Contract">Contract</option>
-            <option value="Internship">Internship</option>
-          </select>
+            type="text"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            placeholder="Full-time, Contract, etc."
+          />
         </div>
+
         <div>
           <label className="block text-sm font-medium text-slate-700">
             Seniority
           </label>
-          <select
+          <input
             name="seniority"
-            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          >
-            <option value="">Select...</option>
-            <option value="Junior">Junior</option>
-            <option value="Mid">Mid</option>
-            <option value="Senior">Senior</option>
-            <option value="Lead">Lead</option>
-            <option value="Director">Director</option>
-            <option value="Executive">Executive</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Function
-          </label>
-          <input
-            name="function"
             type="text"
-            placeholder="Operations, Sales, Engineering..."
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Work mode
-          </label>
-          <select
-            name="remoteOption"
-            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          >
-            <option value="">Select...</option>
-            <option value="Onsite">Onsite</option>
-            <option value="Hybrid">Hybrid</option>
-            <option value="Remote">Remote</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Minimum years of experience
-          </label>
-          <input
-            name="experienceMax"
-            type="number"
-            min={0}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            placeholder="Senior, Mid-level, Lead, etc."
           />
         </div>
       </div>
 
-      {/* Compensation */}
-      <div className="grid gap-4 sm:grid-cols-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Currency
-          </label>
-          <input
-            name="salaryCurrency"
-            type="text"
-            placeholder="NGN, USD..."
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Min salary
-          </label>
-          <input
-            name="salaryMin"
-            type="number"
-            min={0}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Max salary
-          </label>
-          <input
-            name="salaryMax"
-            type="number"
-            min={0}
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
+      {/* Description */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700">
+          Description
+        </label>
+        <textarea
+          name="description"
+          rows={6}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          placeholder="Describe the role, responsibilities, and profile."
+        />
       </div>
 
-      {/* Industry & copy fields */}
-      <div className="space-y-4">
+      {/* Tags + visibility */}
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            Industry
-          </label>
-          <input
-            name="industry"
-            type="text"
-            placeholder="Fintech, Logistics, Healthcare..."
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Short summary
-          </label>
-          <textarea
-            name="summary"
-            rows={2}
-            placeholder="One or two lines that describe the role."
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Full description
-          </label>
-          <textarea
-            name="description"
-            rows={4}
-            placeholder="What this role exists to do, the team, etc."
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Requirements
-          </label>
-          <textarea
-            name="requirements"
-            rows={3}
-            placeholder="Skills, experience, and traits you care about."
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
-      </div>
-
-      {/* Tags & publish */}
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700">
-            Tags / skills
+            Tags (comma-separated)
           </label>
           <input
             name="tags"
             type="text"
-            placeholder="shipping, logistics, operations, excel"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            placeholder="Product, B2B, SaaS"
           />
-          <p className="mt-1 text-xs text-slate-500">
-            Comma-separated keywords (your skills/competency taxonomy v1).
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            id="isPublished"
-            name="isPublished"
-            type="checkbox"
-            className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-          />
-          <label
-            htmlFor="isPublished"
-            className="text-sm font-medium text-slate-700"
-          >
-            Publish this role now (otherwise it will be saved as draft)
+        <div>
+          <label className="block text-sm font-medium text-slate-700">
+            Visibility
           </label>
+          <select
+            name="visibility"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+            defaultValue="public"
+          >
+            <option value="public">Public (show on job board)</option>
+            <option value="internal">Internal only</option>
+          </select>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-3 pt-4">
-        <button
-          type="button"
-          onClick={() => router.push("/ats")}
-          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          disabled={isSubmitting}
-        >
-          Cancel
-        </button>
+      {/* Publish toggle */}
+      <div className="flex items-center gap-2">
+        <input
+          id="publishNow"
+          name="publishNow"
+          type="checkbox"
+          className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+        />
+        <label htmlFor="publishNow" className="text-sm text-slate-700">
+          Publish this role now (status = open)
+        </label>
+      </div>
+
+      {/* Submit */}
+      <div className="flex justify-end">
         <button
           type="submit"
           disabled={isSubmitting}
-          className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a] disabled:opacity-70"
+          className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a] disabled:opacity-60"
         >
           {isSubmitting ? "Creating..." : "Create job"}
         </button>
