@@ -1,27 +1,33 @@
 // lib/supabaseAdmin.ts
-//
-// Server-only Supabase client using the SERVICE ROLE key.
-// This is safe here because this file is ONLY ever imported
-// in server code (no "use client" anywhere).
 
 import { createClient } from "@supabase/supabase-js";
 
-if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Safety checks – fail fast on server if envs are missing.
+if (!SUPABASE_URL) {
+  throw new Error(
+    "Missing NEXT_PUBLIC_SUPABASE_URL environment variable for Supabase admin client."
+  );
 }
 
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
+if (!SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error(
+    "Missing SUPABASE_SERVICE_ROLE_KEY environment variable for Supabase admin client."
+  );
 }
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: {
-      persistSession: false,
-    },
-  }
-);
-
-export default supabaseAdmin;
+/**
+ * supabaseAdmin
+ *
+ * - Uses the service role key.
+ * - Server-side only (API routes, server actions).
+ * - Bypasses RLS, so NEVER expose this to the browser.
+ */
+export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+});
