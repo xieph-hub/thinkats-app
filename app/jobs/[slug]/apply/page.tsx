@@ -1,103 +1,69 @@
 // app/jobs/[slug]/apply/page.tsx
 
 import Link from "next/link";
-import supabaseAdmin from "@/lib/supabaseAdmin";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
-type JobRecord = {
+type JobDetail = {
   id: string;
   slug: string | null;
   title: string;
   location: string | null;
-  department: string | null;
-  employment_type: string | null;
-  seniority: string | null;
-  description: string | null;
 };
 
-async function fetchJobBySlugOrId(slugOrId: string): Promise<JobRecord | null> {
-  const supabase = supabaseAdmin as any;
+type ApplyPageProps = {
+  params: { slug: string };
+};
 
-  // 1) Try find by slug
-  const { data: bySlug, error: slugError } = await supabase
+async function fetchPublicJobForApply(
+  slugOrId: string
+): Promise<JobDetail | null> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase
     .from("jobs")
     .select(
       `
-      id,
-      slug,
-      title,
-      location,
-      department,
-      employment_type,
-      seniority,
-      description
-    `
-    )
-    .eq("slug", slugOrId)
-    .limit(1);
-
-  if (slugError) {
-    console.error("Error fetching job by slug:", slugError);
-  }
-
-  let job = (bySlug && bySlug[0]) || null;
-
-  // 2) If not found by slug, try by id
-  if (!job) {
-    const { data: byId, error: idError } = await supabase
-      .from("jobs")
-      .select(
-        `
         id,
         slug,
         title,
         location,
-        department,
-        employment_type,
-        seniority,
-        description
+        status,
+        visibility
       `
-      )
-      .eq("id", slugOrId)
-      .limit(1);
+    )
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
+    .eq("status", "open")
+    .eq("visibility", "public")
+    .limit(1);
 
-    if (idError) {
-      console.error("Error fetching job by id:", idError);
-    }
-
-    job = (byId && byId[0]) || null;
+  if (error || !data || data.length === 0) {
+    console.error("Error loading job for apply", error);
+    return null;
   }
 
-  if (!job) return null;
+  const row: any = data[0];
 
   return {
-    id: job.id,
-    slug: job.slug ?? slugOrId,
-    title: job.title,
-    location: job.location ?? null,
-    department: job.department ?? null,
-    employment_type: job.employment_type ?? null,
-    seniority: job.seniority ?? null,
-    description: job.description ?? null,
+    id: row.id,
+    slug: row.slug ?? null,
+    title: row.title,
+    location: row.location ?? null,
   };
 }
 
-type PageProps = {
-  params: {
-    slug: string;
-  };
-};
-
-export default async function JobApplyPage({ params }: PageProps) {
-  const job = await fetchJobBySlugOrId(params.slug);
+export default async function ApplyPage({ params }: ApplyPageProps) {
+  const job = await fetchPublicJobForApply(params.slug);
 
   if (!job) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-12">
-        <h1 className="text-2xl font-semibold text-slate-900">Job not found</h1>
-        <p className="text-sm text-slate-600">
-          This job either doesn&apos;t exist, is not public, or has been removed.
+      <main className="mx-auto max-w-3xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Role not available
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          This job may have been closed or is no longer visible.
         </p>
-        <div>
+        <div className="mt-4">
           <Link
             href="/jobs"
             className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
@@ -109,177 +75,139 @@ export default async function JobApplyPage({ params }: PageProps) {
     );
   }
 
-  const applyAction = `/api/jobs/${job.slug ?? job.id}/apply`;
+  const slugOrId = job.slug || job.id;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      {/* Header */}
-      <header className="mb-6">
-        <p className="text-xs uppercase tracking-wide text-slate-500">
-          Resourcin · Job application
+    <main className="mx-auto max-w-3xl px-4 py-12">
+      <div className="mb-6">
+        <Link
+          href={`/jobs/${slugOrId}`}
+          className="text-xs font-medium text-[#172965] hover:underline"
+        >
+          ← Back to job
+        </Link>
+      </div>
+
+      <header className="mb-6 space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          Apply
         </p>
-        <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-          Apply for {job.title}
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {job.title}
         </h1>
-        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-          {job.location && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.location}
-            </span>
-          )}
-          {job.employment_type && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.employment_type}
-            </span>
-          )}
-          {job.department && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.department}
-            </span>
-          )}
-          {job.seniority && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.seniority}
-            </span>
-          )}
-        </div>
+        <p className="text-xs text-slate-500">
+          {job.location || "Location flexible"}
+        </p>
       </header>
 
-      {/* Optional short description */}
-      {job.description && (
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Role overview
-          </h2>
-          <p className="whitespace-pre-line">{job.description}</p>
-        </section>
-      )}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <form
+          method="POST"
+          action={`/api/jobs/${slugOrId}/apply`}
+          encType="multipart/form-data"
+          className="space-y-4"
+        >
+          {/* hidden job id so the API can trust the job */}
+          <input type="hidden" name="job_id" value={job.id} />
+          <input type="hidden" name="source" value="careers_site" />
 
-      {/* Application form – posts directly to API */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-        <h2 className="mb-4 text-sm font-semibold text-slate-900">
-          Share your details
-        </h2>
-
-        <form method="POST" action={applyAction} className="space-y-4">
-          {/* Name / Email */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <div>
+            <div className="sm:col-span-2">
               <label className="block text-xs font-medium text-slate-700">
-                Full name
+                Full name<span className="text-red-500">*</span>
               </label>
               <input
-                required
                 name="full_name"
-                type="text"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
+                required
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
             </div>
+
             <div>
               <label className="block text-xs font-medium text-slate-700">
-                Email
+                Email<span className="text-red-500">*</span>
               </label>
               <input
-                required
                 name="email"
                 type="email"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
+                required
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
             </div>
-          </div>
 
-          {/* Phone / Location */}
-          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-slate-700">
-                Phone (optional)
+                Phone
               </label>
               <input
                 name="phone"
-                type="tel"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
             </div>
+
             <div>
               <label className="block text-xs font-medium text-slate-700">
-                Current location (city, country)
+                Location (City, Country)
               </label>
               <input
                 name="location"
-                type="text"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
             </div>
-          </div>
 
-          {/* Links */}
-          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-slate-700">
-                LinkedIn URL (optional)
+                LinkedIn URL
               </label>
               <input
                 name="linkedin_url"
                 type="url"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
+                placeholder="https://www.linkedin.com/in/..."
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
             </div>
+
             <div>
               <label className="block text-xs font-medium text-slate-700">
-                Portfolio / GitHub / Website (optional)
+                Portfolio / Website
               </label>
               <input
                 name="portfolio_url"
                 type="url"
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
+                placeholder="https://"
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-700">
+                CV / Resume (PDF, max ~10MB)
+              </label>
+              <input
+                name="cv"
+                type="file"
+                accept=".pdf,.doc,.docx"
+                className="mt-1 block w-full text-xs text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#111b4a]"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-medium text-slate-700">
+                Short note / cover letter
+              </label>
+              <textarea
+                name="cover_letter"
+                rows={4}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                placeholder="Give quick context on your experience and interest in this role."
               />
             </div>
           </div>
 
-          {/* CV URL */}
-          <div>
-            <label className="block text-xs font-medium text-slate-700">
-              CV link (Google Drive, Dropbox, etc.)
-            </label>
-            <input
-              name="cv_url"
-              type="url"
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
-              placeholder="https://..."
-            />
-            <p className="mt-1 text-[11px] text-slate-500">
-              You can also email your CV later using the confirmation email
-              you&apos;ll receive.
-            </p>
-          </div>
-
-          {/* Cover letter */}
-          <div>
-            <label className="block text-xs font-medium text-slate-700">
-              Short note / cover letter (optional)
-            </label>
-            <textarea
-              name="cover_letter"
-              rows={4}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-2 focus:ring-[#172965]/20"
-              placeholder="Tell us briefly why this role is a fit for you..."
-            />
-          </div>
-
-          {/* Hidden source + submit */}
-          <input type="hidden" name="source" value="Website" />
-
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <Link
-              href="/jobs"
-              className="text-xs font-medium text-slate-600 hover:text-slate-900"
-            >
-              ← Back to all jobs
-            </Link>
-
+          <div className="pt-3">
             <button
               type="submit"
-              className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
+              className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
             >
               Submit application
             </button>
