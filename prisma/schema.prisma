@@ -6,12 +6,15 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")  // Supabase pooled
-  directUrl = env("DIRECT_URL")    // Supabase direct
+  url       = env("DATABASE_URL")  // pooled connection
+  directUrl = env("DIRECT_URL")    // direct connection
 }
 
-// Intentionally no models here for now.
-// We have dropped the old PascalCase tables (Job, JobApplication, Tenant, etc.),
-// and ATS now runs on Supabase tables directly (jobs, job_applications, candidates, ...).
-// If/when we want Prisma back in the ATS layer, we will add new models that map
-// to those snake_case tables with @@map("jobs"), @@map("job_applications"), etc.
+// We are not actively using Prisma in the app right now.
+// This tiny placeholder model only exists so that
+// `prisma generate` succeeds during Vercel's postinstall.
+
+model PrismaPlaceholder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+}
