@@ -1,72 +1,82 @@
 // app/jobs/[slug]/page.tsx
 
 import Link from "next/link";
-import supabaseAdmin from "@/lib/supabaseAdmin";
-import ApplyForm from "./ApplyForm";
-
-type PageProps = {
-  params: {
-    slug: string;
-  };
-};
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 type JobDetail = {
   id: string;
   slug: string | null;
   title: string;
-  location: string | null;
   department: string | null;
-  employment_type: string | null;
+  location: string | null;
+  employmentType: string | null;
   seniority: string | null;
   description: string | null;
-  created_at: string;
+  tags: string[] | null;
+  createdAt: string | null;
 };
 
-export const revalidate = 0;
+type JobPageProps = {
+  params: { slug: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
+};
 
-async function loadJobBySlug(slug: string): Promise<JobDetail | null> {
-  const { data, error } = await supabaseAdmin
+async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase
     .from("jobs")
     .select(
       `
-      id,
-      slug,
-      title,
-      location,
-      department,
-      employment_type,
-      seniority,
-      description,
-      created_at
-    `
+        id,
+        slug,
+        title,
+        department,
+        location,
+        employment_type,
+        seniority,
+        description,
+        tags,
+        created_at,
+        status,
+        visibility
+      `
     )
-    .eq("slug", slug)
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
     .eq("status", "open")
     .eq("visibility", "public")
-    .single();
+    .limit(1);
 
-  if (error || !data) {
-    console.error("Failed to load public job by slug", error);
+  if (error || !data || data.length === 0) {
+    console.error("Error loading public job", error);
     return null;
   }
 
-  return data as JobDetail;
+  const row: any = data[0];
+
+  return {
+    id: row.id,
+    slug: row.slug ?? null,
+    title: row.title,
+    department: row.department ?? null,
+    location: row.location ?? null,
+    employmentType: row.employment_type ?? null,
+    seniority: row.seniority ?? null,
+    description: row.description ?? null,
+    tags: row.tags ?? null,
+    createdAt: row.created_at ?? null,
+  };
 }
 
-export default async function Page({ params }: PageProps) {
-  const job = await loadJobBySlug(params.slug);
+export default async function PublicJobPage({ params, searchParams }: JobPageProps) {
+  const job = await fetchPublicJob(params.slug);
 
   if (!job) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-12">
-        <p className="text-xs uppercase tracking-wide text-slate-500">
-          Resourcin · Jobs
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-          Job not found
-        </h1>
+      <main className="mx-auto max-w-3xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-slate-900">Role not found</h1>
         <p className="mt-2 text-sm text-slate-600">
-          This job may have been closed or the link is invalid.
+          This job may have been closed or is no longer visible.
         </p>
         <div className="mt-4">
           <Link
@@ -80,65 +90,21 @@ export default async function Page({ params }: PageProps) {
     );
   }
 
+  const slugOrId = job.slug || job.id;
+  const appliedFlag =
+    typeof searchParams?.applied === "string" && searchParams.applied === "1";
+
+  const createdLabel = job.createdAt
+    ? new Date(job.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
+
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-6">
-        <p className="text-xs uppercase tracking-wide text-slate-500">
-          Resourcin · Job
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-          {job.title}
-        </h1>
-
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-          {job.location && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.location}
-            </span>
-          )}
-          {job.employment_type && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.employment_type}
-            </span>
-          )}
-          {job.department && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.department}
-            </span>
-          )}
-          {job.seniority && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.seniority}
-            </span>
-          )}
-        </div>
-
-        <p className="mt-3 text-[13px] text-slate-500">
-          Posted{" "}
-          {new Date(job.created_at).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "2-digit",
-          })}
-        </p>
-      </header>
-
-      <section className="prose prose-sm max-w-none text-slate-800 prose-headings:text-slate-900 prose-a:text-[#172965]">
-        {job.description ? (
-          <article className="whitespace-pre-line text-sm leading-relaxed">
-            {job.description}
-          </article>
-        ) : (
-          <p className="text-sm text-slate-600">
-            Full description coming soon. You can still apply if this role is
-            relevant to you.
-          </p>
-        )}
-      </section>
-
-      <ApplyForm jobSlug={params.slug} jobTitle={job.title} />
-
-      <div className="mt-6">
+    <main className="mx-auto max-w-3xl px-4 py-12">
+      <div className="mb-6">
         <Link
           href="/jobs"
           className="text-xs font-medium text-[#172965] hover:underline"
@@ -146,6 +112,64 @@ export default async function Page({ params }: PageProps) {
           ← Back to all jobs
         </Link>
       </div>
+
+      {appliedFlag && (
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+          Thank you. Your application has been received.
+        </div>
+      )}
+
+      <header className="mb-6 space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          Open role
+        </p>
+        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
+        <p className="text-xs text-slate-500">
+          {job.location || "Location flexible"}
+          {job.department ? ` • ${job.department}` : ""}
+          {job.seniority ? ` • ${job.seniority}` : ""}
+        </p>
+        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+          {job.employmentType && (
+            <span className="rounded-full border border-slate-200 px-3 py-1">
+              {job.employmentType}
+            </span>
+          )}
+          {createdLabel && (
+            <span className="rounded-full border border-slate-200 px-3 py-1">
+              Posted {createdLabel}
+            </span>
+          )}
+        </div>
+      </header>
+
+      <section className="prose prose-sm max-w-none text-slate-800">
+        <div className="whitespace-pre-line text-sm leading-relaxed">
+          {job.description || "No description provided yet."}
+        </div>
+      </section>
+
+      {job.tags && job.tags.length > 0 && (
+        <section className="mt-4 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
+          {job.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full bg-slate-50 px-2.5 py-1"
+            >
+              {tag}
+            </span>
+          ))}
+        </section>
+      )}
+
+      <section className="mt-8">
+        <Link
+          href={`/jobs/${slugOrId}/apply`}
+          className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
+        >
+          Apply for this role
+        </Link>
+      </section>
     </main>
   );
 }
