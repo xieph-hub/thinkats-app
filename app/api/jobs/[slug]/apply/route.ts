@@ -1,159 +1,175 @@
 // app/api/jobs/[slug]/apply/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import supabaseAdmin from "@/lib/supabaseAdmin";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+const FALLBACK_SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
+
+async function findJob(slugOrId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select(
+      `
+        id,
+        tenant_id,
+        slug,
+        title,
+        status,
+        visibility
+      `
+    )
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
+    .limit(1);
+
+  if (error || !data || data.length === 0) {
+    console.error("Error finding job for application", error);
+    return null;
+  }
+
+  const row: any = data[0];
+
+  // Only allow applications to open + public roles
+  if (row.status !== "open" || row.visibility !== "public") {
+    return null;
+  }
+
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string | null,
+    slug: (row.slug ?? null) as string | null,
+    title: row.title as string,
+  };
+}
 
 export async function POST(
   req: NextRequest,
   context: { params: { slug: string } }
 ) {
-  const { slug } = context.params;
-  const supabase = supabaseAdmin as any;
+  const slugOrId = context.params.slug;
+
+  const job = await findJob(slugOrId);
+  if (!job) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  }
+
+  const formData = await req.formData();
+
+  const jobIdFromForm = (formData.get("job_id") ?? "").toString();
+  const fullName = (formData.get("full_name") ?? "").toString().trim();
+  const email = (formData.get("email") ?? "").toString().trim().toLowerCase();
+  const phone = (formData.get("phone") ?? "").toString().trim() || null;
+  const location = (formData.get("location") ?? "").toString().trim() || null;
+  const linkedinUrl =
+    (formData.get("linkedin_url") ?? "").toString().trim() || null;
+  const portfolioUrl =
+    (formData.get("portfolio_url") ?? "").toString().trim() || null;
+  const coverLetter =
+    (formData.get("cover_letter") ?? "").toString().trim() || null;
+  const source =
+    (formData.get("source") ?? "").toString().trim() || "careers_site";
+
+  const cvFile = formData.get("cv") as File | null;
+
+  // sanity check: the form job id must match the job we resolved from slug
+  if (!jobIdFromForm || jobIdFromForm !== job.id) {
+    console.warn("Job ID mismatch on application", {
+      jobFromSlug: job.id,
+      jobFromForm: jobIdFromForm,
+    });
+
+    const redirectUrl = new URL(
+      `/jobs/${job.slug || job.id}/apply`,
+      FALLBACK_SITE_URL
+    );
+    return NextResponse.redirect(redirectUrl, { status: 303 });
+  }
+
+  if (!fullName || !email) {
+    const redirectUrl = new URL(
+      `/jobs/${job.slug || job.id}/apply`,
+      FALLBACK_SITE_URL
+    );
+    return NextResponse.redirect(redirectUrl, { status: 303 });
+  }
+
+  // ---------- Optional: upload CV to Supabase Storage ----------
+  let cvPublicUrl: string | null = null;
 
   try {
-    // 1) Find the job by slug, fall back to id if needed
-    let job: any = null;
+    if (cvFile && typeof cvFile.arrayBuffer === "function") {
+      const arrayBuffer = await cvFile.arrayBuffer();
+      const fileExt = cvFile.name.split(".").pop() || "pdf";
 
-    // Try by slug
-    {
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("id, tenant_id, title")
-        .eq("slug", slug)
-        .limit(1);
+      // You can rename "cvs" to whatever bucket you set up in Supabase.
+      const filePath = `cvs/${job.id}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`;
 
-      if (error) {
-        console.error("Error fetching job by slug in apply route:", error);
-      }
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("cvs")
+        .upload(filePath, arrayBuffer, {
+          contentType: cvFile.type || "application/octet-stream",
+          upsert: false,
+        });
 
-      if (data && data.length > 0) {
-        job = data[0];
-      }
-    }
+      if (!uploadError) {
+        const { data: publicData } = supabaseAdmin.storage
+          .from("cvs")
+          .getPublicUrl(filePath);
 
-    // Try by id if not found by slug
-    if (!job) {
-      const { data, error } = await supabase
-        .from("jobs")
-        .select("id, tenant_id, title")
-        .eq("id", slug)
-        .limit(1);
-
-      if (error) {
-        console.error("Error fetching job by id in apply route:", error);
-      }
-
-      if (data && data.length > 0) {
-        job = data[0];
+        if (publicData?.publicUrl) {
+          cvPublicUrl = publicData.publicUrl;
+        }
+      } else {
+        console.error("Error uploading CV", uploadError);
       }
     }
+  } catch (err) {
+    console.error("Unexpected error while uploading CV", err);
+  }
 
-    if (!job) {
-      return NextResponse.json(
-        { ok: false, message: "Job not found" },
-        { status: 404 }
-      );
-    }
-
-    // 2) Read payload (JSON or form-data)
-    let raw: any = null;
-
-    // Try JSON first
-    try {
-      raw = await req.json();
-    } catch {
-      // Then try formData (from HTML <form>)
-      try {
-        const formData = await req.formData();
-        raw = Object.fromEntries(formData.entries());
-      } catch {
-        raw = null;
-      }
-    }
-
-    if (!raw) {
-      return NextResponse.json(
-        { ok: false, message: "Invalid request body" },
-        { status: 400 }
-      );
-    }
-
-    // Normalise fields (accept snake_case and camelCase)
-    const fullNameRaw = raw.full_name ?? raw.fullName ?? "";
-    const emailRaw = raw.email ?? "";
-    const phoneRaw = raw.phone ?? null;
-    const locationRaw = raw.location ?? null;
-    const linkedinRaw = raw.linkedin_url ?? raw.linkedinUrl ?? null;
-    const portfolioRaw = raw.portfolio_url ?? raw.portfolioUrl ?? null;
-    const cvRaw = raw.cv_url ?? raw.cvUrl ?? null;
-    const coverRaw = raw.cover_letter ?? raw.coverLetter ?? null;
-    const sourceRaw = raw.source ?? "Website";
-
-    const full_name = String(fullNameRaw).trim();
-    const email = String(emailRaw).trim().toLowerCase();
-    const phone = phoneRaw ? String(phoneRaw).trim() : null;
-    const location = locationRaw ? String(locationRaw).trim() : null;
-    const linkedin_url = linkedinRaw ? String(linkedinRaw).trim() : null;
-    const portfolio_url = portfolioRaw ? String(portfolioRaw).trim() : null;
-    const cv_url = cvRaw ? String(cvRaw).trim() : null;
-    const cover_letter = coverRaw ? String(coverRaw).trim() : null;
-    const source = String(sourceRaw).trim() || "Website";
-
-    if (!full_name || !email) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message: "Missing required fields: full_name and email",
-        },
-        { status: 400 }
-      );
-    }
-
-    // 3) Insert into job_applications
-    const { error: insertError } = await supabase
+  // ---------- Insert into job_applications ----------
+  try {
+    const { error: insertError } = await supabaseAdmin
       .from("job_applications")
       .insert({
         job_id: job.id,
-        candidate_id: null, // can be wired to candidates table later
-        full_name,
+        candidate_id: null, // can later link to candidates table
+        full_name: fullName,
         email,
         phone,
         location,
-        linkedin_url,
-        portfolio_url,
-        cv_url,
-        cover_letter,
+        linkedin_url: linkedinUrl,
+        portfolio_url: portfolioUrl,
+        cv_url: cvPublicUrl,
+        cover_letter: coverLetter,
         source,
-        stage: "APPLIED", // default
-        status: "PENDING", // default
+        // stage + status will use defaults: 'APPLIED', 'PENDING'
       });
 
     if (insertError) {
-      console.error("Error inserting job_application:", insertError);
-      return NextResponse.json(
-        {
-          ok: false,
-          message: "Failed to create application",
-        },
-        { status: 500 }
+      console.error("Error inserting job application", insertError);
+      const redirectUrl = new URL(
+        `/jobs/${job.slug || job.id}/apply`,
+        FALLBACK_SITE_URL
       );
+      return NextResponse.redirect(redirectUrl, { status: 303 });
     }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        message: "Application submitted successfully",
-      },
-      { status: 201 }
-    );
   } catch (err) {
-    console.error("Unexpected error in job apply route:", err);
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "Unexpected error while submitting application",
-      },
-      { status: 500 }
+    console.error("Unexpected error inserting job application", err);
+    const redirectUrl = new URL(
+      `/jobs/${job.slug || job.id}/apply`,
+      FALLBACK_SITE_URL
     );
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   }
+
+  // On success, send the candidate back to the job page with a success flag
+  const successRedirectUrl = new URL(
+    `/jobs/${job.slug || job.id}?applied=1`,
+    FALLBACK_SITE_URL
+  );
+
+  return NextResponse.redirect(successRedirectUrl, { status: 303 });
 }
