@@ -3,7 +3,7 @@
 // Central helpers for working with the `jobs` table in Supabase.
 // We are NOT using Prisma here anymore – everything goes through Supabase.
 //
-// This is aligned with your existing `public.jobs` table:
+// public.jobs columns:
 //
 // id                uuid        PK
 // tenant_id         uuid        NOT NULL
@@ -49,7 +49,7 @@ export type JobsTableRow = {
 /**
  * List all jobs for the *current* tenant.
  *
- * - Uses RESOURCIN_TENANT_SLUG → tenant id (via getCurrentTenantId)
+ * - Uses getCurrentTenantId (RESOURCIN_TENANT_SLUG → tenant id)
  * - Reads from `public.jobs`
  * - Sorted newest first
  */
@@ -76,4 +76,44 @@ export async function listJobsForCurrentTenant(): Promise<JobsTableRow[]> {
   }
 
   return data as JobsTableRow[];
+}
+
+/**
+ * Fetch a single job for the *current* tenant by its slug.
+ *
+ * Used by: app/ats/[slug]/page.tsx
+ */
+export async function getJobForCurrentTenantBySlug(
+  slug: string
+): Promise<JobsTableRow | null> {
+  const tenantId = await getCurrentTenantId();
+
+  if (!tenantId) {
+    console.warn("getJobForCurrentTenantBySlug: no current tenant id");
+    return null;
+  }
+
+  if (!slug) {
+    console.warn("getJobForCurrentTenantBySlug: no slug provided");
+    return null;
+  }
+
+  const { data, error } = await (supabaseAdmin as any)
+    .from("jobs")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("slug", slug)
+    .single();
+
+  if (error || !data) {
+    // If not found, Supabase returns an error – treat as "no job"
+    console.error("Error fetching job by slug for tenant", {
+      tenantId,
+      slug,
+      error,
+    });
+    return null;
+  }
+
+  return data as JobsTableRow;
 }
