@@ -1,4 +1,5 @@
 // app/ats/jobs/[jobId]/page.tsx
+
 import Link from "next/link";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
@@ -10,13 +11,12 @@ type PageProps = {
   };
 };
 
-// always fetch fresh from DB
 export const revalidate = 0;
 
 export default async function JobPipelinePage({ params }: PageProps) {
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // 1) Not signed in at all
+  // Not logged in
   if (!user) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -39,7 +39,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // 2) Signed in but no tenant linked
+  // User with no tenant mapping
   if (!currentTenant) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -65,39 +65,25 @@ export default async function JobPipelinePage({ params }: PageProps) {
 
   const supabase = await createSupabaseServerClient();
 
-  // 3) Load the job directly from the real `jobs` table
-  const { data: job, error: jobError } = await supabase
+  // 1) Load the job for this tenant
+  const { data: jobRow, error: jobError } = await supabase
     .from("jobs")
     .select(
       `
-        id,
-        tenant_id,
-        title,
-        department,
-        location,
-        employment_type,
-        seniority,
-        description,
-        status,
-        visibility,
-        tags,
-        created_at,
-        slug
-      `
+      id,
+      title,
+      location,
+      employment_type,
+      department,
+      seniority
+    `
     )
     .eq("id", params.jobId)
-    .maybeSingle();
+    .eq("tenant_id", currentTenant.id)
+    .single();
 
-  if (jobError) {
-    console.error("❌ Error loading job in JobPipelinePage:", {
-      jobError,
-      jobId: params.jobId,
-      tenantId: currentTenant.id,
-    });
-  }
-
-  // 4) If job does not exist OR not the same tenant → show "Job not found"
-  if (!job || job.tenant_id !== currentTenant.id) {
+  if (jobError || !jobRow) {
+    console.error("Job not found for tenant in ATS", jobError);
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
         <h1 className="text-2xl font-semibold text-slate-900">
@@ -119,73 +105,51 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // 5) Load applications for this job from job_applications
-  //    Map snake_case → camelCase to match the old JobApplication shape.
-  let applications: any[] = [];
+  // 2) Load applications for this job from job_applications
+  const { data: appRows, error: appsError } = await supabase
+    .from("job_applications")
+    .select(
+      `
+      id,
+      full_name,
+      email,
+      phone,
+      location,
+      linkedin_url,
+      portfolio_url,
+      cv_url,
+      cover_letter,
+      source,
+      stage,
+      status,
+      created_at
+    `
+    )
+    .eq("job_id", params.jobId)
+    .order("created_at", { ascending: false });
 
-  try {
-    const { data: rawApps, error: appsError } = await supabase
-      .from("job_applications")
-      .select(
-        `
-          id,
-          job_id,
-          candidate_id,
-          full_name,
-          email,
-          phone,
-          location,
-          linkedin_url,
-          portfolio_url,
-          cv_url,
-          cover_letter,
-          source,
-          stage,
-          status,
-          created_at,
-          updated_at
-        `
-      )
-      .eq("job_id", job.id)
-      .order("created_at", { ascending: false });
-
-    if (appsError) {
-      console.error("⚠️ Error loading applications in JobPipelinePage:", {
-        appsError,
-        jobId: params.jobId,
-      });
-      applications = [];
-    } else if (rawApps) {
-      // Map to camelCase so ApplicationsTableClient can treat them like the old JobApplication rows
-      applications = rawApps.map((row) => ({
-        id: row.id,
-        jobId: row.job_id,
-        candidateId: row.candidate_id,
-        fullName: row.full_name,
-        email: row.email,
-        phone: row.phone,
-        location: row.location,
-        linkedinUrl: row.linkedin_url,
-        portfolioUrl: row.portfolio_url,
-        cvUrl: row.cv_url,
-        coverLetter: row.cover_letter,
-        source: row.source,
-        stage: row.stage,
-        status: row.status,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-    }
-  } catch (err) {
-    console.error(
-      "⚠️ Unexpected error loading applications in JobPipelinePage:",
-      {
-        err,
-        jobId: params.jobId,
-      }
-    );
-    applications = [];
+  if (appsError) {
+    console.error("Error loading job applications", appsError);
   }
+
+  const applications =
+    appRows?.map((row: any) => ({
+      id: row.id as string,
+      fullName: row.full_name as string,
+      email: row.email as string,
+      phone: (row.phone as string | null) ?? null,
+      location: (row.location as string | null) ?? null,
+      linkedinUrl: (row.linkedin_url as string | null) ?? null,
+      portfolioUrl: (row.portfolio_url as string | null) ?? null,
+      cvUrl: (row.cv_url as string | null) ?? null,
+      coverLetter: (row.cover_letter as string | null) ?? null,
+      source: (row.source as string | null) ?? null,
+      stage: (row.stage as string) ?? "APPLIED",
+      status: (row.status as string) ?? "PENDING",
+      createdAt: row.created_at as string,
+    })) ?? [];
+
+  const applicationsCount = applications.length;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -196,39 +160,39 @@ export default async function JobPipelinePage({ params }: PageProps) {
             ThinkATS · Pipeline
           </p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            {job.title}
+            {jobRow.title}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            {applications.length} application
-            {applications.length === 1 ? "" : "s"} so far.
+            {applicationsCount} application
+            {applicationsCount === 1 ? "" : "s"} so far.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-          {job.location && (
+          {jobRow.location && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.location}
+              {jobRow.location}
             </span>
           )}
-          {job.employment_type && (
+          {jobRow.employment_type && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.employment_type}
+              {jobRow.employment_type}
             </span>
           )}
-          {job.department && (
+          {jobRow.department && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.department}
+              {jobRow.department}
             </span>
           )}
-          {job.seniority && (
+          {jobRow.seniority && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.seniority}
+              {jobRow.seniority}
             </span>
           )}
         </div>
       </header>
 
-      {/* Applications table (now gets real data when present) */}
+      {/* Applications table (client-side) */}
       <ApplicationsTableClient applications={applications as any} />
     </main>
   );
