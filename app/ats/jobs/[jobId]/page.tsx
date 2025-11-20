@@ -119,8 +119,73 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // 5) For now, applications = empty list (we'll wire the real table later)
-  const applications: any[] = [];
+  // 5) Load applications for this job from job_applications
+  //    Map snake_case → camelCase to match the old JobApplication shape.
+  let applications: any[] = [];
+
+  try {
+    const { data: rawApps, error: appsError } = await supabase
+      .from("job_applications")
+      .select(
+        `
+          id,
+          job_id,
+          candidate_id,
+          full_name,
+          email,
+          phone,
+          location,
+          linkedin_url,
+          portfolio_url,
+          cv_url,
+          cover_letter,
+          source,
+          stage,
+          status,
+          created_at,
+          updated_at
+        `
+      )
+      .eq("job_id", job.id)
+      .order("created_at", { ascending: false });
+
+    if (appsError) {
+      console.error("⚠️ Error loading applications in JobPipelinePage:", {
+        appsError,
+        jobId: params.jobId,
+      });
+      applications = [];
+    } else if (rawApps) {
+      // Map to camelCase so ApplicationsTableClient can treat them like the old JobApplication rows
+      applications = rawApps.map((row) => ({
+        id: row.id,
+        jobId: row.job_id,
+        candidateId: row.candidate_id,
+        fullName: row.full_name,
+        email: row.email,
+        phone: row.phone,
+        location: row.location,
+        linkedinUrl: row.linkedin_url,
+        portfolioUrl: row.portfolio_url,
+        cvUrl: row.cv_url,
+        coverLetter: row.cover_letter,
+        source: row.source,
+        stage: row.stage,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    }
+  } catch (err) {
+    console.error(
+      "⚠️ Unexpected error loading applications in JobPipelinePage:",
+      {
+        err,
+        jobId: params.jobId,
+      }
+    );
+    applications = [];
+  }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -163,7 +228,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
         </div>
       </header>
 
-      {/* Applications table (currently empty array; real data later) */}
+      {/* Applications table (now gets real data when present) */}
       <ApplicationsTableClient applications={applications as any} />
     </main>
   );
