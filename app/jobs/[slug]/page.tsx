@@ -24,35 +24,68 @@ type JobPageProps = {
 async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
   const supabase = await createSupabaseServerClient();
 
-  const { data, error } = await supabase
+  const selectCols = `
+    id,
+    slug,
+    title,
+    department,
+    location,
+    employment_type,
+    seniority,
+    description,
+    tags,
+    created_at,
+    status,
+    visibility
+  `;
+
+  // 1) Try match by slug
+  let { data, error } = await supabase
     .from("jobs")
-    .select(
-      `
-        id,
-        slug,
-        title,
-        department,
-        location,
-        employment_type,
-        seniority,
-        description,
-        tags,
-        created_at,
-        status,
-        visibility
-      `
-    )
-    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
+    .select(selectCols)
+    .eq("slug", slugOrId)
     .eq("status", "open")
     .eq("visibility", "public")
     .limit(1);
 
-  if (error || !data || data.length === 0) {
-    console.error("Error loading public job", error);
+  if (error) {
+    console.error("Error loading public job by slug", error);
+  }
+
+  if (data && data.length > 0) {
+    const row: any = data[0];
+    return {
+      id: row.id,
+      slug: row.slug ?? null,
+      title: row.title,
+      department: row.department ?? null,
+      location: row.location ?? null,
+      employmentType: row.employment_type ?? null,
+      seniority: row.seniority ?? null,
+      description: row.description ?? null,
+      tags: row.tags ?? null,
+      createdAt: row.created_at ?? null,
+    };
+  }
+
+  // 2) If not found, try match by id (UUID path like /jobs/<id>)
+  const { data: dataById, error: errorById } = await supabase
+    .from("jobs")
+    .select(selectCols)
+    .eq("id", slugOrId)
+    .eq("status", "open")
+    .eq("visibility", "public")
+    .limit(1);
+
+  if (errorById) {
+    console.error("Error loading public job by id", errorById);
+  }
+
+  if (!dataById || dataById.length === 0) {
     return null;
   }
 
-  const row: any = data[0];
+  const row: any = dataById[0];
 
   return {
     id: row.id,
