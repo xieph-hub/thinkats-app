@@ -1,150 +1,148 @@
 // app/jobs/page.tsx
+
 import Link from "next/link";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import supabaseAdmin from "@/lib/supabaseAdmin";
 
 type PublicJob = {
   id: string;
   slug: string | null;
   title: string;
-  department: string | null;
   location: string | null;
-  employmentType: string | null;
+  department: string | null;
+  employment_type: string | null;
   seniority: string | null;
-  status: string;
-  createdAt: string | null;
+  created_at: string;
 };
 
-// Revalidate every 60 seconds
-export const revalidate = 60;
+export const revalidate = 0; // always fetch fresh
 
-export default async function JobsPage() {
-  const supabase = await createSupabaseServerClient();
+async function getResourcinTenantId(): Promise<string | null> {
+  const tenantSlug = process.env.RESOURCIN_TENANT_SLUG;
 
-  const { data, error } = await supabase
+  if (!tenantSlug) {
+    console.error("RESOURCIN_TENANT_SLUG is not set in env");
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("tenants")
+    .select("id")
+    .eq("slug", tenantSlug)
+    .single();
+
+  if (error || !data) {
+    console.error("Failed to load Resourcin tenant by slug", error);
+    return null;
+  }
+
+  return data.id as string;
+}
+
+async function loadPublicJobs(): Promise<PublicJob[]> {
+  const tenantId = await getResourcinTenantId();
+  if (!tenantId) return [];
+
+  const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
       `
-        id,
-        slug,
-        title,
-        department,
-        location,
-        employment_type,
-        seniority,
-        status,
-        created_at
-      `
+      id,
+      slug,
+      title,
+      location,
+      department,
+      employment_type,
+      seniority,
+      created_at
+    `
     )
-    // show only open roles; adjust if your status values differ
-    .in("status", ["open", "OPEN", "Open"])
+    .eq("tenant_id", tenantId)
+    .eq("status", "open")
+    .eq("visibility", "public")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error loading public jobs from jobs table:", error);
+  if (error || !data) {
+    console.error("Error loading public jobs", error);
+    return [];
   }
 
-  const jobs: PublicJob[] =
-    (data || []).map((row: any) => ({
-      id: row.id,
-      slug: row.slug ?? null,
-      title: row.title,
-      department: row.department ?? null,
-      location: row.location ?? null,
-      employmentType: row.employment_type ?? null,
-      seniority: row.seniority ?? null,
-      status: row.status ?? "open",
-      createdAt: row.created_at ?? null,
-    })) ?? [];
+  return data as PublicJob[];
+}
+
+export default async function Page() {
+  const jobs = await loadPublicJobs();
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
       <header className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Resourcin · Opportunities
+          Resourcin · Open Roles
         </p>
-        <h1 className="mt-1 text-3xl font-semibold text-slate-900">
-          Open roles
+        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+          Current Opportunities
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          These are the roles we&apos;re actively hiring for through Resourcin
-          and ThinkATS. Click a job to see the full description and apply.
+          Roles we&apos;re actively hiring for. Click any job to read the full
+          description and apply via a simple form.
         </p>
       </header>
 
-      {jobs.length === 0 && (
-        <p className="text-sm text-slate-500">
-          No open roles at the moment. Check back soon.
-        </p>
-      )}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        {jobs.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No open roles right now. Check back soon or send us a speculative
+            application.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {jobs.map((job) => (
+              <li key={job.id} className="py-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <Link
+                      href={`/jobs/${job.slug ?? job.id}`}
+                      className="text-sm font-semibold text-[#172965] hover:underline"
+                    >
+                      {job.title}
+                    </Link>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-600">
+                      {job.location && (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
+                          {job.location}
+                        </span>
+                      )}
+                      {job.employment_type && (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
+                          {job.employment_type}
+                        </span>
+                      )}
+                      {job.department && (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
+                          {job.department}
+                        </span>
+                      )}
+                      {job.seniority && (
+                        <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
+                          {job.seniority}
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-      <div className="space-y-4">
-        {jobs.map((job) => {
-          const href = `/jobs/${job.slug || job.id}`;
-          const postedLabel = job.createdAt
-            ? new Date(job.createdAt).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "short",
-                day: "2-digit",
-              })
-            : null;
-
-          const isOpen =
-            job.status &&
-            (job.status.toLowerCase() === "open" ||
-              job.status.toLowerCase() === "active");
-
-          return (
-            <Link
-              key={job.id}
-              href={href}
-              className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#172965] hover:shadow-md"
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">
-                    {job.title}
-                  </h2>
-                  <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-slate-600">
-                    {job.department && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.department}
-                      </span>
-                    )}
-                    {job.location && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.location}
-                      </span>
-                    )}
-                    {job.employmentType && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.employmentType}
-                      </span>
-                    )}
-                    {job.seniority && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.seniority}
-                      </span>
-                    )}
+                  <div className="text-xs text-slate-500">
+                    Posted{" "}
+                    {new Date(job.created_at).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "2-digit",
+                    })}
                   </div>
                 </div>
-
-                <div className="flex flex-col items-end gap-1 text-xs text-slate-500">
-                  {postedLabel && <span>Created {postedLabel}</span>}
-                  <span
-                    className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                      isOpen
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {isOpen ? "Open" : job.status || "Draft"}
-                  </span>
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }
