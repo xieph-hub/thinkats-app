@@ -1,72 +1,17 @@
 // app/ats/jobs/[jobId]/page.tsx
-
 import Link from "next/link";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import ApplicationsTableClient from "./ApplicationsTableClient";
 
 type PageProps = {
-  params: { jobId: string };
+  params: {
+    jobId: string;
+  };
 };
 
-// Helper – get job + its applications scoped to the current tenant from canonical tables
-async function getJobAndApplications(jobId: string, tenantId: string) {
-  const supabase = await createSupabaseServerClient();
-
-  // ✅ Fetch the job from `Jobs` (canonical)
-  const { data: job, error: jobError } = await supabase
-    .from("Jobs")
-    .select(
-      `
-        id,
-        slug,
-        title,
-        department,
-        location,
-        employmentType,
-        isPublished,
-        clientName,
-        clientSlug,
-        summary,
-        description,
-        createdAt,
-        updatedAt,
-        tenantId
-      `
-    )
-    .eq("id", jobId)
-    .eq("tenantId", tenantId)
-    .single();
-
-  if (jobError || !job) {
-    console.error("❌ Job not found or tenant mismatch (Jobs):", jobError);
-    return { job: null, applications: [] };
-  }
-
-  // ✅ Fetch applications for this job (assuming `applications` has tenantId + jobId)
-  const { data: applications, error: appError } = await supabase
-    .from("applications")
-    .select(
-      `
-        id,
-        candidate_name,
-        candidate_email,
-        candidate_phone,
-        stage,
-        status,
-        created_at
-      `
-    )
-    .eq("job_id", jobId)
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
-
-  if (appError) {
-    console.error("⚠️ Error loading applications:", appError);
-  }
-
-  return { job, applications: applications ?? [] };
-}
+// always fetch fresh from DB
+export const revalidate = 0;
 
 export default async function JobPipelinePage({ params }: PageProps) {
   const { user, currentTenant } = await getCurrentUserAndTenants();
@@ -82,17 +27,19 @@ export default async function JobPipelinePage({ params }: PageProps) {
           You need to be signed in as a client or internal Resourcin user to
           view job pipelines in ThinkATS.
         </p>
-        <Link
-          href="/login?role=client"
-          className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
-        >
-          Go to client login
-        </Link>
+        <div>
+          <Link
+            href="/login?role=client"
+            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
+          >
+            Go to client login
+          </Link>
+        </div>
       </main>
     );
   }
 
-  // No tenant configured
+  // No tenant linked
   if (!currentTenant) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -104,23 +51,53 @@ export default async function JobPipelinePage({ params }: PageProps) {
           tenant yet. Please make sure your account has a tenant assignment in
           Supabase.
         </p>
-        <Link
-          href="/ats"
-          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-        >
-          Back to ATS dashboard
-        </Link>
+        <div>
+          <Link
+            href="/ats"
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            Back to ATS dashboard
+          </Link>
+        </div>
       </main>
     );
   }
 
-  // Load job + applications from canonical tables
-  const { job, applications } = await getJobAndApplications(
-    params.jobId,
-    currentTenant.id
-  );
+  const supabase = await createSupabaseServerClient();
 
-  if (!job) {
+  // 1) Load the job directly from the real `jobs` table
+  const { data: job, error: jobError } = await supabase
+    .from("jobs")
+    .select(
+      `
+        id,
+        tenant_id,
+        title,
+        department,
+        location,
+        employment_type,
+        seniority,
+        description,
+        status,
+        visibility,
+        tags,
+        created_at,
+        slug
+      `
+    )
+    .eq("id", params.jobId)
+    .maybeSingle();
+
+  if (jobError) {
+    console.error("❌ Error loading job in JobPipelinePage:", {
+      jobError,
+      jobId: params.jobId,
+      tenantId: currentTenant.id,
+    });
+  }
+
+  // If job doesn't exist OR belongs to another tenant → show "Job not found"
+  if (!job || job.tenant_id !== currentTenant.id) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
         <h1 className="text-2xl font-semibold text-slate-900">
@@ -130,15 +107,20 @@ export default async function JobPipelinePage({ params }: PageProps) {
           This job either doesn&apos;t exist, doesn&apos;t belong to your
           tenant, or has been removed.
         </p>
-        <Link
-          href="/ats"
-          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-        >
-          Back to ATS dashboard
-        </Link>
+        <div>
+          <Link
+            href="/ats"
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            Back to ATS dashboard
+          </Link>
+        </div>
       </main>
     );
   }
+
+  // 2) For now, treat applications as an empty list (we'll wire this table properly later)
+  const applications: any[] = [];
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -163,9 +145,9 @@ export default async function JobPipelinePage({ params }: PageProps) {
               {job.location}
             </span>
           )}
-          {job.employmentType && (
+          {job.employment_type && (
             <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {job.employmentType}
+              {job.employment_type}
             </span>
           )}
           {job.department && (
@@ -173,11 +155,3 @@ export default async function JobPipelinePage({ params }: PageProps) {
               {job.department}
             </span>
           )}
-        </div>
-      </header>
-
-      {/* Applications table (client-side) */}
-      <ApplicationsTableClient applications={applications as any} />
-    </main>
-  );
-}
