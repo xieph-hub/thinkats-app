@@ -1,49 +1,49 @@
 // app/api/candidate-applications/route.ts
-export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 
+/**
+ * Legacy candidate applications endpoint (Prisma-based) – now disabled.
+ *
+ * We have moved ATS data to Supabase tables (jobs, job_applications, etc.)
+ * and no longer use Prisma models like `JobApplication` here.
+ *
+ * This stub exists so the app compiles cleanly.
+ * Later, if you want "check my applications by email", we will:
+ *   - Read from Supabase (job_applications + candidates),
+ *   - Use supabaseAdmin from "@/lib/supabaseAdmin".
+ */
+
+// Optional: GET handler stub (if something calls GET on this route)
 export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const emailRaw = searchParams.get("email");
+  const url = new URL(req.url);
+  const email = url.searchParams.get("email");
 
-    if (!emailRaw) {
-      return NextResponse.json(
-        { error: "Missing email parameter" },
-        { status: 400 }
-      );
-    }
+  return NextResponse.json(
+    {
+      error:
+        "The /api/candidate-applications endpoint is currently disabled. Please apply via a specific job page.",
+      email: email ?? null,
+    },
+    { status: 410 } // 410 Gone – intentionally deprecated
+  );
+}
 
-    const email = emailRaw.trim().toLowerCase();
+// POST handler stub (if a form posts email here)
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
+  const email =
+    (body && typeof body.email === "string"
+      ? body.email.trim().toLowerCase()
+      : null) || null;
 
-    const applications = await prisma.jobApplication.findMany({
-      where: {
-        email,
-      },
-      orderBy: { createdAt: "desc" },
-      include: {
-        job: true,
-      },
-    });
-
-    const payload = applications.map((app) => ({
-      id: app.id,
-      jobId: app.jobId,
-      jobTitle: app.job?.title ?? null,
-      appliedAt: app.createdAt,
-      source: app.source,
-      stage: app.stage,
-      status: app.status,
-    }));
-
-    return NextResponse.json({ applications: payload });
-  } catch (error) {
-    console.error("Error in /api/candidate-applications", error);
-    return NextResponse.json(
-      { error: "Failed to load applications" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      error:
+        "The /api/candidate-applications endpoint is currently disabled. Please apply via a specific job page.",
+      email,
+      receivedPayload: body ?? null,
+    },
+    { status: 410 }
+  );
 }
