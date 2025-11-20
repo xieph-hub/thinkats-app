@@ -1,70 +1,55 @@
 // app/api/candidate/profile/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getCurrentCandidate } from "@/lib/auth-candidate";
 
-export async function PUT(req: NextRequest) {
-  try {
-    const candidate = await getCurrentCandidate();
-    if (!candidate) {
-      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
-    }
+/**
+ * Legacy candidate profile endpoint (Prisma-based) – now disabled.
+ *
+ * Why?
+ * - We have moved the ATS data model to Supabase tables
+ *   (candidates, jobs, job_applications, etc.).
+ * - The old implementation used Prisma models that no longer match the DB.
+ *
+ * This stub keeps the build green.
+ * Later we will re-implement candidate self-service profile
+ * using Supabase (supabaseAdmin + candidates table).
+ */
 
-    const body = await req.json();
+// GET – someone trying to read candidate profile
+export async function GET(req: NextRequest) {
+  return NextResponse.json(
+    {
+      error:
+        "Candidate self-service profile is currently unavailable. Please contact Resourcin support if you need to update your details.",
+    },
+    { status: 410 } // 410 Gone – intentionally disabled
+  );
+}
 
-    const {
-      fullName,
-      phone,
-      location,
-      linkedinUrl,
-      yearsOfExperience,
-      currentRole,
-      currentCompany,
-      primaryFunction,
-      seniority,
-      skills,
-    } = body;
+// PATCH – someone trying to update profile
+export async function PATCH(req: NextRequest) {
+  const body = await req.json().catch(() => null);
 
-    // Sanitise / basic parsing
-    const skillsArray: string[] =
-      typeof skills === "string"
-        ? skills
-            .split(",")
-            .map((s: string) => s.trim())
-            .filter(Boolean)
-        : Array.isArray(skills)
-          ? skills
-          : [];
+  return NextResponse.json(
+    {
+      error:
+        "Candidate self-service profile is currently unavailable. Please contact Resourcin support if you need to update your details.",
+      receivedPayload: body ?? null,
+    },
+    { status: 410 }
+  );
+}
 
-    const years =
-      typeof yearsOfExperience === "number"
-        ? yearsOfExperience
-        : yearsOfExperience
-        ? parseInt(String(yearsOfExperience), 10)
-        : null;
+// POST – if anyone posts here by mistake
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
 
-    const updated = await prisma.candidate.update({
-      where: { id: candidate.id },
-      data: {
-        fullName: fullName || candidate.fullName,
-        phone: phone ?? candidate.phone,
-        location: location ?? candidate.location,
-        linkedinUrl: linkedinUrl ?? candidate.linkedinUrl,
-        yearsOfExperience: years ?? candidate.yearsOfExperience,
-        currentRole: currentRole ?? candidate.currentRole,
-        currentCompany: currentCompany ?? candidate.currentCompany,
-        primaryFunction: primaryFunction ?? candidate.primaryFunction,
-        seniority: seniority ?? candidate.seniority,
-        skills: skillsArray.length ? skillsArray : candidate.skills,
-      },
-    });
-
-    return NextResponse.json({ ok: true, candidate: updated });
-  } catch (error) {
-    console.error("Error updating candidate profile", error);
-    return NextResponse.json(
-      { error: "Failed to update profile." },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    {
+      error:
+        "Candidate self-service profile is currently unavailable. Please apply via an open job instead.",
+      receivedPayload: body ?? null,
+    },
+    { status: 410 }
+  );
 }
