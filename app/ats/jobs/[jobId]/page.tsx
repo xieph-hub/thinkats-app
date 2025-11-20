@@ -16,7 +16,7 @@ export const revalidate = 0;
 export default async function JobPipelinePage({ params }: PageProps) {
   const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // Not signed in
+  // 1) Not signed in at all
   if (!user) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -39,7 +39,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // No tenant linked
+  // 2) Signed in but no tenant linked
   if (!currentTenant) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -65,7 +65,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
 
   const supabase = await createSupabaseServerClient();
 
-  // 1) Load the job directly from the real `jobs` table
+  // 3) Load the job directly from the real `jobs` table
   const { data: job, error: jobError } = await supabase
     .from("jobs")
     .select(
@@ -96,7 +96,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     });
   }
 
-  // If job doesn't exist OR belongs to another tenant → show "Job not found"
+  // 4) If job does not exist OR not the same tenant → show "Job not found"
   if (!job || job.tenant_id !== currentTenant.id) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
@@ -119,7 +119,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // 2) For now, treat applications as an empty list (we'll wire this table properly later)
+  // 5) For now, applications = empty list (we'll wire the real table later)
   const applications: any[] = [];
 
   return (
@@ -155,3 +155,16 @@ export default async function JobPipelinePage({ params }: PageProps) {
               {job.department}
             </span>
           )}
+          {job.seniority && (
+            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
+              {job.seniority}
+            </span>
+          )}
+        </div>
+      </header>
+
+      {/* Applications table (currently empty array; real data later) */}
+      <ApplicationsTableClient applications={applications as any} />
+    </main>
+  );
+}
