@@ -1,124 +1,49 @@
-import { NextResponse } from "next/server";
-import { prisma } from "../../../../lib/prisma";
+// app/api/sourcing/create/route.ts
 
-// Default tenant (same idea as we used in /api/apply)
-const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID ?? "default-tenant";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
+/**
+ * Legacy sourcing endpoint (Prisma-based) – now disabled.
+ *
+ * Why is this here?
+ * - The old implementation used Prisma models (candidate, job, etc.)
+ *   that no longer match your current database setup.
+ * - This caused build-time TypeScript errors like:
+ *     Property 'candidate' does not exist on type 'PrismaClient'
+ *
+ * For now, we return a clear 410/501-style response so the app can
+ * build and deploy cleanly while we stabilise the core ATS flows
+ * (jobs + applications + ThinkATS dashboard).
+ *
+ * Later, we can re-implement this endpoint using Supabase tables:
+ *   - candidates
+ *   - jobs
+ *   - job_applications
+ */
 
-    const {
-      fullName,
-      email,
-      phone,
-      // we accept everything but only persist what the schema actually has for now
-      headline,
-      summary,
-      currentRole,
-      currentCompany,
-      functions,
-      industries,
-      skills,
-      preferredLocations,
-      workPreference,
-      cvUrl,
-    } = body as {
-      fullName?: string;
-      email?: string;
-      phone?: string;
-      headline?: string;
-      summary?: string;
-      currentRole?: string;
-      currentCompany?: string;
-      functions?: string;
-      industries?: string;
-      skills?: string | string[];
-      preferredLocations?: string;
-      workPreference?: string;
-      cvUrl?: string;
-    };
+// If someone POSTs a new "sourced" candidate here:
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
 
-    if (!fullName || !email) {
-      return NextResponse.json(
-        { error: "fullName and email are required" },
-        { status: 400 }
-      );
-    }
+  return NextResponse.json(
+    {
+      ok: false,
+      message:
+        "Sourcing API is currently disabled while we upgrade the ATS data model. Please contact Resourcin if you need to add a candidate manually.",
+      receivedPayload: body ?? null,
+    },
+    { status: 410 } // Gone / temporarily disabled
+  );
+}
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // Normalise skills into a string[]
-    const rawSkills = skills as unknown;
-    const parsedSkills =
-      typeof rawSkills === "string"
-        ? rawSkills
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : Array.isArray(rawSkills)
-        ? rawSkills.map((s) => String(s).trim()).filter(Boolean)
-        : [];
-
-    // Try to find existing candidate for this tenant + email
-    const existingCandidate = await prisma.candidate.findFirst({
-      where: {
-        email: normalizedEmail,
-        tenantId: DEFAULT_TENANT_ID,
-      },
-      select: { id: true },
-    });
-
-    // Only use fields we’re confident exist on Candidate right now.
-    // If some of these cause new TS errors, we can shave it down further,
-    // but this should align with the schema we’ve been using so far.
-    const baseData = {
-      fullName,
-      email: normalizedEmail,
-      phone: phone ?? null,
-      headline: headline ?? null,
-      summary: summary ?? null,
-      currentCompany: currentCompany ?? null,
-      // currentRole from the form can be mapped into currentTitle in the DB (if you have that field)
-      currentTitle: currentRole ?? null,
-      functions: functions ?? null,
-      industries: industries ?? null,
-      skills: parsedSkills,
-      preferredLocations: preferredLocations ?? null,
-      workPreference: workPreference ?? null,
-      cvUrl: cvUrl ?? null,
-    };
-
-    let candidate;
-
-    if (existingCandidate) {
-      candidate = await prisma.candidate.update({
-        where: { id: existingCandidate.id },
-        data: baseData,
-      });
-    } else {
-      candidate = await prisma.candidate.create({
-        data: {
-          tenantId: DEFAULT_TENANT_ID,
-          ...baseData,
-        },
-      });
-    }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        candidateId: candidate.id,
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("Error in /api/sourcing/create", error);
-    return NextResponse.json(
-      {
-        error: "Something went wrong creating sourced candidate",
-      },
-      { status: 500 }
-    );
-  }
+// Optional: handle GET just in case something calls it
+export async function GET(req: NextRequest) {
+  return NextResponse.json(
+    {
+      ok: false,
+      message:
+        "Sourcing API is currently disabled. No data is returned from this endpoint.",
+    },
+    { status: 410 }
+  );
 }
