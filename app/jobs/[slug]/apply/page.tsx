@@ -19,29 +19,56 @@ async function fetchPublicJobForApply(
 ): Promise<JobDetail | null> {
   const supabase = await createSupabaseServerClient();
 
-  const { data, error } = await supabase
+  const selectCols = `
+    id,
+    slug,
+    title,
+    location,
+    status,
+    visibility
+  `;
+
+  // 1) Try by slug
+  let { data, error } = await supabase
     .from("jobs")
-    .select(
-      `
-        id,
-        slug,
-        title,
-        location,
-        status,
-        visibility
-      `
-    )
-    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
+    .select(selectCols)
+    .eq("slug", slugOrId)
     .eq("status", "open")
     .eq("visibility", "public")
     .limit(1);
 
-  if (error || !data || data.length === 0) {
-    console.error("Error loading job for apply", error);
+  if (error) {
+    console.error("Error loading job for apply by slug", error);
+  }
+
+  if (data && data.length > 0) {
+    const row: any = data[0];
+    return {
+      id: row.id,
+      slug: row.slug ?? null,
+      title: row.title,
+      location: row.location ?? null,
+    };
+  }
+
+  // 2) Try by id
+  const { data: dataById, error: errorById } = await supabase
+    .from("jobs")
+    .select(selectCols)
+    .eq("id", slugOrId)
+    .eq("status", "open")
+    .eq("visibility", "public")
+    .limit(1);
+
+  if (errorById) {
+    console.error("Error loading job for apply by id", errorById);
+  }
+
+  if (!dataById || dataById.length === 0) {
     return null;
   }
 
-  const row: any = data[0];
+  const row: any = dataById[0];
 
   return {
     id: row.id,
@@ -107,7 +134,7 @@ export default async function ApplyPage({ params }: ApplyPageProps) {
           encType="multipart/form-data"
           className="space-y-4"
         >
-          {/* hidden job id so the API can trust the job */}
+          {/* Hidden job id so the API can trust the job */}
           <input type="hidden" name="job_id" value={job.id} />
           <input type="hidden" name="source" value="careers_site" />
 
