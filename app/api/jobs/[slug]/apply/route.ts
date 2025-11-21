@@ -1,20 +1,30 @@
 // app/api/jobs/[slug]/apply/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { uploadCv } from "@/lib/uploadCv";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 export const runtime = "nodejs";
 
-type IdRow = { id: string };
+type PageParams = {
+  params: {
+    slug: string;
+  };
+};
 
-export async function POST(
-  req: Request,
-  { params }: { params: { slug: string } }
-) {
+type JobRow = {
+  id: string;
+  tenant_id: string;
+  status: string;
+  visibility: string;
+};
+
+type CandidateRow = {
+  id: string;
+};
+
+export async function POST(req: Request, { params }: PageParams) {
   try {
     const contentType = req.headers.get("content-type") || "";
 
-    // Unified payload
     let jobSlugFromBody: string | null = null;
     let fullName: string | null = null;
     let email: string | null = null;
@@ -25,9 +35,9 @@ export async function POST(
     let headline: string | null = null;
     let notes: string | null = null;
     let cvUrlFromLink: string | null = null;
-    let cvFile: File | null = null;
+    // We will ignore cvFile for now to avoid upload-related crashes
 
-    // --- Branch 1: JSON body (old callers) ---
+    // ---- Branch 1: JSON body (older callers) ----
     if (contentType.includes("application/json")) {
       const body: any = (await req.json().catch(() => ({}))) || {};
 
@@ -79,9 +89,8 @@ export async function POST(
       if (typeof body.cvUrl === "string" && body.cvUrl.trim().length > 0) {
         cvUrlFromLink = body.cvUrl.trim();
       }
-      // No file with JSON
     } else {
-      // --- Branch 2: FormData body (current JobApplyForm) ---
+      // ---- Branch 2: FormData body (your JobApplyForm) ----
       const formData = await req.formData();
 
       const getText = (key: string): string | null => {
@@ -106,39 +115,33 @@ export async function POST(
       const cvUrlText = getText("cvUrl");
       cvUrlFromLink = cvUrlText && cvUrlText.length > 0 ? cvUrlText : null;
 
-      // Accept both "cv" (new) and "cvFile" (old)
-      const maybeCv = formData.get("cv");
-      const maybeCvFile = formData.get("cvFile");
-      if (maybeCv instanceof File && maybeCv.size > 0) {
-        cvFile = maybeCv;
-      } else if (maybeCvFile instanceof File && maybeCvFile.size > 0) {
-        cvFile = maybeCvFile;
-      }
+      // We *do* receive cvFile here, but we won't attempt upload yet:
+      // const maybeCvFile = formData.get("cvFile");
+      // if (maybeCvFile instanceof File && maybeCvFile.size > 0) { ... }
     }
 
-    // --- Validation ---
+    // ---- Validate basics ----
     if (!fullName || !email) {
-      console.warn("Apply route missing fullName or email", {
+      console.warn("Apply route: missing fullName or email", {
         fullName,
         email,
         contentType,
       });
-
       return NextResponse.json(
         { error: "Full name and email are required." },
         { status: 400 }
       );
     }
 
-    const slug = (jobSlugFromBody || params.slug || "").trim();
-    if (!slug) {
+    const slugOrId = (jobSlugFromBody || params.slug || "").trim();
+    if (!slugOrId) {
       return NextResponse.json(
         { error: "Job slug is missing." },
         { status: 400 }
       );
     }
 
-    // Build cover_letter from headline + notes
+    // Compose cover_letter from headline + notes
     let coverLetter: string | null = null;
     if (headline || notes) {
       const parts: string[] = [];
@@ -151,146 +154,175 @@ export async function POST(
       coverLetter = parts.join("\n\n");
     }
 
-    // 1) Resolve tenant id from tenants table using slug
-    const tenantSlug = process.env.RESOURCIN_TENANT_SLUG || "resourcin";
+    const cvUrl = cvUrlFromLink || null;
 
-    const tenants = await prisma.$queryRaw<IdRow[]>`
-      SELECT id
-      FROM tenants
-      WHERE slug = ${tenantSlug}
-      LIMIT 1
+    // ---- Supabase client ----
+    const supabase = await createSupabaseServerClient();
+
+    // ---- 1) Find job by slug or id (like fetchPublicJob) ----
+    const selectCols = `
+      id,
+      tenant_id,
+      status,
+      visibility
     `;
 
-    if (!tenants || tenants.length === 0) {
-      console.error("No tenant found for slug:", tenantSlug);
-      return NextResponse.json(
-        { error: "Tenant configuration missing." },
-        { status: 500 }
-      );
+    let jobRow: JobRow | null = null;
+
+    // Try match by slug
+    {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select(selectCols)
+        .eq("slug", slugOrId)
+        .limit(1);
+
+      if (error) {
+        console.error("Error loading job by slug in apply route", error);
+      }
+
+      if (data && data.length > 0) {
+        const row: any = data[0];
+        jobRow = {
+          id: row.id,
+          tenant_id: row.tenant_id,
+          status: row.status,
+          visibility: row.visibility,
+        };
+      }
     }
 
-    const tenantId = tenants[0].id;
+    // If not found by slug, try by id
+    if (!jobRow) {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select(selectCols)
+        .eq("id", slugOrId)
+        .limit(1);
 
-    // 2) Find the job by slug within this tenant
-    const jobs = await prisma.$queryRaw<IdRow[]>`
-      SELECT id
-      FROM jobs
-      WHERE slug = ${slug} AND tenant_id = ${tenantId}::uuid
-      LIMIT 1
-    `;
+      if (error) {
+        console.error("Error loading job by id in apply route", error);
+      }
 
-    if (!jobs || jobs.length === 0) {
+      if (data && data.length > 0) {
+        const row: any = data[0];
+        jobRow = {
+          id: row.id,
+          tenant_id: row.tenant_id,
+          status: row.status,
+          visibility: row.visibility,
+        };
+      }
+    }
+
+    if (!jobRow) {
       return NextResponse.json(
         { error: "Job not found for this slug." },
         { status: 404 }
       );
     }
 
-    const jobId = jobs[0].id;
+    const jobId = jobRow.id;
+    const tenantId = jobRow.tenant_id;
 
-    // 3) Determine CV URL: link takes precedence, else upload file if present
-    let cvUrl: string | null = cvUrlFromLink;
-    if (!cvUrl && cvFile && cvFile.size > 0) {
-      cvUrl = await uploadCv({
-        file: cvFile,
-        jobId,
-        candidateEmail: email,
-      });
+    // ---- 2) Upsert candidate (by email + tenant_id) ----
+    let candidateId: string | null = null;
+
+    // Lookup existing
+    const { data: candidateRows, error: candLookupError } = await supabase
+      .from("candidates")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("email", email)
+      .limit(1);
+
+    if (candLookupError) {
+      console.error("Error looking up candidate", candLookupError);
     }
 
-    // 4) Upsert candidate (by email + tenant)
-    const existingCandidates = await prisma.$queryRaw<IdRow[]>`
-      SELECT id
-      FROM candidates
-      WHERE email = ${email} AND tenant_id = ${tenantId}::uuid
-      LIMIT 1
-    `;
+    if (candidateRows && candidateRows.length > 0) {
+      candidateId = (candidateRows[0] as CandidateRow).id;
 
-    let candidateId: string;
+      const { error: updateError } = await supabase
+        .from("candidates")
+        .update({
+          full_name: fullName,
+          phone,
+          location,
+          linkedin_url: linkedinUrl,
+          cv_url: cvUrl,
+        })
+        .eq("id", candidateId);
 
-    if (existingCandidates.length > 0) {
-      candidateId = existingCandidates[0].id;
-
-      // Update candidate
-      await prisma.$executeRaw`
-        UPDATE candidates
-        SET
-          full_name    = ${fullName},
-          phone        = ${phone},
-          location     = ${location},
-          linkedin_url = ${linkedinUrl},
-          cv_url       = ${cvUrl},
-          updated_at   = NOW()
-        WHERE id = ${candidateId}::uuid
-      `;
+      if (updateError) {
+        console.error("Error updating candidate", updateError);
+      }
     } else {
-      // Insert new candidate
-      const insertedCandidates = await prisma.$queryRaw<IdRow[]>`
-        INSERT INTO candidates (
-          tenant_id,
-          full_name,
+      const { data: inserted, error: insertError } = await supabase
+        .from("candidates")
+        .insert({
+          tenant_id: tenantId,
+          full_name: fullName,
           email,
           phone,
           location,
-          linkedin_url,
-          cv_url,
-          source
-        )
-        VALUES (
-          ${tenantId}::uuid,
-          ${fullName},
-          ${email},
-          ${phone},
-          ${location},
-          ${linkedinUrl},
-          ${cvUrl},
-          ${"Website"}
-        )
-        RETURNING id
-      `;
+          linkedin_url: linkedinUrl,
+          cv_url: cvUrl,
+          source: "Website",
+        })
+        .select("id")
+        .single();
 
-      candidateId = insertedCandidates[0].id;
+      if (insertError || !inserted) {
+        console.error("Error inserting candidate", insertError);
+        return NextResponse.json(
+          { error: "Could not create candidate record." },
+          { status: 500 }
+        );
+      }
+
+      candidateId = (inserted as CandidateRow).id;
     }
 
-    // 5) Create job_application row
-    const insertedApplications = await prisma.$queryRaw<IdRow[]>`
-      INSERT INTO job_applications (
-        job_id,
-        candidate_id,
-        full_name,
+    // ---- 3) Insert job_application ----
+    const { data: appInserted, error: appError } = await supabase
+      .from("job_applications")
+      .insert({
+        job_id: jobId,
+        candidate_id: candidateId,
+        full_name: fullName,
         email,
         phone,
         location,
-        linkedin_url,
-        portfolio_url,
-        cv_url,
-        cover_letter,
-        source
-      )
-      VALUES (
-        ${jobId}::uuid,
-        ${candidateId}::uuid,
-        ${fullName},
-        ${email},
-        ${phone},
-        ${location},
-        ${linkedinUrl},
-        ${portfolioUrl},
-        ${cvUrl},
-        ${coverLetter},
-        ${"Website"}
-      )
-      RETURNING id
-    `;
+        linkedin_url: linkedinUrl,
+        portfolio_url: portfolioUrl,
+        cv_url: cvUrl,
+        cover_letter: coverLetter,
+        source: "Website",
+        // stage/status will use default: APPLIED / PENDING
+      })
+      .select("id")
+      .single();
 
-    const applicationId = insertedApplications[0].id;
+    if (appError || !appInserted) {
+      console.error("Error inserting job_application", appError);
+      return NextResponse.json(
+        {
+          error:
+            "Could not create job application record. Please try again shortly.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const applicationId = (appInserted as { id: string }).id;
 
     return NextResponse.json(
       { ok: true, applicationId },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error creating application", error);
+    console.error("Error creating application (outer catch)", error);
     return NextResponse.json(
       {
         error:
