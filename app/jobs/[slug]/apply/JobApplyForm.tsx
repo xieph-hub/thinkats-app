@@ -1,3 +1,4 @@
+// app/jobs/[slug]/apply/JobApplyForm.tsx
 "use client";
 
 import { useState } from "react";
@@ -23,11 +24,17 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    // Make sure the backend has the slug if it wants it
+    formData.set("jobSlug", slug);
+
     try {
-      const res = await fetch(`/api/jobs/${encodeURIComponent(slug)}/apply`, {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch(
+        `/api/jobs/${encodeURIComponent(slug)}/apply`,
+        {
+          method: "POST",
+          body: formData, // 👈 multipart/form-data, handled by browser
+        }
+      );
 
       let data: any = {};
       try {
@@ -60,6 +67,9 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
       className="space-y-5"
       encType="multipart/form-data"
     >
+      {/* Hidden slug so the API can also read it if needed */}
+      <input type="hidden" name="jobSlug" value={slug} />
+
       {successMessage && (
         <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {successMessage}
@@ -146,13 +156,14 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
           Upload CV / Resume (PDF or DOC/DOCX)
         </label>
         <input
-          name="cvFile"
+          name="cv" // 👈 IMPORTANT: matches API route
           type="file"
           accept=".pdf,.doc,.docx,.rtf"
           className="mt-1 block w-full text-xs text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#111c4c]"
         />
         <p className="mt-1 text-[0.7rem] text-slate-500">
-          If you prefer, you can paste a link instead.
+          You can upload your CV here. If you prefer to share a link instead,
+          you can use the field below.
         </p>
       </div>
 
