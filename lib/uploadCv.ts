@@ -1,5 +1,6 @@
 // lib/uploadCv.ts
 import { createClient } from "@supabase/supabase-js";
+import { Buffer } from "buffer";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -16,10 +17,10 @@ if (!supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export type UploadCvParams = {
-  file: File | Blob;          // CV file from formData
-  jobId?: string;             // optional – for folder structure
-  candidateEmail?: string;    // optional – used to name the file
-  folderPrefix?: string;      // optional – for extra nesting if you ever want it
+  file: Blob;              // File from formData (File extends Blob)
+  jobId?: string;          // Optional – for folder structure
+  candidateEmail?: string; // Optional – used in file name
+  folderPrefix?: string;   // Optional – for extra nesting if you want
 };
 
 /**
@@ -65,7 +66,7 @@ export async function uploadCv({
     basePath ? basePath + "/" : ""
   }${Date.now()}-${emailPart}-${safeFileName}`;
 
-  const bucket = "cvs"; // 🔹 create this bucket in Supabase Storage
+  const bucket = "cvs"; // 🔹 Make sure you have a "cvs" bucket in Supabase Storage
 
   const { data, error } = await supabase.storage
     .from(bucket)
@@ -89,5 +90,5 @@ export async function uploadCv({
   return publicUrl;
 }
 
-// To be extra safe if anything previously did `default import uploadCv`
+// In case any old code did `import uploadCv from "@/lib/uploadCv"`
 export default uploadCv;
