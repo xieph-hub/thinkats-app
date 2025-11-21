@@ -24,7 +24,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    // Make sure the backend has the slug if it wants it
+    // Ensure slug is present in the formData
     formData.set("jobSlug", slug);
 
     try {
@@ -32,7 +32,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         `/api/jobs/${encodeURIComponent(slug)}/apply`,
         {
           method: "POST",
-          body: formData, // 👈 multipart/form-data, handled by browser
+          body: formData, // 👈 multipart/form-data, browser sets headers
         }
       );
 
@@ -156,7 +156,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
           Upload CV / Resume (PDF or DOC/DOCX)
         </label>
         <input
-          name="cv" // 👈 IMPORTANT: matches API route
+          name="cv" // 👈 IMPORTANT: matches formData.get("cv") in route
           type="file"
           accept=".pdf,.doc,.docx,.rtf"
           className="mt-1 block w-full text-xs text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#111c4c]"
