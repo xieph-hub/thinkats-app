@@ -1,4 +1,3 @@
-// app/jobs/[slug]/apply/JobApplyForm.tsx
 "use client";
 
 import { useState } from "react";
@@ -24,15 +23,78 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    // Ensure slug is present in the formData
-    formData.set("jobSlug", slug);
-
     try {
+      // 1) Try to upload CV file first (if provided)
+      let uploadedCvUrl: string | null = null;
+      const cvFile = formData.get("cvFile") as File | null;
+      const emailValue = formData.get("email");
+      const email =
+        typeof emailValue === "string" && emailValue.trim().length > 0
+          ? emailValue.trim()
+          : null;
+
+      if (cvFile && cvFile.size > 0) {
+        const uploadForm = new FormData();
+        uploadForm.append("cv", cvFile);
+        if (email) uploadForm.append("email", email);
+
+        const uploadRes = await fetch("/api/upload-cv", {
+          method: "POST",
+          body: uploadForm,
+        });
+
+        let uploadData: any = {};
+        try {
+          uploadData = await uploadRes.json();
+        } catch {
+          // ignore JSON parse error
+        }
+
+        if (!uploadRes.ok || uploadData?.error) {
+          console.error("CV upload failed", uploadData?.error);
+          // We don't block the entire application if upload fails;
+          // the user can still submit with a CV link.
+        } else if (typeof uploadData.url === "string") {
+          uploadedCvUrl = uploadData.url;
+        }
+      }
+
+      // 2) Build payload for the application
+      const getString = (key: string): string | undefined => {
+        const value = formData.get(key);
+        if (typeof value !== "string") return undefined;
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      };
+
+      const payload: any = {
+        jobSlug: slug,
+        fullName: getString("fullName"),
+        email: getString("email"),
+        phone: getString("phone"),
+        location: getString("location"),
+        linkedinUrl: getString("linkedinUrl"),
+        portfolioUrl: getString("portfolioUrl"),
+        headline: getString("headline"),
+        notes: getString("notes"),
+      };
+
+      // Prefer uploaded URL; fall back to manual link field if present
+      const cvUrlField = getString("cvUrl");
+      if (uploadedCvUrl) {
+        payload.cvUrl = uploadedCvUrl;
+      } else if (cvUrlField) {
+        payload.cvUrl = cvUrlField;
+      }
+
       const res = await fetch(
         `/api/jobs/${encodeURIComponent(slug)}/apply`,
         {
           method: "POST",
-          body: formData, // 👈 multipart/form-data, browser sets headers
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         }
       );
 
@@ -67,9 +129,6 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
       className="space-y-5"
       encType="multipart/form-data"
     >
-      {/* Hidden slug so the API can also read it if needed */}
-      <input type="hidden" name="jobSlug" value={slug} />
-
       {successMessage && (
         <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {successMessage}
@@ -81,6 +140,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         </div>
       )}
 
+      {/* Full name + email */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-xs font-medium text-slate-700">
@@ -105,6 +165,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         </div>
       </div>
 
+      {/* Phone + location */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-xs font-medium text-slate-700">
@@ -126,6 +187,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         </div>
       </div>
 
+      {/* LinkedIn + portfolio */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-xs font-medium text-slate-700">
@@ -151,19 +213,19 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         </div>
       </div>
 
+      {/* CV upload */}
       <div>
         <label className="block text-xs font-medium text-slate-700">
           Upload CV / Resume (PDF or DOC/DOCX)
         </label>
         <input
-          name="cv" // 👈 IMPORTANT: matches formData.get("cv") in route
+          name="cvFile"
           type="file"
           accept=".pdf,.doc,.docx,.rtf"
           className="mt-1 block w-full text-xs text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#111c4c]"
         />
         <p className="mt-1 text-[0.7rem] text-slate-500">
-          You can upload your CV here. If you prefer to share a link instead,
-          you can use the field below.
+          If you prefer, you can paste a link instead.
         </p>
       </div>
 
@@ -179,6 +241,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         />
       </div>
 
+      {/* Headline & notes */}
       <div>
         <label className="block text-xs font-medium text-slate-700">
           In 4–6 bullet points, tell us where you create the most value.
