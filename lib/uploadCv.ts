@@ -1,94 +1,52 @@
 // lib/uploadCv.ts
 import { createClient } from "@supabase/supabase-js";
-import { Buffer } from "buffer";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "";
 
-// Fail fast in dev if env is misconfigured
-if (!supabaseUrl) {
-  throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
-}
-if (!supabaseServiceKey) {
-  throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-}
+const supabase =
+  SUPABASE_URL && SUPABASE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
 
-// Server-side Supabase client using the service role key
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+export async function uploadCv(
+  file: File | Blob,
+  email?: string
+): Promise<string> {
+  if (!supabase || !SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("Supabase is not configured on the server");
+  }
 
-export type UploadCvParams = {
-  file: Blob;              // File from formData (File extends Blob)
-  jobId?: string;          // Optional – for folder structure
-  candidateEmail?: string; // Optional – used in file name
-  folderPrefix?: string;   // Optional – for extra nesting if you want
-};
-
-/**
- * Uploads a CV file to Supabase Storage and returns a public URL.
- * This must only be used in server-side code (API routes / server actions).
- */
-export async function uploadCv({
-  file,
-  jobId,
-  candidateEmail,
-  folderPrefix,
-}: UploadCvParams): Promise<string> {
   if (!file) {
-    throw new Error("No CV file provided");
+    throw new Error("No file provided");
   }
 
-  // Convert the File/Blob to a Node Buffer
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  // Try to get extension from file.name; default to pdf
+  const name = (file as any).name as string | undefined;
+  const ext =
+    name && name.includes(".") ? name.split(".").pop() || "pdf" : "pdf";
 
-  const emailPart = candidateEmail
-    ? candidateEmail.replace(/[^a-zA-Z0-9@._-]/g, "")
-    : "anonymous";
-
-  const originalName =
-    "name" in file && (file as File).name
-      ? (file as File).name
-      : "cv.pdf";
-
-  const safeFileName = originalName.replace(/[^a-zA-Z0-9._-]/g, "-");
-
-  const pathParts: string[] = [];
-
-  if (folderPrefix) {
-    pathParts.push(folderPrefix.replace(/\/+$/g, ""));
-  }
-  if (jobId) {
-    pathParts.push(jobId);
-  }
-
-  const basePath = pathParts.join("/");
-  const filename = `${
-    basePath ? basePath + "/" : ""
-  }${Date.now()}-${emailPart}-${safeFileName}`;
-
-  const bucket = "cvs"; // 🔹 Make sure you have a "cvs" bucket in Supabase Storage
+  const safeEmail = (email || "anonymous").replace(/[^a-zA-Z0-9]/g, "_");
+  const path = `cvs/${safeEmail}/${Date.now()}.${ext}`;
 
   const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(filename, buffer, {
+    .from("resourcin-uploads")
+    .upload(path, file, {
+      cacheControl: "3600",
       upsert: false,
-      contentType:
-        "type" in file && (file as File).type
-          ? (file as File).type
-          : "application/pdf",
     });
 
   if (error || !data) {
-    console.error("uploadCv error", error);
-    throw new Error("Failed to upload CV");
+    console.error("Supabase upload error:", error);
+    throw new Error("Upload to storage failed");
   }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(bucket).getPublicUrl(data.path);
+  const { data: publicData } = supabase.storage
+    .from("resourcin-uploads")
+    .getPublicUrl(data.path);
 
-  return publicUrl;
+  return publicData.publicUrl;
 }
-
-// In case any old code did `import uploadCv from "@/lib/uploadCv"`
-export default uploadCv;
