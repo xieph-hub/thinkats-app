@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadCv } from "@/lib/uploadCv";
 
-export const runtime = "nodejs"; // ensure Node runtime (for Buffer/Supabase)
+export const runtime = "nodejs";
+
+type IdRow = { id: string };
 
 export async function POST(
   req: Request,
@@ -25,7 +27,7 @@ export async function POST(
     const coverLetter =
       (formData.get("coverLetter") as string | null) || null;
 
-    // 👇 The uploaded CV file from <input name="cv" type="file" />
+    // Uploaded CV file from <input name="cv" />
     const cvFile = formData.get("cv") as File | null;
 
     if (!fullName || !email) {
@@ -37,86 +39,142 @@ export async function POST(
 
     const slug = (jobSlugFromBody || params.slug).trim();
 
-    // 1) Find the Resourcin tenant (use env if available, else fallback)
-    const tenant = await prisma.tenant.findFirst({
-      where: {
-        slug: process.env.RESOURCIN_TENANT_SLUG || "resourcin",
-      },
-    });
+    // 1) Resolve tenant id from tenants table using slug
+    const tenantSlug = process.env.RESOURCIN_TENANT_SLUG || "resourcin";
 
-    if (!tenant) {
+    const tenants = await prisma.$queryRaw<IdRow[]>`
+      SELECT id
+      FROM tenants
+      WHERE slug = ${tenantSlug}
+      LIMIT 1
+    `;
+
+    if (!tenants || tenants.length === 0) {
+      console.error("No tenant found for slug:", tenantSlug);
       return NextResponse.json(
         { error: "Tenant configuration missing." },
         { status: 500 }
       );
     }
 
-    // 2) Find the job by slug within this tenant
-    const job = await prisma.job.findFirst({
-      where: {
-        slug,
-        tenantId: tenant.id,
-      },
-    });
+    const tenantId = tenants[0].id;
 
-    if (!job) {
+    // 2) Find the job by slug within this tenant
+    const jobs = await prisma.$queryRaw<IdRow[]>`
+      SELECT id
+      FROM jobs
+      WHERE slug = ${slug} AND tenant_id = ${tenantId}
+      LIMIT 1
+    `;
+
+    if (!jobs || jobs.length === 0) {
       return NextResponse.json(
         { error: "Job not found for this slug." },
         { status: 404 }
       );
     }
 
+    const jobId = jobs[0].id;
+
     // 3) Upload CV if present
     let cvUrl: string | null = null;
     if (cvFile && cvFile.size > 0) {
       cvUrl = await uploadCv({
         file: cvFile,
-        jobId: job.id,
+        jobId,
         candidateEmail: email,
       });
     }
 
-    // 4) Upsert candidate (one per email)
-    const candidate = await prisma.candidate.upsert({
-      where: { email }, // email unique in your schema
-      create: {
-        tenantId: tenant.id,
-        fullName,
-        email,
-        phone,
-        location,
-        linkedinUrl,
-        cvUrl,
-      },
-      update: {
-        fullName,
-        phone,
-        location,
-        linkedinUrl,
-        cvUrl,
-      },
-    });
+    // 4) Upsert candidate (by email + tenant)
+    const existingCandidates = await prisma.$queryRaw<IdRow[]>`
+      SELECT id
+      FROM candidates
+      WHERE email = ${email} AND tenant_id = ${tenantId}
+      LIMIT 1
+    `;
 
-    // 5) Create JobApplication
-    const application = await prisma.jobApplication.create({
-      data: {
-        jobId: job.id,
-        candidateId: candidate.id,
-        fullName,
+    let candidateId: string;
+
+    if (existingCandidates.length > 0) {
+      candidateId = existingCandidates[0].id;
+
+      // Update candidate
+      await prisma.$executeRaw`
+        UPDATE candidates
+        SET
+          full_name    = ${fullName},
+          phone        = ${phone},
+          location     = ${location},
+          linkedin_url = ${linkedinUrl},
+          cv_url       = ${cvUrl},
+          updated_at   = NOW()
+        WHERE id = ${candidateId}
+      `;
+    } else {
+      // Insert new candidate
+      const insertedCandidates = await prisma.$queryRaw<IdRow[]>`
+        INSERT INTO candidates (
+          tenant_id,
+          full_name,
+          email,
+          phone,
+          location,
+          linkedin_url,
+          cv_url,
+          source
+        )
+        VALUES (
+          ${tenantId},
+          ${fullName},
+          ${email},
+          ${phone},
+          ${location},
+          ${linkedinUrl},
+          ${cvUrl},
+          ${"Website"}
+        )
+        RETURNING id
+      `;
+
+      candidateId = insertedCandidates[0].id;
+    }
+
+    // 5) Create job_application row
+    const insertedApplications = await prisma.$queryRaw<IdRow[]>`
+      INSERT INTO job_applications (
+        job_id,
+        candidate_id,
+        full_name,
         email,
         phone,
         location,
-        linkedinUrl,
-        portfolioUrl,
-        cvUrl,
-        coverLetter,
-        source: "Website", // keep your original label
-        // stage/status will use your enum defaults (APPLIED / PENDING)
-      },
-    });
+        linkedin_url,
+        portfolio_url,
+        cv_url,
+        cover_letter,
+        source
+      )
+      VALUES (
+        ${jobId},
+        ${candidateId},
+        ${fullName},
+        ${email},
+        ${phone},
+        ${location},
+        ${linkedinUrl},
+        ${portfolioUrl},
+        ${cvUrl},
+        ${coverLetter},
+        ${"Website"}
+      )
+      RETURNING id
+    `;
+
+    const applicationId = insertedApplications[0].id;
 
     return NextResponse.json(
-      { ok: true, applicationId: application.id },
+      { ok: true, applicationId },
       { status: 201 }
     );
   } catch (error) {
