@@ -24,8 +24,14 @@ export async function POST(
     const linkedinUrl = (formData.get("linkedinUrl") as string | null) || null;
     const portfolioUrl =
       (formData.get("portfolioUrl") as string | null) || null;
-    const coverLetter =
-      (formData.get("coverLetter") as string | null) || null;
+
+    // Optional: candidate's own notes/headline
+    const headline = (formData.get("headline") as string | null) || null;
+    const notes = (formData.get("notes") as string | null) || null;
+
+    // Optional CV link
+    const cvUrlFromLink =
+      ((formData.get("cvUrl") as string | null)?.trim() || "") || null;
 
     // Uploaded CV file from <input name="cv" />
     const cvFile = formData.get("cv") as File | null;
@@ -38,6 +44,19 @@ export async function POST(
     }
 
     const slug = (jobSlugFromBody || params.slug).trim();
+
+    // Build cover_letter from headline + notes
+    let coverLetter: string | null = null;
+    if (headline || notes) {
+      const parts = [];
+      if (headline) {
+        parts.push(`Headline / value areas:\n${headline}`);
+      }
+      if (notes) {
+        parts.push(`Additional context:\n${notes}`);
+      }
+      coverLetter = parts.join("\n\n");
+    }
 
     // 1) Resolve tenant id from tenants table using slug
     const tenantSlug = process.env.RESOURCIN_TENANT_SLUG || "resourcin";
@@ -76,9 +95,10 @@ export async function POST(
 
     const jobId = jobs[0].id;
 
-    // 3) Upload CV if present
-    let cvUrl: string | null = null;
-    if (cvFile && cvFile.size > 0) {
+    // 3) Determine CV URL: link takes precedence, else upload file
+    let cvUrl: string | null = cvUrlFromLink;
+
+    if (!cvUrl && cvFile && cvFile.size > 0) {
       cvUrl = await uploadCv({
         file: cvFile,
         jobId,
