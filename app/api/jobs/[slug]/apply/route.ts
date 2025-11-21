@@ -76,13 +76,10 @@ export async function POST(
           ? body.notes.trim()
           : null;
 
-      if (
-        typeof body.cvUrl === "string" &&
-        body.cvUrl.trim().length > 0
-      ) {
+      if (typeof body.cvUrl === "string" && body.cvUrl.trim().length > 0) {
         cvUrlFromLink = body.cvUrl.trim();
       }
-      // No file if JSON caller
+      // No file with JSON
     } else {
       // --- Branch 2: FormData body (current JobApplyForm) ---
       const formData = await req.formData();
@@ -121,7 +118,6 @@ export async function POST(
 
     // --- Validation ---
     if (!fullName || !email) {
-      // Small debug log so you can see what arrived in Vercel logs
       console.warn("Apply route missing fullName or email", {
         fullName,
         email,
@@ -179,7 +175,7 @@ export async function POST(
     const jobs = await prisma.$queryRaw<IdRow[]>`
       SELECT id
       FROM jobs
-      WHERE slug = ${slug} AND tenant_id = ${tenantId}
+      WHERE slug = ${slug} AND tenant_id = ${tenantId}::uuid
       LIMIT 1
     `;
 
@@ -206,7 +202,7 @@ export async function POST(
     const existingCandidates = await prisma.$queryRaw<IdRow[]>`
       SELECT id
       FROM candidates
-      WHERE email = ${email} AND tenant_id = ${tenantId}
+      WHERE email = ${email} AND tenant_id = ${tenantId}::uuid
       LIMIT 1
     `;
 
@@ -225,7 +221,7 @@ export async function POST(
           linkedin_url = ${linkedinUrl},
           cv_url       = ${cvUrl},
           updated_at   = NOW()
-        WHERE id = ${candidateId}
+        WHERE id = ${candidateId}::uuid
       `;
     } else {
       // Insert new candidate
@@ -241,7 +237,7 @@ export async function POST(
           source
         )
         VALUES (
-          ${tenantId},
+          ${tenantId}::uuid,
           ${fullName},
           ${email},
           ${phone},
@@ -272,8 +268,8 @@ export async function POST(
         source
       )
       VALUES (
-        ${jobId},
-        ${candidateId},
+        ${jobId}::uuid,
+        ${candidateId}::uuid,
         ${fullName},
         ${email},
         ${phone},
