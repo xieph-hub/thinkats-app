@@ -25,13 +25,14 @@ export async function POST(
     const portfolioUrl =
       (formData.get("portfolioUrl") as string | null) || null;
 
-    // Optional: candidate's own notes/headline
+    // Optional candidate notes/headline
     const headline = (formData.get("headline") as string | null) || null;
     const notes = (formData.get("notes") as string | null) || null;
 
     // Optional CV link
+    const cvUrlFromLinkRaw = (formData.get("cvUrl") as string | null) || "";
     const cvUrlFromLink =
-      ((formData.get("cvUrl") as string | null)?.trim() || "") || null;
+      cvUrlFromLinkRaw.trim().length > 0 ? cvUrlFromLinkRaw.trim() : null;
 
     // Uploaded CV file from <input name="cv" />
     const cvFile = formData.get("cv") as File | null;
@@ -48,7 +49,7 @@ export async function POST(
     // Build cover_letter from headline + notes
     let coverLetter: string | null = null;
     if (headline || notes) {
-      const parts = [];
+      const parts: string[] = [];
       if (headline) {
         parts.push(`Headline / value areas:\n${headline}`);
       }
