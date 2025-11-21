@@ -1,5 +1,4 @@
 // app/jobs/[slug]/apply/page.tsx
-
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import JobApplyForm from "./JobApplyForm";
@@ -29,7 +28,6 @@ async function fetchPublicJobForApply(
     visibility
   `;
 
-  // 1) Try by slug
   let { data, error } = await supabase
     .from("jobs")
     .select(selectCols)
@@ -52,7 +50,6 @@ async function fetchPublicJobForApply(
     };
   }
 
-  // 2) Try by id
   const { data: dataById, error: errorById } = await supabase
     .from("jobs")
     .select(selectCols)
