@@ -1,12 +1,22 @@
 // app/api/upload-cv/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { uploadCv } from "@/lib/uploadCv";
+import { createClient } from "@supabase/supabase-js";
 
-// Make sure this route always runs on the server
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.error("Supabase env vars are missing");
+      return NextResponse.json(
+        { error: "Supabase is not configured on the server" },
+        { status: 500 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("cv") as File | null;
     const email = (formData.get("email") as string | null) ?? "anonymous";
@@ -18,9 +28,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const url = await uploadCv(file, email);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    return NextResponse.json({ url });
+    const ext = file.name.split(".").pop() || "pdf";
+    const safeEmail = email.replace(/[^a-zA-Z0-9]/g, "_");
+    const path = `cvs/${safeEmail}/${Date.now()}.${ext}`;
+
+    const { data, error } = await supabase.storage
+      .from("resourcin-uploads")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error || !data) {
+      console.error("Supabase upload error:", error);
+      return NextResponse.json(
+        { error: "Upload to storage failed" },
+        { status: 500 }
+      );
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage
+      .from("resourcin-uploads")
+      .getPublicUrl(data.path);
+
+    // 👈 This is what the form uses and what we will store in job_applications.cv_url
+    return NextResponse.json({ url: publicUrl });
   } catch (err) {
     console.error("Upload CV route error:", err);
     return NextResponse.json(
