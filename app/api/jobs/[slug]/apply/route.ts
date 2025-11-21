@@ -1,56 +1,54 @@
 // app/api/jobs/[slug]/apply/route.ts
-import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { NextRequest, NextResponse } from "next/server";
+import { PrismaClient } from "@prisma/client";
 
-type RouteParams = {
-  params: {
-    slug: string;
-  };
-};
+const prisma = new PrismaClient();
 
-type JobRow = {
-  id: string;
-  tenant_id: string;
-  status: string;
-  visibility: string;
-};
-
-export async function POST(req: Request, { params }: RouteParams) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { slug: string } }
+) {
   try {
-    const body: any = (await req.json().catch(() => ({}))) || {};
+    const slugOrId = params.slug;
+    const contentType = req.headers.get("content-type") || "";
 
-    // ── Identify the job ──────────────────────────────────────────────────────
-    const slugOrId = (
-      body.jobSlug ||
-      body.job_slug ||
-      body.slug ||
-      params.slug ||
-      ""
-    )
-      .toString()
-      .trim();
+    let body: any = {};
 
-    if (!slugOrId) {
+    // JSON payload (from JobApplyForm)
+    if (contentType.includes("application/json")) {
+      body = await req.json();
+    }
+    // Fallback: HTML form posting multipart/form-data
+    else if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      const get = (name: string): string | undefined => {
+        const v = form.get(name);
+        if (typeof v !== "string") return undefined;
+        const t = v.trim();
+        return t.length ? t : undefined;
+      };
+
+      body = {
+        jobSlug: get("jobSlug") ?? get("job_id") ?? slugOrId,
+        fullName: get("fullName") ?? get("full_name"),
+        email: get("email"),
+        phone: get("phone"),
+        location: get("location"),
+        linkedinUrl: get("linkedinUrl") ?? get("linkedin_url"),
+        portfolioUrl: get("portfolioUrl") ?? get("portfolio_url"),
+        cvUrl: get("cvUrl"), // ⚠️ only from explicit cvUrl field
+        coverLetter: get("coverLetter") ?? get("cover_letter"),
+        source: get("source") ?? "careers_site",
+      };
+    } else {
       return NextResponse.json(
-        { error: "Job slug is missing." },
+        { error: "Unsupported content type" },
         { status: 400 }
       );
     }
 
-    // ── Core fields ───────────────────────────────────────────────────────────
-    const rawFullName =
-      body.fullName ?? body.full_name ?? body.name ?? null;
-    const rawEmail =
-      body.email ?? body.emailAddress ?? body.email_address ?? null;
-
-    const fullName =
-      typeof rawFullName === "string" && rawFullName.trim().length > 0
-        ? rawFullName.trim()
-        : null;
-    const email =
-      typeof rawEmail === "string" && rawEmail.trim().length > 0
-        ? rawEmail.trim()
-        : null;
+    const fullName = (body.fullName || "").trim();
+    const email = (body.email || "").trim();
 
     if (!fullName || !email) {
       return NextResponse.json(
@@ -59,157 +57,78 @@ export async function POST(req: Request, { params }: RouteParams) {
       );
     }
 
-    const phone =
-      typeof body.phone === "string" && body.phone.trim().length > 0
-        ? body.phone.trim()
-        : null;
-    const location =
-      typeof body.location === "string" &&
-      body.location.trim().length > 0
-        ? body.location.trim()
-        : null;
-    const linkedinUrl =
-      typeof body.linkedinUrl === "string" &&
-      body.linkedinUrl.trim().length > 0
-        ? body.linkedinUrl.trim()
-        : null;
-    const portfolioUrl =
-      typeof body.portfolioUrl === "string" &&
-      body.portfolioUrl.trim().length > 0
-        ? body.portfolioUrl.trim()
-        : null;
+    const jobKey: string = (body.jobSlug || slugOrId).toString();
 
-    // cvUrl is **only** coming from the client now
-    const cvUrl =
-      typeof body.cvUrl === "string" && body.cvUrl.trim().length > 0
-        ? body.cvUrl.trim()
-        : null;
-
-    const headline =
-      typeof body.headline === "string" &&
-      body.headline.trim().length > 0
-        ? body.headline.trim()
-        : null;
-    const notes =
-      typeof body.notes === "string" && body.notes.trim().length > 0
-        ? body.notes.trim()
-        : null;
-
-    // Compose cover_letter from headline + notes
-    let coverLetter: string | null = null;
-    if (headline || notes) {
-      const parts: string[] = [];
-      if (headline) {
-        parts.push(`Headline / value areas:\n${headline}`);
-      }
-      if (notes) {
-        parts.push(`Additional context:\n${notes}`);
-      }
-      coverLetter = parts.join("\n\n");
-    }
-
-    const supabase = await createSupabaseServerClient();
-
-    // ── Find job by slug then id ──────────────────────────────────────────────
-    const selectCols = `
-      id,
-      tenant_id,
-      status,
-      visibility
+    // Fix uuid=text: cast id::text
+    const jobRows = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id
+      FROM jobs
+      WHERE slug = ${jobKey}
+         OR id::text = ${jobKey}
+      LIMIT 1;
     `;
 
-    let jobRow: JobRow | null = null;
-
-    // Try by slug
-    {
-      const { data, error } = await supabase
-        .from("jobs")
-        .select(selectCols)
-        .eq("slug", slugOrId)
-        .limit(1);
-
-      if (error) {
-        console.error("Error loading job by slug in apply route", error);
-      }
-
-      if (data && data.length > 0) {
-        const row: any = data[0];
-        jobRow = {
-          id: row.id,
-          tenant_id: row.tenant_id,
-          status: row.status,
-          visibility: row.visibility,
-        };
-      }
-    }
-
-    // Fallback: by id
-    if (!jobRow) {
-      const { data, error } = await supabase
-        .from("jobs")
-        .select(selectCols)
-        .eq("id", slugOrId)
-        .limit(1);
-
-      if (error) {
-        console.error("Error loading job by id in apply route", error);
-      }
-
-      if (data && data.length > 0) {
-        const row: any = data[0];
-        jobRow = {
-          id: row.id,
-          tenant_id: row.tenant_id,
-          status: row.status,
-          visibility: row.visibility,
-        };
-      }
-    }
-
-    if (!jobRow) {
+    if (!jobRows || jobRows.length === 0) {
       return NextResponse.json(
-        { error: "Job not found for this slug." },
+        { error: "Job not found" },
         { status: 404 }
       );
     }
 
-    // ── Insert into job_applications ──────────────────────────────────────────
-    const { data: appInserted, error: appError } = await supabase
-      .from("job_applications")
-      .insert({
-        job_id: jobRow.id,
-        full_name: fullName,
-        email,
-        phone,
-        location,
-        linkedin_url: linkedinUrl,
-        portfolio_url: portfolioUrl,
-        cv_url: cvUrl, // 👉 directly using the JSON field
-        cover_letter: coverLetter,
-        source: "Website", // stage/status use defaults APPLIED/PENDING
-      })
-      .select("id")
-      .single();
+    const jobId = jobRows[0].id;
 
-    if (appError || !appInserted) {
-      console.error("Error inserting job_application", appError);
-      return NextResponse.json(
-        {
-          error:
-            "Could not create job application record. Please try again shortly.",
-        },
-        { status: 500 }
-      );
-    }
+    const phone =
+      body.phone && String(body.phone).trim().length
+        ? String(body.phone).trim()
+        : null;
 
-    const applicationId = (appInserted as { id: string }).id;
+    const location =
+      body.location && String(body.location).trim().length
+        ? String(body.location).trim()
+        : null;
 
-    return NextResponse.json(
-      { ok: true, applicationId },
-      { status: 201 }
-    );
+    const linkedinUrl =
+      body.linkedinUrl && String(body.linkedinUrl).trim().length
+        ? String(body.linkedinUrl).trim()
+        : null;
+
+    const portfolioUrl =
+      body.portfolioUrl && String(body.portfolioUrl).trim().length
+        ? String(body.portfolioUrl).trim()
+        : null;
+
+    const cvUrl =
+      body.cvUrl && String(body.cvUrl).trim().length
+        ? String(body.cvUrl).trim()
+        : null; // 👈 only explicit CV URL
+
+    const coverLetterRaw =
+      body.coverLetter || body.headline || body.notes || "";
+    const coverLetter =
+      coverLetterRaw && String(coverLetterRaw).trim().length
+        ? String(coverLetterRaw).trim()
+        : null;
+
+    const source =
+      body.source && String(body.source).trim().length
+        ? String(body.source).trim()
+        : "Website";
+
+    const apps = await prisma.$queryRaw<{ id: string }[]>`
+      INSERT INTO job_applications
+        (job_id, full_name, email, phone, location,
+         linkedin_url, portfolio_url, cv_url, cover_letter, source, stage, status)
+      VALUES
+        (${jobId}, ${fullName}, ${email}, ${phone}, ${location},
+         ${linkedinUrl}, ${portfolioUrl}, ${cvUrl}, ${coverLetter}, ${source},
+         'APPLIED', 'PENDING')
+      RETURNING id;
+    `;
+
+    const applicationId = apps[0]?.id;
+    return NextResponse.json({ ok: true, applicationId });
   } catch (error) {
-    console.error("Error creating application (outer catch)", error);
+    console.error("Error creating application", error);
     return NextResponse.json(
       {
         error:
