@@ -12,39 +12,135 @@ export async function POST(
   { params }: { params: { slug: string } }
 ) {
   try {
-    const formData = await req.formData();
+    const contentType = req.headers.get("content-type") || "";
 
-    const jobSlugFromBody =
-      ((formData.get("jobSlug") as string | null) || "").trim();
+    // Unified payload
+    let jobSlugFromBody: string | null = null;
+    let fullName: string | null = null;
+    let email: string | null = null;
+    let phone: string | null = null;
+    let location: string | null = null;
+    let linkedinUrl: string | null = null;
+    let portfolioUrl: string | null = null;
+    let headline: string | null = null;
+    let notes: string | null = null;
+    let cvUrlFromLink: string | null = null;
+    let cvFile: File | null = null;
 
-    const fullName = (formData.get("fullName") as string | null)?.trim();
-    const email = (formData.get("email") as string | null)?.trim();
-    const phone = (formData.get("phone") as string | null) || null;
-    const location = (formData.get("location") as string | null) || null;
-    const linkedinUrl = (formData.get("linkedinUrl") as string | null) || null;
-    const portfolioUrl =
-      (formData.get("portfolioUrl") as string | null) || null;
+    // --- Branch 1: JSON body (old callers) ---
+    if (contentType.includes("application/json")) {
+      const body: any = (await req.json().catch(() => ({}))) || {};
 
-    // Optional candidate notes/headline
-    const headline = (formData.get("headline") as string | null) || null;
-    const notes = (formData.get("notes") as string | null) || null;
+      jobSlugFromBody =
+        (body.jobSlug || body.job_slug || body.slug || "").toString().trim() ||
+        null;
 
-    // Optional CV link
-    const cvUrlFromLinkRaw = (formData.get("cvUrl") as string | null) || "";
-    const cvUrlFromLink =
-      cvUrlFromLinkRaw.trim().length > 0 ? cvUrlFromLinkRaw.trim() : null;
+      const rawFullName =
+        body.fullName || body.full_name || body.name || null;
+      const rawEmail =
+        body.email || body.emailAddress || body.email_address || null;
 
-    // Uploaded CV file from <input name="cv" />
-    const cvFile = formData.get("cv") as File | null;
+      fullName =
+        typeof rawFullName === "string" && rawFullName.trim().length > 0
+          ? rawFullName.trim()
+          : null;
+      email =
+        typeof rawEmail === "string" && rawEmail.trim().length > 0
+          ? rawEmail.trim()
+          : null;
 
+      phone =
+        typeof body.phone === "string" && body.phone.trim().length > 0
+          ? body.phone.trim()
+          : null;
+      location =
+        typeof body.location === "string" && body.location.trim().length > 0
+          ? body.location.trim()
+          : null;
+      linkedinUrl =
+        typeof body.linkedinUrl === "string" &&
+        body.linkedinUrl.trim().length > 0
+          ? body.linkedinUrl.trim()
+          : null;
+      portfolioUrl =
+        typeof body.portfolioUrl === "string" &&
+        body.portfolioUrl.trim().length > 0
+          ? body.portfolioUrl.trim()
+          : null;
+      headline =
+        typeof body.headline === "string" && body.headline.trim().length > 0
+          ? body.headline.trim()
+          : null;
+      notes =
+        typeof body.notes === "string" && body.notes.trim().length > 0
+          ? body.notes.trim()
+          : null;
+
+      if (
+        typeof body.cvUrl === "string" &&
+        body.cvUrl.trim().length > 0
+      ) {
+        cvUrlFromLink = body.cvUrl.trim();
+      }
+      // No file if JSON caller
+    } else {
+      // --- Branch 2: FormData body (current JobApplyForm) ---
+      const formData = await req.formData();
+
+      const getText = (key: string): string | null => {
+        const v = formData.get(key);
+        if (typeof v !== "string") return null;
+        const trimmed = v.trim();
+        return trimmed.length > 0 ? trimmed : null;
+      };
+
+      jobSlugFromBody = getText("jobSlug");
+
+      fullName = getText("fullName") || getText("full_name");
+      email = getText("email");
+
+      phone = getText("phone");
+      location = getText("location");
+      linkedinUrl = getText("linkedinUrl");
+      portfolioUrl = getText("portfolioUrl");
+      headline = getText("headline");
+      notes = getText("notes");
+
+      const cvUrlText = getText("cvUrl");
+      cvUrlFromLink = cvUrlText && cvUrlText.length > 0 ? cvUrlText : null;
+
+      // Accept both "cv" (new) and "cvFile" (old)
+      const maybeCv = formData.get("cv");
+      const maybeCvFile = formData.get("cvFile");
+      if (maybeCv instanceof File && maybeCv.size > 0) {
+        cvFile = maybeCv;
+      } else if (maybeCvFile instanceof File && maybeCvFile.size > 0) {
+        cvFile = maybeCvFile;
+      }
+    }
+
+    // --- Validation ---
     if (!fullName || !email) {
+      // Small debug log so you can see what arrived in Vercel logs
+      console.warn("Apply route missing fullName or email", {
+        fullName,
+        email,
+        contentType,
+      });
+
       return NextResponse.json(
         { error: "Full name and email are required." },
         { status: 400 }
       );
     }
 
-    const slug = (jobSlugFromBody || params.slug).trim();
+    const slug = (jobSlugFromBody || params.slug || "").trim();
+    if (!slug) {
+      return NextResponse.json(
+        { error: "Job slug is missing." },
+        { status: 400 }
+      );
+    }
 
     // Build cover_letter from headline + notes
     let coverLetter: string | null = null;
@@ -96,9 +192,8 @@ export async function POST(
 
     const jobId = jobs[0].id;
 
-    // 3) Determine CV URL: link takes precedence, else upload file
+    // 3) Determine CV URL: link takes precedence, else upload file if present
     let cvUrl: string | null = cvUrlFromLink;
-
     if (!cvUrl && cvFile && cvFile.size > 0) {
       cvUrl = await uploadCv({
         file: cvFile,
