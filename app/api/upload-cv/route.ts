@@ -5,13 +5,13 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export const runtime = "nodejs";
+// Force server runtime
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("Supabase env vars are missing");
+      console.error("Supabase env vars are missing for upload");
       return NextResponse.json(
         { error: "Supabase is not configured on the server" },
         { status: 500 }
@@ -20,11 +20,7 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("cv") as File | null;
-    const emailRaw = formData.get("email");
-    const email =
-      typeof emailRaw === "string" && emailRaw.trim().length > 0
-        ? emailRaw.trim()
-        : "anonymous";
+    const email = (formData.get("email") as string | null) ?? "anonymous";
 
     if (!file || file.size === 0) {
       return NextResponse.json(
@@ -33,6 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // service-role client => bypasses RLS for storage
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
