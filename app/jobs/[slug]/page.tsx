@@ -1,139 +1,47 @@
 // app/jobs/[slug]/page.tsx
 import Link from "next/link";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import ApplyForm from "./ApplyForm";
 
-type JobDetail = {
-  id: string;
-  slug: string | null;
-  title: string;
-  department: string | null;
-  location: string | null;
-  employmentType: string | null;
-  seniority: string | null;
-  description: string | null;
-  tags: string[] | null;
-  createdAt: string | null;
-};
+export const revalidate = 60;
 
 type JobPageProps = {
   params: { slug: string };
-  searchParams?: { [key: string]: string | string[] | undefined };
 };
 
-// Load a public job either by slug (preferred) or by id (UUID)
-async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
-  const supabase = await createSupabaseServerClient();
+export default async function PublicJobPage({ params }: JobPageProps) {
+  const slugOrId = params.slug;
 
-  const selectCols = `
-    id,
-    slug,
-    title,
-    department,
-    location,
-    employment_type,
-    seniority,
-    description,
-    tags,
-    created_at,
-    status,
-    visibility
-  `;
+  const job = await prisma.job.findFirst({
+    where: {
+      AND: [
+        { status: "open" as any },
+        { visibility: "public" as any },
+        {
+          OR: [{ slug: slugOrId }, { id: slugOrId }],
+        },
+      ],
+    },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      department: true,
+      location: true,
+      employmentType: true,
+      seniority: true,
+      description: true,
+      tags: true,
+      createdAt: true,
+    },
+  });
 
-  // 1) Try match by slug
-  let { data, error } = await supabase
-    .from("jobs")
-    .select(selectCols)
-    .eq("slug", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
-
-  if (error) {
-    console.error("Error loading public job by slug", error);
-  }
-
-  if (data && data.length > 0) {
-    const row: any = data[0];
-    return {
-      id: row.id,
-      slug: row.slug ?? null,
-      title: row.title,
-      department: row.department ?? null,
-      location: row.location ?? null,
-      employmentType: row.employment_type ?? null,
-      seniority: row.seniority ?? null,
-      description: row.description ?? null,
-      tags: row.tags ?? null,
-      createdAt: row.created_at ?? null,
-    };
-  }
-
-  // 2) If not found by slug, try match by id (UUID-style /jobs/<id>)
-  const { data: dataById, error: errorById } = await supabase
-    .from("jobs")
-    .select(selectCols)
-    .eq("id", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
-
-  if (errorById) {
-    console.error("Error loading public job by id", errorById);
-  }
-
-  if (!dataById || dataById.length === 0) {
-    return null;
-  }
-
-  const row: any = dataById[0];
-
-  return {
-    id: row.id,
-    slug: row.slug ?? null,
-    title: row.title,
-    department: row.department ?? null,
-    location: row.location ?? null,
-    employmentType: row.employment_type ?? null,
-    seniority: row.seniority ?? null,
-    description: row.description ?? null,
-    tags: row.tags ?? null,
-    createdAt: row.created_at ?? null,
-  };
-}
-
-export default async function PublicJobPage({
-  params,
-  searchParams,
-}: JobPageProps) {
-  const job = await fetchPublicJob(params.slug);
-
-  // If there’s no open/public job matching this slug or id,
-  // show an inline “Role not found” message instead of Next’s 404.
   if (!job) {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-16">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Role not found
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          This job may have been closed or is no longer visible.
-        </p>
-        <div className="mt-4">
-          <Link
-            href="/jobs"
-            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
-            Back to all jobs
-          </Link>
-        </div>
-      </main>
-    );
+    notFound();
   }
 
-  const slugOrId = job.slug || job.id;
-  const appliedFlag =
-    typeof searchParams?.applied === "string" &&
-    searchParams.applied === "1";
+  const slugOrIdForApply = job.slug || job.id;
 
   const createdLabel = job.createdAt
     ? new Date(job.createdAt).toLocaleDateString("en-US", {
@@ -145,8 +53,7 @@ export default async function PublicJobPage({
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-12">
-      {/* Back link */}
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <Link
           href="/jobs"
           className="text-xs font-medium text-[#172965] hover:underline"
@@ -155,21 +62,11 @@ export default async function PublicJobPage({
         </Link>
       </div>
 
-      {/* “Applied” banner if you redirect with ?applied=1 */}
-      {appliedFlag && (
-        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-          Thank you. Your application has been received.
-        </div>
-      )}
-
-      {/* Header */}
       <header className="mb-6 space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {job.title}
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
         <p className="text-xs text-slate-500">
           {job.location || "Location flexible"}
           {job.department ? ` • ${job.department}` : ""}
@@ -189,15 +86,13 @@ export default async function PublicJobPage({
         </div>
       </header>
 
-      {/* Description */}
       <section className="prose prose-sm max-w-none text-slate-800">
         <div className="whitespace-pre-line text-sm leading-relaxed">
           {job.description || "No description provided yet."}
         </div>
       </section>
 
-      {/* Tags */}
-      {job.tags && job.tags.length > 0 && (
+      {Array.isArray(job.tags) && job.tags.length > 0 && (
         <section className="mt-4 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
           {job.tags.map((tag) => (
             <span
@@ -210,15 +105,8 @@ export default async function PublicJobPage({
         </section>
       )}
 
-      {/* Apply CTA */}
-      <section className="mt-8">
-        <Link
-          href={`/jobs/${slugOrId}/apply`}
-          className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
-        >
-          Apply for this role
-        </Link>
-      </section>
+      {/* Inline apply form */}
+      <ApplyForm jobSlug={slugOrIdForApply} jobTitle={job.title} />
     </main>
   );
 }
