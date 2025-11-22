@@ -1,6 +1,5 @@
 // app/api/jobs/[slug]/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 export async function POST(
@@ -30,7 +29,6 @@ export async function POST(
       cvUrl,
       headline,
       notes,
-      jobSlug, // not strictly needed, but available
     } = body ?? {};
 
     if (!fullName || !email) {
@@ -40,9 +38,9 @@ export async function POST(
       );
     }
 
-    // Resolve job.id from slugOrId using Supabase, but no Prisma `job` model
     const supabase = await createSupabaseServerClient();
 
+    // --- 1) Resolve job.id from slug or id, only if open + public
     const selectCols = `
       id,
       slug,
@@ -89,25 +87,38 @@ export async function POST(
       jobId = dataById[0].id;
     }
 
-    const application = await prisma.jobApplication.create({
-      data: {
-        jobId: jobId!,
-        fullName,
+    // --- 2) Insert into job_applications via Supabase
+    const { data: inserted, error: insertError } = await supabase
+      .from("job_applications")
+      .insert({
+        job_id: jobId!,
+        full_name: fullName,
         email,
         phone: phone || null,
         location: location || null,
-        linkedinUrl: linkedinUrl || null,
-        portfolioUrl: portfolioUrl || null,
-        cvUrl: cvUrl || null,
-        coverLetter: notes || headline || null,
+        linkedin_url: linkedinUrl || null,
+        portfolio_url: portfolioUrl || null,
+        cv_url: cvUrl || null,
+        cover_letter: (notes || headline || null) as string | null,
         source: "Website",
-        stage: "APPLIED",
-        status: "PENDING",
-      },
-    });
+        // stage / status can be left to DB defaults
+      })
+      .select("id")
+      .single();
+
+    if (insertError || !inserted) {
+      console.error("Error inserting job_application", insertError);
+      return NextResponse.json(
+        {
+          error:
+            "Unexpected error while creating your application. Please try again.",
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
-      { ok: true, applicationId: application.id },
+      { ok: true, applicationId: inserted.id },
       { status: 200 }
     );
   } catch (err) {
