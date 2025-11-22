@@ -1,159 +1,118 @@
 // app/api/jobs/[slug]/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { createClient } from "@supabase/supabase-js";
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type JobRow = {
-  id: string;
-  tenant_id: string;
-  slug: string | null;
-  status: string;
-  visibility: string;
+type NormalisedBody = {
+  jobSlug?: string;
+  jobId?: string;
+  fullName?: string;
+  email?: string;
+  phone?: string | null;
+  location?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+  cvUrl?: string | null;
+  coverLetter?: string | null;
+  source?: string | null;
+  headline?: string | null;
+  notes?: string | null;
 };
 
-function getBaseUrl(): string {
-  const fromEnv =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.SITE_URL ||
-    "https://www.resourcin.com";
-  if (fromEnv.startsWith("http")) return fromEnv;
-  return `https://${fromEnv}`;
-}
-
-// Find job by slug, then by id, restricted to open + public
-async function findPublicJobForApply(
-  supabase: any,
-  slugOrId: string
-): Promise<JobRow | null> {
-  const selectCols = `
-    id,
-    tenant_id,
-    slug,
-    status,
-    visibility
-  `;
-
-  // 1) try by slug
-  let { data, error } = await supabase
-    .from("jobs")
-    .select(selectCols)
-    .eq("slug", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
-
-  if (error) {
-    console.error("apply route: error loading job by slug", error);
-    throw error;
-  }
-
-  if (data && data.length > 0) {
-    return data[0] as JobRow;
-  }
-
-  // 2) try by id (UUID)
-  const { data: byId, error: byIdError } = await supabase
-    .from("jobs")
-    .select(selectCols)
-    .eq("id", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
-
-  if (byIdError) {
-    console.error("apply route: error loading job by id", byIdError);
-    throw byIdError;
-  }
-
-  if (!byId || byId.length === 0) return null;
-  return byId[0] as JobRow;
+function trimOrUndefined(value: FormDataEntryValue | null): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const t = value.trim();
+  return t.length ? t : undefined;
 }
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { slug: string } }
 ) {
-  const slugOrId = decodeURIComponent(params.slug);
-
   try {
-    const supabase = await createSupabaseServerClient();
-
-    const job = await findPublicJobForApply(supabase, slugOrId);
-    if (!job) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("Supabase env vars are missing");
       return NextResponse.json(
-        { error: "Job not found or not open for applications." },
-        { status: 404 }
+        { error: "Server is not fully configured." },
+        { status: 500 }
       );
     }
 
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
+
     const contentType = req.headers.get("content-type") || "";
+    let body: NormalisedBody = {};
 
-    let fullName = "";
-    let email = "";
-    let phone: string | null = null;
-    let location: string | null = null;
-    let linkedinUrl: string | null = null;
-    let portfolioUrl: string | null = null;
-    let cvUrl: string | null = null;
-    let coverLetter: string | null = null;
-    let source: string | null = null;
+    // 1) Normalise input (JSON OR form-data) into one shape
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
 
-    // --- JSON payload path (JobApplyForm) ---
-    if (contentType.includes("application/json")) {
-      const body = (await req.json().catch(() => ({}))) as any;
-
-      fullName = (body.fullName ?? "").toString().trim();
-      email = (body.email ?? "").toString().trim();
-      phone = (body.phone ?? "").toString().trim() || null;
-      location = (body.location ?? "").toString().trim() || null;
-      linkedinUrl = (body.linkedinUrl ?? "").toString().trim() || null;
-      portfolioUrl = (body.portfolioUrl ?? "").toString().trim() || null;
-      cvUrl = (body.cvUrl ?? "").toString().trim() || null;
-      // allow headline to flow into coverLetter if you want
-      coverLetter =
-        (body.coverLetter || body.headline || "").toString().trim() || null;
-      source = (body.source ?? "Website").toString();
+      body = {
+        jobSlug: trimOrUndefined(form.get("jobSlug") || form.get("job_slug")),
+        jobId: trimOrUndefined(form.get("job_id")),
+        fullName: trimOrUndefined(
+          form.get("fullName") || form.get("full_name")
+        ),
+        email: trimOrUndefined(form.get("email")),
+        phone: trimOrUndefined(form.get("phone")) ?? null,
+        location: trimOrUndefined(form.get("location")) ?? null,
+        linkedinUrl:
+          trimOrUndefined(form.get("linkedinUrl") || form.get("linkedin_url")) ??
+          null,
+        portfolioUrl:
+          trimOrUndefined(
+            form.get("portfolioUrl") || form.get("portfolio_url")
+          ) ?? null,
+        cvUrl:
+          trimOrUndefined(form.get("cvUrl") || form.get("cv_url")) ?? null,
+        coverLetter:
+          trimOrUndefined(
+            form.get("coverLetter") || form.get("cover_letter")
+          ) ?? null,
+        source: trimOrUndefined(form.get("source")) ?? null,
+      };
     } else {
-      // --- FormData path (server-rendered <form> POST) ---
-      const formData = await req.formData();
-
-      fullName =
-        (formData.get("full_name") ||
-          formData.get("fullName") ||
-          "").toString().trim();
-      email = (formData.get("email") || "").toString().trim();
-      phone = (formData.get("phone") || "").toString().trim() || null;
-      location = (formData.get("location") || "").toString().trim() || null;
-
-      linkedinUrl =
-        (formData.get("linkedin_url") ||
-          formData.get("linkedinUrl") ||
-          "").toString().trim() || null;
-      portfolioUrl =
-        (formData.get("portfolio_url") ||
-          formData.get("portfolioUrl") ||
-          "").toString().trim() || null;
-
-      // For classic forms, cvUrl may be sent as a text field (link).
-      // File uploads go through /api/upload-cv, which then sends cvUrl in JSON.
-      const cvField =
-        formData.get("cvUrl") || formData.get("cv_url") || null;
-      if (typeof cvField === "string") {
-        cvUrl = cvField.trim() || null;
-      } else {
-        cvUrl = null;
-      }
-
-      coverLetter =
-        (formData.get("cover_letter") ||
-          formData.get("coverLetter") ||
-          "").toString().trim() || null;
-
-      source =
-        (formData.get("source") || "careers_site").toString() ||
-        "careers_site";
+      // assume JSON
+      const json = (await req.json().catch(() => ({}))) as any;
+      body = {
+        jobSlug: json.jobSlug,
+        jobId: json.jobId,
+        fullName: json.fullName,
+        email: json.email,
+        phone: json.phone ?? null,
+        location: json.location ?? null,
+        linkedinUrl: json.linkedinUrl ?? null,
+        portfolioUrl: json.portfolioUrl ?? null,
+        cvUrl: json.cvUrl ?? null,
+        coverLetter: json.coverLetter ?? null,
+        source: json.source ?? null,
+        headline: json.headline ?? null,
+        notes: json.notes ?? null,
+      };
     }
+
+    const {
+      jobSlug,
+      jobId,
+      fullName,
+      email,
+      phone,
+      location,
+      linkedinUrl,
+      portfolioUrl,
+      cvUrl,
+      coverLetter,
+      source,
+      headline,
+      notes,
+    } = body;
 
     if (!fullName || !email) {
       return NextResponse.json(
@@ -162,84 +121,94 @@ export async function POST(
       );
     }
 
-    // --- 1) Best-effort candidate record (do not fail the application if this fails) ---
-    let candidateId: string | null = null;
+    // Prefer coverLetter, then headline, then notes
+    const finalCoverLetter =
+      coverLetter || headline || notes || null;
 
-    try {
-      // Look for existing candidate for this tenant + email
-      const { data: existing, error: existingErr } = await supabase
-        .from("candidates")
-        .select("id")
-        .eq("tenant_id", job.tenant_id)
-        .eq("email", email)
-        .limit(1);
+    // 2) Resolve job_id: prefer explicit jobId; else look up via slug or id
+    let jobRowId: string | null = null;
 
-      if (existingErr) {
-        console.error(
-          "apply route: error looking up existing candidate",
-          existingErr
+    if (jobId) {
+      jobRowId = jobId;
+    } else {
+      const slugOrId = (jobSlug || params.slug || "").trim();
+      if (!slugOrId) {
+        return NextResponse.json(
+          { error: "Missing job identifier." },
+          { status: 400 }
         );
       }
 
-      if (existing && existing.length > 0) {
-        candidateId = existing[0].id;
-      } else {
-        const { data: inserted, error: insertErr } = await supabase
-          .from("candidates")
-          .insert({
-            tenant_id: job.tenant_id,
-            full_name: fullName,
-            email,
-            phone,
-            location,
-            linkedin_url: linkedinUrl,
-            cv_url: cvUrl,
-            source: source ?? "Website",
-          })
-          .select("id")
-          .single();
+      // Try by slug (open + public job)
+      let { data: bySlug, error: slugError } = await supabase
+        .from("jobs")
+        .select("id")
+        .eq("slug", slugOrId)
+        .eq("status", "open")
+        .eq("visibility", "public")
+        .limit(1);
 
-        if (insertErr) {
-          console.error(
-            "apply route: error inserting candidate (non-fatal)",
-            insertErr
-          );
-        } else if (inserted?.id) {
-          candidateId = inserted.id;
-        }
+      if (slugError) {
+        console.error("Error loading job by slug in apply route:", slugError);
       }
-    } catch (candidateErr) {
-      console.error(
-        "apply route: unexpected candidate create error (non-fatal)",
-        candidateErr
+
+      if (bySlug && bySlug.length > 0) {
+        jobRowId = bySlug[0].id as string;
+      } else {
+        // Fallback: treat slugOrId as a job id (UUID path)
+        const { data: byId, error: idError } = await supabase
+          .from("jobs")
+          .select("id")
+          .eq("id", slugOrId)
+          .eq("status", "open")
+          .eq("visibility", "public")
+          .limit(1);
+
+        if (idError) {
+          console.error("Error loading job by id in apply route:", idError);
+        }
+
+        if (!byId || byId.length === 0) {
+          return NextResponse.json(
+            { error: "Job not found or not open/public." },
+            { status: 404 }
+          );
+        }
+
+        jobRowId = byId[0].id as string;
+      }
+    }
+
+    if (!jobRowId) {
+      return NextResponse.json(
+        { error: "Unable to resolve job for this application." },
+        { status: 400 }
       );
     }
 
-    // --- 2) Create job_application row, including cv_url ---
-    const { data: application, error: appError } = await supabase
+    // 3) Insert into job_applications
+    const insertPayload = {
+      job_id: jobRowId,
+      full_name: fullName,
+      email,
+      phone: phone || null,
+      location: location || null,
+      linkedin_url: linkedinUrl || null,
+      portfolio_url: portfolioUrl || null,
+      cv_url: cvUrl || null,
+      cover_letter: finalCoverLetter,
+      source: source || "Website",
+      // stage, status use DB defaults: APPLIED / PENDING
+    };
+
+    const { data: inserted, error: insertError } = await supabase
       .from("job_applications")
-      .insert({
-        job_id: job.id,
-        candidate_id: candidateId,
-        full_name: fullName,
-        email,
-        phone,
-        location,
-        linkedin_url: linkedinUrl,
-        portfolio_url: portfolioUrl,
-        cv_url: cvUrl,
-        cover_letter: coverLetter,
-        source: source ?? "Website",
-        // stage/status default from DB: APPLIED / PENDING
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
-    if (appError || !application) {
-      console.error(
-        "apply route: error inserting job_application",
-        appError
-      );
+    if (insertError || !inserted) {
+      console.error("Error inserting job_application:", insertError);
       return NextResponse.json(
         {
           error:
@@ -249,24 +218,12 @@ export async function POST(
       );
     }
 
-    // --- Response handling ---
-    // If request came from a classic HTML form, redirect back to job page with ?applied=1
-    if (!contentType.includes("application/json")) {
-      const origin = req.headers.get("origin") ?? getBaseUrl();
-      const redirectUrl = new URL(
-        `/jobs/${encodeURIComponent(slugOrId)}?applied=1`,
-        origin
-      );
-      return NextResponse.redirect(redirectUrl.toString(), 303);
-    }
-
-    // JSON clients (JobApplyForm) get JSON
-    return NextResponse.json({
-      ok: true,
-      applicationId: application.id,
-    });
+    return NextResponse.json(
+      { ok: true, applicationId: inserted.id },
+      { status: 201 }
+    );
   } catch (err) {
-    console.error("POST /api/jobs/[slug]/apply unexpected error", err);
+    console.error("Apply route unexpected error:", err);
     return NextResponse.json(
       {
         error:
