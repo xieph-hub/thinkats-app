@@ -5,10 +5,9 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Force server runtime
+// Force Node runtime + dynamic
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// (Optional but explicit)
-// export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,7 +34,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // IMPORTANT: service-role key, so RLS on Storage won't block us
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false },
     });
@@ -59,16 +57,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get a public URL for the uploaded CV
     const {
       data: { publicUrl },
-    } = supabase.storage
-      .from("resourcin-uploads")
-      .getPublicUrl(data.path);
+    } = supabase.storage.from("resourcin-uploads").getPublicUrl(data.path);
 
-    // We return the full public URL; /api/jobs/[slug]/apply
-    // simply stores this in job_applications.cv_url
-    return NextResponse.json({ url: publicUrl });
+    return NextResponse.json({ url: publicUrl }, { status: 200 });
   } catch (err) {
     console.error("Upload CV route error:", err);
     return NextResponse.json(
