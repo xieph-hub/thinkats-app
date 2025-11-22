@@ -1,10 +1,6 @@
 // app/jobs/[slug]/page.tsx
-
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import ApplyForm from "./ApplyForm";
-
-export const revalidate = 60;
 
 type JobDetail = {
   id: string;
@@ -21,12 +17,9 @@ type JobDetail = {
 
 type JobPageProps = {
   params: { slug: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
 };
 
-/**
- * Fetch an open, public job either by slug or by id (uuid),
- * using Supabase directly against the `jobs` table.
- */
 async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
   const supabase = await createSupabaseServerClient();
 
@@ -45,7 +38,7 @@ async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
     visibility
   `;
 
-  // 1) Try match by slug
+  // 1) Try by slug
   let { data, error } = await supabase
     .from("jobs")
     .select(selectCols)
@@ -74,7 +67,7 @@ async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
     };
   }
 
-  // 2) If not found, try match by id (UUID path like /jobs/<id>)
+  // 2) Try by id (UUID in the URL)
   const { data: dataById, error: errorById } = await supabase
     .from("jobs")
     .select(selectCols)
@@ -107,15 +100,13 @@ async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
   };
 }
 
-export default async function PublicJobPage({ params }: JobPageProps) {
+export default async function PublicJobPage({ params, searchParams }: JobPageProps) {
   const job = await fetchPublicJob(params.slug);
 
   if (!job) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-16">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Role not found
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Role not found</h1>
         <p className="mt-2 text-sm text-slate-600">
           This job may have been closed or is no longer visible.
         </p>
@@ -132,6 +123,8 @@ export default async function PublicJobPage({ params }: JobPageProps) {
   }
 
   const slugOrId = job.slug || job.id;
+  const appliedFlag =
+    typeof searchParams?.applied === "string" && searchParams.applied === "1";
 
   const createdLabel = job.createdAt
     ? new Date(job.createdAt).toLocaleDateString("en-US", {
@@ -152,13 +145,17 @@ export default async function PublicJobPage({ params }: JobPageProps) {
         </Link>
       </div>
 
+      {appliedFlag && (
+        <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+          Thank you. Your application has been received.
+        </div>
+      )}
+
       <header className="mb-6 space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {job.title}
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
         <p className="text-xs text-slate-500">
           {job.location || "Location flexible"}
           {job.department ? ` • ${job.department}` : ""}
@@ -197,9 +194,13 @@ export default async function PublicJobPage({ params }: JobPageProps) {
         </section>
       )}
 
-      {/* Inline apply form that talks to /api/jobs/[slug]/apply via JSON */}
       <section className="mt-8">
-        <ApplyForm jobSlug={slugOrId} jobTitle={job.title} />
+        <Link
+          href={`/jobs/${slugOrId}/apply`}
+          className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
+        >
+          Apply for this role
+        </Link>
       </section>
     </main>
   );
