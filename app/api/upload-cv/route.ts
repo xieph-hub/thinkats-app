@@ -3,13 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Force server runtime
 export const dynamic = "force-dynamic";
+// (Optional but explicit)
+// export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       console.error("Supabase env vars are missing");
       return NextResponse.json(
         { error: "Supabase is not configured on the server" },
@@ -19,7 +22,11 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("cv") as File | null;
-    const email = (formData.get("email") as string | null) ?? "anonymous";
+    const emailRaw = formData.get("email");
+    const email =
+      typeof emailRaw === "string" && emailRaw.trim().length > 0
+        ? emailRaw.trim()
+        : "anonymous";
 
     if (!file || file.size === 0) {
       return NextResponse.json(
@@ -28,7 +35,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // IMPORTANT: service-role key, so RLS on Storage won't block us
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
     const ext = file.name.split(".").pop() || "pdf";
     const safeEmail = email.replace(/[^a-zA-Z0-9]/g, "_");
@@ -49,13 +59,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Get a public URL for the uploaded CV
     const {
       data: { publicUrl },
     } = supabase.storage
       .from("resourcin-uploads")
       .getPublicUrl(data.path);
 
-    // 👈 This is what the form uses and what we will store in job_applications.cv_url
+    // We return the full public URL; /api/jobs/[slug]/apply
+    // simply stores this in job_applications.cv_url
     return NextResponse.json({ url: publicUrl });
   } catch (err) {
     console.error("Upload CV route error:", err);
