@@ -3,9 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 
-// simple slug generator from title
-function slugify(input: string): string {
-  return input
+export const dynamic = "force-dynamic";
+
+// Utility: simple slugifier for job titles
+function slugify(title: string): string {
+  return title
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
@@ -13,20 +15,106 @@ function slugify(input: string): string {
     .slice(0, 80);
 }
 
-export async function POST(req: NextRequest) {
+// GET /api/jobs
+// - view=public or view=careers → open, public jobs (for resourcin.com/jobs)
+// - default → tenant-scoped jobs for logged-in ATS/client users
+export async function GET(req: NextRequest) {
   try {
-    // 1) Who is this and which tenant?
+    const url = new URL(req.url);
+    const view = url.searchParams.get("view");
+
+    const supabase = await createSupabaseServerClient();
+
+    // Public careers view
+    if (view === "public" || view === "careers") {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select(
+          `
+          id,
+          slug,
+          title,
+          department,
+          location,
+          employment_type,
+          seniority,
+          description,
+          tags,
+          status,
+          visibility,
+          created_at
+        `
+        )
+        .eq("status", "open")
+        .eq("visibility", "public")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("GET /api/jobs (public) error", error);
+        return NextResponse.json(
+          { error: "Failed to load jobs" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ jobs: data ?? [] });
+    }
+
+    // ATS / internal view – require user + tenant
     const { user, currentTenant } = await getCurrentUserAndTenants();
 
     if (!user || !currentTenant) {
       return NextResponse.json(
-        { error: "Not authenticated or no tenant found" },
+        { error: "Not authenticated or no tenant configured." },
         { status: 401 }
       );
     }
 
-    // 2) Read data from the form (JSON body)
-    const body = await req.json();
+    const { data, error } = await supabase
+      .from("jobs")
+      .select(
+        `
+        id,
+        slug,
+        title,
+        department,
+        location,
+        employment_type,
+        seniority,
+        description,
+        tags,
+        status,
+        visibility,
+        created_at
+      `
+      )
+      .eq("tenant_id", currentTenant.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("GET /api/jobs (tenant) error", error);
+      return NextResponse.json(
+        { error: "Failed to load jobs" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ jobs: data ?? [] });
+  } catch (err) {
+    console.error("GET /api/jobs unexpected error", err);
+    return NextResponse.json(
+      { error: "Failed to load jobs" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/jobs
+// Creates a new job for the current tenant (ATS side)
+export async function POST(req: NextRequest) {
+  try {
+    const body = (await req.json().catch(() => ({}))) as any;
+
     const {
       title,
       department,
@@ -35,90 +123,77 @@ export async function POST(req: NextRequest) {
       seniority,
       description,
       tags,
+      status,
       visibility,
-      publishNow,
-    } = body;
+    } = body || {};
 
-    // 3) Basic validation
-    if (!title || !location) {
+    if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json(
-        { error: "Missing required fields: title and location" },
+        { error: "Job title is required." },
         { status: 400 }
+      );
+    }
+
+    const { user, currentTenant } = await getCurrentUserAndTenants();
+    if (!user || !currentTenant) {
+      return NextResponse.json(
+        { error: "You must be signed in and linked to a tenant to create jobs." },
+        { status: 401 }
       );
     }
 
     const supabase = await createSupabaseServerClient();
 
-    // 4) Generate a slug, make it unique per tenant
     const baseSlug = slugify(title);
-    let slug = baseSlug;
+    let finalSlug = baseSlug || null;
 
-    const { data: existing, error: existingErr } = await supabase
-      .from("jobs")
-      .select("id, slug")
-      .eq("tenant_id", currentTenant.id)
-      .ilike("slug", `${baseSlug}%`);
+    if (baseSlug) {
+      const { data: existing } = await supabase
+        .from("jobs")
+        .select("slug")
+        .eq("tenant_id", currentTenant.id)
+        .ilike("slug", `${baseSlug}%`);
 
-    if (!existingErr && existing && existing.length > 0) {
-      slug = `${baseSlug}-${existing.length + 1}`;
+      if (existing && existing.length > 0) {
+        const suffix = existing.length + 1;
+        finalSlug = `${baseSlug}-${suffix}`;
+      }
     }
 
-    // 5) Status + visibility logic
-    const status = publishNow ? "open" : "draft";
-    const visibilityValue = visibility || "public";
+    const insertPayload: any = {
+      tenant_id: currentTenant.id,
+      title: title.trim(),
+      department: department ?? null,
+      location: location ?? null,
+      employment_type: employmentType ?? null,
+      seniority: seniority ?? null,
+      description: description ?? null,
+      tags: Array.isArray(tags) ? tags : null,
+      status: status ?? "open",
+      visibility: visibility ?? "public",
+      slug: finalSlug,
+      created_by: user.id ?? null,
+    };
 
-    // 6) Normalise tags to a string[]
-    const tagsArray: string[] =
-      Array.isArray(tags)
-        ? tags
-        : typeof tags === "string" && tags.trim().length > 0
-        ? tags
-            .split(",")
-            .map((t: string) => t.trim())
-            .filter(Boolean)
-        : [];
-
-    // 7) Insert into the REAL `jobs` table
     const { data, error } = await supabase
       .from("jobs")
-      .insert({
-        tenant_id: currentTenant.id,
-        title,
-        department: department || null,
-        location,
-        employment_type: employmentType || null,
-        seniority: seniority || null,
-        description: description || "",
-        status,
-        visibility: visibilityValue,
-        tags: tagsArray.length > 0 ? tagsArray : null,
-        created_by: user.id,
-        slug,
-      })
+      .insert(insertPayload)
       .select("id, slug")
       .single();
 
     if (error || !data) {
-      console.error("❌ Error creating ATS job:", error);
+      console.error("POST /api/jobs insert error", error);
       return NextResponse.json(
-        { error: "Failed to create job. Check logs for details." },
+        { error: "Failed to create job. Please check server logs for more detail." },
         { status: 500 }
       );
     }
 
-    // 8) All good – return the job id + slug
-    return NextResponse.json(
-      {
-        id: data.id,
-        slug: data.slug,
-        status,
-      },
-      { status: 201 }
-    );
+    return NextResponse.json({ job: data }, { status: 201 });
   } catch (err) {
-    console.error("❌ Unexpected error in POST /api/jobs:", err);
+    console.error("POST /api/jobs unexpected error", err);
     return NextResponse.json(
-      { error: "Unexpected error creating job" },
+      { error: "Failed to create job. Please check server logs for more detail." },
       { status: 500 }
     );
   }
