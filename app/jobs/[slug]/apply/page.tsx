@@ -28,6 +28,7 @@ async function fetchPublicJobForApply(
     visibility
   `;
 
+  // 1) Try by slug
   let { data, error } = await supabase
     .from("jobs")
     .select(selectCols)
@@ -50,6 +51,7 @@ async function fetchPublicJobForApply(
     };
   }
 
+  // 2) Try by id
   const { data: dataById, error: errorById } = await supabase
     .from("jobs")
     .select(selectCols)
