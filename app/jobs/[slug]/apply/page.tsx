@@ -1,4 +1,5 @@
 // app/jobs/[slug]/apply/page.tsx
+
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import JobApplyForm from "./JobApplyForm";
@@ -14,9 +15,7 @@ type ApplyPageProps = {
   params: { slug: string };
 };
 
-async function fetchPublicJobForApply(
-  slugOrId: string
-): Promise<JobDetail | null> {
+async function fetchPublicJobForApply(slugOrId: string): Promise<JobDetail | null> {
   const supabase = await createSupabaseServerClient();
 
   const selectCols = `
@@ -119,9 +118,7 @@ export default async function ApplyPage({ params }: ApplyPageProps) {
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Apply
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {job.title}
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
         <p className="text-xs text-slate-500">
           {job.location || "Location flexible"}
         </p>
