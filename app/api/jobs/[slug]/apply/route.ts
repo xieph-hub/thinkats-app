@@ -4,10 +4,21 @@ import { prisma } from "@/lib/prisma";
 
 type RouteParams = { params: { slug: string } };
 
+function looksLikeUuid(value: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value
+  );
+}
+
+type JobRowDb = {
+  id: string;
+};
+
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const slugOrId = params.slug;
 
   try {
+    // Parse JSON body safely
     let body: any;
     try {
       body = await req.json();
@@ -42,84 +53,81 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // 1) Find an open, public job by slug OR id
-    const job = await prisma.job.findFirst({
-      where: {
-        AND: [
-          { status: "open" as any },
-          { visibility: "public" as any },
-          {
-            OR: [{ slug: slugOrId }, { id: slugOrId }],
-          },
-        ],
-      },
-      select: { id: true },
-    });
+    // 1) Find open + public job either by slug or by id (uuid)
+    let jobRow: JobRowDb | null = null;
 
-    if (!job) {
+    if (looksLikeUuid(slugOrId)) {
+      const rowsById = await prisma.$queryRaw<JobRowDb[]>`
+        SELECT id
+        FROM jobs
+        WHERE id = ${slugOrId}::uuid
+          AND status = 'open'
+          AND visibility = 'public'
+        LIMIT 1;
+      `;
+      jobRow = rowsById[0] ?? null;
+    } else {
+      const rowsBySlug = await prisma.$queryRaw<JobRowDb[]>`
+        SELECT id
+        FROM jobs
+        WHERE slug = ${slugOrId}
+          AND status = 'open'
+          AND visibility = 'public'
+        LIMIT 1;
+      `;
+      jobRow = rowsBySlug[0] ?? null;
+    }
+
+    if (!jobRow) {
       return NextResponse.json(
         {
           ok: false,
           error:
-            "Job not found, closed, or not visible publicly. Please check the job link.",
+            "Job not found, closed, or not publicly visible. Please check the job link.",
         },
         { status: 404 }
       );
     }
 
-    // 2) Upsert candidate by email (if your Candidate model uses a different unique field,
-    // adjust the `where` and `create`/`update` structures accordingly)
-    let candidateId: string | null = null;
-    try {
-      const candidate = await prisma.candidate.upsert({
-        where: { email },
-        update: {
-          fullName,
-          phone: phone || undefined,
-          location: location || undefined,
-          linkedinUrl: linkedinUrl || undefined,
-          portfolioUrl: portfolioUrl || undefined,
-        },
-        create: {
-          fullName,
-          email,
-          phone: phone || undefined,
-          location: location || undefined,
-          linkedinUrl: linkedinUrl || undefined,
-          portfolioUrl: portfolioUrl || undefined,
-          source: source || "Website",
-        },
-        select: { id: true },
-      });
-
-      candidateId = candidate.id;
-    } catch (err) {
-      console.error("Error creating/updating candidate", err);
-      // If candidate fails for some reason, we still allow application with null candidateId
-    }
-
-    // 3) Create application
-    const application = await prisma.jobApplication.create({
-      data: {
-        jobId: job.id,
-        candidateId,
-        fullName,
+    // 2) Insert application row directly into job_applications
+    const inserted = await prisma.$queryRaw<{ id: string }[]>`
+      INSERT INTO job_applications (
+        job_id,
+        candidate_id,
+        full_name,
         email,
-        phone: phone || null,
-        location: location || null,
-        linkedinUrl: linkedinUrl || null,
-        portfolioUrl: portfolioUrl || null,
-        cvUrl: cvUrl || null, // <- this is what /ats will show as CV link
-        coverLetter: coverLetter || null,
-        source: source || "Website",
-        stage: "APPLIED" as any,
-        status: "PENDING" as any,
-      },
-      select: { id: true },
-    });
+        phone,
+        location,
+        linkedin_url,
+        portfolio_url,
+        cv_url,
+        cover_letter,
+        source,
+        stage,
+        status
+      )
+      VALUES (
+        ${jobRow.id}::uuid,
+        NULL,
+        ${fullName},
+        ${email},
+        ${phone || null},
+        ${location || null},
+        ${linkedinUrl || null},
+        ${portfolioUrl || null},
+        ${cvUrl || null},
+        ${coverLetter || null},
+        ${source || "Website"},
+        'APPLIED',
+        'PENDING'
+      )
+      RETURNING id;
+    `;
+
+    const applicationId = inserted[0]?.id;
 
     return NextResponse.json(
-      { ok: true, applicationId: application.id },
+      { ok: true, applicationId },
       { status: 200 }
     );
   } catch (err: any) {
@@ -128,7 +136,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       {
         ok: false,
         error: "Unexpected error while creating your application.",
-        // helpful when testing locally; hidden in prod UI
         details:
           process.env.NODE_ENV === "development"
             ? String(err?.message ?? err)
