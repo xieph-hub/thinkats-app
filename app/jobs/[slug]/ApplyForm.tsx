@@ -15,6 +15,8 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isSubmitting) return;
+
     setApiError(null);
     setSuccess(false);
     setIsSubmitting(true);
@@ -23,18 +25,23 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
+      const getString = (key: string): string | undefined => {
+        const value = formData.get(key);
+        if (typeof value !== "string") return undefined;
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+      };
+
       const payload = {
-        fullName: (formData.get("fullName") || "").toString().trim(),
-        email: (formData.get("email") || "").toString().trim(),
-        phone: (formData.get("phone") || "").toString().trim() || null,
-        location: (formData.get("location") || "").toString().trim() || null,
-        linkedinUrl:
-          (formData.get("linkedinUrl") || "").toString().trim() || null,
-        portfolioUrl:
-          (formData.get("portfolioUrl") || "").toString().trim() || null,
-        cvUrl: (formData.get("cvUrl") || "").toString().trim() || null,
-        coverLetter:
-          (formData.get("coverLetter") || "").toString().trim() || null,
+        jobSlugOrId: jobSlug,
+        fullName: getString("fullName") || "",
+        email: getString("email") || "",
+        phone: getString("phone"),
+        location: getString("location"),
+        linkedinUrl: getString("linkedinUrl"),
+        portfolioUrl: getString("portfolioUrl"),
+        cvUrl: getString("cvUrl"),
+        coverLetter: getString("coverLetter"),
         source: "Website",
       };
 
@@ -42,7 +49,7 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
         throw new Error("Full name and email are required.");
       }
 
-      const res = await fetch(`/api/jobs/${encodeURIComponent(jobSlug)}/apply`, {
+      const res = await fetch("/api/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -52,20 +59,19 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
       try {
         body = await res.json();
       } catch {
-        // no-op
+        // ignore JSON parsing issues
       }
 
-      if (!res.ok) {
+      if (!res.ok || body?.error) {
         const message =
-          body?.error ||
-          body?.message ||
-          `Failed to submit application (status ${res.status}).`;
+          body?.error || `Failed to submit application (status ${res.status}).`;
         throw new Error(message);
       }
 
       setSuccess(true);
       form.reset();
     } catch (err: any) {
+      console.error("Apply form error", err);
       setApiError(err?.message || "Something went wrong.");
     } finally {
       setIsSubmitting(false);
@@ -73,7 +79,7 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
   }
 
   return (
-    <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+    <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
       <h2 className="text-lg font-semibold text-slate-900">
         Apply for {jobTitle}
       </h2>
@@ -171,8 +177,8 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
           />
           <p className="mt-1 text-[11px] text-slate-500">
-            For now, paste a link to your CV. We can re-enable file uploads
-            once everything else is stable.
+            For now, paste a link to your CV. We&apos;ll reintroduce file upload
+            once this flow is rock-solid.
           </p>
         </div>
 
@@ -197,8 +203,8 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
 
         {success && (
           <p className="text-xs text-emerald-700">
-            Application submitted. We&apos;ll review and reach out if there&apos;s
-            a fit.
+            Application submitted. We&apos;ll review and reach out if there&apos;s a
+            fit.
           </p>
         )}
 
