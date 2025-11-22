@@ -1,58 +1,24 @@
 // app/api/jobs/[slug]/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { prisma } from "@/lib/prisma";
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+type RouteParams = { params: { slug: string } };
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export async function POST(req: NextRequest, { params }: RouteParams) {
+  const slugOrId = params.slug;
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { slug: string } }
-) {
   try {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      console.error("Supabase env vars are missing", {
-        hasUrl: !!SUPABASE_URL,
-        hasKey: !!SUPABASE_KEY,
-      });
-      return NextResponse.json(
-        { error: "Server is not fully configured for Supabase." },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: false },
-    });
-
-    // Parse JSON body
-    let body: any = null;
+    let body: any;
     try {
       body = await req.json();
-    } catch (parseErr) {
-      console.error("Apply route JSON parse error:", parseErr);
+    } catch {
       return NextResponse.json(
-        { error: "Invalid JSON body." },
-        { status: 400 }
-      );
-    }
-
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { error: "Invalid request body." },
+        { ok: false, error: "Invalid JSON body." },
         { status: 400 }
       );
     }
 
     const {
-      jobSlug,
       fullName,
       email,
       phone,
@@ -60,126 +26,113 @@ export async function POST(
       linkedinUrl,
       portfolioUrl,
       cvUrl,
-      headline,
-      notes,
       coverLetter,
       source,
-    } = body;
+    } = body ?? {};
 
-    if (!fullName || !email) {
+    if (
+      !fullName ||
+      typeof fullName !== "string" ||
+      !email ||
+      typeof email !== "string"
+    ) {
       return NextResponse.json(
-        { error: "Full name and email are required." },
+        { ok: false, error: "Full name and email are required." },
         { status: 400 }
       );
     }
 
-    const slugOrId = (jobSlug || params.slug || "").trim();
-    if (!slugOrId) {
-      return NextResponse.json(
-        { error: "Missing job identifier." },
-        { status: 400 }
-      );
-    }
+    // 1) Find an open, public job by slug OR id
+    const job = await prisma.job.findFirst({
+      where: {
+        AND: [
+          { status: "open" as any },
+          { visibility: "public" as any },
+          {
+            OR: [{ slug: slugOrId }, { id: slugOrId }],
+          },
+        ],
+      },
+      select: { id: true },
+    });
 
-    // --- Resolve job id (must be open + public) ---
-    let jobRowId: string | null = null;
-
-    // Try by slug
-    const { data: slugRows, error: slugError } = await supabase
-      .from("jobs")
-      .select("id")
-      .eq("slug", slugOrId)
-      .eq("status", "open")
-      .eq("visibility", "public")
-      .limit(1);
-
-    if (slugError) {
-      console.error("Error loading job by slug in apply route:", slugError);
-    }
-
-    if (slugRows && slugRows.length > 0) {
-      jobRowId = slugRows[0].id as string;
-    } else {
-      // Try by id (UUID)
-      const { data: idRows, error: idError } = await supabase
-        .from("jobs")
-        .select("id")
-        .eq("id", slugOrId)
-        .eq("status", "open")
-        .eq("visibility", "public")
-        .limit(1);
-
-      if (idError) {
-        console.error("Error loading job by id in apply route:", idError);
-      }
-
-      if (idRows && idRows.length > 0) {
-        jobRowId = idRows[0].id as string;
-      }
-    }
-
-    if (!jobRowId) {
+    if (!job) {
       return NextResponse.json(
         {
+          ok: false,
           error:
-            "Job not found or not open/public. Please check that this link is still valid.",
+            "Job not found, closed, or not visible publicly. Please check the job link.",
         },
         { status: 404 }
       );
     }
 
-    // Prefer explicit coverLetter, then headline, then notes
-    const finalCoverLetter =
-      (coverLetter as string | undefined) ||
-      (headline as string | undefined) ||
-      (notes as string | undefined) ||
-      null;
+    // 2) Upsert candidate by email (if your Candidate model uses a different unique field,
+    // adjust the `where` and `create`/`update` structures accordingly)
+    let candidateId: string | null = null;
+    try {
+      const candidate = await prisma.candidate.upsert({
+        where: { email },
+        update: {
+          fullName,
+          phone: phone || undefined,
+          location: location || undefined,
+          linkedinUrl: linkedinUrl || undefined,
+          portfolioUrl: portfolioUrl || undefined,
+        },
+        create: {
+          fullName,
+          email,
+          phone: phone || undefined,
+          location: location || undefined,
+          linkedinUrl: linkedinUrl || undefined,
+          portfolioUrl: portfolioUrl || undefined,
+          source: source || "Website",
+        },
+        select: { id: true },
+      });
 
-    // --- Insert into job_applications ---
-    const { data: inserted, error: insertError } = await supabase
-      .from("job_applications")
-      .insert({
-        job_id: jobRowId,
-        full_name: fullName,
+      candidateId = candidate.id;
+    } catch (err) {
+      console.error("Error creating/updating candidate", err);
+      // If candidate fails for some reason, we still allow application with null candidateId
+    }
+
+    // 3) Create application
+    const application = await prisma.jobApplication.create({
+      data: {
+        jobId: job.id,
+        candidateId,
+        fullName,
         email,
         phone: phone || null,
         location: location || null,
-        linkedin_url: linkedinUrl || null,
-        portfolio_url: portfolioUrl || null,
-        cv_url: cvUrl || null,
-        cover_letter: finalCoverLetter,
+        linkedinUrl: linkedinUrl || null,
+        portfolioUrl: portfolioUrl || null,
+        cvUrl: cvUrl || null, // <- this is what /ats will show as CV link
+        coverLetter: coverLetter || null,
         source: source || "Website",
-        // stage/status/created_at/updated_at should use DB defaults
-      })
-      .select("id")
-      .single();
-
-    if (insertError || !inserted) {
-      console.error("Error inserting job_application:", insertError);
-      // Surface the *actual* Supabase error message so we can see it in the UI
-      const debugMessage =
-        (insertError as any)?.message ||
-        (insertError as any)?.details ||
-        (insertError as any)?.hint ||
-        "Unexpected error while creating your application.";
-
-      return NextResponse.json(
-        { error: debugMessage },
-        { status: 500 }
-      );
-    }
+        stage: "APPLIED" as any,
+        status: "PENDING" as any,
+      },
+      select: { id: true },
+    });
 
     return NextResponse.json(
-      { ok: true, applicationId: inserted.id },
-      { status: 201 }
+      { ok: true, applicationId: application.id },
+      { status: 200 }
     );
   } catch (err: any) {
-    console.error("Apply route unexpected error:", err);
+    console.error("Error creating application", err);
     return NextResponse.json(
       {
-        error:
-          err?.message ||
-          "Unexpected error while creating your application. Please try again.",
+        ok: false,
+        error: "Unexpected error while creating your application.",
+        // helpful when testing locally; hidden in prod UI
+        details:
+          process.env.NODE_ENV === "development"
+            ? String(err?.message ?? err)
+            : undefined,
       },
       { status: 500 }
     );
