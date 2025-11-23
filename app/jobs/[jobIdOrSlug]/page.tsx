@@ -60,7 +60,6 @@ export default async function JobDetailPage({
 }: PageProps) {
   const rawParam = params.jobIdOrSlug;
 
-  // If the param is missing or literally "undefined", treat as 404
   if (!rawParam || rawParam === "undefined") {
     notFound();
   }
@@ -68,7 +67,6 @@ export default async function JobDetailPage({
   const slugOrId = decodeURIComponent(rawParam);
   const isUuid = looksLikeUuid(slugOrId);
 
-  // 1) Build query *only* with columns that exist on `jobs`
   let query = supabaseAdmin
     .from("jobs")
     .select(
@@ -112,74 +110,87 @@ export default async function JobDetailPage({
   const createdLabel = formatDate(job.created_at);
   const employmentTypeLabel = formatEmploymentType(job.employment_type);
 
+  // Light “overview vs rest” split from the single description field
+  let overview: string | null = null;
+  let restBody: string | null = null;
+  if (job.description) {
+    const parts = job.description.split(/\n\s*\n/);
+    overview = parts[0];
+    if (parts.length > 1) {
+      restBody = parts.slice(1).join("\n\n");
+    }
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
-      <Link
-        href="/jobs"
-        className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
-      >
-        ← Back to all jobs
-      </Link>
+      <div className="mb-4 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+        <Link
+          href="/jobs"
+          className="hover:text-slate-700 hover:underline"
+        >
+          ← Back to all jobs
+        </Link>
+        {job.status && (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] text-slate-700">
+            {job.status}
+            {job.visibility ? ` · ${job.visibility}` : ""}
+          </span>
+        )}
+      </div>
 
       {/* Success / error banners */}
       {appliedFlag === "1" && (
-        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           Thank you. Your application has been received.
         </div>
       )}
       {appliedFlag === "0" && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           We couldn&apos;t submit your application. Please try again or email
           your CV directly.
         </div>
       )}
 
-      <article className="mt-6 space-y-8">
+      <article className="space-y-8">
         {/* Header card */}
-        <header className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Open role
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-                {job.title}
-              </h1>
-              {createdLabel && (
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Posted {createdLabel}
-                </p>
-              )}
-            </div>
+        <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Role
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+            {job.title}
+          </h1>
+          {createdLabel && (
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Posted {createdLabel}
+            </p>
+          )}
 
-            <div className="flex flex-col items-start gap-2 text-[11px] text-slate-600 sm:items-end">
-              <div className="flex flex-wrap gap-1">
-                {job.location && (
-                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                    <span className="mr-1" aria-hidden="true">
-                      📍
-                    </span>
-                    {job.location}
-                  </span>
-                )}
-                {employmentTypeLabel && (
-                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                    <span className="mr-1" aria-hidden="true">
-                      💼
-                    </span>
-                    {employmentTypeLabel}
-                  </span>
-                )}
-                {job.seniority && (
-                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                    <span className="mr-1" aria-hidden="true">
-                      ⭐
-                    </span>
-                    {job.seniority}
-                  </span>
-                )}
-              </div>
-            </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-700">
+            {job.location && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                <span aria-hidden="true">📍</span>
+                {job.location}
+              </span>
+            )}
+            {employmentTypeLabel && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                <span aria-hidden="true">💼</span>
+                {employmentTypeLabel}
+              </span>
+            )}
+            {job.seniority && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                <span aria-hidden="true">⭐</span>
+                {job.seniority}
+              </span>
+            )}
+            {job.department && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                <span aria-hidden="true">팀</span>
+                {job.department}
+              </span>
+            )}
           </div>
 
           {job.tags && job.tags.length > 0 && (
@@ -196,49 +207,75 @@ export default async function JobDetailPage({
           )}
         </header>
 
-        {/* Overview / structure, still powered by single description field */}
+        {/* Role content */}
         <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Overview of the role
-            </h2>
-            <p className="mt-1 text-sm text-slate-700">
-              This overview helps candidates quickly understand why the role
-              exists, what success looks like, and how it fits into the wider
-              business. You can refine this copy inside the job description that
-              lives in your ATS.
-            </p>
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Snapshot
-            </h3>
-            <dl className="mt-2 grid gap-3 text-[11px] text-slate-700 sm:grid-cols-2">
-              <div>
-                <dt className="font-medium text-slate-800">Function</dt>
-                <dd>{job.department || "Not specified"}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-800">Location</dt>
-                <dd>{job.location || "Location flexible"}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-800">
-                  Employment type
-                </dt>
-                <dd>{employmentTypeLabel || "Not specified"}</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-slate-800">Seniority</dt>
-                <dd>{job.seniority || "Not specified"}</dd>
-              </div>
-            </dl>
-          </div>
-
-          {job.description && (
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)]">
+            {/* Overview */}
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <h2 className="text-sm font-semibold text-slate-900">
+                About the role
+              </h2>
+              {overview ? (
+                <p className="mt-2 text-sm leading-relaxed text-slate-800 whitespace-pre-line">
+                  {overview}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600">
+                  The hiring company uses this section to summarise why the role
+                  exists and what success looks like. Edit this inside the job
+                  description in your ATS.
+                </p>
+              )}
+            </div>
+
+            {/* Key details */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                At a glance
+              </h3>
+              <dl className="mt-2 space-y-1.5 text-[11px] text-slate-700">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Function</dt>
+                  <dd className="text-right">
+                    {job.department || "Not specified"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Location</dt>
+                  <dd className="text-right">
+                    {job.location || "Location flexible"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Employment type</dt>
+                  <dd className="text-right">
+                    {employmentTypeLabel || "Not specified"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-slate-500">Seniority</dt>
+                  <dd className="text-right">
+                    {job.seniority || "Not specified"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          {restBody && (
+            <div className="border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Full description
+              </h3>
+              <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-800">
+                {restBody}
+              </p>
+            </div>
+          )}
+
+          {!restBody && job.description && (
+            <div className="border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-900">
                 Full description
               </h3>
               <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-800">
@@ -392,7 +429,7 @@ function ApplicationForm({
 
       {/* SECTION 4: SCREENING QUESTIONS */}
       <div className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
           Screening questions
         </h3>
 
