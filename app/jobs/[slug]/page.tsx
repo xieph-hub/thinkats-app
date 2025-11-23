@@ -54,9 +54,8 @@ export default async function JobDetailPage({
 
   const slugOrId = decodeURIComponent(rawParam);
 
-  const isUuid = looksLikeUuid(slugOrId);
-
-  let query = supabaseAdmin
+  // Base query: only open + public jobs
+  const baseQuery = supabaseAdmin
     .from("jobs")
     .select(
       `
@@ -77,20 +76,41 @@ export default async function JobDetailPage({
     .eq("status", "open")
     .eq("visibility", "public");
 
-  if (isUuid) {
-    query = query.eq("id", slugOrId);
-  } else {
-    query = query.eq("slug", slugOrId);
+  let job: JobRow | null = null;
+
+  // 1) Try by slug first (safe text match)
+  const {
+    data: slugData,
+    error: slugError,
+  } = await baseQuery.eq("slug", slugOrId);
+
+  if (slugError) {
+    console.error("Error loading job detail by slug:", {
+      slugOrId,
+      error: slugError,
+    });
+  } else if (slugData && slugData.length > 0) {
+    job = slugData[0] as JobRow;
   }
 
-  const { data, error } = await query.single<JobRow>();
+  // 2) If not found and it looks like a UUID, try by id
+  if (!job && looksLikeUuid(slugOrId)) {
+    const {
+      data: idData,
+      error: idError,
+    } = await baseQuery.eq("id", slugOrId);
 
-  if (error) {
-    console.error("Error loading job detail:", error);
+    if (idError) {
+      console.error("Error loading job detail by id:", {
+        slugOrId,
+        error: idError,
+      });
+    } else if (idData && idData.length > 0) {
+      job = idData[0] as JobRow;
+    }
   }
 
-  const job = data || undefined;
-
+  // Still nothing → 404
   if (!job) {
     notFound();
   }
@@ -165,14 +185,22 @@ export default async function JobDetailPage({
             talent pool and only reach out when there&apos;s a strong match.
           </p>
 
-          <ApplicationForm jobId={job.id} tenantId={job.tenant_id} slug={job.slug} />
+          <ApplicationForm
+            jobId={job.id}
+            tenantId={job.tenant_id}
+            slug={job.slug}
+          />
         </section>
       </article>
     </main>
   );
 }
 
-function ApplicationForm(props: { jobId: string; tenantId: string; slug: string | null }) {
+function ApplicationForm(props: {
+  jobId: string;
+  tenantId: string;
+  slug: string | null;
+}) {
   const { jobId, tenantId, slug } = props;
 
   return (
