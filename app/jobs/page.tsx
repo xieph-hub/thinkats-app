@@ -10,6 +10,7 @@ import {
   Tag as TagIcon,
   ArrowUpRight,
   Building2,
+  Search,
 } from "lucide-react";
 
 export const revalidate = 60;
@@ -26,6 +27,8 @@ type ClientCompany = {
   slug: string | null;
 };
 
+type WorkModeValue = "remote" | "hybrid" | "onsite" | "flexible";
+
 type PublicJob = {
   id: string;
   slug: string | null;
@@ -35,6 +38,7 @@ type PublicJob = {
   seniority: string | null;
   created_at: string;
   tags: string[] | null;
+  work_mode: WorkModeValue | null;
   client_company?: ClientCompany | null;
 };
 
@@ -74,49 +78,100 @@ type WorkModeConfig = {
   dotClass: string;
 };
 
-// Derive Remote / Hybrid / On-site from employment_type + location text
-function getWorkMode(
+function workModeFromValue(value: WorkModeValue | null): WorkModeConfig | null {
+  if (!value) return null;
+
+  switch (value) {
+    case "remote":
+      return {
+        label: "Remote",
+        bgClass: "bg-emerald-50",
+        textClass: "text-emerald-700",
+        dotClass: "bg-emerald-500",
+      };
+    case "hybrid":
+      return {
+        label: "Hybrid",
+        bgClass: "bg-indigo-50",
+        textClass: "text-indigo-700",
+        dotClass: "bg-indigo-500",
+      };
+    case "onsite":
+      return {
+        label: "On-site",
+        bgClass: "bg-orange-50",
+        textClass: "text-orange-700",
+        dotClass: "bg-orange-500",
+      };
+    case "flexible":
+      return {
+        label: "Flexible",
+        bgClass: "bg-sky-50",
+        textClass: "text-sky-700",
+        dotClass: "bg-sky-500",
+      };
+    default:
+      return null;
+  }
+}
+
+// Fallback heuristic from text if work_mode is not set
+function workModeFromText(
   employmentType: string | null,
   location: string | null
 ): WorkModeConfig | null {
   const source = `${employmentType || ""} ${location || ""}`.toLowerCase();
 
   if (source.includes("remote")) {
-    return {
-      label: "Remote",
-      bgClass: "bg-emerald-50",
-      textClass: "text-emerald-700",
-      dotClass: "bg-emerald-500",
-    };
+    return workModeFromValue("remote");
   }
-
   if (source.includes("hybrid")) {
-    return {
-      label: "Hybrid",
-      bgClass: "bg-indigo-50",
-      textClass: "text-indigo-700",
-      dotClass: "bg-indigo-500",
-    };
+    return workModeFromValue("hybrid");
   }
-
   if (
     source.includes("onsite") ||
     source.includes("on-site") ||
     source.includes("on site")
   ) {
-    return {
-      label: "On-site",
-      bgClass: "bg-orange-50",
-      textClass: "text-orange-700",
-      dotClass: "bg-orange-500",
-    };
+    return workModeFromValue("onsite");
   }
 
   return null;
 }
 
-export default async function JobsPage() {
-  const { data, error } = await supabaseAdmin
+function getWorkModeConfig(job: PublicJob): WorkModeConfig | null {
+  return (
+    workModeFromValue(job.work_mode) ||
+    workModeFromText(job.employment_type, job.location)
+  );
+}
+
+type JobsPageProps = {
+  searchParams?: {
+    q?: string | string[];
+    workMode?: string | string[];
+  };
+};
+
+export default async function JobsPage({ searchParams }: JobsPageProps) {
+  const qParam = searchParams?.q;
+  const workModeParam = searchParams?.workMode;
+
+  const q =
+    typeof qParam === "string" && qParam.trim().length > 0
+      ? qParam.trim()
+      : undefined;
+
+  const workModeFilterRaw =
+    typeof workModeParam === "string" && workModeParam !== "all"
+      ? workModeParam
+      : undefined;
+
+  const workModeFilter = (workModeFilterRaw ??
+    undefined) as WorkModeValue | undefined;
+
+  // Build Supabase query with optional filters
+  let query = supabaseAdmin
     .from("jobs")
     .select(
       `
@@ -130,6 +185,7 @@ export default async function JobsPage() {
       visibility,
       created_at,
       tags,
+      work_mode,
       client_company:client_companies (
         name,
         logo_url,
@@ -138,8 +194,22 @@ export default async function JobsPage() {
     `
     )
     .eq("status", "open")
-    .eq("visibility", "public")
-    .order("created_at", { ascending: false });
+    .eq("visibility", "public");
+
+  if (workModeFilter) {
+    query = query.eq("work_mode", workModeFilter);
+  }
+
+  if (q) {
+    // Basic search on title + location
+    query = query.or(
+      `title.ilike.%${q}%,location.ilike.%${q}%`
+    );
+  }
+
+  query = query.order("created_at", { ascending: false });
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Error loading public jobs:", error);
@@ -151,7 +221,7 @@ export default async function JobsPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
       {/* Header / Hero */}
-      <header className="mb-8 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-slate-100 px-5 py-6 shadow-sm">
+      <header className="mb-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-slate-100 px-5 py-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="inline-flex items-center rounded-full bg-slate-900/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-50">
@@ -190,11 +260,71 @@ export default async function JobsPage() {
         </div>
       </header>
 
+      {/* Filter bar */}
+      <section className="mb-5 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <form
+          method="GET"
+          className="flex flex-wrap items-end gap-3"
+        >
+          {/* Search */}
+          <div className="flex-1 min-w-[180px]">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+              Search
+            </label>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2">
+              <Search className="h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                name="q"
+                defaultValue={q ?? ""}
+                placeholder="Search by title or location"
+                className="h-8 w-full border-0 bg-transparent text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+              />
+            </div>
+          </div>
+
+          {/* Work mode filter */}
+          <div className="w-full min-w-[150px] sm:w-auto">
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">
+              Work mode
+            </label>
+            <select
+              name="workMode"
+              defaultValue={workModeFilter ?? "all"}
+              className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-900 focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]/60"
+            >
+              <option value="all">All work modes</option>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="onsite">On-site</option>
+              <option value="flexible">Flexible</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c]"
+            >
+              Apply filters
+            </button>
+            {(q || workModeFilter) && (
+              <Link
+                href="/jobs"
+                className="text-[11px] font-medium text-slate-500 hover:text-slate-800"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+        </form>
+      </section>
+
       {/* Empty state */}
       {jobs.length === 0 ? (
-        <section className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <section className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-600">
           <p>
-            There are no public roles open right now. You can{" "}
+            No roles match your filters. Try clearing filters or{" "}
             <Link
               href="/talent-network"
               className="font-semibold text-[#172965] hover:underline"
@@ -215,7 +345,7 @@ export default async function JobsPage() {
 
             const share = buildShareLinks(slugOrId, job.title);
             const client = job.client_company;
-            const workMode = getWorkMode(job.employment_type, job.location);
+            const workMode = getWorkModeConfig(job);
 
             return (
               <article
