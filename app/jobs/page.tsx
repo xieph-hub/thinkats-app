@@ -23,6 +23,7 @@ type PublicJob = {
   visibility: string | null;
   created_at: string;
   tags: string[] | null;
+  department: string | null; // 👈 added
 };
 
 const BASE_URL =
@@ -72,7 +73,7 @@ function MetaItem({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-// Minimal inline icons so we’re not pulling any extra libraries
+// Minimal inline icons
 function IconLocation() {
   return (
     <svg
@@ -197,7 +198,8 @@ export default async function JobsPage() {
       status,
       visibility,
       created_at,
-      tags
+      tags,
+      department
     `
     )
     .order("created_at", { ascending: false });
