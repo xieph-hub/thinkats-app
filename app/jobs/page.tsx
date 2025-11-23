@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// Force this route to be fully dynamic – always hit Supabase at request time
+// Always hit Supabase at request time
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -25,6 +25,9 @@ type PublicJob = {
   tags: string[] | null;
 };
 
+const BASE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return "";
@@ -45,8 +48,20 @@ function formatEmploymentType(value: string | null) {
   return value;
 }
 
+// Very simple heuristic work-mode from location / tags
+function deriveWorkMode(job: PublicJob): string | null {
+  const loc = (job.location || "").toLowerCase();
+  const tags = (job.tags || []).map((t) => t.toLowerCase());
+
+  if (loc.includes("remote") || tags.includes("remote")) return "Remote";
+  if (loc.includes("hybrid") || tags.includes("hybrid")) return "Hybrid";
+  if (loc.includes("flexible") || tags.includes("flexible")) return "Flexible";
+  if (loc.includes("on-site") || loc.includes("onsite")) return "On-site";
+
+  return null;
+}
+
 export default async function JobsPage() {
-  // 1) Minimal, safe select: ONLY columns we know exist on `jobs`
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
@@ -70,9 +85,6 @@ export default async function JobsPage() {
   }
 
   const jobs = (data ?? []) as PublicJob[];
-
-  console.log("Jobs page – rows returned from Supabase:", jobs.length);
-
   const count = jobs.length;
 
   return (
@@ -114,13 +126,26 @@ export default async function JobsPage() {
             const employmentTypeLabel = formatEmploymentType(
               job.employment_type
             );
+            const workModeLabel = deriveWorkMode(job);
+
+            const jobUrl = `${BASE_URL}/jobs/${encodeURIComponent(slugOrId)}`;
+            const shareText = encodeURIComponent(
+              `${job.title}${
+                job.location ? ` – ${job.location}` : ""
+              } (via Resourcin)`
+            );
+            const encodedUrl = encodeURIComponent(jobUrl);
+
+            const xUrl = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodedUrl}`;
+            const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+            const whatsappUrl = `https://api.whatsapp.com/send?text=${shareText}%20${encodedUrl}`;
 
             return (
               <article
                 key={job.id}
                 className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-2">
                     <h2 className="text-sm font-semibold text-slate-900">
                       <Link
@@ -138,6 +163,15 @@ export default async function JobsPage() {
                             📍
                           </span>
                           {job.location}
+                        </span>
+                      )}
+
+                      {workModeLabel && (
+                        <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-0.5 text-sky-900">
+                          <span className="mr-1" aria-hidden="true">
+                            🏡
+                          </span>
+                          {workModeLabel}
                         </span>
                       )}
 
@@ -182,6 +216,42 @@ export default async function JobsPage() {
                         ))}
                       </div>
                     )}
+
+                    {/* Social share */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                      <span className="font-medium text-slate-600">
+                        Share:
+                      </span>
+                      <a
+                        href={xUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-[#172965]"
+                      >
+                        <span aria-hidden="true">𝕏</span>
+                        <span>X</span>
+                      </a>
+                      <span className="text-slate-300">•</span>
+                      <a
+                        href={linkedInUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-[#172965]"
+                      >
+                        <span aria-hidden="true">in</span>
+                        <span>LinkedIn</span>
+                      </a>
+                      <span className="text-slate-300">•</span>
+                      <a
+                        href={whatsappUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 hover:text-[#172965]"
+                      >
+                        <span aria-hidden="true">🟢</span>
+                        <span>WhatsApp</span>
+                      </a>
+                    </div>
                   </div>
 
                   <div className="flex flex-col items-start gap-1 text-[11px] text-slate-500 sm:items-end">
