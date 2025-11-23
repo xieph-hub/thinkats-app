@@ -1,141 +1,194 @@
 // app/jobs/[slug]/page.tsx
-import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 import ApplyForm from "./ApplyForm";
 
-type JobRow = {
+type JobDetail = {
   id: string;
   slug: string | null;
   title: string;
+  department: string | null;
   location: string | null;
+  employmentType: string | null;
+  seniority: string | null;
   description: string | null;
-  function?: string | null;
-  employment_type?: string | null;
+  tags: string[] | null;
+  createdAt: string | null;
 };
 
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+type JobPageProps = {
+  params: { slug: string };
+};
 
-  if (!url) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
-  }
+async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
+  const supabase = await createSupabaseServerClient();
 
-  const key = serviceKey || anonKey;
-  if (!key) {
-    throw new Error(
-      "Neither SUPABASE_SERVICE_ROLE_KEY nor NEXT_PUBLIC_SUPABASE_ANON_KEY is set"
-    );
-  }
+  const selectCols = `
+    id,
+    slug,
+    title,
+    department,
+    location,
+    employment_type,
+    seniority,
+    description,
+    tags,
+    created_at,
+    status,
+    visibility
+  `;
 
-  return createClient(url, key);
-}
-
-async function fetchPublicJob(slugOrId: string): Promise<JobRow | null> {
-  const supabase = getSupabaseAdmin();
-
-  const looksLikeUuid =
-    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-      slugOrId
-    );
-
-  let query = supabase
+  // 1) Try by slug
+  let { data, error } = await supabase
     .from("jobs")
-    .select(
-      "id, slug, title, location, description, function, employment_type, status, visibility"
-    )
+    .select(selectCols)
+    .eq("slug", slugOrId)
     .eq("status", "open")
     .eq("visibility", "public")
     .limit(1);
 
-  if (looksLikeUuid) {
-    query = query.eq("id", slugOrId);
-  } else {
-    query = query.eq("slug", slugOrId);
+  if (error) {
+    console.error("Error loading public job by slug:", error);
   }
 
-  const { data, error } = await query;
+  if (data && data.length > 0) {
+    const row: any = data[0];
+    return {
+      id: row.id,
+      slug: row.slug ?? null,
+      title: row.title,
+      department: row.department ?? null,
+      location: row.location ?? null,
+      employmentType: row.employment_type ?? null,
+      seniority: row.seniority ?? null,
+      description: row.description ?? null,
+      tags: row.tags ?? null,
+      createdAt: row.created_at ?? null,
+    };
+  }
 
-  if (error) {
-    console.error("Error loading public job for /jobs/[slug]:", error);
+  // 2) Fallback by id (UUID path)
+  const { data: dataById, error: errorById } = await supabase
+    .from("jobs")
+    .select(selectCols)
+    .eq("id", slugOrId)
+    .eq("status", "open")
+    .eq("visibility", "public")
+    .limit(1);
+
+  if (errorById) {
+    console.error("Error loading public job by id:", errorById);
+  }
+
+  if (!dataById || dataById.length === 0) {
     return null;
   }
 
-  if (!data || data.length === 0) return null;
-
-  const row: any = data[0];
+  const row: any = dataById[0];
 
   return {
     id: row.id,
     slug: row.slug ?? null,
     title: row.title,
+    department: row.department ?? null,
     location: row.location ?? null,
+    employmentType: row.employment_type ?? null,
+    seniority: row.seniority ?? null,
     description: row.description ?? null,
-    function: row.function ?? null,
-    employment_type: row.employment_type ?? null,
+    tags: row.tags ?? null,
+    createdAt: row.created_at ?? null,
   };
 }
 
-export default async function JobDetailPage({
-  params,
-}: {
-  params: { slug: string };
-}) {
+export default async function PublicJobPage({ params }: JobPageProps) {
   const job = await fetchPublicJob(params.slug);
 
   if (!job) {
-    notFound();
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Role not found
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          This job may have been closed or is no longer visible.
+        </p>
+        <div className="mt-4">
+          <Link
+            href="/jobs"
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            ← Back to all jobs
+          </Link>
+        </div>
+      </main>
+    );
   }
 
-  const slugOrId = job.slug ?? job.id;
+  const slugOrId = job.slug || job.id;
+
+  const createdLabel = job.createdAt
+    ? new Date(job.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : null;
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-10">
-      <nav className="mb-4 text-xs text-slate-500">
-        <Link href="/jobs" className="hover:text-[#172965]">
+    <main className="mx-auto max-w-3xl px-4 py-12">
+      <div className="mb-6">
+        <Link
+          href="/jobs"
+          className="text-xs font-medium text-[#172965] hover:underline"
+        >
           ← Back to all jobs
         </Link>
-      </nav>
+      </div>
 
-      <header className="mb-6">
+      <header className="mb-6 space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-          {job.title}
-        </h1>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          {job.location && (
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5">
-              {job.location}
+        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
+        <p className="text-xs text-slate-500">
+          {job.location || "Location flexible"}
+          {job.department ? ` • ${job.department}` : ""}
+          {job.seniority ? ` • ${job.seniority}` : ""}
+        </p>
+        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+          {job.employmentType && (
+            <span className="rounded-full border border-slate-200 px-3 py-1">
+              {job.employmentType}
             </span>
           )}
-          {job.employment_type && (
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5">
-              {job.employment_type}
-            </span>
-          )}
-          {job.function && (
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5">
-              {job.function}
+          {createdLabel && (
+            <span className="rounded-full border border-slate-200 px-3 py-1">
+              Posted {createdLabel}
             </span>
           )}
         </div>
       </header>
 
       <section className="prose prose-sm max-w-none text-slate-800">
-        {job.description ? (
-          <p style={{ whiteSpace: "pre-wrap" }}>{job.description}</p>
-        ) : (
-          <p className="text-sm text-slate-600">
-            No detailed description has been added for this role yet.
-          </p>
-        )}
+        <div className="whitespace-pre-line text-sm leading-relaxed">
+          {job.description || "No description provided yet."}
+        </div>
       </section>
 
-      {/* Inline apply form */}
+      {job.tags && job.tags.length > 0 && (
+        <section className="mt-4 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
+          {job.tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full bg-slate-50 px-2.5 py-1"
+            >
+              {tag}
+            </span>
+          ))}
+        </section>
+      )}
+
+      {/* Inline apply form (NO /jobs/[slug]/apply page needed) */}
       <ApplyForm jobSlug={slugOrId} jobTitle={job.title} />
     </main>
   );
