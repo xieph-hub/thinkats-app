@@ -3,15 +3,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+export const dynamic = "force-dynamic";
+
 type PageProps = {
   params: { jobIdOrSlug: string };
   searchParams?: { applied?: string };
-};
-
-type ClientCompanyRow = {
-  name: string | null;
-  logo_url: string | null;
-  slug: string | null;
 };
 
 type JobRow = {
@@ -19,27 +15,15 @@ type JobRow = {
   tenant_id: string;
   slug: string | null;
   title: string;
-  short_description: string | null;
   location: string | null;
-  location_type: string | null;
   employment_type: string | null;
   seniority: string | null;
-  experience_level: string | null;
   department: string | null;
   description: string | null;
   status: string | null;
   visibility: string | null;
-  work_mode: string | null; // remote / hybrid / onsite / flexible
-  salary_min: number | null;
-  salary_max: number | null;
-  salary_currency: string | null;
-  salary_visible: boolean | null;
-  required_skills: string[] | null;
-  education_required: string | null;
-  education_field: string | null;
   tags: string[] | null;
   created_at: string | null;
-  client_company: ClientCompanyRow[] | null; // NOTE: Supabase nested select returns an array
 };
 
 function formatDate(dateStr: string | null) {
@@ -53,23 +37,11 @@ function formatDate(dateStr: string | null) {
   });
 }
 
-function formatWorkMode(workMode: string | null, locationType: string | null) {
-  const value = (workMode || locationType || "").toLowerCase();
-  if (!value) return null;
-
-  switch (value) {
-    case "remote":
-      return "Remote";
-    case "hybrid":
-      return "Hybrid";
-    case "onsite":
-    case "on-site":
-      return "On-site";
-    case "flexible":
-      return "Flexible";
-    default:
-      return null;
-  }
+// simple UUID pattern: 8-4-4-4-12 hex segments
+function looksLikeUuid(value: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value
+  );
 }
 
 function formatEmploymentType(value: string | null) {
@@ -82,51 +54,13 @@ function formatEmploymentType(value: string | null) {
   return value;
 }
 
-function formatSalaryRange(
-  min: number | null,
-  max: number | null,
-  currency: string | null
-) {
-  if (!min && !max) return null;
-
-  const symbol =
-    currency === "USD"
-      ? "$"
-      : currency === "GBP"
-      ? "£"
-      : currency === "EUR"
-      ? "€"
-      : "₦";
-
-  const fmt = (val: number | null) =>
-    typeof val === "number"
-      ? `${symbol}${val.toLocaleString("en-NG", {
-          maximumFractionDigits: 0,
-        })}`
-      : null;
-
-  const minStr = fmt(min);
-  const maxStr = fmt(max);
-
-  if (minStr && maxStr) return `${minStr} – ${maxStr}`;
-  if (minStr) return `From ${minStr}`;
-  if (maxStr) return `Up to ${maxStr}`;
-  return null;
-}
-
-// Simple UUID pattern: 8-4-4-4-12 hex
-function looksLikeUuid(value: string) {
-  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-    value
-  );
-}
-
 export default async function JobDetailPage({
   params,
   searchParams,
 }: PageProps) {
   const rawParam = params.jobIdOrSlug;
 
+  // If the param is missing or literally "undefined", treat as 404
   if (!rawParam || rawParam === "undefined") {
     notFound();
   }
@@ -134,7 +68,7 @@ export default async function JobDetailPage({
   const slugOrId = decodeURIComponent(rawParam);
   const isUuid = looksLikeUuid(slugOrId);
 
-  // 1) Build base query
+  // 1) Build query *only* with columns that exist on `jobs`
   let query = supabaseAdmin
     .from("jobs")
     .select(
@@ -143,35 +77,18 @@ export default async function JobDetailPage({
       tenant_id,
       slug,
       title,
-      short_description,
       location,
-      location_type,
       employment_type,
       seniority,
-      experience_level,
       department,
       description,
       status,
       visibility,
-      work_mode,
-      salary_min,
-      salary_max,
-      salary_currency,
-      salary_visible,
-      required_skills,
-      education_required,
-      education_field,
       tags,
-      created_at,
-      client_company (
-        name,
-        logo_url,
-        slug
-      )
+      created_at
     `
     )
-    .eq("status", "open")
-    .eq("visibility", "public");
+    .limit(1);
 
   if (isUuid) {
     query = query.eq("id", slugOrId);
@@ -182,7 +99,7 @@ export default async function JobDetailPage({
   const { data, error } = await query.maybeSingle();
 
   if (error) {
-    console.error("Error loading job detail:", error);
+    console.error("Job detail – error loading job:", error);
   }
 
   const job = (data as JobRow | null) ?? null;
@@ -193,14 +110,7 @@ export default async function JobDetailPage({
 
   const appliedFlag = searchParams?.applied;
   const createdLabel = formatDate(job.created_at);
-  const workModeLabel = formatWorkMode(job.work_mode, job.location_type);
   const employmentTypeLabel = formatEmploymentType(job.employment_type);
-  const salaryLabel =
-    job.salary_visible === true
-      ? formatSalaryRange(job.salary_min, job.salary_max, job.salary_currency)
-      : null;
-
-  const company = job.client_company?.[0] ?? null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -217,7 +127,6 @@ export default async function JobDetailPage({
           Thank you. Your application has been received.
         </div>
       )}
-
       {appliedFlag === "0" && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           We couldn&apos;t submit your application. Please try again or email
@@ -225,27 +134,17 @@ export default async function JobDetailPage({
         </div>
       )}
 
-      {/* Job header */}
       <article className="mt-6 space-y-8">
+        {/* Header card */}
         <header className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                {company?.name ? "Open role · Client" : "Open role"}
+                Open role
               </p>
               <h1 className="mt-1 text-2xl font-semibold text-slate-900">
                 {job.title}
               </h1>
-              {company?.name && (
-                <p className="mt-1 text-sm font-medium text-slate-800">
-                  {company.name}
-                </p>
-              )}
-              {job.short_description && (
-                <p className="mt-2 text-sm text-slate-700">
-                  {job.short_description}
-                </p>
-              )}
               {createdLabel && (
                 <p className="mt-1 text-[11px] text-slate-500">
                   Posted {createdLabel}
@@ -263,17 +162,6 @@ export default async function JobDetailPage({
                     {job.location}
                   </span>
                 )}
-                {workModeLabel && (
-                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                    <span className="mr-1" aria-hidden="true">
-                      🏡
-                    </span>
-                    {workModeLabel}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-1">
                 {employmentTypeLabel && (
                   <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                     <span className="mr-1" aria-hidden="true">
@@ -291,64 +179,36 @@ export default async function JobDetailPage({
                   </span>
                 )}
               </div>
-
-              {salaryLabel && (
-                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-medium text-emerald-800">
-                  💰 {salaryLabel} / year
-                </span>
-              )}
             </div>
           </div>
 
-          {/* Tags / skills */}
-          {(job.tags && job.tags.length > 0) ||
-          (job.required_skills && job.required_skills.length > 0) ? (
+          {job.tags && job.tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1">
-              {job.tags?.map((tag) => (
+              {job.tags.map((tag) => (
                 <span
-                  key={`tag-${tag}`}
+                  key={tag}
                   className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700"
                 >
                   #{tag}
                 </span>
               ))}
-              {job.required_skills?.map((skill) => (
-                <span
-                  key={`skill-${skill}`}
-                  className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-medium text-[#172965]"
-                >
-                  {skill}
-                </span>
-              ))}
             </div>
-          ) : null}
+          )}
         </header>
 
-        {/* Overview sections – we still use job.description as the main body */}
+        {/* Overview / structure, still powered by single description field */}
         <section className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">
               Overview of the role
             </h2>
             <p className="mt-1 text-sm text-slate-700">
-              This section summarises why the role exists, what success looks
-              like, and how it fits into the wider business. Use the full job
-              description below to tailor this further when you brief candidates.
+              This overview helps candidates quickly understand why the role
+              exists, what success looks like, and how it fits into the wider
+              business. You can refine this copy inside the job description that
+              lives in your ATS.
             </p>
           </div>
-
-          {company?.name && (
-            <div>
-              <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                About the client
-              </h3>
-              <p className="mt-1 text-sm text-slate-700">
-                {company.name} is partnering with Resourcin to hire for this
-                role. Full client details are shared with shortlisted
-                candidates once there is a strong fit.
-              </p>
-            </div>
-          )}
 
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -364,28 +224,18 @@ export default async function JobDetailPage({
                 <dd>{job.location || "Location flexible"}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-800">Employment type</dt>
+                <dt className="font-medium text-slate-800">
+                  Employment type
+                </dt>
                 <dd>{employmentTypeLabel || "Not specified"}</dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-800">Experience level</dt>
-                <dd>{job.experience_level || "Not specified"}</dd>
+                <dt className="font-medium text-slate-800">Seniority</dt>
+                <dd>{job.seniority || "Not specified"}</dd>
               </div>
-              {job.education_required && (
-                <div>
-                  <dt className="font-medium text-slate-800">
-                    Education required
-                  </dt>
-                  <dd>
-                    {job.education_required}
-                    {job.education_field ? ` – ${job.education_field}` : ""}
-                  </dd>
-                </div>
-              )}
             </dl>
           </div>
 
-          {/* Full description as authored in ATS */}
           {job.description && (
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
