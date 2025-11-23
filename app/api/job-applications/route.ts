@@ -60,10 +60,8 @@ export async function POST(req: NextRequest) {
         } else {
           const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           if (baseUrl) {
-            // if the bucket is public, this will be directly accessible
             cvUrl = `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${filePath}`;
           } else {
-            // fallback to just storing the path
             cvUrl = filePath;
           }
         }
@@ -102,10 +100,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Success → back to job page with success flag
+    // ✅ Success → go to clean thank-you page
     return NextResponse.redirect(
       new URL(
-        `/jobs/${encodeURIComponent(jobSlug || jobId)}?applied=1`,
+        `/jobs/${encodeURIComponent(jobSlug || jobId)}/applied`,
         req.url
       )
     );
