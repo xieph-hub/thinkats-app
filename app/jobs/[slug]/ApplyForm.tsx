@@ -15,8 +15,6 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (isSubmitting) return;
-
     setApiError(null);
     setSuccess(false);
     setIsSubmitting(true);
@@ -25,17 +23,16 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
-      const getString = (key: string): string | undefined => {
-        const value = formData.get(key);
+      const getString = (name: string): string | undefined => {
+        const value = formData.get(name);
         if (typeof value !== "string") return undefined;
         const trimmed = value.trim();
         return trimmed.length > 0 ? trimmed : undefined;
       };
 
       const payload = {
-        jobSlugOrId: jobSlug,
-        fullName: getString("fullName") || "",
-        email: getString("email") || "",
+        fullName: getString("fullName") ?? "",
+        email: getString("email") ?? "",
         phone: getString("phone"),
         location: getString("location"),
         linkedinUrl: getString("linkedinUrl"),
@@ -49,7 +46,7 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
         throw new Error("Full name and email are required.");
       }
 
-      const res = await fetch("/api/apply", {
+      const res = await fetch(`/api/jobs/${encodeURIComponent(jobSlug)}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -59,19 +56,19 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
       try {
         body = await res.json();
       } catch {
-        // ignore JSON parsing issues
+        // ignore JSON parse error
       }
 
       if (!res.ok || body?.error) {
         const message =
-          body?.error || `Failed to submit application (status ${res.status}).`;
+          body?.error ||
+          `Failed to submit application (status ${res.status}).`;
         throw new Error(message);
       }
 
       setSuccess(true);
       form.reset();
     } catch (err: any) {
-      console.error("Apply form error", err);
       setApiError(err?.message || "Something went wrong.");
     } finally {
       setIsSubmitting(false);
@@ -176,10 +173,6 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
             placeholder="https://..."
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
           />
-          <p className="mt-1 text-[11px] text-slate-500">
-            For now, paste a link to your CV. We&apos;ll reintroduce file upload
-            once this flow is rock-solid.
-          </p>
         </div>
 
         {/* Cover letter */}
@@ -194,7 +187,6 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
           />
         </div>
 
-        {/* Errors / success */}
         {apiError && (
           <p className="text-xs text-red-600">
             {apiError}
@@ -203,8 +195,8 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
 
         {success && (
           <p className="text-xs text-emerald-700">
-            Application submitted. We&apos;ll review and reach out if there&apos;s a
-            fit.
+            Thank you for your interest in the role. Your application has been
+            received. We&apos;ll be in touch if there&apos;s a strong match.
           </p>
         )}
 
