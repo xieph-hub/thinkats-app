@@ -3,18 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export const revalidate = 60;
+// Force this route to be fully dynamic – always hit Supabase at request time
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Jobs | Resourcin",
   description:
     "Open roles managed by Resourcin across Africa and beyond. Browse and apply without creating an account.",
-};
-
-type ClientCompanyRow = {
-  name: string | null;
-  logo_url: string | null;
-  slug: string | null;
 };
 
 type PublicJob = {
@@ -28,8 +23,6 @@ type PublicJob = {
   visibility: string | null;
   created_at: string;
   tags: string[] | null;
-  work_mode: string | null; // remote / hybrid / onsite / flexible
-  client_company: ClientCompanyRow[] | null; // NOTE: Supabase nested select returns an array
 };
 
 function formatDate(dateStr: string) {
@@ -40,16 +33,6 @@ function formatDate(dateStr: string) {
     month: "short",
     day: "2-digit",
   });
-}
-
-function formatWorkMode(workMode: string | null) {
-  if (!workMode) return null;
-  const v = workMode.toLowerCase();
-  if (v === "remote") return "Remote";
-  if (v === "hybrid") return "Hybrid";
-  if (v === "onsite" || v === "on-site") return "On-site";
-  if (v === "flexible") return "Flexible";
-  return workMode;
 }
 
 function formatEmploymentType(value: string | null) {
@@ -63,6 +46,7 @@ function formatEmploymentType(value: string | null) {
 }
 
 export default async function JobsPage() {
+  // 1) Minimal, safe select: ONLY columns we know exist on `jobs`
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
@@ -76,24 +60,19 @@ export default async function JobsPage() {
       status,
       visibility,
       created_at,
-      tags,
-      work_mode,
-      client_company (
-        name,
-        logo_url,
-        slug
-      )
+      tags
     `
     )
-    .eq("status", "open")
-    .eq("visibility", "public")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error loading public jobs:", error);
+    console.error("Jobs page – error loading jobs:", error);
   }
 
   const jobs = (data ?? []) as PublicJob[];
+
+  console.log("Jobs page – rows returned from Supabase:", jobs.length);
+
   const count = jobs.length;
 
   return (
@@ -112,36 +91,29 @@ export default async function JobsPage() {
         </p>
         {count > 0 && (
           <p className="mt-1 text-[11px] text-slate-500">
-            Showing {count} open role{count === 1 ? "" : "s"}.
+            Showing {count} role{count === 1 ? "" : "s"} from your ATS.
           </p>
         )}
       </header>
 
       {count === 0 ? (
         <p className="mt-8 text-sm text-slate-500">
-          No public roles are currently open. Check back soon or{" "}
-          <Link
-            href="/talent-network"
-            className="font-medium text-[#172965] hover:underline"
-          >
-            join our talent network
-          </Link>
-          .
+          No jobs found in your{" "}
+          <code className="rounded bg-slate-100 px-1 text-[11px]">jobs</code>{" "}
+          table. Once you create roles in the ATS, they&apos;ll appear here.
         </p>
       ) : (
         <section className="mt-6 space-y-4">
           {jobs.map((job) => {
             const slugOrId = job.slug || job.id;
             if (!slugOrId) {
-              console.warn("Job missing slug and id", job);
+              console.warn("Jobs page – job missing slug and id", job);
               return null;
             }
 
-            const workModeLabel = formatWorkMode(job.work_mode);
             const employmentTypeLabel = formatEmploymentType(
               job.employment_type
             );
-            const company = job.client_company?.[0] ?? null;
 
             return (
               <article
@@ -150,24 +122,15 @@ export default async function JobsPage() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-2">
-                    {/* Company + title */}
-                    <div>
-                      {company?.name && (
-                        <p className="text-[11px] font-medium text-slate-600">
-                          {company.name}
-                        </p>
-                      )}
-                      <h2 className="text-sm font-semibold text-slate-900">
-                        <Link
-                          href={`/jobs/${encodeURIComponent(slugOrId)}`}
-                          className="hover:underline"
-                        >
-                          {job.title}
-                        </Link>
-                      </h2>
-                    </div>
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      <Link
+                        href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                        className="hover:underline"
+                      >
+                        {job.title}
+                      </Link>
+                    </h2>
 
-                    {/* Meta chips */}
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                       {job.location && (
                         <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5">
@@ -175,15 +138,6 @@ export default async function JobsPage() {
                             📍
                           </span>
                           {job.location}
-                        </span>
-                      )}
-
-                      {workModeLabel && (
-                        <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-0.5 text-sky-900">
-                          <span className="mr-1" aria-hidden="true">
-                            🏡
-                          </span>
-                          {workModeLabel}
                         </span>
                       )}
 
@@ -204,9 +158,18 @@ export default async function JobsPage() {
                           {job.seniority}
                         </span>
                       )}
+
+                      {job.status && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-700">
+                          <span className="mr-1" aria-hidden="true">
+                            📌
+                          </span>
+                          {job.status}
+                          {job.visibility ? ` · ${job.visibility}` : ""}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Tags */}
                     {job.tags && job.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {job.tags.map((tag) => (
@@ -221,7 +184,6 @@ export default async function JobsPage() {
                     )}
                   </div>
 
-                  {/* Right column: date + CTA */}
                   <div className="flex flex-col items-start gap-1 text-[11px] text-slate-500 sm:items-end">
                     <span>Posted {formatDate(job.created_at)}</span>
                     <Link
