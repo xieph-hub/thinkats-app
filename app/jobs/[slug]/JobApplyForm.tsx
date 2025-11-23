@@ -4,10 +4,11 @@ import { useRef, useState } from "react";
 
 type JobApplyFormProps = {
   slug: string;
+  jobId: string;
   jobTitle: string;
 };
 
-export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
+export default function JobApplyForm({ slug, jobId, jobTitle }: JobApplyFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -58,12 +59,12 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         try {
           uploadData = await uploadRes.json();
         } catch {
-          // ignore JSON parse error
+          // ignore parse error
         }
 
         if (!uploadRes.ok || uploadData?.error) {
           console.error("CV upload failed", uploadData?.error);
-          // We let the application go through even if upload fails
+          // Let the application proceed even if upload fails
         } else if (typeof uploadData.url === "string") {
           uploadedCvUrl = uploadData.url;
         }
@@ -77,7 +78,8 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
       };
 
       const payload: any = {
-        jobSlug: slug,
+        jobId,           // <— we send the real job_id
+        jobSlug: slug,   // <— also send slug as metadata
         fullName: getString("fullName"),
         email: getString("email"),
         phone: getString("phone"),
@@ -86,9 +88,10 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         portfolioUrl: getString("portfolioUrl"),
         headline: getString("headline"),
         notes: getString("notes"),
-        // optional source override if we add it later
+        source: "Website",
       };
 
+      // Prefer uploaded CV URL; fall back to manual link field
       const cvUrlField = getString("cvUrl");
       if (uploadedCvUrl) {
         payload.cvUrl = uploadedCvUrl;
@@ -108,7 +111,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
       try {
         data = await res.json();
       } catch {
-        // ignore json parse issues
+        // ignore JSON errors
       }
 
       if (!res.ok || data?.error) {
