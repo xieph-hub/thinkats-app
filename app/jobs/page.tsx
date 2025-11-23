@@ -23,7 +23,7 @@ type PublicJob = {
   visibility: string | null;
   created_at: string;
   tags: string[] | null;
-  department: string | null; // from your jobs table
+  department: string | null;
 };
 
 const BASE_URL =
@@ -49,7 +49,6 @@ function formatEmploymentType(value: string | null) {
   return value;
 }
 
-// Very simple work-mode heuristic using location/tags
 function deriveWorkMode(job: PublicJob): string | null {
   const loc = (job.location || "").toLowerCase();
   const tags = (job.tags || []).map((t) => t.toLowerCase());
@@ -73,7 +72,6 @@ function MetaItem({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-// Minimal inline icons – clean, not noisy
 function IconLocation() {
   return (
     <svg
@@ -238,4 +236,128 @@ export default async function JobsPage() {
           table yet. Once you create roles in the ATS, they&apos;ll appear here.
         </p>
       ) : (
-        <section className="mt-4 spa
+        <section className="mt-4 space-y-4">
+          {jobs.map((job) => {
+            const slugOrId = job.slug || job.id;
+            if (!slugOrId) {
+              console.warn("Jobs page – job missing slug and id", job);
+              return null;
+            }
+
+            const employmentTypeLabel = formatEmploymentType(
+              job.employment_type
+            );
+            const workModeLabel = deriveWorkMode(job);
+
+            const jobUrl = `${BASE_URL}/jobs/${encodeURIComponent(slugOrId)}`;
+            const shareText = encodeURIComponent(
+              `${job.title}${
+                job.location ? ` – ${job.location}` : ""
+              } (via Resourcin)`
+            );
+            const encodedUrl = encodeURIComponent(jobUrl);
+
+            const xUrl = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodedUrl}`;
+            const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+            const whatsappUrl = `https://api.whatsapp.com/send?text=${shareText}%20${encodedUrl}`;
+
+            return (
+              <article
+                key={job.id}
+                className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm ring-1 ring-transparent transition hover:border-[#172965]/70 hover:bg-white hover:shadow-md hover:ring-[#172965]/5"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-2">
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">
+                        <Link
+                          href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                          className="hover:underline"
+                        >
+                          {job.title}
+                        </Link>
+                      </h2>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {job.department || "Client role"}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {job.location && (
+                        <MetaItem
+                          icon={<IconLocation />}
+                          label={job.location}
+                        />
+                      )}
+                      {workModeLabel && (
+                        <MetaItem icon={<IconGlobe />} label={workModeLabel} />
+                      )}
+                      {employmentTypeLabel && (
+                        <MetaItem
+                          icon={<IconBriefcase />}
+                          label={employmentTypeLabel}
+                        />
+                      )}
+                      {job.seniority && (
+                        <MetaItem icon={<IconStar />} label={job.seniority} />
+                      )}
+                    </div>
+
+                    {job.tags && job.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {job.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                      <span className="font-medium text-slate-600">
+                        Share this role:
+                      </span>
+                      <SharePill href={xUrl} label="Post on X" short="𝕏" />
+                      <SharePill
+                        href={linkedInUrl}
+                        label="Share on LinkedIn"
+                        short="in"
+                      />
+                      <SharePill
+                        href={whatsappUrl}
+                        label="Send on WhatsApp"
+                        short="wa"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-start gap-2 text-[11px] text-slate-500 sm:items-end">
+                    <span>Posted {formatDate(job.created_at)}</span>
+                    {(job.status || job.visibility) && (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] text-slate-700">
+                        {job.status || "unspecified"}
+                        {job.visibility ? ` · ${job.visibility}` : ""}
+                      </span>
+                    )}
+                    <Link
+                      href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                      className="mt-1 inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] transition"
+                    >
+                      View role
+                      <span className="ml-1 text-[11px]" aria-hidden="true">
+                        →
+                      </span>
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
+    </main>
+  );
+}
