@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 
 type JobApplyFormProps = {
   slug: string;
@@ -11,18 +11,17 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
-  // This marks where we scroll to when there is a status message
-  const statusRef = useRef<HTMLDivElement | null>(null);
-
-  function scrollToStatus() {
-    if (statusRef.current) {
-      statusRef.current.scrollIntoView({
+  const scrollToFormTop = () => {
+    if (typeof window === "undefined") return;
+    if (formRef.current) {
+      formRef.current.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     }
-  }
+  };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -36,7 +35,7 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
     const formData = new FormData(form);
 
     try {
-      // 1) Try to upload CV file first (if provided)
+      // 1) Upload CV file (optional)
       let uploadedCvUrl: string | null = null;
       const cvFile = formData.get("cvFile") as File | null;
       const emailValue = formData.get("email");
@@ -64,13 +63,12 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
 
         if (!uploadRes.ok || uploadData?.error) {
           console.error("CV upload failed", uploadData?.error);
-          // Don't block the whole application if upload fails
+          // We let the application go through even if upload fails
         } else if (typeof uploadData.url === "string") {
           uploadedCvUrl = uploadData.url;
         }
       }
 
-      // 2) Build payload for the application
       const getString = (key: string): string | undefined => {
         const value = formData.get(key);
         if (typeof value !== "string") return undefined;
@@ -88,9 +86,9 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         portfolioUrl: getString("portfolioUrl"),
         headline: getString("headline"),
         notes: getString("notes"),
+        // optional source override if we add it later
       };
 
-      // Prefer uploaded URL; fall back to manual link field if present
       const cvUrlField = getString("cvUrl");
       if (uploadedCvUrl) {
         payload.cvUrl = uploadedCvUrl;
@@ -98,40 +96,37 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
         payload.cvUrl = cvUrlField;
       }
 
-      const res = await fetch(
-        `/api/jobs/${encodeURIComponent(slug)}/apply`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch(`/api/jobs/${encodeURIComponent(slug)}/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
       let data: any = {};
       try {
         data = await res.json();
       } catch {
-        // ignore JSON parse error
+        // ignore json parse issues
       }
 
       if (!res.ok || data?.error) {
         setErrorMessage(
           data?.error || "Unexpected error while submitting application."
         );
-        scrollToStatus();
+        scrollToFormTop();
       } else {
         setSuccessMessage(
           "Thank you for your interest in the role. Your application has been received. We'll be in touch if there's a strong match."
         );
         form.reset();
-        scrollToStatus();
+        scrollToFormTop();
       }
     } catch (err) {
       console.error("Application submit error", err);
       setErrorMessage("Unexpected error while submitting application.");
-      scrollToStatus();
+      scrollToFormTop();
     } finally {
       setSubmitting(false);
     }
@@ -139,13 +134,11 @@ export default function JobApplyForm({ slug, jobTitle }: JobApplyFormProps) {
 
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
       className="space-y-5"
       encType="multipart/form-data"
     >
-      {/* Anchor for scrolling */}
-      <div ref={statusRef} />
-
       {successMessage && (
         <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {successMessage}
