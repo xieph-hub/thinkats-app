@@ -7,10 +7,10 @@ type RouteParams = {
 };
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  try {
-    const slugOrId = params.slug;
+  const slugOrId = params.slug;
 
-    let body: any;
+  try {
+    let body: any = null;
     try {
       body = await req.json();
     } catch {
@@ -21,6 +21,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     const {
+      jobId,      // optional, if we send it from the form
+      jobSlug,    // optional
       fullName,
       email,
       phone,
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Combine any long-form text fields into cover_letter
+    // Combine any "long text" into cover_letter
     const combinedCoverLetter: string | null =
       (typeof coverLetter === "string" && coverLetter.trim().length > 0
         ? coverLetter.trim()
@@ -54,43 +56,52 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         : null) ??
       null;
 
-    // 1) Look up an open, public job by slug OR id
-    const { data: jobs, error: jobError } = await supabaseAdmin
-      .from("jobs")
-      .select("id,status,visibility")
-      .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
-      .limit(1);
+    // Figure out job_id
+    let finalJobId: string | null = jobId ?? null;
 
-    if (jobError) {
-      console.error("Job lookup error in /api/jobs/[slug]/apply:", jobError);
-      return NextResponse.json(
-        { error: "Could not look up job." },
-        { status: 500 }
-      );
-    }
+    // If we didn't get jobId from the client, fall back to a lookup by slug / id
+    if (!finalJobId) {
+      const identifier = jobSlug || slugOrId;
 
-    const job = jobs?.[0];
+      const { data: jobs, error: jobError } = await supabaseAdmin
+        .from("jobs")
+        .select("id,status,visibility")
+        .or(`slug.eq.${identifier},id.eq.${identifier}`)
+        .limit(1);
 
-    if (!job) {
-      return NextResponse.json(
-        { error: "Job not found." },
-        { status: 404 }
-      );
-    }
+      if (jobError) {
+        console.error("Job lookup error in /api/jobs/[slug]/apply:", jobError);
+        return NextResponse.json(
+          { error: "Could not look up job." },
+          { status: 500 }
+        );
+      }
 
-    if (job.status !== "open" || job.visibility !== "public") {
-      return NextResponse.json(
-        { error: "This job is not accepting applications." },
-        { status: 400 }
-      );
+      const job = jobs?.[0];
+
+      if (!job) {
+        return NextResponse.json(
+          { error: "Job not found." },
+          { status: 404 }
+        );
+      }
+
+      if (job.status !== "open" || job.visibility !== "public") {
+        return NextResponse.json(
+          { error: "This job is not accepting applications." },
+          { status: 400 }
+        );
+      }
+
+      finalJobId = job.id;
     }
 
     // 2) Insert into job_applications
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("job_applications")
       .insert({
-        job_id: job.id,
-        // candidate_id stays null for now (we’ll wire it later)
+        job_id: finalJobId,
+        candidate_id: null, // we’ll wire this later
         full_name: fullName,
         email,
         phone: phone || null,
@@ -110,7 +121,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         insertError
       );
       return NextResponse.json(
-        { error: "Could not create job application." },
+        {
+          error:
+            insertError.message ||
+            "Could not create job application.",
+        },
         { status: 500 }
       );
     }
@@ -119,19 +134,21 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       ok: true,
       applicationId: inserted?.id ?? null,
     });
-  } catch (err) {
-    console.error(
-      "Unexpected error in /api/jobs/[slug]/apply:",
-      err
-    );
+  } catch (err: any) {
+    console.error("Unexpected error in /api/jobs/[slug]/apply:", err);
     return NextResponse.json(
-      { error: "Unexpected error while submitting application." },
+      {
+        error:
+          err && typeof err === "object" && "message" in err
+            ? String(err.message)
+            : "Unexpected error while submitting application.",
+      },
       { status: 500 }
     );
   }
 }
 
-// Optional: explicitly 405 anything else
+// Explicitly block GET to avoid 405 confusion
 export function GET() {
   return NextResponse.json(
     { error: "Method not allowed." },
