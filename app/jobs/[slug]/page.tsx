@@ -1,99 +1,111 @@
 // app/jobs/[slug]/page.tsx
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
-import PublicJobApplyForm from "../PublicJobApplyForm";
+import Link from "next/link";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import JobApplyForm from "./JobApplyForm";
 
-type JobDetail = {
-  id: string;
-  slug: string | null;
-  title: string;
-  department: string | null;
-  location: string | null;
-  employment_type: string | null;
-  seniority: string | null;
-  description: string | null;
-  tags: string[] | null;
-  created_at: string | null;
-  status: string | null;
-  visibility: string | null;
-};
-
-type JobPageProps = {
+type PageProps = {
   params: { slug: string };
 };
 
-async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
-  const supabase = createSupabaseAdminClient();
+type JobRecord = {
+  id: string;
+  slug: string | null;
+  title: string;
+  location: string | null;
+  department: string | null;
+  employment_type: string | null;
+  seniority: string | null;
+  description: string | null;
+};
+
+async function fetchPublicJob(slugOrId: string): Promise<JobRecord | null> {
+  const supabase = await createSupabaseServerClient();
 
   const selectCols = `
     id,
     slug,
     title,
-    department,
     location,
+    department,
     employment_type,
     seniority,
     description,
-    tags,
-    created_at,
     status,
     visibility
   `;
 
-  // Try by slug first
+  // 1) Try by slug
   let { data, error } = await supabase
     .from("jobs")
     .select(selectCols)
     .eq("slug", slugOrId)
     .eq("status", "open")
     .eq("visibility", "public")
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
-    console.error("Error loading public job by slug:", error);
+    console.error("Error loading job by slug", error);
   }
 
-  if (!data) {
-    // Fallback: try by id
-    const byId = await supabase
-      .from("jobs")
-      .select(selectCols)
-      .eq("id", slugOrId)
-      .eq("status", "open")
-      .eq("visibility", "public")
-      .limit(1)
-      .maybeSingle();
-
-    if (byId.error) {
-      console.error("Error loading public job by id:", byId.error);
-    }
-
-    if (!byId.data) return null;
-    data = byId.data;
+  if (data && data.length > 0) {
+    const row: any = data[0];
+    return {
+      id: row.id,
+      slug: row.slug ?? null,
+      title: row.title,
+      location: row.location ?? null,
+      department: row.department ?? null,
+      employment_type: row.employment_type ?? null,
+      seniority: row.seniority ?? null,
+      description: row.description ?? null,
+    };
   }
 
-  return data as JobDetail;
+  // 2) Try by id
+  const { data: byId, error: byIdError } = await supabase
+    .from("jobs")
+    .select(selectCols)
+    .eq("id", slugOrId)
+    .eq("status", "open")
+    .eq("visibility", "public")
+    .limit(1);
+
+  if (byIdError) {
+    console.error("Error loading job by id", byIdError);
+  }
+
+  if (!byId || byId.length === 0) {
+    return null;
+  }
+
+  const row: any = byId[0];
+  return {
+    id: row.id,
+    slug: row.slug ?? null,
+    title: row.title,
+    location: row.location ?? null,
+    department: row.department ?? null,
+    employment_type: row.employment_type ?? null,
+    seniority: row.seniority ?? null,
+    description: row.description ?? null,
+  };
 }
 
-export default async function PublicJobPage({ params }: JobPageProps) {
-  const job = await fetchPublicJob(params.slug);
+export default async function JobDetailPage({ params }: PageProps) {
+  const slugOrId = params.slug;
+  const job = await fetchPublicJob(slugOrId);
 
   if (!job) {
     notFound();
   }
 
-  const createdLabel = job.created_at
-    ? new Date(job.created_at).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      })
-    : null;
+  // We keep using the URL slug/id as-is so the API route
+  // can find the job by slug OR id.
+  const applySlug = slugOrId;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12">
+    <main className="mx-auto max-w-4xl px-4 py-10">
       <div className="mb-6">
         <Link
           href="/jobs"
@@ -103,6 +115,7 @@ export default async function PublicJobPage({ params }: JobPageProps) {
         </Link>
       </div>
 
+      {/* Header */}
       <header className="mb-6 space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
@@ -110,46 +123,61 @@ export default async function PublicJobPage({ params }: JobPageProps) {
         <h1 className="text-2xl font-semibold text-slate-900">
           {job.title}
         </h1>
-        <p className="text-xs text-slate-500">
-          {job.location || "Location flexible"}
-          {job.department ? ` • ${job.department}` : ""}
-          {job.seniority ? ` • ${job.seniority}` : ""}
-        </p>
-        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <span>{job.location || "Location flexible"}</span>
           {job.employment_type && (
-            <span className="rounded-full border border-slate-200 px-3 py-1">
-              {job.employment_type}
-            </span>
+            <>
+              <span>•</span>
+              <span>{job.employment_type}</span>
+            </>
           )}
-          {createdLabel && (
-            <span className="rounded-full border border-slate-200 px-3 py-1">
-              Posted {createdLabel}
-            </span>
+          {job.seniority && (
+            <>
+              <span>•</span>
+              <span>{job.seniority}</span>
+            </>
+          )}
+          {job.department && (
+            <>
+              <span>•</span>
+              <span>{job.department}</span>
+            </>
           )}
         </div>
       </header>
 
-      <section className="prose prose-sm max-w-none text-slate-800">
-        <div className="whitespace-pre-line text-sm leading-relaxed">
-          {job.description || "No description provided yet."}
-        </div>
-      </section>
-
-      {job.tags && job.tags.length > 0 && (
-        <section className="mt-4 flex flex-wrap gap-1.5 text-[11px] text-slate-500">
-          {job.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full bg-slate-50 px-2.5 py-1"
-            >
-              {tag}
-            </span>
-          ))}
+      <div className="grid gap-8 md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)]">
+        {/* Left: Job description */}
+        <section className="space-y-4 text-sm leading-relaxed text-slate-800">
+          {job.description ? (
+            <article className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-800 prose-ul:list-disc prose-ul:pl-4">
+              {/* Description is plain text today; render with whitespace preserved */}
+              <p className="whitespace-pre-line">{job.description}</p>
+            </article>
+          ) : (
+            <p className="text-sm text-slate-500">
+              No detailed description has been added for this role yet.
+            </p>
+          )}
         </section>
-      )}
 
-      {/* NEW: inline public apply form */}
-      <PublicJobApplyForm jobId={job.id} jobTitle={job.title} />
+        {/* Right: Apply form (client component) */}
+        <aside>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Apply for this role
+            </h2>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Share a few details and upload your CV. We&apos;ll review and
+              reach out if there&apos;s a strong match.
+            </p>
+
+            <div className="mt-4">
+              <JobApplyForm slug={applySlug} jobTitle={job.title} />
+            </div>
+          </div>
+        </aside>
+      </div>
     </main>
   );
 }
