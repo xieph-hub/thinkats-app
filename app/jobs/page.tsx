@@ -29,7 +29,7 @@ type PublicJob = {
   created_at: string;
   tags: string[] | null;
   work_mode: string | null; // remote / hybrid / onsite / flexible
-  client_company: ClientCompanyRow[] | null; // Supabase nested select returns an array
+  client_company: ClientCompanyRow[] | null; // NOTE: Supabase nested select returns an array
 };
 
 function formatDate(dateStr: string) {
@@ -63,7 +63,6 @@ function formatEmploymentType(value: string | null) {
 }
 
 export default async function JobsPage() {
-  // 1) Load ALL jobs, no server-side filters
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
@@ -86,10 +85,12 @@ export default async function JobsPage() {
       )
     `
     )
+    .eq("status", "open")
+    .eq("visibility", "public")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error loading jobs:", error);
+    console.error("Error loading public jobs:", error);
   }
 
   const jobs = (data ?? []) as PublicJob[];
@@ -111,15 +112,21 @@ export default async function JobsPage() {
         </p>
         {count > 0 && (
           <p className="mt-1 text-[11px] text-slate-500">
-            Showing {count} role{count === 1 ? "" : "s"} from your ATS.
+            Showing {count} open role{count === 1 ? "" : "s"}.
           </p>
         )}
       </header>
 
       {count === 0 ? (
         <p className="mt-8 text-sm text-slate-500">
-          No jobs found in your <code className="text-[11px]">jobs</code> table.
-          Once you create roles in the ATS, they&apos;ll appear here.
+          No public roles are currently open. Check back soon or{" "}
+          <Link
+            href="/talent-network"
+            className="font-medium text-[#172965] hover:underline"
+          >
+            join our talent network
+          </Link>
+          .
         </p>
       ) : (
         <section className="mt-6 space-y-4">
@@ -195,17 +202,6 @@ export default async function JobsPage() {
                             ⭐
                           </span>
                           {job.seniority}
-                        </span>
-                      )}
-
-                      {/* Soft status indicator so you see what's what */}
-                      {job.status && (
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-700">
-                          <span className="mr-1" aria-hidden="true">
-                            📌
-                          </span>
-                          {job.status}
-                          {job.visibility ? ` · ${job.visibility}` : ""}
                         </span>
                       )}
                     </div>
