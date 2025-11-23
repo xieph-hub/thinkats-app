@@ -63,7 +63,7 @@ function formatEmploymentType(value: string | null) {
 }
 
 export default async function JobsPage() {
-  // 1) Load jobs WITHOUT strict SQL filters so we don't miss rows due to case
+  // 1) Load ALL jobs, no server-side filters
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
@@ -89,26 +89,10 @@ export default async function JobsPage() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error loading public jobs:", error);
+    console.error("Error loading jobs:", error);
   }
 
-  const rawJobs = (data ?? []) as any[];
-
-  // 2) Case-insensitive filter: treat null/empty as "include"
-  const jobs = rawJobs
-    .filter((job) => {
-      const status =
-        typeof job.status === "string" ? job.status.toLowerCase() : "";
-      const visibility =
-        typeof job.visibility === "string" ? job.visibility.toLowerCase() : "";
-
-      const isOpen = !status || status === "open";
-      const isPublic = !visibility || visibility === "public";
-
-      return isOpen && isPublic;
-    })
-    .map((job) => job as PublicJob);
-
+  const jobs = (data ?? []) as PublicJob[];
   const count = jobs.length;
 
   return (
@@ -127,21 +111,15 @@ export default async function JobsPage() {
         </p>
         {count > 0 && (
           <p className="mt-1 text-[11px] text-slate-500">
-            Showing {count} open role{count === 1 ? "" : "s"}.
+            Showing {count} role{count === 1 ? "" : "s"} from your ATS.
           </p>
         )}
       </header>
 
       {count === 0 ? (
         <p className="mt-8 text-sm text-slate-500">
-          No public roles are currently open. Check back soon or{" "}
-          <Link
-            href="/talent-network"
-            className="font-medium text-[#172965] hover:underline"
-          >
-            join our talent network
-          </Link>
-          .
+          No jobs found in your <code className="text-[11px]">jobs</code> table.
+          Once you create roles in the ATS, they&apos;ll appear here.
         </p>
       ) : (
         <section className="mt-6 space-y-4">
@@ -217,6 +195,17 @@ export default async function JobsPage() {
                             ⭐
                           </span>
                           {job.seniority}
+                        </span>
+                      )}
+
+                      {/* Soft status indicator so you see what's what */}
+                      {job.status && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-slate-700">
+                          <span className="mr-1" aria-hidden="true">
+                            📌
+                          </span>
+                          {job.status}
+                          {job.visibility ? ` · ${job.visibility}` : ""}
                         </span>
                       )}
                     </div>
