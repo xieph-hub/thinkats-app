@@ -25,8 +25,6 @@ export async function POST(
     const cvUrl =
       (body.cvUrl ?? "").toString().trim() || null;
 
-    // You were collecting these as "headline" + "notes" on the form.
-    // We'll merge them into one cover_letter for now.
     const headline =
       (body.headline ?? "").toString().trim() || "";
     const notes =
@@ -43,24 +41,22 @@ export async function POST(
       );
     }
 
-    // Optional: sanity check that the slug in the URL and payload line up.
+    // Optional: warn if mismatched slug
     if (jobSlug && jobSlug !== slugOrId) {
-      console.warn(
-        "Job slug mismatch between URL and payload",
-        { urlSlug: slugOrId, bodySlug: jobSlug }
-      );
+      console.warn("Job slug mismatch between URL and payload", {
+        urlSlug: slugOrId,
+        bodySlug: jobSlug,
+      });
     }
 
-    // 1) Find an OPEN, PUBLIC job by slug OR id
+    // 1) Find an open, public job by slug OR id
     let jobRow: any | null = null;
 
     // 1a. Try by slug
     {
       const { data, error } = await supabaseAdmin
         .from("jobs")
-        .select(
-          "id, tenant_id, title, status, visibility"
-        )
+        .select("id, tenant_id, title, status, visibility")
         .eq("slug", slugOrId)
         .eq("status", "open")
         .eq("visibility", "public")
@@ -69,19 +65,16 @@ export async function POST(
       if (error) {
         console.error("Error loading job by slug", error);
       }
-
       if (data && data.length > 0) {
         jobRow = data[0];
       }
     }
 
-    // 1b. If not found, try by id
+    // 1b. Try by id
     if (!jobRow) {
       const { data, error } = await supabaseAdmin
         .from("jobs")
-        .select(
-          "id, tenant_id, title, status, visibility"
-        )
+        .select("id, tenant_id, title, status, visibility")
         .eq("id", slugOrId)
         .eq("status", "open")
         .eq("visibility", "public")
@@ -90,7 +83,6 @@ export async function POST(
       if (error) {
         console.error("Error loading job by id", error);
       }
-
       if (data && data.length > 0) {
         jobRow = data[0];
       }
@@ -109,7 +101,6 @@ export async function POST(
     // 2) Upsert candidate (per tenant + email)
     let candidateId: string | null = null;
 
-    // 2a. Check if candidate already exists for this tenant + email
     const { data: existingCandidates, error: existingError } =
       await supabaseAdmin
         .from("candidates")
@@ -119,16 +110,12 @@ export async function POST(
         .limit(1);
 
     if (existingError) {
-      console.error(
-        "Error checking existing candidate",
-        existingError
-      );
+      console.error("Error checking existing candidate", existingError);
     }
 
     if (existingCandidates && existingCandidates.length > 0) {
       candidateId = existingCandidates[0].id as string;
     } else {
-      // 2b. Create a new candidate
       const { data: newCandidate, error: createCandError } =
         await supabaseAdmin
           .from("candidates")
@@ -148,10 +135,7 @@ export async function POST(
           .single();
 
       if (createCandError) {
-        console.error(
-          "Error creating candidate record",
-          createCandError
-        );
+        console.error("Error creating candidate record", createCandError);
         return NextResponse.json(
           { error: "Could not create candidate record." },
           { status: 500 }
@@ -177,8 +161,6 @@ export async function POST(
           cv_url: cvUrl,
           cover_letter: coverLetter,
           source,
-          // stage & status default to APPLIED / PENDING in DB, but it's fine
-          // to be explicit if you prefer:
           stage: "APPLIED",
           status: "PENDING",
         })
@@ -186,10 +168,7 @@ export async function POST(
         .single();
 
     if (appError || !application) {
-      console.error(
-        "Error creating job application",
-        appError
-      );
+      console.error("Error creating job application", appError);
       return NextResponse.json(
         {
           error:
@@ -203,6 +182,7 @@ export async function POST(
       {
         ok: true,
         applicationId: application.id,
+        candidateId,
       },
       { status: 200 }
     );
