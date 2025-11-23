@@ -215,9 +215,7 @@ export function JobListWithDrawer({
               <button
                 type="button"
                 className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#111c4c]"
-                onClick={() =>
-                  selectedJob && onEditJob?.(selectedJob.id)
-                }
+                onClick={() => selectedJob && onEditJob?.(selectedJob.id)}
               >
                 Edit job
               </button>
@@ -230,13 +228,15 @@ export function JobListWithDrawer({
               >
                 View applications
               </button>
-              <button
-                type="button"
-                className="inline-flex items-center rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-                onClick={() => selectedJob && openDeleteModal(selectedJob)}
-              >
-                Delete job
-              </button>
+              {onDeleteJob && (
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                  onClick={() => selectedJob && openDeleteModal(selectedJob)}
+                >
+                  Delete job
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -323,3 +323,6 @@ function StatusPill({ status }: { status: Job["status"] }) {
     </span>
   );
 }
+
+// exported type so server-side page can shape Supabase rows
+export type AtsJobListItem = Job;
