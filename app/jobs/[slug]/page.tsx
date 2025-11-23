@@ -1,97 +1,34 @@
+// app/jobs/[slug]/page.tsx
 import Link from "next/link";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { notFound } from "next/navigation";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import JobApplyForm from "./JobApplyForm";
 
-type JobDetail = {
-  id: string;
-  slug: string | null;
-  title: string;
-  department: string | null;
-  location: string | null;
-  employmentType: string | null;
-  seniority: string | null;
-  description: string | null;
-  tags: string[] | null;
-  status: string;
-  visibility: string;
+type PageProps = {
+  params: { slug: string };
 };
 
-async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
-  const supabase = await createSupabaseServerClient();
+export default async function JobDetailPage({ params }: PageProps) {
+  const slugOrId = params.slug;
 
-  const selectColumns = `
-    id,
-    slug,
-    title,
-    department,
-    location,
-    employment_type,
-    seniority,
-    description,
-    tags,
-    status,
-    visibility
-  `;
-
-  // 1) Try by slug
-  let { data, error } = await supabase
+  const { data: jobs, error } = await supabaseAdmin
     .from("jobs")
-    .select(selectColumns)
-    .eq("slug", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
+    .select(
+      "id,title,location,employment_type,seniority,description,status,visibility"
+    )
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
     .limit(1);
 
   if (error) {
-    console.error("Error loading job by slug:", error);
+    console.error("Error loading job detail:", error);
+    throw new Error("Failed to load job.");
   }
 
-  let row = data?.[0];
+  const job = jobs?.[0];
 
-  // 2) Fallback: try by id
-  if (!row) {
-    const { data: byId, error: errorById } = await supabase
-      .from("jobs")
-      .select(selectColumns)
-      .eq("id", slugOrId)
-      .eq("status", "open")
-      .eq("visibility", "public")
-      .limit(1);
-
-    if (errorById) {
-      console.error("Error loading job by id:", errorById);
-    }
-
-    row = byId?.[0];
-  }
-
-  if (!row) return null;
-
-  return {
-    id: row.id as string,
-    slug: (row.slug as string | null) ?? null,
-    title: row.title as string,
-    department: (row.department as string | null) ?? null,
-    location: (row.location as string | null) ?? null,
-    employmentType: (row.employment_type as string | null) ?? null,
-    seniority: (row.seniority as string | null) ?? null,
-    description: (row.description as string | null) ?? null,
-    tags: (row.tags as string[] | null) ?? null,
-    status: row.status as string,
-    visibility: row.visibility as string,
-  };
-}
-
-export default async function JobPage({
-  params,
-}: {
-  params: { slug: string };
-}) {
-  const job = await fetchPublicJob(params.slug);
-
-  if (!job) {
+  if (!job || job.visibility !== "public") {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-16">
+      <main className="mx-auto max-w-3xl px-4 py-12">
         <h1 className="text-2xl font-semibold text-slate-900">
           Role not available
         </h1>
@@ -110,11 +47,9 @@ export default async function JobPage({
     );
   }
 
-  const slugOrId = job.slug ?? job.id;
-
   return (
-    <main className="mx-auto max-w-4xl px-4 py-12">
-      <div className="mb-6">
+    <main className="mx-auto max-w-3xl px-4 py-10">
+      <div className="mb-4">
         <Link
           href="/jobs"
           className="text-xs font-medium text-[#172965] hover:underline"
@@ -123,65 +58,37 @@ export default async function JobPage({
         </Link>
       </div>
 
-      <header className="mb-8 space-y-2">
+      <header className="mb-6 space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          {job.location && <span>{job.location}</span>}
-          {job.employmentType && (
-            <>
-              <span className="h-1 w-1 rounded-full bg-slate-400" />
-              <span>{job.employmentType}</span>
-            </>
-          )}
-          {job.seniority && (
-            <>
-              <span className="h-1 w-1 rounded-full bg-slate-400" />
-              <span>{job.seniority}</span>
-            </>
-          )}
-        </div>
-
-        {job.tags && job.tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {job.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {job.title}
+        </h1>
+        <p className="text-xs text-slate-500">
+          {job.location || "Location flexible"}
+          {job.employment_type ? ` • ${job.employment_type}` : ""}
+          {job.seniority ? ` • ${job.seniority}` : ""}
+        </p>
       </header>
 
-      <section className="mb-10 space-y-4 text-sm leading-relaxed text-slate-800">
+      <section className="prose prose-sm max-w-none text-slate-800">
         {job.description ? (
-          <article className="prose prose-sm max-w-none">
-            <p className="whitespace-pre-line">{job.description}</p>
-          </article>
+          <p className="whitespace-pre-line">{job.description}</p>
         ) : (
-          <p className="text-sm text-slate-600">
-            Full description coming soon. You can still apply if this role is a
-            strong match.
-          </p>
+          <p>More details will be shared during the interview process.</p>
         )}
       </section>
 
-      <section className="mt-10 border-t border-slate-200 pt-8">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">
+      <section className="mt-8">
+        <h2 className="mb-2 text-sm font-semibold text-slate-900">
           Apply for this role
         </h2>
-        <p className="mb-4 text-xs text-slate-600">
-          Share a few details and your CV. We review every application
-          carefully.
-        </p>
-
-        <JobApplyForm slug={slugOrId} jobTitle={job.title} />
+        <JobApplyForm
+          slug={slugOrId}
+          jobId={job.id}
+          jobTitle={job.title}
+        />
       </section>
     </main>
   );
