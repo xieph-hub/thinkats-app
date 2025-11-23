@@ -2,7 +2,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import JobApplyForm from "./JobApplyForm";
+import JobApplyForm from "./apply/JobApplyForm";
 
 type PageProps = {
   params: { slug: string };
@@ -100,8 +100,6 @@ export default async function JobDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  // We keep using the URL slug/id as-is so the API route
-  // can find the job by slug OR id.
   const applySlug = slugOrId;
 
   return (
@@ -151,7 +149,6 @@ export default async function JobDetailPage({ params }: PageProps) {
         <section className="space-y-4 text-sm leading-relaxed text-slate-800">
           {job.description ? (
             <article className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-800 prose-ul:list-disc prose-ul:pl-4">
-              {/* Description is plain text today; render with whitespace preserved */}
               <p className="whitespace-pre-line">{job.description}</p>
             </article>
           ) : (
@@ -161,7 +158,7 @@ export default async function JobDetailPage({ params }: PageProps) {
           )}
         </section>
 
-        {/* Right: Apply form (client component) */}
+        {/* Right: Apply form */}
         <aside>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <h2 className="text-sm font-semibold text-slate-900">
