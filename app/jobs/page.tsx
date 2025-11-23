@@ -1,15 +1,8 @@
 // app/jobs/page.tsx
-import type { Metadata } from "next";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const revalidate = 60;
-
-export const metadata: Metadata = {
-  title: "Jobs | Resourcin",
-  description:
-    "Open roles managed by Resourcin across Africa and beyond. Browse and apply without creating an account.",
-};
 
 type PublicJob = {
   id: string;
@@ -35,17 +28,7 @@ export default async function JobsPage() {
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
-      `
-      id,
-      slug,
-      title,
-      location,
-      employment_type,
-      seniority,
-      status,
-      visibility,
-      created_at
-    `
+      "id, slug, title, location, employment_type, seniority, status, visibility, created_at"
     )
     .eq("status", "open")
     .eq("visibility", "public")
@@ -67,9 +50,7 @@ export default async function JobsPage() {
           Open roles
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          Browse currently open roles with Resourcin and our clients. You can
-          apply without creating an account; we&apos;ll only reach out when
-          there&apos;s a strong match.
+          Browse currently open roles with Resourcin and our clients.
         </p>
       </header>
 
@@ -88,8 +69,6 @@ export default async function JobsPage() {
         <ul className="mt-6 space-y-4">
           {jobs.map((job) => {
             const slugOrId = job.slug || job.id;
-
-            // If for some reason we don't have either, skip this record
             if (!slugOrId) {
               console.warn("Job missing slug and id", job);
               return null;
