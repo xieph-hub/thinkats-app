@@ -1,7 +1,8 @@
 // app/jobs/[slug]/page.tsx
 import Link from "next/link";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import ApplyForm from "./ApplyForm";
+import { notFound } from "next/navigation";
+import { createSupabaseAdminClient } from "@/lib/supabaseAdmin";
+import PublicJobApplyForm from "../PublicJobApplyForm";
 
 type JobDetail = {
   id: string;
@@ -14,16 +15,16 @@ type JobDetail = {
   description: string | null;
   tags: string[] | null;
   created_at: string | null;
+  status: string | null;
+  visibility: string | null;
 };
 
 type JobPageProps = {
   params: { slug: string };
 };
 
-async function fetchPublicJob(
-  slugOrId: string
-): Promise<JobDetail | null> {
-  const supabase = await createSupabaseServerClient();
+async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
+  const supabase = createSupabaseAdminClient();
 
   const selectCols = `
     id,
@@ -40,62 +41,49 @@ async function fetchPublicJob(
     visibility
   `;
 
-  // By slug
+  // Try by slug first
   let { data, error } = await supabase
     .from("jobs")
     .select(selectCols)
     .eq("slug", slugOrId)
     .eq("status", "open")
     .eq("visibility", "public")
-    .limit(1);
+    .limit(1)
+    .maybeSingle();
 
-  if (error) console.error("Error loading job by slug:", error);
-
-  if (data && data.length > 0) {
-    return data[0] as JobDetail;
+  if (error) {
+    console.error("Error loading public job by slug:", error);
   }
 
-  // Fallback by id
-  const { data: byId, error: idError } = await supabase
-    .from("jobs")
-    .select(selectCols)
-    .eq("id", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
+  if (!data) {
+    // Fallback: try by id
+    const byId = await supabase
+      .from("jobs")
+      .select(selectCols)
+      .eq("id", slugOrId)
+      .eq("status", "open")
+      .eq("visibility", "public")
+      .limit(1)
+      .maybeSingle();
 
-  if (idError) console.error("Error loading job by id:", idError);
+    if (byId.error) {
+      console.error("Error loading public job by id:", byId.error);
+    }
 
-  if (!byId || byId.length === 0) return null;
+    if (!byId.data) return null;
+    data = byId.data;
+  }
 
-  return byId[0] as JobDetail;
+  return data as JobDetail;
 }
 
-export default async function JobDetailPage({ params }: JobPageProps) {
+export default async function PublicJobPage({ params }: JobPageProps) {
   const job = await fetchPublicJob(params.slug);
 
   if (!job) {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-16">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Role not found
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          This job may have been closed or is no longer visible.
-        </p>
-        <div className="mt-4">
-          <Link
-            href="/jobs"
-            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
-            ← Back to all jobs
-          </Link>
-        </div>
-      </main>
-    );
+    notFound();
   }
 
-  const slugOrId = job.slug || job.id;
   const createdLabel = job.created_at
     ? new Date(job.created_at).toLocaleDateString("en-US", {
         year: "numeric",
@@ -160,8 +148,8 @@ export default async function JobDetailPage({ params }: JobPageProps) {
         </section>
       )}
 
-      {/* Inline public apply form */}
-      <ApplyForm jobSlug={slugOrId} jobTitle={job.title} />
+      {/* NEW: inline public apply form */}
+      <PublicJobApplyForm jobId={job.id} jobTitle={job.title} />
     </main>
   );
 }
