@@ -1,92 +1,72 @@
 // app/api/jobs/[slug]/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { createClient } from "@supabase/supabase-js";
 
-// This route accepts JSON only (NOT form-data)
-// It is called by the React ApplyForm via fetch()
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { slug: string } }
-) {
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+// Safety check – avoid crashing with undefined env
+function getSupabaseAdmin() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error("Supabase env vars are missing in /api/jobs/[slug]/apply");
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false },
+  });
+}
+
+type RouteContext = {
+  params: { slug: string };
+};
+
+export async function POST(req: NextRequest, context: RouteContext) {
+  const { slug } = context.params;
+
   try {
-    const slugOrId = params.slug;
+    const supabase = getSupabaseAdmin();
 
-    const body = await req.json().catch(() => null);
+    // -----------------------------
+    // 1) Find an open, public job by slug OR id
+    // -----------------------------
+    const slugOrId = slug;
 
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { error: "Invalid request body." },
-        { status: 400 }
-      );
-    }
+    const selectJobCols =
+      "id, tenant_id, title, status, visibility";
 
-    const {
-      fullName,
-      email,
-      phone,
-      location,
-      linkedinUrl,
-      portfolioUrl,
-      cvUrl,
-      coverLetter,
-      source,
-    } = body as {
-      fullName?: string;
-      email?: string;
-      phone?: string | null;
-      location?: string | null;
-      linkedinUrl?: string | null;
-      portfolioUrl?: string | null;
-      cvUrl?: string | null;
-      coverLetter?: string | null;
-      source?: string | null;
-    };
-
-    if (!fullName || !email) {
-      return NextResponse.json(
-        { error: "Full name and email are required." },
-        { status: 400 }
-      );
-    }
-
-    const supabase = await createSupabaseServerClient();
-
-    // -------- 1) Find an OPEN, PUBLIC job by slug OR id --------
-    const selectCols = `
-      id,
-      slug,
-      status,
-      visibility
-    `;
-
-    let { data: bySlug, error: slugError } = await supabase
+    // First try by slug
+    let { data: jobsBySlug, error: jobBySlugError } = await supabase
       .from("jobs")
-      .select(selectCols)
+      .select(selectJobCols)
       .eq("slug", slugOrId)
       .eq("status", "open")
       .eq("visibility", "public")
       .limit(1);
 
-    if (slugError) {
-      console.error("Error querying job by slug in apply API:", slugError);
+    if (jobBySlugError) {
+      console.error("Error looking up job by slug:", jobBySlugError);
     }
 
-    let jobRow = bySlug?.[0];
+    let jobRow = jobsBySlug && jobsBySlug.length > 0 ? jobsBySlug[0] : null;
 
+    // Fallback: try by id
     if (!jobRow) {
-      const { data: byId, error: idError } = await supabase
+      const { data: jobsById, error: jobByIdError } = await supabase
         .from("jobs")
-        .select(selectCols)
+        .select(selectJobCols)
         .eq("id", slugOrId)
         .eq("status", "open")
         .eq("visibility", "public")
         .limit(1);
 
-      if (idError) {
-        console.error("Error querying job by id in apply API:", idError);
+      if (jobByIdError) {
+        console.error("Error looking up job by id:", jobByIdError);
       }
 
-      jobRow = byId?.[0];
+      if (jobsById && jobsById.length > 0) {
+        jobRow = jobsById[0];
+      }
     }
 
     if (!jobRow) {
@@ -96,47 +76,175 @@ export async function POST(
       );
     }
 
-    const jobId = jobRow.id as string;
+    const jobId: string = jobRow.id;
+    const tenantId: string = jobRow.tenant_id;
 
-    // -------- 2) Insert job_application --------
-    const { data: inserted, error: insertError } = await supabase
+    // -----------------------------
+    // 2) Parse body (support both ApplyForm + JobApplyForm shapes)
+    // -----------------------------
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (err) {
+      console.error("Failed to parse JSON body in job apply route:", err);
+      return NextResponse.json(
+        { error: "Invalid request body." },
+        { status: 400 }
+      );
+    }
+
+    // Support multiple naming conventions
+    const fullName: string | undefined =
+      body.fullName || body.full_name || undefined;
+    const email: string | undefined = body.email || undefined;
+    const phone: string | null =
+      body.phone && String(body.phone).trim().length > 0
+        ? String(body.phone).trim()
+        : null;
+    const location: string | null =
+      body.location && String(body.location).trim().length > 0
+        ? String(body.location).trim()
+        : null;
+
+    const linkedinUrl: string | null =
+      body.linkedinUrl ||
+      body.linkedin_url ||
+      null;
+
+    const portfolioUrl: string | null =
+      body.portfolioUrl ||
+      body.portfolio_url ||
+      null;
+
+    // CV URL can be from:
+    // - Manual link (ApplyForm / JobApplyForm)
+    // - Previously uploaded Supabase Storage URL (JobApplyForm)
+    const cvUrl: string | null =
+      body.cvUrl ||
+      body.cv_url ||
+      null;
+
+    // Cover letter / notes / headline
+    const coverLetter: string | null =
+      body.coverLetter ||
+      body.notes ||
+      null;
+
+    const source: string =
+      body.source ||
+      "Website";
+
+    if (!fullName || !email) {
+      return NextResponse.json(
+        { error: "Full name and email are required." },
+        { status: 400 }
+      );
+    }
+
+    // -----------------------------
+    // 3) Find or create candidate in `candidates`
+    // -----------------------------
+    let candidateId: string | null = null;
+
+    // 3a) Try to find existing candidate by (tenant_id, email)
+    const {
+      data: existingCandidates,
+      error: existingCandError,
+    } = await supabase
+      .from("candidates")
+      .select("id, cv_url")
+      .eq("tenant_id", tenantId)
+      .eq("email", email)
+      .limit(1);
+
+    if (existingCandError) {
+      console.error("Error querying existing candidate:", existingCandError);
+      // We won't fail the whole request yet; we'll still try to create a new one.
+    }
+
+    if (existingCandidates && existingCandidates.length > 0) {
+      const existing = existingCandidates[0];
+      candidateId = existing.id;
+
+      // Optionally update candidate.cv_url if they didn't have one before and we now have one
+      if (!existing.cv_url && cvUrl) {
+        const { error: updateCandError } = await supabase
+          .from("candidates")
+          .update({ cv_url: cvUrl })
+          .eq("id", existing.id);
+
+        if (updateCandError) {
+          console.error("Error updating candidate cv_url:", updateCandError);
+        }
+      }
+    } else {
+      // 3b) Create new candidate
+      const { data: newCandidate, error: createCandError } = await supabase
+        .from("candidates")
+        .insert({
+          tenant_id: tenantId,
+          full_name: fullName,
+          email,
+          phone,
+          location,
+          linkedin_url: linkedinUrl,
+          current_title: null, // can wire to "headline" later
+          current_company: null,
+          cv_url: cvUrl,
+          source,
+        })
+        .select("id")
+        .single();
+
+      if (createCandError || !newCandidate) {
+        console.error("Error creating candidate record:", createCandError);
+        return NextResponse.json(
+          { error: "Could not create candidate record." },
+          { status: 500 }
+        );
+      }
+
+      candidateId = newCandidate.id;
+    }
+
+    // -----------------------------
+    // 4) Create job_application linked to candidate
+    // -----------------------------
+    const { data: application, error: appError } = await supabase
       .from("job_applications")
       .insert({
         job_id: jobId,
+        candidate_id: candidateId,
         full_name: fullName,
         email,
-        phone: phone ?? null,
-        location: location ?? null,
-        linkedin_url: linkedinUrl ?? null,
-        portfolio_url: portfolioUrl ?? null,
-        cv_url: cvUrl ?? null, // simple link for now
-        cover_letter: coverLetter ?? null,
-        source: source ?? "Website",
-        stage: "APPLIED",
-        status: "PENDING",
+        phone,
+        location,
+        linkedin_url: linkedinUrl,
+        portfolio_url: portfolioUrl,
+        cv_url: cvUrl,
+        cover_letter: coverLetter,
+        source,
+        // stage + status will use defaults: 'APPLIED' / 'PENDING'
       })
       .select("id")
       .single();
 
-    if (insertError) {
-      console.error("Error inserting job_application:", insertError);
+    if (appError || !application) {
+      console.error("Error creating job application:", appError);
       return NextResponse.json(
-        {
-          error:
-            "Unexpected error while creating your application. Please try again.",
-        },
+        { error: "Could not create application record." },
         { status: 500 }
       );
     }
 
     return NextResponse.json(
-      { ok: true, applicationId: inserted.id },
-      { status: 200 }
+      { ok: true, applicationId: application.id },
+      { status: 201 }
     );
   } catch (err) {
-    console.error("Apply API error:", err);
+    console.error("Unexpected error in /api/jobs/[slug]/apply:", err);
     return NextResponse.json(
-      { error: "Unexpected error while submitting application." },
+      { error: "Unexpected error while creating your application. Please try again." },
       { status: 500 }
     );
   }
