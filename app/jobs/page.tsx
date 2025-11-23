@@ -9,6 +9,7 @@ import {
   Share2,
   Tag as TagIcon,
   ArrowUpRight,
+  Building2,
 } from "lucide-react";
 
 export const revalidate = 60;
@@ -17,6 +18,12 @@ export const metadata: Metadata = {
   title: "Jobs | Resourcin",
   description:
     "Open roles managed by Resourcin across Africa and beyond. Browse and apply without creating an account.",
+};
+
+type ClientCompany = {
+  name: string | null;
+  logo_url: string | null;
+  slug: string | null;
 };
 
 type PublicJob = {
@@ -28,6 +35,7 @@ type PublicJob = {
   seniority: string | null;
   created_at: string;
   tags: string[] | null;
+  client_company?: ClientCompany | null;
 };
 
 const SITE_URL =
@@ -59,6 +67,54 @@ function formatDate(dateStr: string) {
   });
 }
 
+type WorkModeConfig = {
+  label: string;
+  bgClass: string;
+  textClass: string;
+  dotClass: string;
+};
+
+// Derive Remote / Hybrid / On-site from employment_type + location text
+function getWorkMode(
+  employmentType: string | null,
+  location: string | null
+): WorkModeConfig | null {
+  const source = `${employmentType || ""} ${location || ""}`.toLowerCase();
+
+  if (source.includes("remote")) {
+    return {
+      label: "Remote",
+      bgClass: "bg-emerald-50",
+      textClass: "text-emerald-700",
+      dotClass: "bg-emerald-500",
+    };
+  }
+
+  if (source.includes("hybrid")) {
+    return {
+      label: "Hybrid",
+      bgClass: "bg-indigo-50",
+      textClass: "text-indigo-700",
+      dotClass: "bg-indigo-500",
+    };
+  }
+
+  if (
+    source.includes("onsite") ||
+    source.includes("on-site") ||
+    source.includes("on site")
+  ) {
+    return {
+      label: "On-site",
+      bgClass: "bg-orange-50",
+      textClass: "text-orange-700",
+      dotClass: "bg-orange-500",
+    };
+  }
+
+  return null;
+}
+
 export default async function JobsPage() {
   const { data, error } = await supabaseAdmin
     .from("jobs")
@@ -73,7 +129,12 @@ export default async function JobsPage() {
       status,
       visibility,
       created_at,
-      tags
+      tags,
+      client_company:client_companies (
+        name,
+        logo_url,
+        slug
+      )
     `
     )
     .eq("status", "open")
@@ -153,6 +214,8 @@ export default async function JobsPage() {
             }
 
             const share = buildShareLinks(slugOrId, job.title);
+            const client = job.client_company;
+            const workMode = getWorkMode(job.employment_type, job.location);
 
             return (
               <article
@@ -161,7 +224,7 @@ export default async function JobsPage() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   {/* Left side: core details */}
-                  <div>
+                  <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h2 className="text-sm font-semibold text-slate-900">
                         <Link
@@ -174,21 +237,62 @@ export default async function JobsPage() {
                       </h2>
                     </div>
 
+                    {/* Hiring company */}
+                    {client && (client.name || client.logo_url) && (
+                      <div className="mt-2 flex items-center gap-2">
+                        {client.logo_url && (
+                          <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+                            <img
+                              src={client.logo_url}
+                              alt={client.name || "Client logo"}
+                              className="h-full w-full object-contain"
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                          <span className="uppercase tracking-[0.14em] text-slate-400">
+                            Hiring company
+                          </span>
+                          {client.name && (
+                            <span className="ml-1 font-medium text-slate-800 normal-case tracking-normal">
+                              {client.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                       <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                        <MapPin className="h-3.5 w-3.5 text-red-400" />
                         {job.location || "Location flexible"}
                       </span>
+
                       {job.employment_type && (
                         <span className="inline-flex items-center gap-1">
-                          <Briefcase className="h-3.5 w-3.5 text-slate-400" />
-                          {job.employment_type}
+                          <Briefcase className="h-3.5 w-3.5 text-amber-500" />
+                          <span className="font-medium text-slate-800">
+                            {job.employment_type}
+                          </span>
                         </span>
                       )}
+
                       {job.seniority && (
                         <span className="inline-flex items-center gap-1 uppercase tracking-wide">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                           {job.seniority}
+                        </span>
+                      )}
+
+                      {workMode && (
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium ring-1 ring-black/5 ${workMode.bgClass} ${workMode.textClass}`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${workMode.dotClass}`}
+                          />
+                          {workMode.label}
                         </span>
                       )}
                     </div>
