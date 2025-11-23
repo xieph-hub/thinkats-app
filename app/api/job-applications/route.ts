@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
 
     const jobId = formData.get("jobId")?.toString();
-    const tenantId = formData.get("tenantId")?.toString();
+    const tenantId = formData.get("tenantId")?.toString(); // used only for storage path
     const jobSlug = formData.get("jobSlug")?.toString() || "";
 
     if (!jobId || !tenantId) {
@@ -30,8 +30,7 @@ export async function POST(req: NextRequest) {
     const portfolioUrl = formData.get("portfolioUrl")?.toString().trim() || "";
     const coverLetter = formData.get("coverLetter")?.toString().trim() || "";
 
-    // Extra screening fields – we won't store them in separate columns yet,
-    // we'll just append into cover_letter text so nothing is lost.
+    // Extra screening fields – fold into cover letter for now
     const hasWorkPermit = formData.get("hasWorkPermit")?.toString() || "";
     const currentGross = formData.get("currentGross")?.toString().trim() || "";
     const expectedGross =
@@ -66,7 +65,7 @@ export async function POST(req: NextRequest) {
           .upload(objectPath, buffer, {
             cacheControl: "3600",
             upsert: false,
-            contentType: cvFile.type || "application/octet-stream",
+            contentType: cvFile.type || "application/pdf",
           });
 
       if (storageError || !storageData) {
@@ -93,11 +92,11 @@ export async function POST(req: NextRequest) {
       .join("\n\n");
 
     // ---- Insert application into job_applications ----
+    // NOTE: We do NOT insert tenant_id here because that column does not exist.
     const { error: insertError } = await supabaseAdmin
       .from("job_applications")
       .insert({
         job_id: jobId,
-        tenant_id: tenantId,
         full_name: fullName,
         email,
         phone,
@@ -112,11 +111,14 @@ export async function POST(req: NextRequest) {
       });
 
     if (insertError) {
-      console.error("job-applications: error inserting job_application", insertError);
+      console.error(
+        "job-applications: error inserting job_application",
+        insertError
+      );
       return redirectWithFlag(req.url, jobSlug || jobId, 0);
     }
 
-    // Success
+    // ✅ Success
     return redirectWithFlag(req.url, jobSlug || jobId, 1);
   } catch (err) {
     console.error("job-applications: unexpected error", err);
