@@ -1,15 +1,17 @@
 // app/api/job-applications/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { Buffer } from "buffer";
 
 export const runtime = "nodejs";
+
+const BUCKET_NAME = "resourcin-uploads";
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
 
     const jobId = formData.get("jobId")?.toString();
-    const tenantId = formData.get("tenantId")?.toString();
     const jobSlug = formData.get("jobSlug")?.toString() || "";
     const fullName = formData.get("fullName")?.toString();
     const email = formData.get("email")?.toString();
@@ -22,10 +24,9 @@ export async function POST(req: NextRequest) {
 
     const cvFile = formData.get("cv") as File | null;
 
-    if (!jobId || !tenantId || !fullName || !email) {
+    if (!jobId || !fullName || !email) {
       console.error("Missing required fields in job application", {
         jobId,
-        tenantId,
         fullName,
         email,
       });
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --- Optional CV upload to Supabase Storage ---
+    // --- CV upload to Supabase Storage (resourcin-uploads bucket) ---
     let cvUrl: string | null = null;
 
     if (cvFile && cvFile.size > 0) {
@@ -45,11 +46,11 @@ export async function POST(req: NextRequest) {
         const arrayBuffer = await cvFile.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Adjust bucket name if you use something else
-        const filePath = `${tenantId}/${jobId}/${Date.now()}-${cvFile.name}`;
+        const safeName = cvFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+        const filePath = `cv-uploads/${jobId}/${Date.now()}-${safeName}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
-          .from("cvs") // make sure a "cvs" bucket exists, or change this name
+          .from(BUCKET_NAME)
           .upload(filePath, buffer, {
             contentType: cvFile.type || "application/octet-stream",
           });
@@ -57,12 +58,13 @@ export async function POST(req: NextRequest) {
         if (uploadError) {
           console.error("Error uploading CV to storage", uploadError);
         } else {
-          // If bucket is public, you can construct a public URL like this:
           const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
           if (baseUrl) {
-            cvUrl = `${baseUrl}/storage/v1/object/public/cvs/${filePath}`;
+            // if the bucket is public, this will be directly accessible
+            cvUrl = `${baseUrl}/storage/v1/object/public/${BUCKET_NAME}/${filePath}`;
           } else {
-            cvUrl = filePath; // fallback to path only
+            // fallback to just storing the path
+            cvUrl = filePath;
           }
         }
       } catch (err) {
@@ -70,12 +72,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // --- Insert application row ---
+    // --- Insert application row (no tenant_id) ---
     const { data, error } = await supabaseAdmin
       .from("job_applications")
       .insert({
         job_id: jobId,
-        tenant_id: tenantId,
         full_name: fullName,
         email,
         phone,
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Success
+    // Success → back to job page with success flag
     return NextResponse.redirect(
       new URL(
         `/jobs/${encodeURIComponent(jobSlug || jobId)}?applied=1`,
