@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
     const coverLetter = formData.get("coverLetter")?.toString() || null;
     const source = "careers_site";
 
+    const cvFile = formData.get("cv") as File | null;
+
     if (!jobId || !tenantId || !fullName || !email) {
       console.error("Missing required fields in job application", {
         jobId,
@@ -35,10 +37,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // TODO: Wire up Supabase storage for CV properly.
-    // For now we ignore the file so the flow works end-to-end.
-    const cvUrl = null;
+    // --- Optional CV upload to Supabase Storage ---
+    let cvUrl: string | null = null;
 
+    if (cvFile && cvFile.size > 0) {
+      try {
+        const arrayBuffer = await cvFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Adjust bucket name if you use something else
+        const filePath = `${tenantId}/${jobId}/${Date.now()}-${cvFile.name}`;
+
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from("cvs") // make sure a "cvs" bucket exists, or change this name
+          .upload(filePath, buffer, {
+            contentType: cvFile.type || "application/octet-stream",
+          });
+
+        if (uploadError) {
+          console.error("Error uploading CV to storage", uploadError);
+        } else {
+          // If bucket is public, you can construct a public URL like this:
+          const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+          if (baseUrl) {
+            cvUrl = `${baseUrl}/storage/v1/object/public/cvs/${filePath}`;
+          } else {
+            cvUrl = filePath; // fallback to path only
+          }
+        }
+      } catch (err) {
+        console.error("Unexpected error processing CV file", err);
+      }
+    }
+
+    // --- Insert application row ---
     const { data, error } = await supabaseAdmin
       .from("job_applications")
       .insert({
@@ -69,7 +101,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Success → bounce back to job page with success flag
+    // Success
     return NextResponse.redirect(
       new URL(
         `/jobs/${encodeURIComponent(jobSlug || jobId)}?applied=1`,
