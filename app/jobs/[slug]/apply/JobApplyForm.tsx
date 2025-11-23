@@ -58,7 +58,7 @@ export default function JobApplyForm({
 
         if (!uploadRes.ok || uploadData?.error) {
           console.error("CV upload failed", uploadData?.error);
-          // We don't block the application if upload fails;
+          // Don't block the application if upload fails;
           // candidate can still submit with a manual CV link.
         } else if (typeof uploadData.url === "string") {
           uploadedCvUrl = uploadData.url;
@@ -84,7 +84,7 @@ export default function JobApplyForm({
         source: "Website",
       };
 
-      // Prefer uploaded CV URL from Supabase, fall back to manual link field
+      // Prefer uploaded CV URL; fall back to manual link field
       const manualCvUrl = getString("cvUrl");
       if (uploadedCvUrl) {
         payload.cvUrl = uploadedCvUrl;
@@ -96,7 +96,6 @@ export default function JobApplyForm({
         throw new Error("Full name and email are required.");
       }
 
-      // 3) Call your existing jobs apply API
       const res = await fetch(
         `/api/jobs/${encodeURIComponent(slug)}/apply`,
         {
@@ -126,10 +125,10 @@ export default function JobApplyForm({
         );
         form.reset();
 
-        // 🔼 Scroll back to the top of the form so the message is visible
+        // Scroll back to the top of the form so the message is visible
         if (typeof window !== "undefined") {
           const rect = form.getBoundingClientRect();
-          const top = rect.top + window.scrollY - 80; // small offset
+          const top = rect.top + window.scrollY - 80;
           window.scrollTo({ top, behavior: "smooth" });
         }
       }
@@ -159,10 +158,9 @@ export default function JobApplyForm({
         </div>
       )}
 
-      {/* Basic intro (optional) */}
       <p className="text-xs text-slate-600">
-        Apply for <span className="font-semibold">{jobTitle}</span>.
-        Share a few details and your CV.
+        Apply for <span className="font-semibold">{jobTitle}</span>. Share
+        a few details and your CV.
       </p>
 
       {/* Full name + email */}
