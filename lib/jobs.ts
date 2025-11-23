@@ -1,7 +1,7 @@
 // lib/jobs.ts
 //
 // Central helpers for working with the `jobs` table in Supabase.
-// We are NOT using Prisma here anymore – everything goes through Supabase.
+// Everything goes through the admin client (no Prisma).
 //
 // public.jobs columns:
 //
@@ -23,7 +23,7 @@
 // updated_at        timestamptz DEFAULT now()
 // slug              text        NULL
 
-import supabaseAdmin from "@/lib/supabaseAdmin";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenantId } from "@/lib/tenant";
 
 export type JobsTableRow = {
@@ -61,7 +61,7 @@ export async function listJobsForCurrentTenant(): Promise<JobsTableRow[]> {
     return [];
   }
 
-  const { data, error } = await (supabaseAdmin as any)
+  const { data, error } = await supabaseAdmin
     .from("jobs")
     .select("*")
     .eq("tenant_id", tenantId)
@@ -81,7 +81,8 @@ export async function listJobsForCurrentTenant(): Promise<JobsTableRow[]> {
 /**
  * Fetch a single job for the *current* tenant by its slug.
  *
- * Used by: app/ats/[slug]/page.tsx
+ * Used by: ATS job detail pages like `/ats/[slug]` or `/ats/jobs/[jobId]`
+ * (depending on how you wire the route).
  */
 export async function getJobForCurrentTenantBySlug(
   slug: string
@@ -94,11 +95,11 @@ export async function getJobForCurrentTenantBySlug(
   }
 
   if (!slug) {
-    console.warn("getJobForCurrentTenantBySlug: no slug provided");
+    console.warn("getJobForCurrentTenantBySlug: empty slug");
     return null;
   }
 
-  const { data, error } = await (supabaseAdmin as any)
+  const { data, error } = await supabaseAdmin
     .from("jobs")
     .select("*")
     .eq("tenant_id", tenantId)
@@ -106,10 +107,47 @@ export async function getJobForCurrentTenantBySlug(
     .single();
 
   if (error || !data) {
-    // If not found, Supabase returns an error – treat as "no job"
     console.error("Error fetching job by slug for tenant", {
       tenantId,
       slug,
+      error,
+    });
+    return null;
+  }
+
+  return data as JobsTableRow;
+}
+
+/**
+ * (Optional) Fetch a job by its id for the current tenant.
+ * Handy if your ATS route is `/ats/jobs/[jobId]`.
+ */
+export async function getJobForCurrentTenantById(
+  jobId: string
+): Promise<JobsTableRow | null> {
+  const tenantId = await getCurrentTenantId();
+
+  if (!tenantId) {
+    console.warn("getJobForCurrentTenantById: no current tenant id");
+    return null;
+  }
+
+  if (!jobId) {
+    console.warn("getJobForCurrentTenantById: empty jobId");
+    return null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("id", jobId)
+    .single();
+
+  if (error || !data) {
+    console.error("Error fetching job by id for tenant", {
+      tenantId,
+      jobId,
       error,
     });
     return null;
