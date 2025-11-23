@@ -9,18 +9,20 @@ type JobDetail = {
   title: string;
   department: string | null;
   location: string | null;
-  employmentType: string | null;
+  employment_type: string | null;
   seniority: string | null;
   description: string | null;
   tags: string[] | null;
-  createdAt: string | null;
+  created_at: string | null;
 };
 
 type JobPageProps = {
   params: { slug: string };
 };
 
-async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
+async function fetchPublicJob(
+  slugOrId: string
+): Promise<JobDetail | null> {
   const supabase = await createSupabaseServerClient();
 
   const selectCols = `
@@ -38,7 +40,7 @@ async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
     visibility
   `;
 
-  // 1) Try by slug
+  // By slug
   let { data, error } = await supabase
     .from("jobs")
     .select(selectCols)
@@ -47,28 +49,14 @@ async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
     .eq("visibility", "public")
     .limit(1);
 
-  if (error) {
-    console.error("Error loading public job by slug:", error);
-  }
+  if (error) console.error("Error loading job by slug:", error);
 
   if (data && data.length > 0) {
-    const row: any = data[0];
-    return {
-      id: row.id,
-      slug: row.slug ?? null,
-      title: row.title,
-      department: row.department ?? null,
-      location: row.location ?? null,
-      employmentType: row.employment_type ?? null,
-      seniority: row.seniority ?? null,
-      description: row.description ?? null,
-      tags: row.tags ?? null,
-      createdAt: row.created_at ?? null,
-    };
+    return data[0] as JobDetail;
   }
 
-  // 2) Fallback by id (UUID path)
-  const { data: dataById, error: errorById } = await supabase
+  // Fallback by id
+  const { data: byId, error: idError } = await supabase
     .from("jobs")
     .select(selectCols)
     .eq("id", slugOrId)
@@ -76,31 +64,14 @@ async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
     .eq("visibility", "public")
     .limit(1);
 
-  if (errorById) {
-    console.error("Error loading public job by id:", errorById);
-  }
+  if (idError) console.error("Error loading job by id:", idError);
 
-  if (!dataById || dataById.length === 0) {
-    return null;
-  }
+  if (!byId || byId.length === 0) return null;
 
-  const row: any = dataById[0];
-
-  return {
-    id: row.id,
-    slug: row.slug ?? null,
-    title: row.title,
-    department: row.department ?? null,
-    location: row.location ?? null,
-    employmentType: row.employment_type ?? null,
-    seniority: row.seniority ?? null,
-    description: row.description ?? null,
-    tags: row.tags ?? null,
-    createdAt: row.created_at ?? null,
-  };
+  return byId[0] as JobDetail;
 }
 
-export default async function PublicJobPage({ params }: JobPageProps) {
+export default async function JobDetailPage({ params }: JobPageProps) {
   const job = await fetchPublicJob(params.slug);
 
   if (!job) {
@@ -125,9 +96,8 @@ export default async function PublicJobPage({ params }: JobPageProps) {
   }
 
   const slugOrId = job.slug || job.id;
-
-  const createdLabel = job.createdAt
-    ? new Date(job.createdAt).toLocaleDateString("en-US", {
+  const createdLabel = job.created_at
+    ? new Date(job.created_at).toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -149,16 +119,18 @@ export default async function PublicJobPage({ params }: JobPageProps) {
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {job.title}
+        </h1>
         <p className="text-xs text-slate-500">
           {job.location || "Location flexible"}
           {job.department ? ` • ${job.department}` : ""}
           {job.seniority ? ` • ${job.seniority}` : ""}
         </p>
         <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
-          {job.employmentType && (
+          {job.employment_type && (
             <span className="rounded-full border border-slate-200 px-3 py-1">
-              {job.employmentType}
+              {job.employment_type}
             </span>
           )}
           {createdLabel && (
@@ -188,7 +160,7 @@ export default async function PublicJobPage({ params }: JobPageProps) {
         </section>
       )}
 
-      {/* Inline apply form (NO /jobs/[slug]/apply page needed) */}
+      {/* Inline public apply form */}
       <ApplyForm jobSlug={slugOrId} jobTitle={job.title} />
     </main>
   );
