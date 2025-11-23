@@ -1,36 +1,34 @@
-// app/jobs/[slug]/page.tsx
-import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import JobApplyForm from "./apply/JobApplyForm";
+import JobApplyForm from "./JobApplyForm";
 
-type PageProps = {
-  params: { slug: string };
-};
-
-type JobRecord = {
+type JobDetail = {
   id: string;
   slug: string | null;
   title: string;
-  location: string | null;
   department: string | null;
-  employment_type: string | null;
+  location: string | null;
+  employmentType: string | null;
   seniority: string | null;
   description: string | null;
+  tags: string[] | null;
+  status: string;
+  visibility: string;
 };
 
-async function fetchPublicJob(slugOrId: string): Promise<JobRecord | null> {
+async function fetchPublicJob(slugOrId: string): Promise<JobDetail | null> {
   const supabase = await createSupabaseServerClient();
 
-  const selectCols = `
+  const selectColumns = `
     id,
     slug,
     title,
-    location,
     department,
+    location,
     employment_type,
     seniority,
     description,
+    tags,
     status,
     visibility
   `;
@@ -38,72 +36,84 @@ async function fetchPublicJob(slugOrId: string): Promise<JobRecord | null> {
   // 1) Try by slug
   let { data, error } = await supabase
     .from("jobs")
-    .select(selectCols)
+    .select(selectColumns)
     .eq("slug", slugOrId)
     .eq("status", "open")
     .eq("visibility", "public")
     .limit(1);
 
   if (error) {
-    console.error("Error loading job by slug", error);
+    console.error("Error loading job by slug:", error);
   }
 
-  if (data && data.length > 0) {
-    const row: any = data[0];
-    return {
-      id: row.id,
-      slug: row.slug ?? null,
-      title: row.title,
-      location: row.location ?? null,
-      department: row.department ?? null,
-      employment_type: row.employment_type ?? null,
-      seniority: row.seniority ?? null,
-      description: row.description ?? null,
-    };
+  let row = data?.[0];
+
+  // 2) Fallback: try by id
+  if (!row) {
+    const { data: byId, error: errorById } = await supabase
+      .from("jobs")
+      .select(selectColumns)
+      .eq("id", slugOrId)
+      .eq("status", "open")
+      .eq("visibility", "public")
+      .limit(1);
+
+    if (errorById) {
+      console.error("Error loading job by id:", errorById);
+    }
+
+    row = byId?.[0];
   }
 
-  // 2) Try by id
-  const { data: byId, error: byIdError } = await supabase
-    .from("jobs")
-    .select(selectCols)
-    .eq("id", slugOrId)
-    .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
+  if (!row) return null;
 
-  if (byIdError) {
-    console.error("Error loading job by id", byIdError);
-  }
-
-  if (!byId || byId.length === 0) {
-    return null;
-  }
-
-  const row: any = byId[0];
   return {
-    id: row.id,
-    slug: row.slug ?? null,
-    title: row.title,
-    location: row.location ?? null,
-    department: row.department ?? null,
-    employment_type: row.employment_type ?? null,
-    seniority: row.seniority ?? null,
-    description: row.description ?? null,
+    id: row.id as string,
+    slug: (row.slug as string | null) ?? null,
+    title: row.title as string,
+    department: (row.department as string | null) ?? null,
+    location: (row.location as string | null) ?? null,
+    employmentType: (row.employment_type as string | null) ?? null,
+    seniority: (row.seniority as string | null) ?? null,
+    description: (row.description as string | null) ?? null,
+    tags: (row.tags as string[] | null) ?? null,
+    status: row.status as string,
+    visibility: row.visibility as string,
   };
 }
 
-export default async function JobDetailPage({ params }: PageProps) {
-  const slugOrId = params.slug;
-  const job = await fetchPublicJob(slugOrId);
+export default async function JobPage({
+  params,
+}: {
+  params: { slug: string };
+}) {
+  const job = await fetchPublicJob(params.slug);
 
   if (!job) {
-    notFound();
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Role not available
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          This job may have been closed or is no longer visible.
+        </p>
+        <div className="mt-4">
+          <Link
+            href="/jobs"
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            ← Back to all jobs
+          </Link>
+        </div>
+      </main>
+    );
   }
 
-  const applySlug = slugOrId;
+  const slugOrId = job.slug ?? job.id;
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-10">
+    <main className="mx-auto max-w-4xl px-4 py-12">
       <div className="mb-6">
         <Link
           href="/jobs"
@@ -113,68 +123,66 @@ export default async function JobDetailPage({ params }: PageProps) {
         </Link>
       </div>
 
-      {/* Header */}
-      <header className="mb-6 space-y-2">
+      <header className="mb-8 space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {job.title}
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
+
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          <span>{job.location || "Location flexible"}</span>
-          {job.employment_type && (
+          {job.location && <span>{job.location}</span>}
+          {job.employmentType && (
             <>
-              <span>•</span>
-              <span>{job.employment_type}</span>
+              <span className="h-1 w-1 rounded-full bg-slate-400" />
+              <span>{job.employmentType}</span>
             </>
           )}
           {job.seniority && (
             <>
-              <span>•</span>
+              <span className="h-1 w-1 rounded-full bg-slate-400" />
               <span>{job.seniority}</span>
             </>
           )}
-          {job.department && (
-            <>
-              <span>•</span>
-              <span>{job.department}</span>
-            </>
-          )}
         </div>
+
+        {job.tags && job.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {job.tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </header>
 
-      <div className="grid gap-8 md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)]">
-        {/* Left: Job description */}
-        <section className="space-y-4 text-sm leading-relaxed text-slate-800">
-          {job.description ? (
-            <article className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-800 prose-ul:list-disc prose-ul:pl-4">
-              <p className="whitespace-pre-line">{job.description}</p>
-            </article>
-          ) : (
-            <p className="text-sm text-slate-500">
-              No detailed description has been added for this role yet.
-            </p>
-          )}
-        </section>
+      <section className="mb-10 space-y-4 text-sm leading-relaxed text-slate-800">
+        {job.description ? (
+          <article className="prose prose-sm max-w-none">
+            <p className="whitespace-pre-line">{job.description}</p>
+          </article>
+        ) : (
+          <p className="text-sm text-slate-600">
+            Full description coming soon. You can still apply if this role is a
+            strong match.
+          </p>
+        )}
+      </section>
 
-        {/* Right: Apply form */}
-        <aside>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Apply for this role
-            </h2>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Share a few details and upload your CV. We&apos;ll review and
-              reach out if there&apos;s a strong match.
-            </p>
+      <section className="mt-10 border-t border-slate-200 pt-8">
+        <h2 className="mb-3 text-sm font-semibold text-slate-900">
+          Apply for this role
+        </h2>
+        <p className="mb-4 text-xs text-slate-600">
+          Share a few details and your CV. We review every application
+          carefully.
+        </p>
 
-            <div className="mt-4">
-              <JobApplyForm slug={applySlug} jobTitle={job.title} />
-            </div>
-          </div>
-        </aside>
-      </div>
+        <JobApplyForm slug={slugOrId} jobTitle={job.title} />
+      </section>
     </main>
   );
 }
