@@ -15,48 +15,37 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
     setApiError(null);
     setSuccess(false);
-    setIsSubmitting(true);
 
     try {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
-      const getString = (name: string): string | undefined => {
-        const value = formData.get(name);
-        if (typeof value !== "string") return undefined;
-        const trimmed = value.trim();
-        return trimmed.length > 0 ? trimmed : undefined;
-      };
+      const fullName = (formData.get("fullName") || "").toString().trim();
+      const email = (formData.get("email") || "").toString().trim();
 
-      const payload = {
-        fullName: getString("fullName") ?? "",
-        email: getString("email") ?? "",
-        phone: getString("phone"),
-        location: getString("location"),
-        linkedinUrl: getString("linkedinUrl"),
-        portfolioUrl: getString("portfolioUrl"),
-        cvUrl: getString("cvUrl"),
-        coverLetter: getString("coverLetter"),
-        source: "Website",
-      };
-
-      if (!payload.fullName || !payload.email) {
+      if (!fullName || !email) {
         throw new Error("Full name and email are required.");
       }
 
-      const res = await fetch(`/api/jobs/${encodeURIComponent(jobSlug)}/apply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      // Let the browser set multipart headers
+      const res = await fetch(
+        `/api/public/jobs/${encodeURIComponent(jobSlug)}/apply`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       let body: any = null;
       try {
         body = await res.json();
       } catch {
-        // ignore JSON parse error
+        // ignore parse error
       }
 
       if (!res.ok || body?.error) {
@@ -69,23 +58,38 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
       setSuccess(true);
       form.reset();
     } catch (err: any) {
-      setApiError(err?.message || "Something went wrong.");
+      setApiError(err?.message || "Unexpected error while submitting.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+    <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
       <h2 className="text-lg font-semibold text-slate-900">
         Apply for {jobTitle}
       </h2>
       <p className="mt-1 text-xs text-slate-600">
-        Share a few details and a link to your CV. We&apos;ll review and get
-        back to you.
+        Share a few details and attach your CV. We&apos;ll review and get back
+        to you.
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="mt-4 space-y-4"
+        encType="multipart/form-data"
+      >
+        {apiError && (
+          <p className="text-xs text-red-600">{apiError}</p>
+        )}
+
+        {success && (
+          <p className="text-xs text-emerald-700">
+            Thank you for your interest in the role. Your application has been
+            received. We&apos;ll be in touch if there&apos;s a strong match.
+          </p>
+        )}
+
         {/* Name + email */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -116,7 +120,7 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              Phone
+              Phone / WhatsApp
             </label>
             <input
               name="phone"
@@ -126,7 +130,7 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              Location (city, country)
+              Current location (city, country)
             </label>
             <input
               name="location"
@@ -151,7 +155,7 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-700">
-              Portfolio / GitHub URL (optional)
+              Portfolio / GitHub (optional)
             </label>
             <input
               name="portfolioUrl"
@@ -162,7 +166,22 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
           </div>
         </div>
 
-        {/* CV link */}
+        {/* CV upload + link */}
+        <div>
+          <label className="block text-xs font-medium text-slate-700">
+            Upload CV / Resume (PDF or DOC/DOCX)
+          </label>
+          <input
+            name="cvFile"
+            type="file"
+            accept=".pdf,.doc,.docx,.rtf"
+            className="mt-1 block w-full text-xs text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#111c4c]"
+          />
+          <p className="mt-1 text-[11px] text-slate-500">
+            You can also paste a link instead of uploading.
+          </p>
+        </div>
+
         <div>
           <label className="block text-xs font-medium text-slate-700">
             CV link (Google Drive, Dropbox, etc.)
@@ -187,18 +206,10 @@ export default function ApplyForm({ jobSlug, jobTitle }: ApplyFormProps) {
           />
         </div>
 
-        {apiError && (
-          <p className="text-xs text-red-600">
-            {apiError}
-          </p>
-        )}
-
-        {success && (
-          <p className="text-xs text-emerald-700">
-            Thank you for your interest in the role. Your application has been
-            received. We&apos;ll be in touch if there&apos;s a strong match.
-          </p>
-        )}
+        <p className="text-[0.7rem] text-slate-500">
+          By submitting, you agree that we can store your details and reach out
+          when we see a strong match. We won&apos;t spam you or sell your data.
+        </p>
 
         <button
           type="submit"
