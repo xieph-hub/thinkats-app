@@ -3,11 +3,23 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import JobApplyForm from "./apply/JobApplyForm";
-import { getJobForCurrentTenantBySlug } from "@/lib/jobs";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const revalidate = 60;
 
 type PageParams = { slug: string };
+
+type PublicJob = {
+  id: string;
+  slug: string | null;
+  title: string;
+  location: string | null;
+  employment_type: string | null;
+  seniority: string | null;
+  description: string | null;
+  status: string;
+  visibility: string;
+};
 
 function getBaseUrl(): string {
   const fromEnv =
@@ -16,17 +28,59 @@ function getBaseUrl(): string {
   return `https://${fromEnv}`;
 }
 
-// Optional but nice: SEO metadata for job detail
+/**
+ * Fetch a single open, public job by slug.
+ * - No UUID casting
+ * - No tenant logic (we assume global slugs for now)
+ */
+async function fetchPublicJobBySlug(
+  slug: string
+): Promise<PublicJob | null> {
+  if (!slug) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select(
+      `
+      id,
+      slug,
+      title,
+      location,
+      employment_type,
+      seniority,
+      description,
+      status,
+      visibility
+    `
+    )
+    .eq("slug", slug)
+    .eq("status", "open")
+    .eq("visibility", "public")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching public job by slug", {
+      slug,
+      error,
+    });
+    return null;
+  }
+
+  if (!data) return null;
+  return data as PublicJob;
+}
+
+// SEO metadata for job detail
 export async function generateMetadata({
   params,
 }: {
   params: PageParams;
 }): Promise<Metadata> {
   const baseUrl = getBaseUrl();
-  const job = await getJobForCurrentTenantBySlug(params.slug);
+  const job = await fetchPublicJobBySlug(params.slug);
 
   // If job not found or not open/public, fall back to generic
-  if (!job || job.status !== "open" || job.visibility !== "public") {
+  if (!job) {
     const title = "Role not available | Resourcin";
     const description =
       "This role may have been closed or is no longer visible.";
@@ -54,7 +108,6 @@ export async function generateMetadata({
   const description =
     job.description?.slice(0, 200) ||
     `Apply for ${job.title} through Resourcin.`;
-
   const url = `${baseUrl.replace(/\/$/, "")}/jobs/${slugOrId}`;
 
   return {
@@ -79,10 +132,10 @@ export default async function JobDetailPage({
 }: {
   params: PageParams;
 }) {
-  const job = await getJobForCurrentTenantBySlug(params.slug);
+  const job = await fetchPublicJobBySlug(params.slug);
 
-  // ✅ No UUID casting here. We only look up by slug in getJobForCurrentTenantBySlug.
-  if (!job || job.status !== "open" || job.visibility !== "public") {
+  // If we can’t load it or it’s not open/public, show 404 – NOT a 500.
+  if (!job) {
     notFound();
   }
 
@@ -105,7 +158,9 @@ export default async function JobDetailPage({
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           Open role
         </p>
-        <h1 className="text-2xl font-semibold text-slate-900">{job.title}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {job.title}
+        </h1>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
           <span>{job.location || "Location flexible"}</span>
           {job.employment_type && (
@@ -129,8 +184,6 @@ export default async function JobDetailPage({
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         {job.description ? (
           <div className="prose prose-sm max-w-none text-slate-800">
-            {/* If you later store structured sections, we can render them properly.
-               For now we just render the description as simple text. */}
             <p className="whitespace-pre-line">{job.description}</p>
           </div>
         ) : (
@@ -146,8 +199,8 @@ export default async function JobDetailPage({
           Apply for this role
         </h2>
         <p className="mb-4 text-xs text-slate-600">
-          Share a few details and your CV. We&apos;ll review and get in touch
-          if there&apos;s a strong match.
+          Share a few details and your CV. We&apos;ll review and get in
+          touch if there&apos;s a strong match.
         </p>
         <JobApplyForm slug={slugOrId} jobTitle={job.title} />
       </section>
