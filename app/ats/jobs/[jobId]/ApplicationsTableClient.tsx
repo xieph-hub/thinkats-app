@@ -1,5 +1,38 @@
 "use client";
 
+const SUPABASE_PUBLIC_URL =
+  (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+
+/**
+ * Turn whatever is stored in cvUrl into a usable href.
+ *
+ * - If it's already a full http/https URL → return as-is.
+ * - If it's a relative storage path (e.g. "cvs/email/file.pdf") →
+ *   build a Supabase public URL under the `resourcin-uploads` bucket.
+ * - If env is missing or value is empty → return null.
+ */
+function resolveCvHref(raw?: string | null): string | null {
+  if (!raw) return null;
+
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // Already a full URL (Supabase, Drive, Dropbox, etc.)
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // We expect this to be a path inside the `resourcin-uploads` bucket
+  if (!SUPABASE_PUBLIC_URL) {
+    // Env misconfig – better to show "No CV" than a broken link
+    return null;
+  }
+
+  const normalizedPath = trimmed.replace(/^\/+/, "");
+
+  return `${SUPABASE_PUBLIC_URL}/storage/v1/object/public/resourcin-uploads/${normalizedPath}`;
+}
+
 type Application = {
   id: string;
   fullName: string;
@@ -65,13 +98,7 @@ export default function ApplicationsTableClient({
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
               {applications.map((application) => {
-                const cvUrlRaw = application.cvUrl || "";
-                const cvHref =
-                  cvUrlRaw &&
-                  (cvUrlRaw.startsWith("http://") ||
-                  cvUrlRaw.startsWith("https://")
-                    ? cvUrlRaw
-                    : `https://${cvUrlRaw}`);
+                const cvHref = resolveCvHref(application.cvUrl);
 
                 return (
                   <tr key={application.id} className="hover:bg-slate-50/60">
@@ -96,7 +123,9 @@ export default function ApplicationsTableClient({
                     </td>
 
                     <td className="px-4 py-2 align-top text-xs text-slate-600">
-                      {application.location || <span className="text-slate-400">–</span>}
+                      {application.location || (
+                        <span className="text-slate-400">–</span>
+                      )}
                     </td>
 
                     <td className="px-4 py-2 align-top text-xs">
@@ -130,7 +159,9 @@ export default function ApplicationsTableClient({
                     </td>
 
                     <td className="px-4 py-2 align-top text-xs text-slate-600">
-                      {application.source || <span className="text-slate-400">–</span>}
+                      {application.source || (
+                        <span className="text-slate-400">–</span>
+                      )}
                     </td>
 
                     <td className="px-4 py-2 align-top text-xs">
