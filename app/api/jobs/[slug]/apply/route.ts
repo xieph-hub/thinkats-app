@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
+// This route accepts JSON only (NOT form-data)
+// It is called by the React ApplyForm via fetch()
 export async function POST(
   req: NextRequest,
   { params }: { params: { slug: string } }
@@ -9,12 +11,11 @@ export async function POST(
   try {
     const slugOrId = params.slug;
 
-    let body: any;
-    try {
-      body = await req.json();
-    } catch {
+    const body = await req.json().catch(() => null);
+
+    if (!body || typeof body !== "object") {
       return NextResponse.json(
-        { error: "Invalid JSON body." },
+        { error: "Invalid request body." },
         { status: 400 }
       );
     }
@@ -27,9 +28,19 @@ export async function POST(
       linkedinUrl,
       portfolioUrl,
       cvUrl,
-      headline,
-      notes,
-    } = body ?? {};
+      coverLetter,
+      source,
+    } = body as {
+      fullName?: string;
+      email?: string;
+      phone?: string | null;
+      location?: string | null;
+      linkedinUrl?: string | null;
+      portfolioUrl?: string | null;
+      cvUrl?: string | null;
+      coverLetter?: string | null;
+      source?: string | null;
+    };
 
     if (!fullName || !email) {
       return NextResponse.json(
@@ -40,7 +51,7 @@ export async function POST(
 
     const supabase = await createSupabaseServerClient();
 
-    // --- 1) Resolve job.id from slug or id, only if open + public
+    // -------- 1) Find an OPEN, PUBLIC job by slug OR id --------
     const selectCols = `
       id,
       slug,
@@ -48,7 +59,7 @@ export async function POST(
       visibility
     `;
 
-    let { data, error } = await supabase
+    let { data: bySlug, error: slugError } = await supabase
       .from("jobs")
       .select(selectCols)
       .eq("slug", slugOrId)
@@ -56,16 +67,14 @@ export async function POST(
       .eq("visibility", "public")
       .limit(1);
 
-    if (error) {
-      console.error("Error loading job in apply endpoint (slug)", error);
+    if (slugError) {
+      console.error("Error querying job by slug in apply API:", slugError);
     }
 
-    let jobId: string | null = null;
+    let jobRow = bySlug?.[0];
 
-    if (data && data.length > 0) {
-      jobId = data[0].id;
-    } else {
-      const { data: dataById, error: errorById } = await supabase
+    if (!jobRow) {
+      const { data: byId, error: idError } = await supabase
         .from("jobs")
         .select(selectCols)
         .eq("id", slugOrId)
@@ -73,41 +82,44 @@ export async function POST(
         .eq("visibility", "public")
         .limit(1);
 
-      if (errorById) {
-        console.error("Error loading job in apply endpoint (id)", errorById);
+      if (idError) {
+        console.error("Error querying job by id in apply API:", idError);
       }
 
-      if (!dataById || dataById.length === 0) {
-        return NextResponse.json(
-          { error: "This job is no longer accepting applications." },
-          { status: 404 }
-        );
-      }
-
-      jobId = dataById[0].id;
+      jobRow = byId?.[0];
     }
 
-    // --- 2) Insert into job_applications via Supabase
+    if (!jobRow) {
+      return NextResponse.json(
+        { error: "Job not found or not open/public." },
+        { status: 404 }
+      );
+    }
+
+    const jobId = jobRow.id as string;
+
+    // -------- 2) Insert job_application --------
     const { data: inserted, error: insertError } = await supabase
       .from("job_applications")
       .insert({
-        job_id: jobId!,
+        job_id: jobId,
         full_name: fullName,
         email,
-        phone: phone || null,
-        location: location || null,
-        linkedin_url: linkedinUrl || null,
-        portfolio_url: portfolioUrl || null,
-        cv_url: cvUrl || null,
-        cover_letter: (notes || headline || null) as string | null,
-        source: "Website",
-        // stage / status can be left to DB defaults
+        phone: phone ?? null,
+        location: location ?? null,
+        linkedin_url: linkedinUrl ?? null,
+        portfolio_url: portfolioUrl ?? null,
+        cv_url: cvUrl ?? null, // simple link for now
+        cover_letter: coverLetter ?? null,
+        source: source ?? "Website",
+        stage: "APPLIED",
+        status: "PENDING",
       })
       .select("id")
       .single();
 
-    if (insertError || !inserted) {
-      console.error("Error inserting job_application", insertError);
+    if (insertError) {
+      console.error("Error inserting job_application:", insertError);
       return NextResponse.json(
         {
           error:
@@ -122,12 +134,9 @@ export async function POST(
       { status: 200 }
     );
   } catch (err) {
-    console.error("Error creating application", err);
+    console.error("Apply API error:", err);
     return NextResponse.json(
-      {
-        error:
-          "Unexpected error while creating your application. Please try again.",
-      },
+      { error: "Unexpected error while submitting application." },
       { status: 500 }
     );
   }
