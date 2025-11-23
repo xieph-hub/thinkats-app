@@ -87,7 +87,14 @@ export default async function JobsPage() {
       ) : (
         <ul className="mt-6 space-y-4">
           {jobs.map((job) => {
-            const slugOrId = job.slug ?? job.id;
+            const slugOrId = job.slug || job.id;
+
+            // If for some reason we don't have either, skip this record
+            if (!slugOrId) {
+              console.warn("Job missing slug and id", job);
+              return null;
+            }
+
             return (
               <li
                 key={job.id}
