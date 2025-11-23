@@ -19,10 +19,17 @@ export async function POST(
   try {
     const slugOrId = params.slug;
 
-    // 1) Find the open, public job by slug OR id
+    if (!slugOrId || typeof slugOrId !== "string") {
+      return NextResponse.json(
+        { error: "Missing job identifier." },
+        { status: 400 }
+      );
+    }
+
+    // 1) Find an open, public job by slug OR id
     let jobQuery = supabaseAdmin
       .from("jobs")
-      .select("id, tenant_id, status, visibility")
+      .select("id, status, visibility")
       .eq("status", "open")
       .eq("visibility", "public")
       .limit(1);
@@ -33,10 +40,10 @@ export async function POST(
       jobQuery = jobQuery.eq("slug", slugOrId);
     }
 
-    const { data: job, error: jobError } = await jobQuery.maybeSingle();
+    const { data: job, error: jobError } = await jobQuery.single();
 
     if (jobError || !job) {
-      console.error("Public apply: job not found", {
+      console.error("Public apply: job not found or not open", {
         slugOrId,
         jobError,
       });
@@ -46,6 +53,7 @@ export async function POST(
       );
     }
 
+    // 2) Parse body
     const body = await req.json().catch(() => null);
 
     if (!body || typeof body !== "object") {
@@ -87,66 +95,7 @@ export async function POST(
     const trimmedFullName = fullName.trim();
     const trimmedEmail = email.trim();
 
-    // 2) Ensure a candidate exists for (tenant_id, email)
-    let candidateId: string | null = null;
-
-    const {
-      data: existingCandidate,
-      error: existingCandidateError,
-    } = await supabaseAdmin
-      .from("candidates")
-      .select("id")
-      .eq("tenant_id", job.tenant_id)
-      .eq("email", trimmedEmail)
-      .maybeSingle();
-
-    if (existingCandidateError) {
-      console.error("Public apply: error checking candidate", {
-        tenantId: job.tenant_id,
-        email: trimmedEmail,
-        existingCandidateError,
-      });
-    }
-
-    if (existingCandidate?.id) {
-      candidateId = existingCandidate.id;
-    } else {
-      const {
-        data: newCandidate,
-        error: createCandidateError,
-      } = await supabaseAdmin
-        .from("candidates")
-        .insert({
-          tenant_id: job.tenant_id,
-          full_name: trimmedFullName,
-          email: trimmedEmail,
-          phone: phone || null,
-          location: location || null,
-          linkedin_url: linkedinUrl || null,
-          current_title: null,
-          current_company: null,
-          cv_url: cvUrl || null,
-          source: source || "Website",
-        })
-        .select("id")
-        .single();
-
-      if (createCandidateError || !newCandidate) {
-        console.error("Public apply: failed to create candidate", {
-          tenantId: job.tenant_id,
-          email: trimmedEmail,
-          createCandidateError,
-        });
-        return NextResponse.json(
-          { error: "Could not save candidate profile." },
-          { status: 500 }
-        );
-      }
-
-      candidateId = newCandidate.id;
-    }
-
-    // 3) Create job_application
+    // 3) Create job_application (candidate_id left null for now)
     const {
       data: application,
       error: applicationError,
@@ -154,7 +103,7 @@ export async function POST(
       .from("job_applications")
       .insert({
         job_id: job.id,
-        candidate_id: candidateId,
+        candidate_id: null, // can wire up later
         full_name: trimmedFullName,
         email: trimmedEmail,
         phone: phone || null,
@@ -164,19 +113,22 @@ export async function POST(
         cv_url: cvUrl || null,
         cover_letter: coverLetter || null,
         source: source || "Website",
-        // stage/status can use DB defaults
+        // stage + status use DB defaults: 'APPLIED' / 'PENDING'
       })
       .select("id")
       .single();
 
     if (applicationError || !application) {
-      console.error("Public apply: failed to create job_application", {
-        jobId: job.id,
-        candidateId,
-        applicationError,
-      });
+      console.error(
+        "Public apply: failed to create job_application",
+        { jobId: job.id, applicationError }
+      );
       return NextResponse.json(
-        { error: "Could not save job application." },
+        {
+          error:
+            applicationError?.message ||
+            "Could not save job application.",
+        },
         { status: 500 }
       );
     }
@@ -185,10 +137,14 @@ export async function POST(
       ok: true,
       applicationId: application.id,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Public apply: unexpected error", err);
     return NextResponse.json(
-      { error: "Unexpected error while submitting application." },
+      {
+        error:
+          err?.message ||
+          "Unexpected error while submitting application.",
+      },
       { status: 500 }
     );
   }
