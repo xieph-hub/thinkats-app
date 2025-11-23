@@ -18,6 +18,8 @@ type JobRow = {
   seniority: string | null;
   department: string | null;
   description: string | null;
+  status: string | null;
+  visibility: string | null;
   created_at: string | null;
 };
 
@@ -32,10 +34,29 @@ function formatDate(dateStr: string | null) {
   });
 }
 
-export default async function JobDetailPage({ params, searchParams }: PageProps) {
-  const slugOrId = decodeURIComponent(params.jobIdOrSlug);
+// simple UUID pattern: 8-4-4-4-12 hex segments
+function looksLikeUuid(value: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value
+  );
+}
 
-  const { data, error } = await supabaseAdmin
+export default async function JobDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
+  const rawParam = params.jobIdOrSlug;
+
+  // If the param is missing or literally "undefined", treat it as 404
+  if (!rawParam || rawParam === "undefined") {
+    notFound();
+  }
+
+  const slugOrId = decodeURIComponent(rawParam);
+
+  const isUuid = looksLikeUuid(slugOrId);
+
+  let query = supabaseAdmin
     .from("jobs")
     .select(
       `
@@ -53,16 +74,22 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
       created_at
     `
     )
-    .or(`id.eq.${slugOrId},slug.eq.${slugOrId}`)
     .eq("status", "open")
-    .eq("visibility", "public")
-    .limit(1);
+    .eq("visibility", "public");
+
+  if (isUuid) {
+    query = query.eq("id", slugOrId);
+  } else {
+    query = query.eq("slug", slugOrId);
+  }
+
+  const { data, error } = await query.single<JobRow>();
 
   if (error) {
     console.error("Error loading job detail:", error);
   }
 
-  const job = (data ?? [])[0] as JobRow | undefined;
+  const job = data || undefined;
 
   if (!job) {
     notFound();
@@ -138,15 +165,15 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
             talent pool and only reach out when there&apos;s a strong match.
           </p>
 
-          <ApplicationForm jobId={job.id} tenantId={job.tenant_id} />
+          <ApplicationForm jobId={job.id} tenantId={job.tenant_id} slug={job.slug} />
         </section>
       </article>
     </main>
   );
 }
 
-function ApplicationForm(props: { jobId: string; tenantId: string }) {
-  const { jobId, tenantId } = props;
+function ApplicationForm(props: { jobId: string; tenantId: string; slug: string | null }) {
+  const { jobId, tenantId, slug } = props;
 
   return (
     <form
@@ -157,6 +184,7 @@ function ApplicationForm(props: { jobId: string; tenantId: string }) {
     >
       <input type="hidden" name="jobId" value={jobId} />
       <input type="hidden" name="tenantId" value={tenantId} />
+      <input type="hidden" name="jobSlug" value={slug ?? ""} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
