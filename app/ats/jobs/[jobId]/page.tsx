@@ -43,6 +43,7 @@ type ApplicationStatus =
 type TimelineEvent = {
   label: string;
   at: string;
+  note?: string;
 };
 
 type ApplicationsSplitViewApplication = {
@@ -55,6 +56,7 @@ type ApplicationsSplitViewApplication = {
   cvUrl?: string;
   phone?: string;
   timeline?: TimelineEvent[];
+  latestNote?: string;
 };
 
 type PageProps = {
@@ -85,7 +87,7 @@ export default async function AtsJobPage({ params }: PageProps) {
     notFound();
   }
 
-  // 2) Load applications for this job
+  // 2) Load applications
   const { data: appsData, error: appsError } = await supabaseAdmin
     .from("job_applications")
     .select(
@@ -143,7 +145,7 @@ export default async function AtsJobPage({ params }: PageProps) {
     interviewRows = (interviewsData ?? []) as InterviewRow[];
   }
 
-  // 4) Shape into ApplicationsSplitView props
+  // 4) Shape for ApplicationsSplitView
   const allowedStatuses: ApplicationStatus[] = [
     "applied",
     "screening",
@@ -163,7 +165,7 @@ export default async function AtsJobPage({ params }: PageProps) {
 
       const timeline: TimelineEvent[] = [];
 
-      // Always: applied
+      // Applied
       if (row.created_at) {
         timeline.push({
           label: "Applied",
@@ -171,13 +173,14 @@ export default async function AtsJobPage({ params }: PageProps) {
         });
       }
 
-      // Status change event
+      // Status change
       if (row.status_changed_at) {
         const niceStatus =
           safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1);
         timeline.push({
           label: `Moved to ${niceStatus}`,
           at: row.status_changed_at,
+          note: row.status_note || undefined,
         });
       }
 
@@ -192,14 +195,21 @@ export default async function AtsJobPage({ params }: PageProps) {
         timeline.push({
           label: `Interview scheduled (${typeLabel})`,
           at: iv.scheduled_at,
+          note: iv.notes || undefined,
         });
       }
 
       // Sort by time ascending
       timeline.sort(
-        (a, b) =>
-          new Date(a.at).getTime() - new Date(b.at).getTime()
+        (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
       );
+
+      // Derive latestNote (prefer the most recent event that has a note)
+      const latestNoteFromTimeline =
+        [...timeline].reverse().find((ev) => !!ev.note)?.note;
+
+      const latestNote =
+        latestNoteFromTimeline || row.status_note || undefined;
 
       return {
         id: row.id,
@@ -211,6 +221,7 @@ export default async function AtsJobPage({ params }: PageProps) {
         cvUrl: row.cv_url ?? undefined,
         phone: row.phone ?? undefined,
         timeline,
+        latestNote,
       };
     }
   );
