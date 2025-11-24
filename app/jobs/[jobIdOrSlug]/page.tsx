@@ -155,50 +155,66 @@ function formatSalary(job: JobRow): string | null {
   return null;
 }
 
+/**
+ * Smarter description splitter:
+ * - Detects headings for "Responsibilities" / "Requirements" in different phrasings
+ * - Strips bullets like "-", "*", "•"
+ * - Defaults everything else into Overview
+ */
 function splitDescription(raw: string | null): DescriptionSections {
   if (!raw) {
     return { overview: [], responsibilities: [], requirements: [] };
   }
 
-  const lines = raw
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const sections: DescriptionSections = {
+    overview: [],
+    responsibilities: [],
+    requirements: [],
+  };
 
-  let mode: "overview" | "responsibilities" | "requirements" = "overview";
-  const overview: string[] = [];
-  const responsibilities: string[] = [];
-  const requirements: string[] = [];
+  let mode: keyof DescriptionSections = "overview";
 
-  for (const line of lines) {
+  const lines = raw.split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
     const lower = line.toLowerCase();
 
+    // Switch to Responsibilities
     if (
       lower.startsWith("responsibil") ||
       lower.startsWith("key responsibilities") ||
+      lower.startsWith("main responsibilities") ||
       lower.startsWith("what you'll do") ||
+      lower.startsWith("what you’ll do") ||
       lower.startsWith("what you will do")
     ) {
       mode = "responsibilities";
       continue;
     }
 
+    // Switch to Requirements
     if (
-      lower.startsWith("requirement") ||
       lower.startsWith("requirements") ||
+      lower.startsWith("requirement") ||
       lower.startsWith("what you'll need") ||
-      lower.startsWith("what you need")
+      lower.startsWith("what you’ll need") ||
+      lower.startsWith("what you need") ||
+      lower.startsWith("who you are")
     ) {
       mode = "requirements";
       continue;
     }
 
-    if (mode === "overview") overview.push(line);
-    else if (mode === "responsibilities") responsibilities.push(line);
-    else requirements.push(line);
+    // Strip leading bullets / markdown list markers
+    const cleaned = line.replace(/^[-*•\u2022]\s*/, "");
+
+    sections[mode].push(cleaned);
   }
 
-  return { overview, responsibilities, requirements };
+  return sections;
 }
 
 /** Small meta pill with icon + label */
