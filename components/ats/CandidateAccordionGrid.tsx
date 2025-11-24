@@ -1,219 +1,166 @@
-// components/ats/CandidateGridAccordion.tsx
 "use client";
 
 import React, { useState } from "react";
 
-export type Candidate = {
+export type CandidateCard = {
   id: string;
   fullName: string;
-  currentRole?: string;
+  currentTitle?: string;
   company?: string;
   location?: string;
-  keySkills?: string[]; // used for the top 3 tags
-  headline?: string;
+  keySkills: string[];      // top 3–5 skills for collapsed view
+  allSkills?: string[];     // full list for expanded view
   yearsExperience?: number;
   email?: string;
   phone?: string;
-  tags?: string[];
-  lastContactedAt?: string;
-  source?: string;
-  cvUrl?: string;
-  notes?: string;
+  summary?: string;         // short bio / profile summary
 };
 
 type Props = {
-  candidates: Candidate[];
+  candidates: CandidateCard[];
   onViewProfile?: (id: string) => void;
 };
 
-export function CandidateGridAccordion({ candidates, onViewProfile }: Props) {
+export function CandidateAccordionGrid({ candidates, onViewProfile }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   if (!candidates.length) {
     return (
-      <p className="text-xs text-slate-500">
-        No candidates in this view yet.
-      </p>
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center text-xs text-slate-500">
+        No candidates saved yet. Once you add people to your talent database,
+        they will appear here.
+      </div>
     );
   }
 
-  const toggle = (id: string) => {
-    setOpenId((prev) => (prev === id ? null : id));
-  };
-
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {candidates.map((c) => {
-        const isOpen = openId === c.id;
-        const skillSlice = (c.keySkills ?? []).slice(0, 3);
+    <div className="grid gap-3 md:grid-cols-2">
+      {candidates.map((candidate) => {
+        const isOpen = candidate.id === openId;
+        const topSkills = candidate.keySkills.slice(0, 3);
 
         return (
           <article
-            key={c.id}
-            className="flex flex-col rounded-2xl border border-slate-200 bg-white/80 p-3 shadow-sm ring-1 ring-transparent transition hover:border-[#172965]/60 hover:bg-white hover:shadow-md hover:ring-[#172965]/5"
+            key={candidate.id}
+            className="flex flex-col rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm ring-1 ring-transparent transition hover:border-[#172965]/70 hover:bg-white hover:shadow-md hover:ring-[#172965]/5"
           >
-            {/* Collapsed header */}
+            {/* Header row (always visible) */}
             <button
               type="button"
-              onClick={() => toggle(c.id)}
-              className="flex w-full items-start justify-between gap-2 text-left"
+              onClick={() => setOpenId(isOpen ? null : candidate.id)}
+              className="flex w-full items-start justify-between gap-3 text-left"
             >
-              <div className="space-y-0.5">
-                <h2 className="text-sm font-semibold text-slate-900">
-                  {c.fullName}
-                </h2>
-                {(c.currentRole || c.company) && (
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  {candidate.fullName}
+                </h3>
+                <p className="text-[11px] text-slate-600">
+                  {candidate.currentTitle || "Role not specified"}
+                  {candidate.company ? ` • ${candidate.company}` : ""}
+                </p>
+                {candidate.location && (
                   <p className="text-[11px] text-slate-500">
-                    {c.currentRole}
-                    {c.currentRole && c.company && (
-                      <span className="mx-1 text-slate-300">•</span>
-                    )}
-                    {c.company}
+                    {candidate.location}
                   </p>
                 )}
-                {c.location && (
-                  <p className="text-[11px] text-slate-500">{c.location}</p>
+                {topSkills.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {topSkills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
-              <span className="mt-1 text-[11px] text-slate-400">
-                {isOpen ? "Hide" : "View"}
-              </span>
+              <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
+                <span>{isOpen ? "Hide" : "Details"}</span>
+                <span
+                  className={`inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-[9px] transition ${
+                    isOpen ? "rotate-90" : ""
+                  }`}
+                >
+                  ▸
+                </span>
+              </div>
             </button>
 
-            {/* Key skills */}
-            {skillSlice.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {skillSlice.map((skill) => (
-                  <span
-                    key={skill}
-                    className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Accordion content */}
+            {/* Expanded area */}
             {isOpen && (
-              <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
-                {c.headline && (
-                  <section>
-                    <h3 className="text-[11px] font-semibold text-slate-900">
-                      Summary
-                    </h3>
-                    <p className="mt-0.5 leading-relaxed">{c.headline}</p>
-                  </section>
+              <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-700">
+                {candidate.summary && (
+                  <p className="text-slate-700">{candidate.summary}</p>
                 )}
 
-                <section>
-                  <h3 className="text-[11px] font-semibold text-slate-900">
-                    Contact
-                  </h3>
-                  <dl className="mt-1 grid grid-cols-2 gap-2">
-                    {c.email && (
-                      <div>
-                        <dt className="text-[10px] font-medium text-slate-700">
-                          Email
-                        </dt>
-                        <dd className="mt-0.5 break-all text-[11px]">
-                          {c.email}
-                        </dd>
-                      </div>
-                    )}
-                    {c.phone && (
-                      <div>
-                        <dt className="text-[10px] font-medium text-slate-700">
-                          Phone
-                        </dt>
-                        <dd className="mt-0.5 text-[11px]">{c.phone}</dd>
-                      </div>
-                    )}
-                    {typeof c.yearsExperience === "number" && (
-                      <div>
-                        <dt className="text-[10px] font-medium text-slate-700">
-                          Experience
-                        </dt>
-                        <dd className="mt-0.5 text-[11px]">
-                          {c.yearsExperience} years
-                        </dd>
-                      </div>
-                    )}
-                    {c.source && (
-                      <div>
-                        <dt className="text-[10px] font-medium text-slate-700">
-                          Source
-                        </dt>
-                        <dd className="mt-0.5 text-[11px]">{c.source}</dd>
-                      </div>
-                    )}
-                    {c.lastContactedAt && (
-                      <div>
-                        <dt className="text-[10px] font-medium text-slate-700">
-                          Last contacted
-                        </dt>
-                        <dd className="mt-0.5 text-[11px]">
-                          {new Date(c.lastContactedAt).toLocaleDateString()}
-                        </dd>
-                      </div>
-                    )}
-                  </dl>
-                </section>
-
-                {c.tags && c.tags.length > 0 && (
-                  <section>
-                    <h3 className="text-[11px] font-semibold text-slate-900">
-                      Tags
-                    </h3>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {c.tags.map((tag) => (
+                {(candidate.allSkills && candidate.allSkills.length > 0) && (
+                  <section className="mt-3 space-y-1">
+                    <h4 className="font-semibold text-slate-900">Skills</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {candidate.allSkills.map((skill) => (
                         <span
-                          key={tag}
-                          className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-700"
+                          key={skill}
+                          className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-0.5 text-[10px] font-medium text-slate-800"
                         >
-                          {tag}
+                          {skill}
                         </span>
                       ))}
                     </div>
                   </section>
                 )}
 
-                {c.notes && (
-                  <section>
-                    <h3 className="text-[11px] font-semibold text-slate-900">
-                      Internal notes
-                    </h3>
-                    <p className="mt-0.5 whitespace-pre-line leading-relaxed">
-                      {c.notes}
-                    </p>
+                {(candidate.email || candidate.phone) && (
+                  <section className="mt-3 space-y-1">
+                    <h4 className="font-semibold text-slate-900">
+                      Contact details
+                    </h4>
+                    <dl className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                      {candidate.email && (
+                        <div>
+                          <dt className="font-medium text-slate-700">Email</dt>
+                          <dd className="mt-0.5 break-all">
+                            <a
+                              href={`mailto:${candidate.email}`}
+                              className="hover:text-[#172965]"
+                            >
+                              {candidate.email}
+                            </a>
+                          </dd>
+                        </div>
+                      )}
+                      {candidate.phone && (
+                        <div>
+                          <dt className="font-medium text-slate-700">Phone</dt>
+                          <dd className="mt-0.5">{candidate.phone}</dd>
+                        </div>
+                      )}
+                    </dl>
                   </section>
                 )}
 
-                <div className="flex items-center justify-between pt-1">
-                  {c.cvUrl ? (
-                    <a
-                      href={c.cvUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4c]"
-                    >
-                      View CV
-                    </a>
-                  ) : (
-                    <span className="text-[10px] text-slate-400">
-                      CV not attached
+                <div className="mt-4 flex items-center justify-between">
+                  {candidate.yearsExperience != null && (
+                    <p className="text-[10px] text-slate-500">
+                      Approx.{" "}
+                      <span className="font-semibold text-slate-700">
+                        {candidate.yearsExperience} year
+                        {candidate.yearsExperience === 1 ? "" : "s"}
+                      </span>{" "}
+                      of experience
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onViewProfile?.(candidate.id)}
+                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-800 hover:border-[#172965] hover:bg-slate-50"
+                  >
+                    View full profile
+                    <span className="ml-1 text-[11px]" aria-hidden="true">
+                      →
                     </span>
-                  )}
-
-                  {onViewProfile && (
-                    <button
-                      type="button"
-                      onClick={() => onViewProfile(c.id)}
-                      className="text-[11px] font-semibold text-[#172965] hover:underline"
-                    >
-                      View full profile →
-                    </button>
-                  )}
+                  </button>
                 </div>
               </div>
             )}
