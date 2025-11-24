@@ -1,8 +1,15 @@
-// app/api/ats/applications/[id]/status/route.ts
+// app/api/ats/applications/[id]/update/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
+
+type ApplicationStatus =
+  | "applied"
+  | "screening"
+  | "interview"
+  | "offer"
+  | "rejected";
 
 export async function PATCH(
   req: NextRequest,
@@ -18,47 +25,97 @@ export async function PATCH(
       );
     }
 
-    const body = await req.json();
-    const status = (body.status as string | undefined)?.trim();
+    const body = await req.json().catch(() => ({}));
+
+    const status = body.status as ApplicationStatus | undefined;
     const note = (body.note as string | undefined)?.trim() || null;
 
-    if (!status) {
+    if (!status && !note) {
       return NextResponse.json(
-        { error: "New status is required" },
+        {
+          error: "Nothing to update. Provide at least a new status or a note.",
+        },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("job_applications")
-      .update({
-        status,
-        status_note: note,
-        status_changed_at: new Date().toISOString(),
-      })
-      .eq("id", applicationId)
-      .select("id, status, status_note, status_changed_at")
-      .maybeSingle();
+    // 1) Update application status (and only use columns we’re sure exist)
+    const updatePayload: Record<string, unknown> = {};
+    if (status) {
+      updatePayload.status = status;
+    }
 
-    if (error || !data) {
-      console.error("Error updating application status:", error);
+    const { data: updated, error } = await supabaseAdmin
+      .from("job_applications")
+      .update(updatePayload)
+      .eq("id", applicationId)
+      .select("id, job_id, full_name, email, status")
+      .single();
+
+    if (error || !updated) {
+      console.error("ATS applications/update – error updating application:", error);
       return NextResponse.json(
-        { error: "Failed to update status" },
+        { error: "Failed to update application" },
         { status: 500 }
       );
     }
 
+    // 2) Log status change into application_events
+    try {
+      await supabaseAdmin.from("application_events").insert({
+        application_id: updated.id,
+        type: "status_change",
+        payload: {
+          new_status: status ?? updated.status,
+          note,
+        },
+      });
+    } catch (eventErr) {
+      console.error(
+        "ATS applications/update – failed to insert status_change event:",
+        eventErr
+      );
+      // Don’t fail the whole request because of logging
+    }
+
+    // 3) Email hooks (stubbed, but logged as events)
+    if (status === "interview" || status === "offer" || status === "rejected") {
+      const templateKey =
+        status === "interview"
+          ? "interview_invite"
+          : status === "offer"
+          ? "offer"
+          : "rejection";
+
+      try {
+        // This is where you’d actually send the email via Postmark / Resend / SES etc.
+        // For now we just log an `email_queued` event.
+        await supabaseAdmin.from("application_events").insert({
+          application_id: updated.id,
+          type: "email_queued",
+          payload: {
+            template: templateKey,
+            to: updated.email,
+            candidate_name: updated.full_name,
+          },
+        });
+      } catch (emailErr) {
+        console.error(
+          "ATS applications/update – failed to log email_queued event:",
+          emailErr
+        );
+      }
+    }
+
     return NextResponse.json(
       {
-        id: data.id,
-        status: data.status,
-        status_note: data.status_note,
-        status_changed_at: data.status_changed_at,
+        id: updated.id,
+        status: updated.status,
       },
       { status: 200 }
     );
   } catch (err) {
-    console.error("Unexpected error in status update:", err);
+    console.error("ATS applications/update – unexpected error:", err);
     return NextResponse.json(
       { error: "Unexpected error" },
       { status: 500 }
