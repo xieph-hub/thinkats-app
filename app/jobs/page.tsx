@@ -70,7 +70,7 @@ function MetaItem({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-// === ICONS (color-rich but minimal) ===
+// === ICONS (location / briefcase / seniority / work-mode) ===
 
 function IconLocation() {
   // Red pin
@@ -164,7 +164,7 @@ function IconGlobe() {
   );
 }
 
-// === SOCIAL ICON LINKS (no pills, just logos) ===
+// === SOCIAL ICON LINKS (logos only, no pills) ===
 
 type SocialIconButtonProps = {
   href: string;
@@ -194,49 +194,60 @@ function SocialIconButton({
 }
 
 function LinkedInLogoIcon() {
+  // Blue tile + white "in"
   return (
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
       className="h-4 w-4"
-      fill="currentColor"
+      role="img"
     >
-      {/* simple “in” app-style logo */}
-      <path d="M5 4.75C5 3.78 5.78 3 6.75 3h10.5C18.22 3 19 3.78 19 4.75v14.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25V4.75Z" />
-      <path d="M8.02 17h-1.5v-6h1.5v6Zm-.75-6.9c-.54 0-.97-.43-.97-.97 0-.55.43-.98.97-.98.54 0 .98.43.98.98 0 .54-.44.97-.98.97Zm3.1 6.9h-1.5v-6h1.45v.82c.32-.51.91-.95 1.88-.95 1.58 0 2.67 1.03 2.67 2.88V17h-1.5v-3.66c0-1.02-.49-1.63-1.43-1.63-.83 0-1.35.52-1.54 1.08-.06.15-.08.34-.08.54V17Z" />
+      {/* Background square */}
+      <rect x="2" y="2" width="20" height="20" rx="4" fill="#0A66C2" />
+      {/* "in" letters */}
+      <path
+        d="M8.15 16.5H6.25V10h1.9v6.5Zm-.95-7.5c-.63 0-1.15-.5-1.15-1.15 0-.66.52-1.16 1.15-1.16.64 0 1.16.5 1.16 1.16 0 .65-.52 1.15-1.16 1.15Zm4.13 7.5h-1.9V10h1.82v.9c.32-.6.95-1.03 1.95-1.03 1.68 0 2.85 1.12 2.85 3.3v3.33h-1.9v-3.02c0-1.02-.48-1.69-1.45-1.69-.88 0-1.43.58-1.63 1.18-.06.14-.09.33-.09.52v3.01Z"
+        fill="#FFFFFF"
+      />
     </svg>
   );
 }
 
 function XLogoIcon() {
+  // Simple X mark logo (you said this one is good)
   return (
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
       className="h-4 w-4"
-      fill="currentColor"
+      role="img"
     >
-      <path d="M5 5h3.2L13 11.1 16.7 5H19l-4.7 7.1L19 19h-3.2L11 12.9 7.3 19H5l4.7-6.9L5 5Z" />
+      <path
+        d="M5 5h3.2L13 11.1 16.7 5H19l-4.7 7.1L19 19h-3.2L11 12.9 7.3 19H5l4.7-6.9L5 5Z"
+        fill="#000000"
+      />
     </svg>
   );
 }
 
 function WhatsAppLogoIcon() {
+  // Green bubble + white phone-ish mark
   return (
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
       className="h-4 w-4"
+      role="img"
     >
+      {/* green bubble */}
       <path
-        d="M12 4.2A7.3 7.3 0 0 0 4.7 11.5c0 1.2.3 2.1.8 3.1L4 20l5.5-1.4c.9.4 1.7.6 2.5.6 4 0 7.3-3.2 7.3-7.3A7.3 7.3 0 0 0 12 4.2Z"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        fill="none"
+        d="M4.5 19.5 5.7 16A7.3 7.3 0 0 1 4.7 11.5 7.3 7.3 0 0 1 12 4.2a7.3 7.3 0 0 1 7.3 7.3c0 4.1-3.3 7.3-7.3 7.3-1 0-2-.2-2.9-.6L4.5 19.5Z"
+        fill="#25D366"
       />
+      {/* white phone / chat mark */}
       <path
-        d="M9.2 9.3c.1-.2.2-.3.4-.3h.3c.1 0 .2 0 .3.2l.6 1c.1.2.1.3 0 .4l-.3.4c-.1.1-.1.2-.1.3 0 .1.3.7.9 1.2.5.5 1.1.8 1.2.8.1 0 .2 0 .3-.1l.5-.5c.1-.1.2-.1.4 0l1 .5c.1.1.2.2.2.3 0 .2-.2.8-.6 1.2-.4.4-.9.6-1.5.6-.3 0-.6 0-1-.1-1.1-.3-2-1-2.8-1.8-.8-.8-1.4-1.7-1.7-2.7-.2-.6-.2-1.1 0-1.5.1-.2.2-.3.3-.4Z"
-        fill="currentColor"
+        d="M9.9 9.3c.1-.2.2-.3.4-.3h.3c.1 0 .2 0 .3.2l.6 1c.1.2.1.3 0 .4l-.3.4c-.1.1-.1.2-.1.3 0 .1.3.7.9 1.2.5.5 1.1.8 1.2.8.1 0 .2 0 .3-.1l.5-.5c.1-.1.2-.1.4 0l1 .5c.1.1.2.2.2.3 0 .2-.2.8-.6 1.2-.4.4-.9.6-1.5.6-.3 0-.6 0-1-.1-1.1-.3-2-1-2.8-1.8-.8-.8-1.4-1.7-1.7-2.7-.2-.6-.2-1.1 0-1.5.1-.2.2-.3.3-.4Z"
+        fill="#FFFFFF"
       />
     </svg>
   );
@@ -392,21 +403,15 @@ export default async function JobsPage() {
                       <SocialIconButton
                         href={linkedInUrl}
                         label="Share on LinkedIn"
-                        className="text-[#0A66C2]"
                       >
                         <LinkedInLogoIcon />
                       </SocialIconButton>
-                      <SocialIconButton
-                        href={xUrl}
-                        label="Share on X"
-                        className="text-black"
-                      >
+                      <SocialIconButton href={xUrl} label="Share on X">
                         <XLogoIcon />
                       </SocialIconButton>
                       <SocialIconButton
                         href={whatsappUrl}
                         label="Share on WhatsApp"
-                        className="text-[#25D366]"
                       >
                         <WhatsAppLogoIcon />
                       </SocialIconButton>
