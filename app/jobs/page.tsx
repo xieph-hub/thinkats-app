@@ -164,19 +164,19 @@ function IconGlobe() {
   );
 }
 
-// === SOCIAL ICON PILL BUTTONS ===
+// === SOCIAL ICON LINKS (no pills, just logos) ===
 
 type SocialIconButtonProps = {
   href: string;
   label: string;
-  bgColor: string;
+  className?: string;
   children: ReactNode;
 };
 
 function SocialIconButton({
   href,
   label,
-  bgColor,
+  className,
   children,
 }: SocialIconButtonProps) {
   return (
@@ -186,27 +186,22 @@ function SocialIconButton({
       rel="noreferrer"
       aria-label={label}
       title={label}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-white shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-1"
-      style={{ backgroundColor: bgColor }}
+      className={`inline-flex items-center justify-center text-xs transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-1 ${className ?? ""}`}
     >
       {children}
     </a>
   );
 }
 
-/**
- * Brand-style logos – white glyphs inside coloured circular pills
- * Button background carries the brand color; icons use currentColor (white).
- */
-
 function LinkedInLogoIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="h-3.5 w-3.5"
+      className="h-4 w-4"
       fill="currentColor"
     >
+      {/* simple “in” app-style logo */}
       <path d="M5 4.75C5 3.78 5.78 3 6.75 3h10.5C18.22 3 19 3.78 19 4.75v14.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25V4.75Z" />
       <path d="M8.02 17h-1.5v-6h1.5v6Zm-.75-6.9c-.54 0-.97-.43-.97-.97 0-.55.43-.98.97-.98.54 0 .98.43.98.98 0 .54-.44.97-.98.97Zm3.1 6.9h-1.5v-6h1.45v.82c.32-.51.91-.95 1.88-.95 1.58 0 2.67 1.03 2.67 2.88V17h-1.5v-3.66c0-1.02-.49-1.63-1.43-1.63-.83 0-1.35.52-1.54 1.08-.06.15-.08.34-.08.54V17Z" />
     </svg>
@@ -218,7 +213,7 @@ function XLogoIcon() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="h-3.5 w-3.5"
+      className="h-4 w-4"
       fill="currentColor"
     >
       <path d="M5 5h3.2L13 11.1 16.7 5H19l-4.7 7.1L19 19h-3.2L11 12.9 7.3 19H5l4.7-6.9L5 5Z" />
@@ -231,7 +226,7 @@ function WhatsAppLogoIcon() {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className="h-3.5 w-3.5"
+      className="h-4 w-4"
     >
       <path
         d="M12 4.2A7.3 7.3 0 0 0 4.7 11.5c0 1.2.3 2.1.8 3.1L4 20l5.5-1.4c.9.4 1.7.6 2.5.6 4 0 7.3-3.2 7.3-7.3A7.3 7.3 0 0 0 12 4.2Z"
@@ -397,21 +392,21 @@ export default async function JobsPage() {
                       <SocialIconButton
                         href={linkedInUrl}
                         label="Share on LinkedIn"
-                        bgColor="#0A66C2"
+                        className="text-[#0A66C2]"
                       >
                         <LinkedInLogoIcon />
                       </SocialIconButton>
                       <SocialIconButton
                         href={xUrl}
                         label="Share on X"
-                        bgColor="#000000"
+                        className="text-black"
                       >
                         <XLogoIcon />
                       </SocialIconButton>
                       <SocialIconButton
                         href={whatsappUrl}
                         label="Share on WhatsApp"
-                        bgColor="#25D366"
+                        className="text-[#25D366]"
                       >
                         <WhatsAppLogoIcon />
                       </SocialIconButton>
