@@ -2,10 +2,7 @@
 import Link from "next/link";
 import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import {
-  ApplicationsSplitView,
-  type AtsApplicationListItem,
-} from "@/components/ats/ApplicationsSplitView";
+import { ApplicationsSplitView, Application } from "@/components/ats/ApplicationsSplitView";
 
 type PageProps = {
   params: {
@@ -23,40 +20,14 @@ type JobRow = {
   created_at: string | null;
 };
 
-type RawApplicationRow = {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  location: string | null;
-  linkedin_url: string | null;
-  portfolio_url: string | null;
-  cv_url: string | null;
-  cover_letter: string | null;
-  source: string | null;
-  stage: string | null;
-  status: string | null;
-  created_at: string;
-};
+export const revalidate = 0; // always fresh
 
-export const revalidate = 0;
-
-function mapStageToUiStatus(
-  stage: string | null | undefined
-): AtsApplicationListItem["status"] {
-  const normalized = (stage || "").toLowerCase();
-  if (["screening", "shortlisted", "shortlist"].includes(normalized)) {
-    return "screening";
-  }
-  if (normalized.includes("interview")) {
-    return "interview";
-  }
-  if (normalized === "offer") {
-    return "offer";
-  }
-  if (normalized === "rejected") {
-    return "rejected";
-  }
+function mapStageToStatus(stage: string | null): Application["status"] {
+  const s = (stage || "").toLowerCase();
+  if (s === "screening") return "screening";
+  if (s === "interview") return "interview";
+  if (s === "offer") return "offer";
+  if (s === "rejected") return "rejected";
   return "applied";
 }
 
@@ -154,7 +125,7 @@ export default async function JobPipelinePage({ params }: PageProps) {
     );
   }
 
-  // 2) Load job applications
+  // 2) Load job applications from job_applications
   const { data: rawApplications, error: appsError } = await supabase
     .from("job_applications")
     .select(
@@ -181,20 +152,25 @@ export default async function JobPipelinePage({ params }: PageProps) {
     console.error("Error loading job_applications", appsError);
   }
 
-  const uiApplications: AtsApplicationListItem[] = (rawApplications ??
-    []).map((row: RawApplicationRow) => ({
-    id: row.id,
-    fullName: row.full_name,
-    email: row.email,
-    status: mapStageToUiStatus(row.stage),
-    appliedAt: row.created_at,
-    location: row.location || undefined,
-    cvUrl: row.cv_url || undefined,
-    phone: row.phone || undefined,
-    timeline: [],
-  }));
+  const applications: Application[] =
+    rawApplications?.map((row: any) => ({
+      id: row.id,
+      fullName: row.full_name,
+      email: row.email,
+      phone: row.phone || undefined,
+      location: row.location || undefined,
+      cvUrl: row.cv_url || undefined,
+      status: mapStageToStatus(row.stage),
+      appliedAt: row.created_at,
+      timeline: [
+        {
+          label: "Applied",
+          at: row.created_at,
+        },
+      ],
+    })) ?? [];
 
-  const applicationsCount = uiApplications.length;
+  const applicationsCount = applications.length;
 
   const createdLabel = jobRow.created_at
     ? new Date(jobRow.created_at).toLocaleDateString("en-US", {
@@ -250,7 +226,8 @@ export default async function JobPipelinePage({ params }: PageProps) {
         </div>
       </header>
 
-      <ApplicationsSplitView applications={uiApplications} />
+      {/* Applications split view */}
+      <ApplicationsSplitView applications={applications} />
     </main>
   );
 }
