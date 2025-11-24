@@ -15,6 +15,8 @@ type PublicJob = {
   created_at: string;
   tags: string[] | null;
   department: string | null;
+  // Supabase join: can be an object or an array; we normalise it
+  client_company?: any;
 };
 
 type Props = {
@@ -208,7 +210,11 @@ export function JobsListClient({ initialJobs }: Props) {
 /* Card list + helpers                                                 */
 /* ------------------------------------------------------------------ */
 
-function JobsCards({ jobs }: { jobs: (PublicJob & { workMode?: string | null })[] }) {
+function JobsCards({
+  jobs,
+}: {
+  jobs: (PublicJob & { workMode?: string | null })[];
+}) {
   return (
     <section className="mt-2 space-y-4">
       {jobs.map((job) => (
@@ -218,10 +224,17 @@ function JobsCards({ jobs }: { jobs: (PublicJob & { workMode?: string | null })[
   );
 }
 
-function JobCard({ job }: { job: PublicJob & { workMode?: string | null } }) {
+function JobCard({
+  job,
+}: {
+  job: PublicJob & { workMode?: string | null };
+}) {
   const slugOrId = job.slug || job.id;
   const employmentTypeLabel = formatEmploymentType(job.employment_type);
   const workModeLabel = job.workMode ?? deriveWorkMode(job);
+
+  const company = normalizeClientCompany(job.client_company);
+  const isConfidential = !company;
 
   const jobUrl = `${BASE_URL}/jobs/${encodeURIComponent(slugOrId)}`;
   const shareText = encodeURIComponent(
@@ -236,20 +249,35 @@ function JobCard({ job }: { job: PublicJob & { workMode?: string | null } }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm ring-1 ring-transparent transition hover:border-[#172965]/70 hover:bg-white hover:shadow-md hover:ring-[#172965]/5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        {/* Left: title + meta + tags + share */}
+        {/* Left: company pill + title + meta */}
         <div className="space-y-2">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">
-              <Link
-                href={`/jobs/${encodeURIComponent(slugOrId)}`}
-                className="hover:underline"
-              >
-                {job.title}
-              </Link>
-            </h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              {job.department || "Client role"}
-            </p>
+          <div className="space-y-1">
+            <CompanyPill
+              name={
+                company?.name && !isConfidential
+                  ? company.name
+                  : "Client (confidential)"
+              }
+              logoUrl={
+                !isConfidential && company?.logo_url
+                  ? String(company.logo_url)
+                  : undefined
+              }
+              anonymous={isConfidential}
+            />
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                <Link
+                  href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                  className="hover:underline"
+                >
+                  {job.title}
+                </Link>
+              </h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                {job.department || "Client role"}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -380,6 +408,30 @@ function deriveWorkMode(job: { location: string | null; tags: string[] | null })
   return null;
 }
 
+// Supabase can return the relation as an object or an array – normalise it
+function normalizeClientCompany(raw: any): {
+  name: string | null;
+  logo_url: string | null;
+  slug: string | null;
+} | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return null;
+    const first = raw[0];
+    if (!first) return null;
+    return {
+      name: first.name ?? null,
+      logo_url: first.logo_url ?? null,
+      slug: first.slug ?? null,
+    };
+  }
+  return {
+    name: raw.name ?? null,
+    logo_url: raw.logo_url ?? null,
+    slug: raw.slug ?? null,
+  };
+}
+
 function MetaItem({
   icon,
   label,
@@ -481,6 +533,67 @@ function IconStar() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function IconBuilding() {
+  return (
+    <svg
+      className="h-3 w-3 text-[#8B5CF6]"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      fill="none"
+    >
+      <rect
+        x="4"
+        y="3"
+        width="12"
+        height="14"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+      <path
+        d="M8 7h1.5M10.5 7H12M8 10h1.5M10.5 10H12M7 14h6"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CompanyPill({
+  name,
+  logoUrl,
+  anonymous,
+}: {
+  name: string;
+  logoUrl?: string;
+  anonymous?: boolean;
+}) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
+      {anonymous ? (
+        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-100">
+          <IconBuilding />
+        </span>
+      ) : logoUrl ? (
+        <span className="h-4 w-4 overflow-hidden rounded-full bg-slate-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl}
+            alt={name}
+            className="h-full w-full object-cover"
+          />
+        </span>
+      ) : (
+        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-slate-100">
+          <IconBuilding />
+        </span>
+      )}
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 
