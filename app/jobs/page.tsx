@@ -200,6 +200,10 @@ export default async function JobsPage() {
       department
     `
     )
+    // ✅ Only show jobs that are actually open
+    .eq("status", "open")
+    // ✅ Only show public jobs (but also allow legacy rows with NULL visibility)
+    .or("visibility.eq.public,visibility.is.null")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -208,6 +212,9 @@ export default async function JobsPage() {
 
   const jobs = (data ?? []) as PublicJob[];
   const count = jobs.length;
+
+  // ...rest of your component unchanged
+}
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-10">
