@@ -1,20 +1,15 @@
+// components/ats/ApplicationsSplitView.tsx
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Drawer } from "@/components/ui/Drawer";
-
-export type ApplicationStatus =
-  | "applied"
-  | "screening"
-  | "interview"
-  | "offer"
-  | "rejected";
 
 type Application = {
   id: string;
   fullName: string;
   email: string;
-  status: ApplicationStatus;
+  status: "applied" | "screening" | "interview" | "offer" | "rejected";
   appliedAt: string;
   location?: string;
   cvUrl?: string;
@@ -24,65 +19,155 @@ type Application = {
 
 type Props = {
   applications: Application[];
-  // Optional hooks you can implement later
-  onStatusChange?: (
-    appId: string,
-    newStatus: ApplicationStatus,
-    note?: string
-  ) => Promise<void> | void;
-  onScheduleInterview?: (
-    appId: string,
-    payload: {
-      date: string;
-      time: string;
-      type: "onsite" | "remote" | "phone";
-      location?: string;
-      notes?: string;
-    }
-  ) => Promise<void> | void;
 };
 
-export function ApplicationsSplitView({
-  applications,
-  onStatusChange,
-  onScheduleInterview,
-}: Props) {
+export function ApplicationsSplitView({ applications }: Props) {
+  const router = useRouter();
+
   const [selected, setSelected] = useState<Application | null>(
     applications[0] ?? null
   );
-
-  // Mobile candidate drawer
   const [drawerCandidate, setDrawerCandidate] = useState<Application | null>(
     null
   );
 
-  // Quick-action drawers
-  const [statusDrawerCandidate, setStatusDrawerCandidate] =
-    useState<Application | null>(null);
-  const [interviewDrawerCandidate, setInterviewDrawerCandidate] =
-    useState<Application | null>(null);
+  // Drawers for status + interview
+  const [statusDrawerOpen, setStatusDrawerOpen] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const [interviewDrawerOpen, setInterviewDrawerOpen] = useState(false);
+  const [interviewLoading, setInterviewLoading] = useState(false);
+  const [interviewError, setInterviewError] = useState<string | null>(null);
+
+  const handleSelect = (app: Application) => {
+    setSelected(app);
+    setDrawerCandidate(app); // used on mobile
+  };
 
   const isEmpty = applications.length === 0;
 
-  const handleSelectDesktop = (app: Application) => {
-    setSelected(app);
+  const handleStatusSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    if (!selected) return;
+
+    const formData = new FormData(e.currentTarget);
+    const newStatus = formData.get("status") as Application["status"] | null;
+    const note = (formData.get("note") as string) || "";
+
+    if (!newStatus) {
+      setStatusError("Please select a status.");
+      return;
+    }
+
+    setStatusLoading(true);
+    setStatusError(null);
+
+    try {
+      const res = await fetch(
+        `/api/ats/applications/${encodeURIComponent(selected.id)}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus, note }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to update status");
+      }
+
+      // Optimistic update for the currently selected candidate
+      setSelected((prev) =>
+        prev ? { ...prev, status: newStatus } : prev
+      );
+      setStatusDrawerOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error("Error updating status", err);
+      setStatusError("Could not update status. Please try again.");
+    } finally {
+      setStatusLoading(false);
+    }
   };
 
-  const effectiveOnStatusChange =
-    onStatusChange ??
-    (async () => {
-      // no-op default
-    });
+  const handleInterviewSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    if (!selected) return;
 
-  const effectiveOnScheduleInterview =
-    onScheduleInterview ??
-    (async () => {
-      // no-op default
-    });
+    const formData = new FormData(e.currentTarget);
+    const scheduledAtRaw = formData.get("scheduledAt") as string;
+    const type = (formData.get("type") as string) || "";
+    const location = (formData.get("location") as string) || "";
+    const notes = (formData.get("notes") as string) || "";
+
+    if (!scheduledAtRaw) {
+      setInterviewError("Please select a date and time.");
+      return;
+    }
+
+    const iso = new Date(scheduledAtRaw).toISOString();
+
+    setInterviewLoading(true);
+    setInterviewError(null);
+
+    try {
+      const res = await fetch(
+        `/api/ats/applications/${encodeURIComponent(
+          selected.id
+        )}/interviews`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scheduledAt: iso,
+            type: type || null,
+            location: location || null,
+            notes: notes || null,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to schedule interview");
+      }
+
+      const payload = await res.json();
+
+      const event = {
+        label: "Interview scheduled",
+        at: payload.scheduled_at ?? iso,
+      };
+
+      // Optimistic add to timeline
+      setSelected((prev) =>
+        prev
+          ? {
+              ...prev,
+              timeline: [...(prev.timeline ?? []), event],
+            }
+          : prev
+      );
+
+      setInterviewDrawerOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error("Error scheduling interview", err);
+      setInterviewError(
+        "Could not schedule interview. Please try again."
+      );
+    } finally {
+      setInterviewLoading(false);
+    }
+  };
 
   return (
     <div className="flex h-[70vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {/* Desktop: split view */}
+      {/* Split view for desktop */}
       <div className="hidden h-full md:grid md:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)]">
         {/* List */}
         <div className="border-r border-slate-100">
@@ -103,7 +188,7 @@ export function ApplicationsSplitView({
                   return (
                     <li
                       key={app.id}
-                      onClick={() => handleSelectDesktop(app)}
+                      onClick={() => handleSelect(app)}
                       className={`cursor-pointer px-4 py-3 text-xs transition ${
                         active
                           ? "bg-[#172965]/5"
@@ -123,7 +208,9 @@ export function ApplicationsSplitView({
                           <StatusDot status={app.status} />
                           <p className="mt-0.5 text-[10px] text-slate-500">
                             Applied{" "}
-                            {new Date(app.appliedAt).toLocaleDateString()}
+                            {new Date(
+                              app.appliedAt
+                            ).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
@@ -152,15 +239,21 @@ export function ApplicationsSplitView({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={() => setStatusDrawerCandidate(selected)}
+                    onClick={() =>
+                      selected && setStatusDrawerOpen(true)
+                    }
+                    disabled={!selected}
+                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Change status
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#111c4c]"
-                    onClick={() => setInterviewDrawerCandidate(selected)}
+                    onClick={() =>
+                      selected && setInterviewDrawerOpen(true)
+                    }
+                    disabled={!selected}
+                    className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Schedule interview
                   </button>
@@ -217,7 +310,9 @@ export function ApplicationsSplitView({
                     <div className="text-right">
                       <StatusDot status={app.status} />
                       <p className="mt-0.5 text-[10px] text-slate-500">
-                        {new Date(app.appliedAt).toLocaleDateString()}
+                        {new Date(
+                          app.appliedAt
+                        ).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
@@ -227,6 +322,7 @@ export function ApplicationsSplitView({
           )}
         </div>
 
+        {/* Mobile candidate details drawer */}
         <Drawer
           isOpen={!!drawerCandidate}
           onClose={() => setDrawerCandidate(null)}
@@ -239,65 +335,173 @@ export function ApplicationsSplitView({
         </Drawer>
       </div>
 
-      {/* Change status drawer */}
+      {/* Drawer: Change status */}
       <Drawer
-        isOpen={!!statusDrawerCandidate}
-        onClose={() => setStatusDrawerCandidate(null)}
-        title={
-          statusDrawerCandidate
-            ? `Change status – ${statusDrawerCandidate.fullName}`
-            : "Change status"
-        }
+        isOpen={statusDrawerOpen}
+        onClose={() => !statusLoading && setStatusDrawerOpen(false)}
+        title="Change status"
         size="sm"
       >
-        {statusDrawerCandidate && (
-          <ChangeStatusForm
-            candidate={statusDrawerCandidate}
-            onCancel={() => setStatusDrawerCandidate(null)}
-            onSave={async (newStatus, note) => {
-              await effectiveOnStatusChange(
-                statusDrawerCandidate.id,
-                newStatus,
-                note
-              );
-              setStatusDrawerCandidate(null);
-            }}
-          />
+        {selected ? (
+          <form
+            onSubmit={handleStatusSubmit}
+            className="space-y-3 text-xs text-slate-800"
+          >
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                New status
+              </label>
+              <select
+                name="status"
+                defaultValue={selected.status}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              >
+                <option value="applied">Applied</option>
+                <option value="screening">Screening</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Notes (optional)
+              </label>
+              <textarea
+                name="note"
+                rows={3}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+                placeholder="Why are you moving this candidate to this stage?"
+              />
+            </div>
+
+            {statusError && (
+              <p className="text-[11px] text-red-600">{statusError}</p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={statusLoading}
+                onClick={() => setStatusDrawerOpen(false)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={statusLoading}
+                className="rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {statusLoading ? "Saving..." : "Save status"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Select a candidate to change their status.
+          </p>
         )}
       </Drawer>
 
-      {/* Schedule interview drawer */}
+      {/* Drawer: Schedule interview */}
       <Drawer
-        isOpen={!!interviewDrawerCandidate}
-        onClose={() => setInterviewDrawerCandidate(null)}
-        title={
-          interviewDrawerCandidate
-            ? `Schedule interview – ${interviewDrawerCandidate.fullName}`
-            : "Schedule interview"
+        isOpen={interviewDrawerOpen}
+        onClose={() =>
+          !interviewLoading && setInterviewDrawerOpen(false)
         }
+        title="Schedule interview"
         size="sm"
       >
-        {interviewDrawerCandidate && (
-          <ScheduleInterviewForm
-            candidate={interviewDrawerCandidate}
-            onCancel={() => setInterviewDrawerCandidate(null)}
-            onSchedule={async (payload) => {
-              await effectiveOnScheduleInterview(
-                interviewDrawerCandidate.id,
-                payload
-              );
-              setInterviewDrawerCandidate(null);
-            }}
-          />
+        {selected ? (
+          <form
+            onSubmit={handleInterviewSubmit}
+            className="space-y-3 text-xs text-slate-800"
+          >
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Interview date &amp; time
+              </label>
+              <input
+                type="datetime-local"
+                name="scheduledAt"
+                required
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Format
+              </label>
+              <select
+                name="type"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              >
+                <option value="">Select...</option>
+                <option value="virtual">Virtual</option>
+                <option value="onsite">On-site</option>
+                <option value="phone">Phone</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Location / link
+              </label>
+              <input
+                name="location"
+                placeholder="Office address or video link"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Notes (optional)
+              </label>
+              <textarea
+                name="notes"
+                rows={3}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+                placeholder="Context for the interviewer or candidate."
+              />
+            </div>
+
+            {interviewError && (
+              <p className="text-[11px] text-red-600">
+                {interviewError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={interviewLoading}
+                onClick={() => setInterviewDrawerOpen(false)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={interviewLoading}
+                className="rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {interviewLoading ? "Scheduling..." : "Schedule"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Select a candidate to schedule an interview.
+          </p>
         )}
       </Drawer>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Candidate details                                                   */
-/* ------------------------------------------------------------------ */
 
 function CandidateDetails({
   candidate,
@@ -326,7 +530,9 @@ function CandidateDetails({
           )}
           {candidate.location && (
             <div>
-              <dt className="font-medium text-slate-700">Location</dt>
+              <dt className="font-medium text-slate-700">
+                Location
+              </dt>
               <dd className="mt-0.5">{candidate.location}</dd>
             </div>
           )}
@@ -342,7 +548,9 @@ function CandidateDetails({
       {/* CV preview / link */}
       {candidate.cvUrl && (
         <section>
-          <h3 className="text-xs font-semibold text-slate-900">Résumé</h3>
+          <h3 className="text-xs font-semibold text-slate-900">
+            Résumé
+          </h3>
           <p className="mt-1 text-[11px] text-slate-600">
             Open the candidate&apos;s CV in a new tab.
           </p>
@@ -380,232 +588,9 @@ function CandidateDetails({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Quick action forms                                                 */
-/* ------------------------------------------------------------------ */
-
-function ChangeStatusForm({
-  candidate,
-  onCancel,
-  onSave,
-}: {
-  candidate: Application;
-  onCancel: () => void;
-  onSave: (status: ApplicationStatus, note?: string) => Promise<void> | void;
-}) {
-  const [status, setStatus] = useState<ApplicationStatus>(candidate.status);
-  const [note, setNote] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      await onSave(status, note.trim() || undefined);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 text-[11px]">
-      <p className="text-slate-600">
-        Update the pipeline status for{" "}
-        <span className="font-semibold text-slate-900">
-          {candidate.fullName}
-        </span>
-        .
-      </p>
-
-      <div className="space-y-1">
-        <label className="font-medium text-slate-800">Status</label>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as ApplicationStatus)}
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-        >
-          <option value="applied">Applied</option>
-          <option value="screening">Screening</option>
-          <option value="interview">Interview</option>
-          <option value="offer">Offer</option>
-          <option value="rejected">Rejected</option>
-        </select>
-      </div>
-
-      <div className="space-y-1">
-        <label className="font-medium text-slate-800">
-          Internal note (optional)
-        </label>
-        <textarea
-          rows={3}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Context for this status change (visible to your team only)."
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4c] disabled:opacity-60"
-        >
-          {submitting ? "Saving..." : "Save status"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function ScheduleInterviewForm({
-  candidate,
-  onCancel,
-  onSchedule,
-}: {
-  candidate: Application;
-  onCancel: () => void;
-  onSchedule: (payload: {
-    date: string;
-    time: string;
-    type: "onsite" | "remote" | "phone";
-    location?: string;
-    notes?: string;
-  }) => Promise<void> | void;
-}) {
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [type, setType] = useState<"onsite" | "remote" | "phone">("remote");
-  const [location, setLocation] = useState("");
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!date || !time) return;
-
-    setSubmitting(true);
-    try {
-      await onSchedule({
-        date,
-        time,
-        type,
-        location: location.trim() || undefined,
-        notes: notes.trim() || undefined,
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 text-[11px]">
-      <p className="text-slate-600">
-        Schedule an interview with{" "}
-        <span className="font-semibold text-slate-900">
-          {candidate.fullName}
-        </span>
-        .
-      </p>
-
-      <div className="flex gap-2">
-        <div className="flex-1 space-y-1">
-          <label className="font-medium text-slate-800">Date</label>
-          <input
-            type="date"
-            required
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-          />
-        </div>
-        <div className="flex-1 space-y-1">
-          <label className="font-medium text-slate-800">Time</label>
-          <input
-            type="time"
-            required
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-          />
-        </div>
-      </div>
-
-      <div className="space-y-1">
-        <label className="font-medium text-slate-800">Format</label>
-        <select
-          value={type}
-          onChange={(e) =>
-            setType(e.target.value as "onsite" | "remote" | "phone")
-          }
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-        >
-          <option value="remote">Remote (video)</option>
-          <option value="onsite">On-site</option>
-          <option value="phone">Phone</option>
-        </select>
-      </div>
-
-      <div className="space-y-1">
-        <label className="font-medium text-slate-800">
-          Location / meeting link (optional)
-        </label>
-        <input
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="Office address or video link"
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-        />
-      </div>
-
-      <div className="space-y-1">
-        <label className="font-medium text-slate-800">
-          Notes to include in invite (optional)
-        </label>
-        <textarea
-          rows={3}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Interview panel, agenda, preparation notes..."
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-1">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={submitting || !date || !time}
-          className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4c] disabled:opacity-60"
-        >
-          {submitting ? "Scheduling..." : "Schedule interview"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Status dot                                                          */
-/* ------------------------------------------------------------------ */
-
-function StatusDot({ status }: { status: ApplicationStatus }) {
+function StatusDot({ status }: { status: Application["status"] }) {
   const map: Record<
-    ApplicationStatus,
+    Application["status"],
     { label: string; color: string }
   > = {
     applied: { label: "Applied", color: "#172965" },
