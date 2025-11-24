@@ -24,6 +24,7 @@ type PublicJob = {
   created_at: string;
   tags: string[] | null;
   department: string | null;
+  description: string | null;
 };
 
 const BASE_URL =
@@ -70,7 +71,7 @@ function MetaItem({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-// === ICONS (location / briefcase / seniority / work-mode) ===
+// === ICONS (location / classic brown briefcase / seniority / work-mode) ===
 
 function IconLocation() {
   // Red pin
@@ -92,34 +93,49 @@ function IconLocation() {
 }
 
 function IconBriefcase() {
-  // Brown / amber briefcase
+  // Classic solid brown briefcase
   return (
     <svg
       className="h-3.5 w-3.5"
-      viewBox="0 0 20 20"
+      viewBox="0 0 24 24"
       aria-hidden="true"
       fill="none"
     >
+      {/* Body */}
       <rect
         x="3"
-        y="6"
-        width="14"
-        height="9"
-        rx="1.7"
-        stroke="#92400E"
-        strokeWidth="1.3"
-        fill="#FEF3C7"
+        y="7"
+        width="18"
+        height="11"
+        rx="2"
+        fill="#92400E"
+        stroke="#451A03"
+        strokeWidth="1.2"
       />
+      {/* Handle */}
       <path
-        d="M7.5 6V5.4A1.9 1.9 0 0 1 9.4 3.5h1.2a1.9 1.9 0 0 1 1.9 1.9V6"
-        stroke="#92400E"
-        strokeWidth="1.3"
+        d="M9 7V6.2C9 5.09 9.9 4.2 11.02 4.2h1.96C14.1 4.2 15 5.09 15 6.2V7"
+        stroke="#451A03"
+        strokeWidth="1.2"
+        strokeLinecap="round"
       />
+      {/* Mid seam */}
       <path
-        d="M3.5 9.5h4m5 0h4"
-        stroke="#B45309"
+        d="M3 11h18"
+        stroke="#FED7AA"
         strokeWidth="1.1"
         strokeLinecap="round"
+      />
+      {/* Small latch */}
+      <rect
+        x="11"
+        y="10.4"
+        width="2"
+        height="2.2"
+        rx="0.5"
+        fill="#FBBF24"
+        stroke="#451A03"
+        strokeWidth="0.8"
       />
     </svg>
   );
@@ -202,9 +218,7 @@ function LinkedInLogoIcon() {
       className="h-4 w-4"
       role="img"
     >
-      {/* Background square */}
       <rect x="2" y="2" width="20" height="20" rx="4" fill="#0A66C2" />
-      {/* "in" letters */}
       <path
         d="M8.15 16.5H6.25V10h1.9v6.5Zm-.95-7.5c-.63 0-1.15-.5-1.15-1.15 0-.66.52-1.16 1.15-1.16.64 0 1.16.5 1.16 1.16 0 .65-.52 1.15-1.16 1.15Zm4.13 7.5h-1.9V10h1.82v.9c.32-.6.95-1.03 1.95-1.03 1.68 0 2.85 1.12 2.85 3.3v3.33h-1.9v-3.02c0-1.02-.48-1.69-1.45-1.69-.88 0-1.43.58-1.63 1.18-.06.14-.09.33-.09.52v3.01Z"
         fill="#FFFFFF"
@@ -214,7 +228,7 @@ function LinkedInLogoIcon() {
 }
 
 function XLogoIcon() {
-  // Simple X mark logo (you said this one is good)
+  // Simple X logo
   return (
     <svg
       viewBox="0 0 24 24"
@@ -231,7 +245,7 @@ function XLogoIcon() {
 }
 
 function WhatsAppLogoIcon() {
-  // Green bubble + white phone-ish mark
+  // Green bubble + white phone/chat mark
   return (
     <svg
       viewBox="0 0 24 24"
@@ -239,17 +253,44 @@ function WhatsAppLogoIcon() {
       className="h-4 w-4"
       role="img"
     >
-      {/* green bubble */}
       <path
         d="M4.5 19.5 5.7 16A7.3 7.3 0 0 1 4.7 11.5 7.3 7.3 0 0 1 12 4.2a7.3 7.3 0 0 1 7.3 7.3c0 4.1-3.3 7.3-7.3 7.3-1 0-2-.2-2.9-.6L4.5 19.5Z"
         fill="#25D366"
       />
-      {/* white phone / chat mark */}
       <path
         d="M9.9 9.3c.1-.2.2-.3.4-.3h.3c.1 0 .2 0 .3.2l.6 1c.1.2.1.3 0 .4l-.3.4c-.1.1-.1.2-.1.3 0 .1.3.7.9 1.2.5.5 1.1.8 1.2.8.1 0 .2 0 .3-.1l.5-.5c.1-.1.2-.1.4 0l1 .5c.1.1.2.2.2.3 0 .2-.2.8-.6 1.2-.4.4-.9.6-1.5.6-.3 0-.6 0-1-.1-1.1-.3-2-1-2.8-1.8-.8-.8-1.4-1.7-1.7-2.7-.2-.6-.2-1.1 0-1.5.1-.2.2-.3.3-.4Z"
         fill="#FFFFFF"
       />
     </svg>
+  );
+}
+
+// === STATUS BADGE ===
+
+function StatusBadge({ status }: { status: string | null }) {
+  const normalized = (status || "").toLowerCase();
+  let label = "Open role";
+  let color = "#16A34A";
+
+  if (!status) {
+    label = "Status unknown";
+    color = "#6B7280";
+  } else if (normalized === "on_hold" || normalized === "on-hold") {
+    label = "On hold";
+    color = "#EAB308";
+  } else if (normalized === "closed") {
+    label = "Closed";
+    color = "#DC2626";
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] text-slate-700">
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      {label}
+    </span>
   );
 }
 
@@ -270,7 +311,8 @@ export default async function JobsPage() {
       visibility,
       created_at,
       tags,
-      department
+      department,
+      description
     `
     )
     .eq("status", "open")
@@ -341,6 +383,13 @@ export default async function JobsPage() {
             const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
             const whatsappUrl = `https://api.whatsapp.com/send?text=${shareText}%20${encodedUrl}`;
 
+            const descriptionSnippet =
+              job.description && job.description.trim().length > 0
+                ? job.description.trim().length > 220
+                  ? job.description.trim().slice(0, 220) + "…"
+                  : job.description.trim()
+                : null;
+
             return (
               <article
                 key={job.id}
@@ -348,6 +397,7 @@ export default async function JobsPage() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="space-y-2">
+                    {/* Title / department */}
                     <div>
                       <h2 className="text-sm font-semibold text-slate-900">
                         <Link
@@ -362,6 +412,7 @@ export default async function JobsPage() {
                       </p>
                     </div>
 
+                    {/* Meta row */}
                     <div className="flex flex-wrap gap-2">
                       {job.location && (
                         <MetaItem
@@ -383,6 +434,14 @@ export default async function JobsPage() {
                       )}
                     </div>
 
+                    {/* Description preview */}
+                    {descriptionSnippet && (
+                      <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                        {descriptionSnippet}
+                      </p>
+                    )}
+
+                    {/* Tags */}
                     {job.tags && job.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {job.tags.map((tag) => (
@@ -396,6 +455,7 @@ export default async function JobsPage() {
                       </div>
                     )}
 
+                    {/* Social share */}
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
                       <span className="font-medium text-slate-600">
                         Share:
@@ -418,12 +478,13 @@ export default async function JobsPage() {
                     </div>
                   </div>
 
+                  {/* Right-side meta */}
                   <div className="flex flex-col items-start gap-2 text-[11px] text-slate-500 sm:items-end">
+                    <StatusBadge status={job.status} />
                     <span>Posted {formatDate(job.created_at)}</span>
-                    {(job.status || job.visibility) && (
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] text-slate-700">
-                        {job.status || "unspecified"}
-                        {job.visibility ? ` · ${job.visibility}` : ""}
+                    {job.visibility && (
+                      <span className="text-[10px] text-slate-500">
+                        Visibility: {job.visibility}
                       </span>
                     )}
                     <Link
