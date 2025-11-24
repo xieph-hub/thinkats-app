@@ -64,36 +64,38 @@ function deriveWorkMode(job: PublicJob): string | null {
 function MetaItem({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-700">
-      <span className="text-slate-500" aria-hidden="true">
-        {icon}
-      </span>
+      <span aria-hidden="true">{icon}</span>
       <span>{label}</span>
     </span>
   );
 }
 
+// === ICONS (color-rich but minimal) ===
+
 function IconLocation() {
+  // Red pin
   return (
     <svg
-      className="h-3 w-3"
+      className="h-3.5 w-3.5"
       viewBox="0 0 20 20"
       aria-hidden="true"
       fill="none"
     >
       <path
         d="M10 2.5a4.5 4.5 0 0 0-4.5 4.5c0 3.038 3.287 6.87 4.063 7.69a.6.6 0 0 0 .874 0C11.213 13.87 14.5 10.038 14.5 7A4.5 4.5 0 0 0 10 2.5Z"
-        stroke="currentColor"
+        stroke="#EF4444"
         strokeWidth="1.3"
       />
-      <circle cx="10" cy="7" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="10" cy="7" r="1.6" fill="#F87171" />
     </svg>
   );
 }
 
 function IconBriefcase() {
+  // Brown / amber briefcase
   return (
     <svg
-      className="h-3 w-3"
+      className="h-3.5 w-3.5"
       viewBox="0 0 20 20"
       aria-hidden="true"
       fill="none"
@@ -104,17 +106,18 @@ function IconBriefcase() {
         width="14"
         height="9"
         rx="1.7"
-        stroke="currentColor"
+        stroke="#92400E"
         strokeWidth="1.3"
+        fill="#FEF3C7"
       />
       <path
         d="M7.5 6V5.4A1.9 1.9 0 0 1 9.4 3.5h1.2a1.9 1.9 0 0 1 1.9 1.9V6"
-        stroke="currentColor"
+        stroke="#92400E"
         strokeWidth="1.3"
       />
       <path
         d="M3.5 9.5h4m5 0h4"
-        stroke="currentColor"
+        stroke="#B45309"
         strokeWidth="1.1"
         strokeLinecap="round"
       />
@@ -123,40 +126,45 @@ function IconBriefcase() {
 }
 
 function IconStar() {
+  // Gold-ish seniority
   return (
     <svg
-      className="h-3 w-3"
+      className="h-3.5 w-3.5"
       viewBox="0 0 20 20"
       aria-hidden="true"
       fill="none"
     >
       <path
         d="m10 3.2 1.54 3.12 3.44.5-2.49 2.43.59 3.47L10 11.6l-3.08 1.62.59-3.47L5.02 6.82l3.44-.5L10 3.2Z"
-        stroke="currentColor"
+        stroke="#EAB308"
         strokeWidth="1.2"
         strokeLinejoin="round"
+        fill="#FEF9C3"
       />
     </svg>
   );
 }
 
 function IconGlobe() {
+  // Teal work-mode icon
   return (
     <svg
-      className="h-3 w-3"
+      className="h-3.5 w-3.5"
       viewBox="0 0 20 20"
       aria-hidden="true"
       fill="none"
     >
-      <circle cx="10" cy="10" r="6.2" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="10" cy="10" r="6.2" stroke="#0D9488" strokeWidth="1.2" />
       <path
-        d="M10 3.8c-1.5 1.7-2.3 3.9-2.3 6.2 0 2.3.8 4.5 2.3 6.2m0-12.4c1.5 1.7 2.3 3.9 2.3 6.2 0 2.3-.8 4.5-2.3 6.2M4.2 10h11.6"
-        stroke="currentColor"
+        d="M10 3.8c-1.5 1.7-2.3 3.9-2.3 6.2 0 2.3.8 4.5 2.3 6.2 1.5-1.7 2.3-3.9 2.3-6.2 0-2.3-.8-4.5-2.3-6.2Zm-5.8 6.2h11.6"
+        stroke="#0D9488"
         strokeWidth="1.1"
       />
     </svg>
   );
 }
+
+// === SOCIAL ICON PILL BUTTONS ===
 
 type SocialIconButtonProps = {
   href: string;
@@ -177,6 +185,7 @@ function SocialIconButton({
       target="_blank"
       rel="noreferrer"
       aria-label={label}
+      title={label}
       className="inline-flex h-7 w-7 items-center justify-center rounded-full text-white shadow-sm transition hover:-translate-y-[1px] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-1"
       style={{ backgroundColor: bgColor }}
     >
@@ -186,9 +195,10 @@ function SocialIconButton({
 }
 
 /**
- * Brand-style logos – they inherit the button's text color (white)
- * and we give the brand colour via SocialIconButton.bgColor
+ * Brand-style logos – white glyphs inside coloured circular pills
+ * Button background carries the brand color; icons use currentColor (white).
  */
+
 function LinkedInLogoIcon() {
   return (
     <svg
@@ -197,9 +207,8 @@ function LinkedInLogoIcon() {
       className="h-3.5 w-3.5"
       fill="currentColor"
     >
-      <rect x="3" y="3" width="18" height="18" rx="2.5" />
-      <path d="M8.16 17h-2.2V10h2.2v7Zm-1.1-8A1.28 1.28 0 1 1 7.28 8a1.27 1.27 0 0 1-1.22 1Z" />
-      <path d="M18.5 17h-2.18v-3.63c0-.92-.36-1.55-1.16-1.55-.62 0-1 .42-1.17.83-.06.14-.08.33-.08.52V17h-2.18V10h2.18v1.03c.31-.48.87-1.16 2.08-1.16 1.52 0 2.51 1 2.51 3.17V17Z" />
+      <path d="M5 4.75C5 3.78 5.78 3 6.75 3h10.5C18.22 3 19 3.78 19 4.75v14.5A1.75 1.75 0 0 1 17.25 21H6.75A1.75 1.75 0 0 1 5 19.25V4.75Z" />
+      <path d="M8.02 17h-1.5v-6h1.5v6Zm-.75-6.9c-.54 0-.97-.43-.97-.97 0-.55.43-.98.97-.98.54 0 .98.43.98.98 0 .54-.44.97-.98.97Zm3.1 6.9h-1.5v-6h1.45v.82c.32-.51.91-.95 1.88-.95 1.58 0 2.67 1.03 2.67 2.88V17h-1.5v-3.66c0-1.02-.49-1.63-1.43-1.63-.83 0-1.35.52-1.54 1.08-.06.15-.08.34-.08.54V17Z" />
     </svg>
   );
 }
@@ -212,7 +221,7 @@ function XLogoIcon() {
       className="h-3.5 w-3.5"
       fill="currentColor"
     >
-      <path d="M5 5h3.1L12 9.8 15.9 5H19l-5.1 6.1L19 19h-3.1L12 14.2 8.1 19H5l5.1-7.9L5 5Z" />
+      <path d="M5 5h3.2L13 11.1 16.7 5H19l-4.7 7.1L19 19h-3.2L11 12.9 7.3 19H5l4.7-6.9L5 5Z" />
     </svg>
   );
 }
@@ -225,18 +234,20 @@ function WhatsAppLogoIcon() {
       className="h-3.5 w-3.5"
     >
       <path
-        d="M12 4.5A7 7 0 0 0 5 11.5c0 1.2.3 2.1.9 3.1L5 19l4.4-.9c.9.4 1.7.5 2.6.5 3.9 0 7-3.1 7-7.1a7 7 0 0 0-7-7Z"
+        d="M12 4.2A7.3 7.3 0 0 0 4.7 11.5c0 1.2.3 2.1.8 3.1L4 20l5.5-1.4c.9.4 1.7.6 2.5.6 4 0 7.3-3.2 7.3-7.3A7.3 7.3 0 0 0 12 4.2Z"
         stroke="currentColor"
         strokeWidth="1.3"
         fill="none"
       />
       <path
-        d="M9.5 9.2c.1-.2.2-.2.4-.2h.3c.1 0 .2 0 .3.2l.6 1c.1.1.1.2 0 .3l-.3.4c-.1.1-.1.2 0 .3 0 0 .6 1.1 1.6 1.6.7.4.8.3.9.2l.4-.5c.1-.1.2-.1.4 0l1 .5c.2.1.3.2.3.3 0 .2-.1.8-.5 1.2-.5.5-1.1.5-1.9.3-1.1-.3-2-1-2.7-1.7-.7-.7-1.3-1.6-1.6-2.5-.3-.9-.1-1.4.2-1.8Z"
+        d="M9.2 9.3c.1-.2.2-.3.4-.3h.3c.1 0 .2 0 .3.2l.6 1c.1.2.1.3 0 .4l-.3.4c-.1.1-.1.2-.1.3 0 .1.3.7.9 1.2.5.5 1.1.8 1.2.8.1 0 .2 0 .3-.1l.5-.5c.1-.1.2-.1.4 0l1 .5c.1.1.2.2.2.3 0 .2-.2.8-.6 1.2-.4.4-.9.6-1.5.6-.3 0-.6 0-1-.1-1.1-.3-2-1-2.8-1.8-.8-.8-1.4-1.7-1.7-2.7-.2-.6-.2-1.1 0-1.5.1-.2.2-.3.3-.4Z"
         fill="currentColor"
       />
     </svg>
   );
 }
+
+// === PAGE ===
 
 export default async function JobsPage() {
   const { data, error } = await supabaseAdmin
