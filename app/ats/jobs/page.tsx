@@ -1,117 +1,142 @@
 // app/ats/jobs/page.tsx
-import Link from "next/link";
-import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import AtsJobsPageClient from "./AtsJobsPageClient";
-import type { AtsJobListItem } from "@/components/ats/JobListWithDrawer";
+import type { Metadata } from "next";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  JobsIndexClient,
+  type AtsJobSummary,
+} from "@/components/ats/JobsIndexClient";
 
-export const revalidate = 0;
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "ATS Jobs | Resourcin",
+  description:
+    "Internal view of all jobs managed via Resourcin ATS, with quick preview and pipeline access.",
+};
+
+type RawJobRow = {
+  id: string;
+  title: string;
+  location: string | null;
+  employment_type: string | null;
+  seniority: string | null;
+  status: string | null;
+  visibility: string | null;
+  created_at: string;
+  department: string | null;
+  tags: string[] | null;
+};
+
+type RawApplicationRow = {
+  id: string;
+  job_id: string | null;
+  status: string | null;
+};
+
+function deriveWorkMode(job: RawJobRow): string | null {
+  const loc = (job.location || "").toLowerCase();
+  const tags = (job.tags || []).map((t) => t.toLowerCase());
+
+  if (loc.includes("remote") || tags.includes("remote")) return "Remote";
+  if (loc.includes("hybrid") || tags.includes("hybrid")) return "Hybrid";
+  if (loc.includes("flexible") || tags.includes("flexible")) return "Flexible";
+  if (loc.includes("on-site") || loc.includes("onsite")) return "On-site";
+
+  return null;
+}
 
 export default async function AtsJobsPage() {
-  const { user, currentTenant } = await getCurrentUserAndTenants();
+  const [{ data: jobsData, error: jobsError }, { data: appsData, error: appsError }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("jobs")
+        .select(
+          `
+          id,
+          title,
+          location,
+          employment_type,
+          seniority,
+          status,
+          visibility,
+          created_at,
+          department,
+          tags
+        `
+        )
+        .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("job_applications")
+        .select("id, job_id, status"),
+    ]);
 
-  if (!user) {
-    return (
-      <main className="mx-auto max-w-4xl px-4 py-12">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          ThinkATS – sign in to view jobs
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          You need to be signed in as a client or internal Resourcin user to
-          manage jobs in ThinkATS.
-        </p>
-        <div className="mt-4">
-          <Link
-            href="/login?role=client"
-            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
-          >
-            Go to client login
-          </Link>
-        </div>
-      </main>
-    );
+  if (jobsError) {
+    console.error("ATS jobs page – error loading jobs:", jobsError);
+  }
+  if (appsError) {
+    console.error("ATS jobs page – error loading applications:", appsError);
   }
 
-  if (!currentTenant) {
-    return (
-      <main className="mx-auto max-w-4xl px-4 py-12">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          ThinkATS – no tenant configured
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          You&apos;re authenticated but your user isn&apos;t linked to any ATS
-          tenant yet. Please make sure your account has a tenant assignment in
-          Supabase.
-        </p>
-        <div className="mt-4">
-          <Link
-            href="/ats"
-            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
-            Back to ATS dashboard
-          </Link>
-        </div>
-      </main>
-    );
+  const jobsRows = (jobsData ?? []) as RawJobRow[];
+  const appsRows = (appsData ?? []) as RawApplicationRow[];
+
+  const countsByJobId = new Map<
+    string,
+    { total: number; byStatus: Record<string, number> }
+  >();
+
+  for (const app of appsRows) {
+    if (!app.job_id) continue;
+    const key = app.job_id;
+    if (!countsByJobId.has(key)) {
+      countsByJobId.set(key, { total: 0, byStatus: {} });
+    }
+    const entry = countsByJobId.get(key)!;
+    entry.total += 1;
+    const s = (app.status || "applied").toLowerCase();
+    entry.byStatus[s] = (entry.byStatus[s] || 0) + 1;
   }
 
-  const supabase = await createSupabaseServerClient();
-
-  const { data, error } = await supabase
-    .from("jobs")
-    .select(
-      `
-      id,
-      title,
-      location,
-      employment_type,
-      seniority,
-      status,
-      created_at,
-      client_company:client_companies(name)
-    `
-    )
-    .eq("tenant_id", currentTenant.id)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error loading ATS jobs:", error);
-  }
-
-  const rawJobs = (data ?? []) as any[];
-
-  const jobs: AtsJobListItem[] = rawJobs.map((row) => {
-    const companyRel = Array.isArray(row.client_company)
-      ? row.client_company[0]
-      : row.client_company;
-
-    const companyName = companyRel?.name || "Client role";
-
-    const createdAt =
-      typeof row.created_at === "string"
-        ? row.created_at
-        : new Date().toISOString();
+  const jobs: AtsJobSummary[] = jobsRows.map((row) => {
+    const counts = countsByJobId.get(row.id) ?? {
+      total: 0,
+      byStatus: {} as Record<string, number>,
+    };
 
     return {
       id: row.id,
       title: row.title,
-      companyName,
-      location: row.location || "Location flexible",
-      salary: undefined,
-      workMode: undefined,
-      status: (row.status || "draft") as AtsJobListItem["status"],
-      createdAt,
-      description: "",
-      requirements: "",
+      location: row.location,
+      employmentType: row.employment_type,
+      seniority: row.seniority,
+      status: row.status,
+      visibility: row.visibility,
+      createdAt: row.created_at,
+      department: row.department,
+      tags: row.tags,
+      workMode: deriveWorkMode(row),
+      applicationsTotal: counts.total,
+      applicationsByStatus: counts.byStatus,
     };
   });
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <ErrorBoundary>
-        <AtsJobsPageClient jobs={jobs} />
-      </ErrorBoundary>
+      <header className="mb-6 border-b border-slate-100 pb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          ATS
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+          Jobs overview
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">
+          Internal view of all roles managed via Resourcin ATS. Use filters and
+          the quick preview drawer to inspect pipelines without leaving this
+          page.
+        </p>
+      </header>
+
+      <JobsIndexClient jobs={jobs} />
     </main>
   );
 }
