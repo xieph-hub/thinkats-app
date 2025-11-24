@@ -1,132 +1,124 @@
-// app/ats/jobs/[jobId]/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
-import { getCurrentUserAndTenants } from "@/lib/getCurrentUserAndTenants";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
-import { ApplicationsSplitView, Application } from "@/components/ats/ApplicationsSplitView";
+import { notFound } from "next/navigation";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  ApplicationsSplitView,
+  type ApplicationStatus,
+} from "@/components/ats/ApplicationsSplitView";
 
-type PageProps = {
-  params: {
-    jobId: string;
-  };
-};
+export const dynamic = "force-dynamic";
 
 type JobRow = {
   id: string;
   title: string;
+  department: string | null;
   location: string | null;
   employment_type: string | null;
-  department: string | null;
   seniority: string | null;
-  created_at: string | null;
+  status: string;
+  visibility: string;
+  created_at: string;
 };
 
-export const revalidate = 0; // always fresh
+type Application = {
+  id: string;
+  fullName: string;
+  email: string;
+  status: ApplicationStatus;
+  appliedAt: string;
+  location?: string;
+  cvUrl?: string;
+  phone?: string;
+  timeline?: { label: string; at: string }[];
+};
 
-function mapStageToStatus(stage: string | null): Application["status"] {
-  const s = (stage || "").toLowerCase();
-  if (s === "screening") return "screening";
-  if (s === "interview") return "interview";
-  if (s === "offer") return "offer";
-  if (s === "rejected") return "rejected";
-  return "applied";
+export async function generateMetadata({
+  params,
+}: {
+  params: { jobId: string };
+}): Promise<Metadata> {
+  const { jobId } = params;
+
+  const { data } = await supabaseAdmin
+    .from("jobs")
+    .select("title")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  return {
+    title: data?.title
+      ? `${data.title} | ATS job – Resourcin`
+      : "ATS job | Resourcin",
+  };
 }
 
-export default async function JobPipelinePage({ params }: PageProps) {
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+function formatEmploymentType(value: string | null) {
+  if (!value) return null;
+  const lower = value.toLowerCase();
+  if (lower === "full-time" || lower === "full_time") return "Full-time";
+  if (lower === "part-time" || lower === "part_time") return "Part-time";
+  if (lower === "contract") return "Contract";
+  if (lower === "internship") return "Internship";
+  return value;
+}
+
+function deriveWorkMode(job: JobRow): string | null {
+  const loc = (job.location || "").toLowerCase();
+
+  if (loc.includes("remote")) return "Remote";
+  if (loc.includes("hybrid")) return "Hybrid";
+  if (loc.includes("flexible")) return "Flexible";
+  if (loc.includes("on-site") || loc.includes("onsite")) return "On-site";
+
+  return null;
+}
+
+export default async function AtsJobDetailPage({
+  params,
+}: {
+  params: { jobId: string };
+}) {
   const { jobId } = params;
-  const { user, currentTenant } = await getCurrentUserAndTenants();
 
-  // Not signed in as ATS user
-  if (!user) {
-    return (
-      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          ThinkATS – sign in to view this job
-        </h1>
-        <p className="text-sm text-slate-600">
-          You need to be signed in as a client or internal Resourcin user to
-          view job pipelines in ThinkATS.
-        </p>
-        <div>
-          <Link
-            href="/login?role=client"
-            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#111b4a]"
-          >
-            Go to client login
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
-  // User has no tenant linked
-  if (!currentTenant) {
-    return (
-      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          ThinkATS – no tenant configured
-        </h1>
-        <p className="text-sm text-slate-600">
-          You&apos;re authenticated but your user isn&apos;t linked to any ATS
-          tenant yet. Please make sure your account has a tenant assignment in
-          Supabase.
-        </p>
-        <div>
-          <Link
-            href="/ats"
-            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
-            Back to ATS dashboard
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
-  const supabase = await createSupabaseServerClient();
-
-  // 1) Load the job for this tenant
-  const { data: jobRow, error: jobError } = await supabase
+  // 1) Load job
+  const { data: jobData, error: jobError } = await supabaseAdmin
     .from("jobs")
     .select(
       `
       id,
       title,
+      department,
       location,
       employment_type,
-      department,
       seniority,
+      status,
+      visibility,
       created_at
     `
     )
     .eq("id", jobId)
-    .eq("tenant_id", currentTenant.id)
     .single<JobRow>();
 
-  if (jobError || !jobRow) {
-    console.error("Error loading job for pipeline", jobError);
-    return (
-      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-12">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Job not found
-        </h1>
-        <p className="text-sm text-slate-600">
-          This job either doesn&apos;t exist, doesn&apos;t belong to your
-          tenant, or has been removed.
-        </p>
-        <div>
-          <Link
-            href="/ats"
-            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
-            Back to ATS dashboard
-          </Link>
-        </div>
-      </main>
-    );
+  if (jobError || !jobData) {
+    console.error("ATS job detail – error loading job:", jobError);
+    notFound();
   }
 
-  // 2) Load job applications from job_applications
-  const { data: rawApplications, error: appsError } = await supabase
+  const job = jobData;
+
+  // 2) Load applications for this job
+  const { data: appsData, error: appsError } = await supabaseAdmin
     .from("job_applications")
     .select(
       `
@@ -135,99 +127,172 @@ export default async function JobPipelinePage({ params }: PageProps) {
       email,
       phone,
       location,
-      linkedin_url,
-      portfolio_url,
       cv_url,
-      cover_letter,
-      source,
-      stage,
       status,
       created_at
     `
     )
-    .eq("job_id", jobRow.id)
-    .order("created_at", { ascending: false });
+    .eq("job_id", job.id)
+    .order("created_at", { ascending: true });
 
   if (appsError) {
-    console.error("Error loading job_applications", appsError);
+    console.error("ATS job detail – error loading applications:", appsError);
   }
 
-  const applications: Application[] =
-    rawApplications?.map((row: any) => ({
+  const rawApps = appsData ?? [];
+
+  const allowedStatuses: ApplicationStatus[] = [
+    "applied",
+    "screening",
+    "interview",
+    "offer",
+    "rejected",
+  ];
+
+  const applications: Application[] = rawApps.map((row: any) => {
+    const rawStatus = (row.status as string | null) ?? "applied";
+    const safeStatus = allowedStatuses.includes(
+      rawStatus as ApplicationStatus
+    )
+      ? (rawStatus as ApplicationStatus)
+      : "applied";
+
+    return {
       id: row.id,
-      fullName: row.full_name,
-      email: row.email,
-      phone: row.phone || undefined,
-      location: row.location || undefined,
-      cvUrl: row.cv_url || undefined,
-      status: mapStageToStatus(row.stage),
-      appliedAt: row.created_at,
-      timeline: [
-        {
-          label: "Applied",
-          at: row.created_at,
-        },
-      ],
-    })) ?? [];
+      fullName: row.full_name ?? "Unnamed candidate",
+      email: row.email ?? "",
+      status: safeStatus,
+      appliedAt: row.created_at ?? new Date().toISOString(),
+      location: row.location ?? undefined,
+      cvUrl: row.cv_url ?? undefined,
+      phone: row.phone ?? undefined,
+      timeline: [], // future: plug in real timeline events
+    };
+  });
 
-  const applicationsCount = applications.length;
+  const totalApplications = applications.length;
+  const lastAppliedAt =
+    totalApplications > 0
+      ? applications[applications.length - 1].appliedAt
+      : null;
 
-  const createdLabel = jobRow.created_at
-    ? new Date(jobRow.created_at).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      })
-    : "";
+  const statusBuckets: Record<ApplicationStatus, number> = {
+    applied: 0,
+    screening: 0,
+    interview: 0,
+    offer: 0,
+    rejected: 0,
+  };
+  for (const app of applications) {
+    statusBuckets[app.status] += 1;
+  }
+
+  const employmentTypeLabel = formatEmploymentType(job.employment_type);
+  const workModeLabel = deriveWorkMode(job);
+
+  const isConfidential = job.visibility === "confidential";
+  const isInternalOnly = job.visibility === "internal";
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      {/* Page header */}
-      <header className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">
-            ThinkATS · Pipeline
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            {jobRow.title}
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            {applicationsCount} application
-            {applicationsCount === 1 ? "" : "s"} so far.
-          </p>
-          {createdLabel && (
-            <p className="mt-0.5 text-xs text-slate-500">
-              Role created {createdLabel}
-            </p>
-          )}
-        </div>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <Link
+          href="/ats/jobs"
+          className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
+        >
+          ← Back to all ATS jobs
+        </Link>
+      </div>
 
-        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-          {jobRow.location && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {jobRow.location}
-            </span>
-          )}
-          {jobRow.employment_type && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {jobRow.employment_type}
-            </span>
-          )}
-          {jobRow.department && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {jobRow.department}
-            </span>
-          )}
-          {jobRow.seniority && (
-            <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1">
-              {jobRow.seniority}
-            </span>
-          )}
+      {/* Job header / cockpit summary */}
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1.5">
+            <h1 className="text-lg font-semibold text-slate-900">
+              {job.title}
+            </h1>
+            <p className="text-[11px] text-slate-600">
+              {isConfidential
+                ? "Confidential client"
+                : job.department || "Client role"}
+              {isInternalOnly && " • Internal only"}
+            </p>
+
+            <div className="mt-1 flex flex-wrap gap-2 text-[11px]">
+              {job.location && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-0.5 text-slate-700">
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: "#EF4444" }} // red pin
+                    aria-hidden="true"
+                  />
+                  {job.location}
+                </span>
+              )}
+              {workModeLabel && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-0.5 text-slate-700">
+                  <span className="text-[11px]">🌐</span>
+                  {workModeLabel}
+                </span>
+              )}
+              {employmentTypeLabel && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-0.5 text-slate-700">
+                  <span
+                    className="inline-block h-2.5 w-3 rounded-[3px]"
+                    style={{ backgroundColor: "#92400E" }} // brown briefcase
+                    aria-hidden="true"
+                  />
+                  {employmentTypeLabel}
+                </span>
+              )}
+              {job.seniority && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-0.5 text-slate-700">
+                  <span className="text-[11px]">★</span>
+                  {job.seniority}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-[11px] text-slate-500">
+              Created {formatDate(job.created_at)} • Status:{" "}
+              <span className="font-medium text-slate-700">{job.status}</span>{" "}
+              • Visibility:{" "}
+              <span className="font-medium text-slate-700">
+                {job.visibility}
+              </span>
+            </p>
+          </div>
+
+          {/* Simple stats */}
+          <div className="grid grid-cols-3 gap-2 text-center text-[11px] sm:text-right">
+            <div className="rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-[10px] text-slate-500">Total apps</p>
+              <p className="mt-0.5 text-base font-semibold text-slate-900">
+                {totalApplications}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-[10px] text-slate-500">In pipeline</p>
+              <p className="mt-0.5 text-base font-semibold text-slate-900">
+                {statusBuckets.applied +
+                  statusBuckets.screening +
+                  statusBuckets.interview}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-[10px] text-slate-500">Last activity</p>
+              <p className="mt-0.5 text-[11px] font-medium text-slate-800">
+                {lastAppliedAt ? formatDate(lastAppliedAt) : "—"}
+              </p>
+            </div>
+          </div>
         </div>
-      </header>
+      </section>
 
       {/* Applications split view */}
-      <ApplicationsSplitView applications={applications} />
+      <section>
+        <ApplicationsSplitView applications={applications} />
+      </section>
     </main>
   );
 }
