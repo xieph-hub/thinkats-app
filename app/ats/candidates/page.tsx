@@ -1,14 +1,16 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { CandidatesAccordion } from "@/components/ats/CandidatesAccordion";
+import CandidatesAccordion, {
+  Candidate as AccordionCandidate,
+} from "@/components/ats/CandidatesAccordion";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Candidates | Resourcin ATS",
   description:
-    "Unified candidate database across all jobs managed in Resourcin ATS.",
+    "Unified view of candidates from all roles managed in Resourcin ATS.",
 };
 
 type RawRow = {
@@ -18,13 +20,13 @@ type RawRow = {
   email: string;
   phone: string | null;
   location: string | null;
-  status: string | null;
+  status: string;
   created_at: string;
-  job?: {
+  job: {
     id: string;
-    title: string | null;
+    title: string;
     slug: string | null;
-  } | null;
+  }[]; // <- Supabase returns this as an array
 };
 
 export default async function CandidatesPage() {
@@ -50,43 +52,47 @@ export default async function CandidatesPage() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Candidates page – error loading applications:", error);
+    console.error("ATS candidates – error loading candidates:", error);
   }
 
   const rows = (data ?? []) as RawRow[];
 
-  const candidates = rows.map((row) => ({
-    id: row.id,
-    fullName: row.full_name,
-    email: row.email,
-    phone: row.phone ?? undefined,
-    location: row.location ?? undefined,
-    status: (row.status as string) || "applied",
-    appliedAt: row.created_at,
-    jobTitle: row.job?.title ?? undefined,
-    jobSlug: row.job?.slug ?? undefined,
-    jobId: row.job_id ?? undefined,
-    // These can later be filled from CV parsing / tagging
-    headline: row.job?.title
-      ? `Applied for ${row.job.title}`
-      : "Candidate profile",
-    keySkills: [] as string[],
-    experienceSummary: undefined as string | undefined,
-    source: undefined as string | undefined,
-  }));
+  const candidates: AccordionCandidate[] = rows.map((row) => {
+    const job = row.job?.[0]; // take the first related job if present
+
+    return {
+      id: row.id,
+      // primary identity
+      full_name: row.full_name,
+      name: row.full_name,
+      email: row.email,
+      phone: row.phone,
+      location: row.location,
+
+      // job context
+      title: job?.title ?? "Role not specified",
+      current_role: job?.title ?? null,
+      // you can wire current_company later if you add it to the query
+
+      // metadata
+      tags: [row.status],
+      last_contact_at: row.created_at,
+      // key_skills, years_experience, etc. can be wired in later
+    };
+  });
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <header className="mb-6 border-b border-slate-100 pb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS
+          Talent database
         </p>
         <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-          Candidate database
+          Candidates
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Browse all applicants across roles. Filter by status and search by
-          name, email, or role to quickly find the right profiles.
+          Browse applicants from all roles in a single, unified view. Use this
+          list as your lightweight CRM for talent.
         </p>
       </header>
 
