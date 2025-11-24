@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-// Bucket for CV uploads – adjust if your bucket name is different
+// Bucket for CV uploads – update via env if needed
 const CV_BUCKET =
   process.env.NEXT_PUBLIC_SUPABASE_CV_BUCKET ||
   process.env.SUPABASE_CV_BUCKET ||
@@ -35,27 +35,80 @@ export async function POST(
     // Expecting multipart/form-data from your public apply form
     const formData = await req.formData();
 
-    const jobIdRaw = formData.get("jobId");
+    // --- Robust field extraction (in case names differ slightly) ---
+    const jobIdRaw =
+      formData.get("jobId") ||
+      formData.get("job_id") ||
+      formData.get("job");
     const jobId = jobIdRaw ? String(jobIdRaw) : null;
 
-    const fullName = formData.get("full_name")?.toString().trim() || "";
-    const email = formData.get("email")?.toString().trim() || "";
-    const phone = formData.get("phone")?.toString().trim() || "";
+    const fullNameEntry =
+      formData.get("full_name") ||
+      formData.get("name") ||
+      formData.get("candidate_name");
+    const emailEntry =
+      formData.get("email") || formData.get("candidate_email");
+
+    const fullName =
+      (typeof fullNameEntry === "string"
+        ? fullNameEntry
+        : fullNameEntry?.toString() || ""
+      ).trim();
+
+    const email =
+      (typeof emailEntry === "string"
+        ? emailEntry
+        : emailEntry?.toString() || ""
+      ).trim();
+
+    const phoneEntry = formData.get("phone");
+    const locationEntry = formData.get("location");
+
+    const phone =
+      (typeof phoneEntry === "string"
+        ? phoneEntry
+        : phoneEntry?.toString() || ""
+      ).trim() || null;
+
     const location =
-      formData.get("location")?.toString().trim() || "";
-    const linkedinUrl =
-      formData.get("linkedin_url")?.toString().trim() || "";
-    const coverLetter =
-      formData.get("cover_letter")?.toString().trim() || "";
+      (typeof locationEntry === "string"
+        ? locationEntry
+        : locationEntry?.toString() || ""
+      ).trim() || null;
+
+    // Optional extras if you wired them on the form:
+    const linkedinEntry =
+      formData.get("linkedin_url") || formData.get("linkedin");
+    const coverLetterEntry =
+      formData.get("cover_letter") || formData.get("message");
+
+    const linkedin_url =
+      (typeof linkedinEntry === "string"
+        ? linkedinEntry
+        : linkedinEntry?.toString() || ""
+      ).trim() || null;
+
+    const cover_letter =
+      (typeof coverLetterEntry === "string"
+        ? coverLetterEntry
+        : coverLetterEntry?.toString() || ""
+      ).trim() || null;
 
     if (!fullName || !email) {
+      console.error("Apply – missing fullName or email", {
+        fullName,
+        email,
+      });
       return NextResponse.json(
-        { error: "Full name and email are required." },
+        {
+          error:
+            "We couldn't submit your application. Please check your details and try again.",
+        },
         { status: 400 }
       );
     }
 
-    // 1) Resolve job via jobId (preferred) or slug fallback
+    // --- 1) Resolve job via jobId (preferred) or slug fallback ---
     let job: JobRecord | null = null;
 
     if (isUuid(jobId)) {
@@ -85,6 +138,10 @@ export async function POST(
     }
 
     if (!job) {
+      console.error("Apply – job not found for identifier:", {
+        identifier,
+        jobId,
+      });
       return NextResponse.json(
         { error: "Job not found or no longer available." },
         { status: 404 }
@@ -93,13 +150,14 @@ export async function POST(
 
     // Optional guard – only allow public + open jobs
     if (job.visibility !== "public" || job.status !== "open") {
+      console.error("Apply – job not open/public:", job);
       return NextResponse.json(
         { error: "Applications for this role are currently closed." },
         { status: 400 }
       );
     }
 
-    // 2) Handle CV upload to Supabase Storage (if provided)
+    // --- 2) Handle CV upload to Supabase Storage (if provided) ---
     let cvUrl: string | null = null;
     const cvFile = formData.get("cv");
 
@@ -137,22 +195,21 @@ export async function POST(
       }
     }
 
-    // 3) Insert into job_applications, linking to job
-    // ⚠️ IMPORTANT: This assumes your job_applications table has these columns:
-    // id, job_id, full_name, email, phone, location, linkedin_url, cover_letter, cv_url, status
+    // --- 3) Insert into job_applications, linking to job ---
+    // Keep this payload VERY minimal to match your schema.
+    // Columns assumed to exist: job_id, full_name, email, phone, location, cv_url, status
     const insertPayload: Record<string, unknown> = {
       job_id: job.id,
       full_name: fullName,
       email,
-      phone: phone || null,
-      location: location || null,
-      linkedin_url: linkedinUrl || null,
-      cover_letter: coverLetter || null,
-      cv_url: cvUrl,
       status: "applied",
-      // If you later add a 'source' column, you can uncomment this:
-      // source: "public_job_board",
     };
+
+    if (phone) insertPayload.phone = phone;
+    if (location) insertPayload.location = location;
+    if (cvUrl) insertPayload.cv_url = cvUrl;
+    if (linkedin_url) insertPayload.linkedin_url = linkedin_url;
+    if (cover_letter) insertPayload.cover_letter = cover_letter;
 
     const { data: appData, error: appError } = await supabaseAdmin
       .from("job_applications")
@@ -163,7 +220,9 @@ export async function POST(
     if (appError || !appData) {
       console.error(
         "Apply – error inserting job_application:",
-        appError
+        appError,
+        "payload:",
+        insertPayload
       );
       return NextResponse.json(
         {
@@ -174,7 +233,7 @@ export async function POST(
       );
     }
 
-    // 4) Success
+    // --- 4) Success ---
     return NextResponse.json(
       {
         ok: true,
