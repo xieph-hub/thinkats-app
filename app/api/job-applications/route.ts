@@ -4,141 +4,146 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-const BUCKET_NAME = "resourcin-uploads";
-
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const formData = await req.formData();
+    const formData = await request.formData();
 
-    const jobId = formData.get("jobId")?.toString();
-    const tenantId = formData.get("tenantId")?.toString(); // used only for storage path
+    const jobId = formData.get("jobId")?.toString() || "";
     const jobSlug = formData.get("jobSlug")?.toString() || "";
-
-    if (!jobId || !tenantId) {
-      console.error("job-applications: missing jobId or tenantId", {
-        jobId,
-        tenantId,
-      });
-      return redirectWithFlag(req.url, jobSlug || jobId || null, 0);
-    }
-
     const fullName = formData.get("fullName")?.toString().trim() || "";
     const email = formData.get("email")?.toString().trim() || "";
+
+    if (!jobId || !fullName || !email) {
+      console.error("job-applications: missing required fields", {
+        jobId,
+        fullName,
+        email,
+      });
+      return redirectWithFlag(request, jobSlug || jobId, "0");
+    }
+
     const phone = formData.get("phone")?.toString().trim() || "";
     const location = formData.get("location")?.toString().trim() || "";
     const linkedinUrl = formData.get("linkedinUrl")?.toString().trim() || "";
     const portfolioUrl = formData.get("portfolioUrl")?.toString().trim() || "";
-    const coverLetter = formData.get("coverLetter")?.toString().trim() || "";
+    const source = formData.get("source")?.toString().trim() || "careers_site";
 
-    // Extra screening fields – fold into cover letter for now
-    const hasWorkPermit = formData.get("hasWorkPermit")?.toString() || "";
-    const currentGross = formData.get("currentGross")?.toString().trim() || "";
-    const expectedGross =
-      formData.get("expectedGross")?.toString().trim() || "";
-    const noticePeriod =
-      formData.get("noticePeriod")?.toString().trim() || "";
+    const coverLetter = formData
+      .get("coverLetter")
+      ?.toString()
+      .trim() || "";
 
-    const cvFile = formData.get("cv") as File | null;
+    // Extra screening fields (we'll fold them into cover_letter text for now)
+    const workPermit = formData.get("workPermit")?.toString() || "";
+    const expectedSalary = formData.get("expectedSalary")?.toString() || "";
+    const currentSalary = formData.get("currentSalary")?.toString() || "";
+    const noticePeriod = formData.get("noticePeriod")?.toString() || "";
+    const howHeard = formData.get("howHeard")?.toString() || "";
+    const marketingOptIn = formData.get("marketingOptIn") === "on";
 
-    if (!fullName || !email || !cvFile) {
-      console.error("job-applications: missing required fields", {
-        fullName: !!fullName,
-        email: !!email,
-        cvFile: !!cvFile,
-      });
-      return redirectWithFlag(req.url, jobSlug || jobId, 0);
-    }
+    const extraLines: string[] = [];
 
-    // ---- Upload CV to Supabase Storage ----
-    let cvUrl: string | null = null;
+    if (workPermit) extraLines.push(`Work permit for role country: ${workPermit}`);
+    if (expectedSalary)
+      extraLines.push(`Expected gross annual compensation: ${expectedSalary}`);
+    if (currentSalary)
+      extraLines.push(`Current gross annual compensation (self-reported): ${currentSalary}`);
+    if (noticePeriod)
+      extraLines.push(`Notice period: ${noticePeriod}`);
+    if (howHeard) extraLines.push(`How they heard about this role: ${howHeard}`);
+    if (marketingOptIn)
+      extraLines.push(
+        "Candidate consented to hear about future opportunities."
+      );
 
-    if (cvFile && cvFile.size > 0) {
-      const arrayBuffer = await cvFile.arrayBuffer();
-      const buffer = new Uint8Array(arrayBuffer);
+    const extraBlock =
+      extraLines.length > 0
+        ? `\n\n---\nScreening details:\n${extraLines.join("\n")}`
+        : "";
 
-      const safeName = cvFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-      const objectPath = `${tenantId}/jobs/${jobId}/${Date.now()}-${safeName}`;
-
-      const { data: storageData, error: storageError } =
-        await supabaseAdmin.storage
-          .from(BUCKET_NAME)
-          .upload(objectPath, buffer, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: cvFile.type || "application/pdf",
-          });
-
-      if (storageError || !storageData) {
-        console.error("job-applications: error uploading CV", storageError);
-        return redirectWithFlag(req.url, jobSlug || jobId, 0);
-      }
-
-      const { data: publicData } = supabaseAdmin.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(storageData.path);
-
-      cvUrl = publicData.publicUrl;
-    }
-
-    // ---- Build combined cover letter text (includes screening info) ----
-    const combinedCoverLetter = [
-      coverLetter,
-      currentGross && `Current gross (self-reported): ${currentGross}`,
-      expectedGross && `Expected gross (self-reported): ${expectedGross}`,
-      noticePeriod && `Notice period: ${noticePeriod}`,
-      hasWorkPermit && `Has valid work permit: ${hasWorkPermit}`,
-    ]
+    const combinedCover = [coverLetter, extraBlock]
+      .map((s) => s.trim())
       .filter(Boolean)
       .join("\n\n");
 
-    // ---- Insert application into job_applications ----
-    // NOTE: We do NOT insert tenant_id here because that column does not exist.
-    const { error: insertError } = await supabaseAdmin
-      .from("job_applications")
-      .insert({
-        job_id: jobId,
-        full_name: fullName,
-        email,
-        phone,
-        location,
-        linkedin_url: linkedinUrl,
-        portfolio_url: portfolioUrl,
-        cv_url: cvUrl,
-        cover_letter: combinedCoverLetter || null,
-        source: "career_site",
-        stage: "applied",
-        status: "active",
-      });
+    // ---- Upload CV to Supabase Storage (resourcin-uploads) ----
+    const cvFile = formData.get("cv") as File | null;
+    let cvUrl: string | null = null;
 
-    if (insertError) {
-      console.error(
-        "job-applications: error inserting job_application",
-        insertError
-      );
-      return redirectWithFlag(req.url, jobSlug || jobId, 0);
+    if (cvFile && cvFile.size > 0) {
+      try {
+        const arrayBuffer = await cvFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const ext = cvFile.name.split(".").pop() || "pdf";
+        const path = `cv/${jobId}/${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}.${ext}`;
+
+        const { data: uploadData, error: uploadError } =
+          await supabaseAdmin.storage
+            .from("resourcin-uploads")
+            .upload(path, buffer, {
+              contentType: cvFile.type || "application/octet-stream",
+            });
+
+        if (uploadError || !uploadData) {
+          console.error("job-applications: error uploading CV", uploadError);
+        } else {
+          const { data: publicUrlData } = supabaseAdmin.storage
+            .from("resourcin-uploads")
+            .getPublicUrl(uploadData.path);
+
+          cvUrl = publicUrlData.publicUrl;
+        }
+      } catch (err) {
+        console.error("job-applications: unexpected error uploading CV", err);
+      }
     }
 
-    // ✅ Success
-    return redirectWithFlag(req.url, jobSlug || jobId, 1);
+    // ---- Insert into job_applications table ----
+    const { error: insertError } = await supabaseAdmin
+      .from("job_applications")
+      .insert([
+        {
+          job_id: jobId,
+          full_name: fullName,
+          email,
+          phone: phone || null,
+          location: location || null,
+          linkedin_url: linkedinUrl || null,
+          portfolio_url: portfolioUrl || null,
+          cv_url: cvUrl,
+          cover_letter: combinedCover || null,
+          source,
+          stage: "applied",
+          status: "active",
+        },
+      ]);
+
+    if (insertError) {
+      console.error("job-applications: error inserting job_application", insertError);
+      return redirectWithFlag(request, jobSlug || jobId, "0");
+    }
+
+    return redirectWithFlag(request, jobSlug || jobId, "1");
   } catch (err) {
     console.error("job-applications: unexpected error", err);
-    return redirectWithFlag(req.url, null, 0);
+    // We don't know the slug here; fallback to jobs root
+    const url = new URL(request.nextUrl);
+    url.pathname = "/jobs";
+    url.searchParams.set("applied", "0");
+    return NextResponse.redirect(url.toString(), { status: 303 });
   }
 }
 
 function redirectWithFlag(
-  requestUrl: string,
-  slugOrId: string | null,
-  flag: 0 | 1
+  request: NextRequest,
+  slugOrId: string,
+  flag: "0" | "1"
 ) {
-  const url = new URL(requestUrl);
-
-  if (slugOrId) {
-    url.pathname = `/jobs/${slugOrId}`;
-  } else {
-    url.pathname = "/jobs";
-  }
-
-  url.search = `applied=${flag}`;
+  const url = new URL(request.nextUrl);
+  url.pathname = `/jobs/${encodeURIComponent(slugOrId)}`;
+  url.searchParams.set("applied", flag);
   return NextResponse.redirect(url.toString(), { status: 303 });
 }
