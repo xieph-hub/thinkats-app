@@ -1,7 +1,7 @@
 // components/ats/ApplicationsSplitView.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/Drawer";
 
 type ApplicationStatus =
@@ -34,6 +34,8 @@ type Props = {
   applications: Application[];
 };
 
+type FilterKey = "all" | "applied" | "interview" | "offer" | "rejected";
+
 export function ApplicationsSplitView({ applications }: Props) {
   const [selected, setSelected] = useState<Application | null>(
     applications[0] ?? null
@@ -41,13 +43,52 @@ export function ApplicationsSplitView({ applications }: Props) {
   const [drawerCandidate, setDrawerCandidate] = useState<Application | null>(
     null
   );
+  const [statusFilter, setStatusFilter] = useState<FilterKey>("all");
+
+  // Precompute counts per filter
+  const counts = useMemo(() => {
+    const base: Record<FilterKey, number> = {
+      all: applications.length,
+      applied: 0,
+      interview: 0,
+      offer: 0,
+      rejected: 0,
+    };
+
+    for (const app of applications) {
+      if (app.status === "applied") base.applied += 1;
+      if (app.status === "interview") base.interview += 1;
+      if (app.status === "offer") base.offer += 1;
+      if (app.status === "rejected") base.rejected += 1;
+    }
+
+    return base;
+  }, [applications]);
+
+  // Filtered list based on statusFilter
+  const visibleApplications = useMemo(() => {
+    if (statusFilter === "all") return applications;
+    return applications.filter((a) => a.status === statusFilter);
+  }, [applications, statusFilter]);
+
+  const isEmpty = visibleApplications.length === 0;
+
+  // Ensure selected candidate always belongs to the current filtered set
+  useEffect(() => {
+    if (!visibleApplications.length) {
+      setSelected(null);
+      return;
+    }
+
+    if (!selected || !visibleApplications.some((a) => a.id === selected.id)) {
+      setSelected(visibleApplications[0]);
+    }
+  }, [visibleApplications, selected]);
 
   const handleSelect = (app: Application) => {
     setSelected(app);
     setDrawerCandidate(app); // used on mobile
   };
-
-  const isEmpty = applications.length === 0;
 
   return (
     <div className="flex h-[70vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -55,19 +96,27 @@ export function ApplicationsSplitView({ applications }: Props) {
       <div className="hidden h-full md:grid md:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)]">
         {/* List */}
         <div className="border-r border-slate-100">
-          <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Applications ({applications.length})
-            </h2>
+          <header className="border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Applications ({applications.length})
+              </h2>
+            </div>
+            <FilterChips
+              statusFilter={statusFilter}
+              counts={counts}
+              onChange={setStatusFilter}
+            />
           </header>
+
           <div className="h-full overflow-y-auto">
             {isEmpty ? (
               <p className="px-4 py-6 text-xs text-slate-500">
-                No applications yet.
+                No applications match this filter.
               </p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {applications.map((app) => {
+                {visibleApplications.map((app) => {
                   const active = selected?.id === app.id;
                   return (
                     <li
@@ -154,19 +203,27 @@ export function ApplicationsSplitView({ applications }: Props) {
 
       {/* Mobile list + drawer */}
       <div className="flex h-full flex-col md:hidden">
-        <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Applications ({applications.length})
-          </h2>
+        <header className="border-b border-slate-100 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Applications ({applications.length})
+            </h2>
+          </div>
+          <FilterChips
+            statusFilter={statusFilter}
+            counts={counts}
+            onChange={setStatusFilter}
+          />
         </header>
+
         <div className="h-full overflow-y-auto">
           {isEmpty ? (
             <p className="px-4 py-6 text-xs text-slate-500">
-              No applications yet.
+              No applications match this filter.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {applications.map((app) => (
+              {visibleApplications.map((app) => (
                 <li
                   key={app.id}
                   className="cursor-pointer px-4 py-3 text-xs hover:bg-slate-50"
@@ -209,6 +266,49 @@ export function ApplicationsSplitView({ applications }: Props) {
   );
 }
 
+function FilterChips({
+  statusFilter,
+  counts,
+  onChange,
+}: {
+  statusFilter: FilterKey;
+  counts: Record<FilterKey, number>;
+  onChange: (value: FilterKey) => void;
+}) {
+  const filters: { key: FilterKey; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "applied", label: "Applied" },
+    { key: "interview", label: "Interview" },
+    { key: "offer", label: "Offer" },
+    { key: "rejected", label: "Rejected" },
+  ];
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {filters.map((f) => {
+        const active = statusFilter === f.key;
+        return (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => onChange(f.key)}
+            className={
+              active
+                ? "inline-flex items-center gap-1 rounded-full bg-[#172965] px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+                : "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-700 hover:border-[#172965]/60 hover:bg-white"
+            }
+          >
+            <span>{f.label}</span>
+            <span className={active ? "text-slate-100" : "text-slate-500"}>
+              {counts[f.key]}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function CandidateDetails({
   candidate,
   compact,
@@ -216,7 +316,6 @@ function CandidateDetails({
   candidate: Application;
   compact?: boolean;
 }) {
-  // find last timeline entry (for "Last updated" text)
   const lastEvent =
     candidate.timeline && candidate.timeline.length > 0
       ? candidate.timeline[candidate.timeline.length - 1]
@@ -266,8 +365,7 @@ function CandidateDetails({
           </p>
           {lastEvent && (
             <p className="mt-1 text-[10px] text-slate-400">
-              Last updated{" "}
-              {new Date(lastEvent.at).toLocaleString()}
+              Last updated {new Date(lastEvent.at).toLocaleString()}
             </p>
           )}
         </section>
