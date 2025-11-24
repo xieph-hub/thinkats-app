@@ -14,7 +14,6 @@ type ApplicationStatus =
 type TimelineItem = {
   label: string;
   at: string;
-  note?: string;
 };
 
 type Application = {
@@ -27,68 +26,152 @@ type Application = {
   cvUrl?: string;
   phone?: string;
   timeline?: TimelineItem[];
-  latestNote?: string;
 };
 
 type Props = {
   applications: Application[];
+
+  // These are provided by JobDetailShell and actually hit Supabase
+  onStatusChange?: (
+    applicationId: string,
+    newStatus: string,
+    note?: string
+  ) => void | Promise<void>;
+
+  onScheduleInterview?: (
+    applicationId: string,
+    payload: any // keep this loose to match your existing handler type
+  ) => void | Promise<void>;
 };
 
-type FilterKey = "all" | "applied" | "interview" | "offer" | "rejected";
+type FilterKey = "all" | ApplicationStatus;
 
-export function ApplicationsSplitView({ applications }: Props) {
-  const [selected, setSelected] = useState<Application | null>(
-    applications[0] ?? null
-  );
-  const [drawerCandidate, setDrawerCandidate] = useState<Application | null>(
-    null
-  );
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "applied", label: "Applied" },
+  { key: "screening", label: "Screening" },
+  { key: "interview", label: "Interview" },
+  { key: "offer", label: "Offer" },
+  { key: "rejected", label: "Rejected" },
+];
+
+export function ApplicationsSplitView({
+  applications,
+  onStatusChange,
+  onScheduleInterview,
+}: Props) {
   const [statusFilter, setStatusFilter] = useState<FilterKey>("all");
 
-  // Precompute counts per filter
-  const counts = useMemo(() => {
-    const base: Record<FilterKey, number> = {
-      all: applications.length,
-      applied: 0,
-      interview: 0,
-      offer: 0,
-      rejected: 0,
-    };
-
-    for (const app of applications) {
-      if (app.status === "applied") base.applied += 1;
-      if (app.status === "interview") base.interview += 1;
-      if (app.status === "offer") base.offer += 1;
-      if (app.status === "rejected") base.rejected += 1;
-    }
-
-    return base;
-  }, [applications]);
-
-  // Filtered list based on statusFilter
-  const visibleApplications = useMemo(() => {
+  const filteredApplications = useMemo(() => {
     if (statusFilter === "all") return applications;
     return applications.filter((a) => a.status === statusFilter);
   }, [applications, statusFilter]);
 
-  const isEmpty = visibleApplications.length === 0;
+  const [selected, setSelected] = useState<Application | null>(
+    filteredApplications[0] ?? null
+  );
 
-  // Ensure selected candidate always belongs to the current filtered set
+  const [drawerCandidate, setDrawerCandidate] = useState<Application | null>(
+    null
+  );
+
+  // Drawers for actions
+  const [statusDrawerFor, setStatusDrawerFor] = useState<Application | null>(
+    null
+  );
+  const [statusDraft, setStatusDraft] = useState<ApplicationStatus>("applied");
+  const [statusNote, setStatusNote] = useState("");
+  const [submittingStatus, setSubmittingStatus] = useState(false);
+
+  const [interviewDrawerFor, setInterviewDrawerFor] =
+    useState<Application | null>(null);
+  const [interviewDate, setInterviewDate] = useState("");
+  const [interviewTime, setInterviewTime] = useState("");
+  const [interviewType, setInterviewType] = useState<
+    "phone" | "video" | "onsite"
+  >("video");
+  const [interviewLocation, setInterviewLocation] = useState("");
+  const [interviewNotes, setInterviewNotes] = useState("");
+  const [submittingInterview, setSubmittingInterview] = useState(false);
+
+  const isEmpty = filteredApplications.length === 0;
+
+  // Keep a sensible selected candidate when filters change
   useEffect(() => {
-    if (!visibleApplications.length) {
-      setSelected(null);
-      return;
+    if (!selected || !filteredApplications.some((a) => a.id === selected.id)) {
+      setSelected(filteredApplications[0] ?? null);
     }
-
-    if (!selected || !visibleApplications.some((a) => a.id === selected.id)) {
-      setSelected(visibleApplications[0]);
-    }
-  }, [visibleApplications, selected]);
+  }, [filteredApplications, selected]);
 
   const handleSelect = (app: Application) => {
     setSelected(app);
     setDrawerCandidate(app); // used on mobile
   };
+
+  const openStatusDrawer = () => {
+    if (!selected) return;
+    setStatusDraft(selected.status);
+    setStatusNote("");
+    setStatusDrawerFor(selected);
+  };
+
+  const openInterviewDrawer = () => {
+    if (!selected) return;
+    setInterviewDate("");
+    setInterviewTime("");
+    setInterviewType("video");
+    setInterviewLocation("");
+    setInterviewNotes("");
+    setInterviewDrawerFor(selected);
+  };
+
+  const handleSubmitStatus: React.FormEventHandler<HTMLFormElement> = async (
+    e
+  ) => {
+    e.preventDefault();
+    if (!statusDrawerFor || !onStatusChange) {
+      setStatusDrawerFor(null);
+      return;
+    }
+    try {
+      setSubmittingStatus(true);
+      await onStatusChange(
+        statusDrawerFor.id,
+        statusDraft,
+        statusNote.trim() || undefined
+      );
+      setStatusDrawerFor(null);
+    } catch (err) {
+      console.error("Error changing status", err);
+    } finally {
+      setSubmittingStatus(false);
+    }
+  };
+
+  const handleSubmitInterview: React.FormEventHandler<HTMLFormElement> =
+    async (e) => {
+      e.preventDefault();
+      if (!interviewDrawerFor || !onScheduleInterview) {
+        setInterviewDrawerFor(null);
+        return;
+      }
+
+      try {
+        setSubmittingInterview(true);
+        await onScheduleInterview(interviewDrawerFor.id, {
+          date: interviewDate,
+          time: interviewTime,
+          type: interviewType,
+          location: interviewLocation || undefined,
+          notes: interviewNotes || undefined,
+        });
+        setInterviewDrawerFor(null);
+      } catch (err) {
+        console.error("Error scheduling interview", err);
+      } finally {
+        setSubmittingInterview(false);
+      }
+    };
 
   return (
     <div className="flex h-[70vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -96,27 +179,42 @@ export function ApplicationsSplitView({ applications }: Props) {
       <div className="hidden h-full md:grid md:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)]">
         {/* List */}
         <div className="border-r border-slate-100">
-          <header className="border-b border-slate-100 px-4 py-3">
-            <div className="flex items-center justify-between">
+          <header className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <div>
               <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Applications ({applications.length})
               </h2>
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                Showing {filteredApplications.length}{" "}
+                {statusFilter === "all" ? "total" : statusFilter} candidate
+                {filteredApplications.length === 1 ? "" : "s"}.
+              </p>
             </div>
-            <FilterChips
-              statusFilter={statusFilter}
-              counts={counts}
-              onChange={setStatusFilter}
-            />
+            <div className="flex flex-wrap gap-1">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setStatusFilter(f.key)}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                    statusFilter === f.key
+                      ? "border-[#172965] bg-[#172965]/5 text-[#172965]"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </header>
-
           <div className="h-full overflow-y-auto">
             {isEmpty ? (
               <p className="px-4 py-6 text-xs text-slate-500">
-                No applications match this filter.
+                No applications in this view yet.
               </p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {visibleApplications.map((app) => {
+                {filteredApplications.map((app) => {
                   const active = selected?.id === app.id;
                   return (
                     <li
@@ -170,12 +268,14 @@ export function ApplicationsSplitView({ applications }: Props) {
                 <div className="flex gap-2">
                   <button
                     type="button"
+                    onClick={openStatusDrawer}
                     className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
                   >
                     Change status
                   </button>
                   <button
                     type="button"
+                    onClick={openInterviewDrawer}
                     className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#111c4c]"
                   >
                     Schedule interview
@@ -201,33 +301,49 @@ export function ApplicationsSplitView({ applications }: Props) {
         </div>
       </div>
 
-      {/* Mobile list + drawer */}
+      {/* Mobile: list + drawer */}
       <div className="flex h-full flex-col md:hidden">
-        <header className="border-b border-slate-100 px-4 py-3">
-          <div className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+          <div>
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               Applications ({applications.length})
             </h2>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              {filteredApplications.length} in this view
+            </p>
           </div>
-          <FilterChips
-            statusFilter={statusFilter}
-            counts={counts}
-            onChange={setStatusFilter}
-          />
+          <div className="flex flex-wrap gap-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setStatusFilter(f.key)}
+                className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                  statusFilter === f.key
+                    ? "border-[#172965] bg-[#172965]/5 text-[#172965]"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </header>
-
         <div className="h-full overflow-y-auto">
           {isEmpty ? (
             <p className="px-4 py-6 text-xs text-slate-500">
-              No applications match this filter.
+              No applications in this view yet.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {visibleApplications.map((app) => (
+              {filteredApplications.map((app) => (
                 <li
                   key={app.id}
                   className="cursor-pointer px-4 py-3 text-xs hover:bg-slate-50"
-                  onClick={() => setDrawerCandidate(app)}
+                  onClick={() => {
+                    setSelected(app);
+                    setDrawerCandidate(app);
+                  }}
                 >
                   <div className="flex justify-between gap-2">
                     <div>
@@ -262,49 +378,180 @@ export function ApplicationsSplitView({ applications }: Props) {
           )}
         </Drawer>
       </div>
-    </div>
-  );
-}
 
-function FilterChips({
-  statusFilter,
-  counts,
-  onChange,
-}: {
-  statusFilter: FilterKey;
-  counts: Record<FilterKey, number>;
-  onChange: (value: FilterKey) => void;
-}) {
-  const filters: { key: FilterKey; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "applied", label: "Applied" },
-    { key: "interview", label: "Interview" },
-    { key: "offer", label: "Offer" },
-    { key: "rejected", label: "Rejected" },
-  ];
+      {/* Change status drawer */}
+      <Drawer
+        isOpen={!!statusDrawerFor}
+        onClose={() => setStatusDrawerFor(null)}
+        title="Change status"
+        size="sm"
+      >
+        {statusDrawerFor && (
+          <form onSubmit={handleSubmitStatus} className="space-y-4 text-[13px]">
+            <p className="text-xs text-slate-600">
+              Update status for{" "}
+              <span className="font-semibold">
+                {statusDrawerFor.fullName}
+              </span>
+              .
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                New status
+              </label>
+              <select
+                value={statusDraft}
+                onChange={(e) =>
+                  setStatusDraft(e.target.value as ApplicationStatus)
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              >
+                <option value="applied">Applied</option>
+                <option value="screening">Screening</option>
+                <option value="interview">Interview</option>
+                <option value="offer">Offer</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Internal note (optional)
+              </label>
+              <textarea
+                value={statusNote}
+                onChange={(e) => setStatusNote(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setStatusDrawerFor(null)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submittingStatus}
+                className="rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submittingStatus ? "Updating…" : "Update status"}
+              </button>
+            </div>
+          </form>
+        )}
+      </Drawer>
 
-  return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      {filters.map((f) => {
-        const active = statusFilter === f.key;
-        return (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => onChange(f.key)}
-            className={
-              active
-                ? "inline-flex items-center gap-1 rounded-full bg-[#172965] px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm"
-                : "inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-700 hover:border-[#172965]/60 hover:bg-white"
-            }
+      {/* Schedule interview drawer */}
+      <Drawer
+        isOpen={!!interviewDrawerFor}
+        onClose={() => setInterviewDrawerFor(null)}
+        title="Schedule interview"
+        size="sm"
+      >
+        {interviewDrawerFor && (
+          <form
+            onSubmit={handleSubmitInterview}
+            className="space-y-4 text-[13px]"
           >
-            <span>{f.label}</span>
-            <span className={active ? "text-slate-100" : "text-slate-500"}>
-              {counts[f.key]}
-            </span>
-          </button>
-        );
-      })}
+            <p className="text-xs text-slate-600">
+              Schedule an interview with{" "}
+              <span className="font-semibold">
+                {interviewDrawerFor.fullName}
+              </span>
+              .
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-800">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={interviewDate}
+                  onChange={(e) => setInterviewDate(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-800">
+                  Time
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={interviewTime}
+                  onChange={(e) => setInterviewTime(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Interview type
+              </label>
+              <select
+                value={interviewType}
+                onChange={(e) =>
+                  setInterviewType(e.target.value as "phone" | "video" | "onsite")
+                }
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              >
+                <option value="phone">Phone</option>
+                <option value="video">Video</option>
+                <option value="onsite">On-site</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Location / Link (optional)
+              </label>
+              <input
+                type="text"
+                value={interviewLocation}
+                onChange={(e) => setInterviewLocation(e.target.value)}
+                placeholder="Office address or meeting link"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-800">
+                Notes (optional)
+              </label>
+              <textarea
+                rows={3}
+                value={interviewNotes}
+                onChange={(e) => setInterviewNotes(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/80"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setInterviewDrawerFor(null)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submittingInterview}
+                className="rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submittingInterview ? "Scheduling…" : "Schedule"}
+              </button>
+            </div>
+          </form>
+        )}
+      </Drawer>
     </div>
   );
 }
@@ -316,11 +563,6 @@ function CandidateDetails({
   candidate: Application;
   compact?: boolean;
 }) {
-  const lastEvent =
-    candidate.timeline && candidate.timeline.length > 0
-      ? candidate.timeline[candidate.timeline.length - 1]
-      : undefined;
-
   return (
     <div className="space-y-4">
       {/* Contact */}
@@ -354,23 +596,6 @@ function CandidateDetails({
         </dl>
       </section>
 
-      {/* Latest update block */}
-      {candidate.latestNote && (
-        <section>
-          <h3 className="text-xs font-semibold text-slate-900">
-            Latest update
-          </h3>
-          <p className="mt-1 whitespace-pre-line text-[11px] text-slate-600">
-            {candidate.latestNote}
-          </p>
-          {lastEvent && (
-            <p className="mt-1 text-[10px] text-slate-400">
-              Last updated {new Date(lastEvent.at).toLocaleString()}
-            </p>
-          )}
-        </section>
-      )}
-
       {/* CV preview / link */}
       {candidate.cvUrl && (
         <section>
@@ -403,11 +628,6 @@ function CandidateDetails({
                 <p className="text-[10px] text-slate-500">
                   {new Date(t.at).toLocaleString()}
                 </p>
-                {t.note && (
-                  <p className="mt-0.5 whitespace-pre-line text-[10px] text-slate-500">
-                    {t.note}
-                  </p>
-                )}
               </li>
             ))}
           </ol>
