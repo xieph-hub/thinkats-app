@@ -300,3 +300,5 @@ function StatusDot({ status }: { status: Application["status"] }) {
     </span>
   );
 }
+
+export type AtsApplicationListItem = Application;
