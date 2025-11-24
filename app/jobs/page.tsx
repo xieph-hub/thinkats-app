@@ -183,3 +183,163 @@ export default async function JobsPage() {
         </p>
       ) : (
         <section className="mt-4 rounded-2xl border border-slate-100 bg-white/70">
+          <ul className="divide-y divide-slate-100">
+            {jobs.map((job) => {
+              const slugOrId = job.slug || job.id;
+              if (!slugOrId) {
+                console.warn("Jobs page – job missing slug and id", job);
+                return null;
+              }
+
+              const employmentTypeLabel = formatEmploymentType(
+                job.employment_type
+              );
+              const workModeLabel = deriveWorkMode(job);
+              const preview = descriptionPreview(job.description);
+
+              const jobUrl = `${BASE_URL}/jobs/${encodeURIComponent(slugOrId)}`;
+              const shareText = `${job.title}${
+                job.location ? ` – ${job.location}` : ""
+              } (via Resourcin)`;
+
+              const encodedUrl = encodeURIComponent(jobUrl);
+              const encodedText = encodeURIComponent(shareText);
+
+              const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+              const xUrl = `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`;
+              const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedText}%20${encodedUrl}`;
+
+              return (
+                <li key={job.id}>
+                  <article className="group flex flex-col gap-3 px-4 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-start sm:justify-between">
+                    {/* Left side: main info */}
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <h2 className="text-sm font-semibold text-slate-900">
+                          <Link
+                            href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                            className="hover:underline"
+                          >
+                            {job.title}
+                          </Link>
+                        </h2>
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          {job.department || "Client role via Resourcin"}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-3 text-[11px] text-slate-600">
+                        {job.location && (
+                          <MetaItem
+                            icon={
+                              <span className="inline-block h-2 w-2 rounded-full bg-rose-400" />
+                            }
+                            label={job.location}
+                          />
+                        )}
+                        {workModeLabel && (
+                          <MetaItem
+                            icon={
+                              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                            }
+                            label={workModeLabel}
+                          />
+                        )}
+                        {employmentTypeLabel && (
+                          <MetaItem
+                            icon={
+                              <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                            }
+                            label={employmentTypeLabel}
+                          />
+                        )}
+                        {job.seniority && (
+                          <MetaItem
+                            icon={
+                              <span className="inline-block h-2 w-2 rounded-full bg-slate-400" />
+                            }
+                            label={job.seniority}
+                          />
+                        )}
+                      </div>
+
+                      {preview && (
+                        <p className="text-[11px] leading-relaxed text-slate-600">
+                          {preview}{" "}
+                          <Link
+                            href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                            className="font-medium text-[#172965] hover:underline"
+                          >
+                            Read more
+                          </Link>
+                        </p>
+                      )}
+
+                      {job.tags && job.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {job.tags.slice(0, 5).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right side: meta + actions */}
+                    <div className="flex flex-col items-start gap-2 text-[11px] text-slate-500 sm:items-end">
+                      <span>Posted {formatDate(job.created_at)}</span>
+
+                      <div className="flex items-center gap-2">
+                        <SocialIcon
+                          href={linkedInUrl}
+                          label="Share on LinkedIn"
+                          bgColor="#0A66C2"
+                        >
+                          <span className="text-[11px] font-bold leading-none">
+                            in
+                          </span>
+                        </SocialIcon>
+                        <SocialIcon
+                          href={xUrl}
+                          label="Share on X"
+                          bgColor="#000000"
+                        >
+                          <span className="text-[11px] font-bold leading-none">
+                            X
+                          </span>
+                        </SocialIcon>
+                        <SocialIcon
+                          href={whatsappUrl}
+                          label="Share on WhatsApp"
+                          bgColor="#25D366"
+                        >
+                          <span className="text-[11px] font-semibold leading-none">
+                            wa
+                          </span>
+                        </SocialIcon>
+                      </div>
+
+                      <Link
+                        href={`/jobs/${encodeURIComponent(slugOrId)}`}
+                        className="mt-1 inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#111c4c]"
+                      >
+                        View &amp; apply
+                        <span className="ml-1 text-[11px]" aria-hidden="true">
+                          →
+                        </span>
+                      </Link>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+    </main>
+  );
+}
