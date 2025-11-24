@@ -11,20 +11,6 @@ export const metadata: Metadata = {
     "Open roles managed by Resourcin and its clients. Browse and apply without creating an account.",
 };
 
-export type PublicJob = {
-  id: string;
-  slug: string | null;
-  title: string;
-  location: string | null;
-  employment_type: string | null;
-  seniority: string | null;
-  status: string | null;
-  visibility: string | null;
-  created_at: string;
-  tags: string[] | null;
-  department: string | null;
-};
-
 export default async function JobsPage() {
   const { data, error } = await supabaseAdmin
     .from("jobs")
@@ -40,7 +26,12 @@ export default async function JobsPage() {
       visibility,
       created_at,
       tags,
-      department
+      department,
+      client_company:client_companies (
+        name,
+        logo_url,
+        slug
+      )
     `
     )
     .order("created_at", { ascending: false });
@@ -49,7 +40,7 @@ export default async function JobsPage() {
     console.error("Jobs page – error loading jobs:", error);
   }
 
-  const jobs = (data ?? []) as PublicJob[];
+  const jobs = (data ?? []) as any[];
 
   return <JobsListClient initialJobs={jobs} />;
 }
