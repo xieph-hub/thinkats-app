@@ -1,10 +1,9 @@
-// components/ats/ApplicationsSplitView.tsx
 "use client";
 
 import React, { useState } from "react";
 import { Drawer } from "@/components/ui/Drawer";
 
-type Application = {
+export type Application = {
   id: string;
   fullName: string;
   email: string;
@@ -28,17 +27,17 @@ export function ApplicationsSplitView({ applications }: Props) {
     null
   );
 
+  const isEmpty = applications.length === 0;
+
   const handleSelect = (app: Application) => {
     setSelected(app);
     setDrawerCandidate(app); // used on mobile
   };
 
-  const isEmpty = applications.length === 0;
-
   return (
     <div className="flex h-[70vh] flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {/* Split view for desktop */}
-      <div className="hidden h-full md:grid md:grid-cols-[minmax(0,0.45fr)_minmax(0,0.55fr)]">
+      {/* Desktop split view */}
+      <div className="hidden h-full md:grid md:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]">
         {/* List */}
         <div className="border-r border-slate-100">
           <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -138,7 +137,7 @@ export function ApplicationsSplitView({ applications }: Props) {
         </div>
       </div>
 
-      {/* Mobile: list only + drawer for details */}
+      {/* Mobile list + drawer */}
       <div className="flex h-full flex-col md:hidden">
         <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -235,7 +234,7 @@ function CandidateDetails({
         </dl>
       </section>
 
-      {/* CV preview / link */}
+      {/* CV */}
       {candidate.cvUrl && (
         <section>
           <h3 className="text-xs font-semibold text-slate-900">Résumé</h3>
@@ -300,5 +299,3 @@ function StatusDot({ status }: { status: Application["status"] }) {
     </span>
   );
 }
-
-export type AtsApplicationListItem = Application;
