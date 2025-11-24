@@ -20,7 +20,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const tenantId = body.tenantId as string | undefined;
-    const intent = (body.intent as Intent | undefined) ?? "draft";
+
+    // --- submit_mode / intent normalisation ---
+    const submitModeRaw =
+      (body.submit_mode as string | undefined) ??
+      (body.submitMode as string | undefined) ??
+      (body.intent as Intent | string | undefined) ??
+      "draft";
+
+    const submitMode = submitModeRaw.toLowerCase();
 
     if (!tenantId) {
       return NextResponse.json(
@@ -59,25 +67,17 @@ export async function POST(req: NextRequest) {
     const yearsMaxRaw = body.yearsExperienceMax as string | null;
 
     const yearsExperienceMin =
-      yearsMinRaw && yearsMinRaw !== ""
-        ? parseInt(yearsMinRaw, 10)
-        : null;
+      yearsMinRaw && yearsMinRaw !== "" ? parseInt(yearsMinRaw, 10) : null;
     const yearsExperienceMax =
-      yearsMaxRaw && yearsMaxRaw !== ""
-        ? parseInt(yearsMaxRaw, 10)
-        : null;
+      yearsMaxRaw && yearsMaxRaw !== "" ? parseInt(yearsMaxRaw, 10) : null;
 
     const salaryMinRaw = body.salaryMin as string | null;
     const salaryMaxRaw = body.salaryMax as string | null;
 
     const salaryMin =
-      salaryMinRaw && salaryMinRaw !== ""
-        ? parseFloat(salaryMinRaw)
-        : null;
+      salaryMinRaw && salaryMinRaw !== "" ? parseFloat(salaryMinRaw) : null;
     const salaryMax =
-      salaryMaxRaw && salaryMaxRaw !== ""
-        ? parseFloat(salaryMaxRaw)
-        : null;
+      salaryMaxRaw && salaryMaxRaw !== "" ? parseFloat(salaryMaxRaw) : null;
 
     const salaryCurrency =
       (body.salaryCurrency as string | undefined) || null;
@@ -102,9 +102,20 @@ export async function POST(req: NextRequest) {
     const confidential =
       (body.confidential as boolean | undefined) ?? false;
 
-    // Map locationType to work_mode
-    let workMode: "remote" | "hybrid" | "onsite" | "flexible" | null =
-      null;
+    // --- NEW: tags_raw handling ---
+    const rawTagsInput =
+      (body.tags_raw as string | undefined) ??
+      (body.tagsRaw as string | undefined) ??
+      "";
+
+    const tagsFromRaw =
+      rawTagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean) || [];
+
+    // --- Map locationType to work_mode (ATS-facing field) ---
+    let workMode: "remote" | "hybrid" | "onsite" | "flexible" | null = null;
     switch (locationType) {
       case "remote":
         workMode = "remote";
@@ -113,6 +124,7 @@ export async function POST(req: NextRequest) {
         workMode = "hybrid";
         break;
       case "onsite":
+      case "on-site":
         workMode = "onsite";
         break;
       case "flexible":
@@ -122,8 +134,57 @@ export async function POST(req: NextRequest) {
         workMode = null;
     }
 
-    const status = intent === "publish" ? "open" : "draft";
-    const visibility = internalOnly ? "internal" : "public";
+    // --- NEW: visibility normalisation (public / internal / confidential) ---
+    const visibilityInput = (body.visibility as string | undefined)
+      ?.toLowerCase()
+      .trim();
+
+    let visibility: "public" | "internal" | "confidential" = "public";
+
+    if (visibilityInput === "internal") {
+      visibility = "internal";
+    } else if (visibilityInput === "confidential") {
+      visibility = "confidential";
+    } else if (internalOnly) {
+      visibility = "internal";
+    } else if (confidential) {
+      visibility = "confidential";
+    } else {
+      visibility = "public";
+    }
+
+    // Keep booleans consistent with final visibility
+    const internalOnlyFinal = visibility === "internal";
+    const confidentialFinal = visibility === "confidential";
+
+    // --- NEW: status normalisation from submit_mode ---
+    // You can extend this later (e.g. "on_hold", "closed").
+    let status: string = "draft";
+    if (submitMode === "publish" || submitMode === "open") {
+      status = "open";
+    } else if (submitMode === "close" || submitMode === "closed") {
+      status = "closed";
+    } else if (submitMode === "hold" || submitMode === "on_hold") {
+      status = "on_hold";
+    } else {
+      status = "draft";
+    }
+
+    // --- NEW: send work_mode as a normalised tag so /jobs + detail can derive work mode ---
+    let workModeTag: string | null = null;
+    if (workMode === "remote") workModeTag = "remote";
+    else if (workMode === "hybrid") workModeTag = "hybrid";
+    else if (workMode === "flexible") workModeTag = "flexible";
+    else if (workMode === "onsite") workModeTag = "on-site";
+
+    const tags = Array.from(
+      new Set(
+        [
+          ...tagsFromRaw,
+          ...(workModeTag ? [workModeTag] : []),
+        ].filter(Boolean)
+      )
+    );
 
     const slug = slugify(title);
 
@@ -146,12 +207,14 @@ export async function POST(req: NextRequest) {
       required_skills: requiredSkills.length ? requiredSkills : null,
       education_required: educationRequired,
       education_field: educationField,
-      internal_only: internalOnly,
-      confidential,
+      internal_only: internalOnlyFinal,
+      confidential: confidentialFinal,
       status,
       visibility,
       work_mode: workMode,
       slug,
+      // NEW: tags array for public site + filters + deriveWorkMode
+      tags: tags.length ? tags : null,
     };
 
     const { data, error } = await supabaseAdmin
