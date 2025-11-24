@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-// You can override this in your env if your bucket has a different name
+// Bucket for CV uploads – adjust if your bucket name is different
 const CV_BUCKET =
   process.env.NEXT_PUBLIC_SUPABASE_CV_BUCKET ||
   process.env.SUPABASE_CV_BUCKET ||
@@ -32,6 +32,7 @@ export async function POST(
   try {
     const identifier = params.slug;
 
+    // Expecting multipart/form-data from your public apply form
     const formData = await req.formData();
 
     const jobIdRaw = formData.get("jobId");
@@ -90,6 +91,7 @@ export async function POST(
       );
     }
 
+    // Optional guard – only allow public + open jobs
     if (job.visibility !== "public" || job.status !== "open") {
       return NextResponse.json(
         { error: "Applications for this role are currently closed." },
@@ -135,10 +137,11 @@ export async function POST(
       }
     }
 
-    // 3) Insert into job_applications, linking job and tenant
+    // 3) Insert into job_applications, linking to job
+    // ⚠️ IMPORTANT: This assumes your job_applications table has these columns:
+    // id, job_id, full_name, email, phone, location, linkedin_url, cover_letter, cv_url, status
     const insertPayload: Record<string, unknown> = {
       job_id: job.id,
-      tenant_id: job.tenant_id ?? null,
       full_name: fullName,
       email,
       phone: phone || null,
@@ -147,7 +150,8 @@ export async function POST(
       cover_letter: coverLetter || null,
       cv_url: cvUrl,
       status: "applied",
-      source: "public_job_board",
+      // If you later add a 'source' column, you can uncomment this:
+      // source: "public_job_board",
     };
 
     const { data: appData, error: appError } = await supabaseAdmin
