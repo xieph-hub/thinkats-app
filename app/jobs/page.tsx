@@ -1,8 +1,8 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
+import type { ReactNode } from "react";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import type { JobCardData } from "@/components/jobs/JobCard";
-import { JobsGridClient } from "./JobsGridClient";
 
 export const dynamic = "force-dynamic";
 
@@ -30,33 +30,87 @@ type PublicJob = {
 const BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
 
-function normaliseEmploymentType(
-  value: string | null
-): JobCardData["type"] | null {
-  if (!value) return null;
-  const v = value.toLowerCase();
+// --- helpers ---
 
-  if (v === "full-time" || v === "full_time") return "Full-time";
-  if (v === "part-time" || v === "part_time") return "Part-time";
-  if (v === "contract") return "Contract";
-  if (v === "remote") return "Remote";
-
-  // Fallback – treat unknown as Full-time (or keep as Remote, etc. if you prefer)
-  return "Full-time";
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 }
 
-function deriveExperienceLabel(seniority: string | null): string {
-  if (!seniority) return "Not specified";
-  const v = seniority.toLowerCase();
+function formatEmploymentType(value: string | null) {
+  if (!value) return null;
+  const lower = value.toLowerCase();
+  if (lower === "full-time" || lower === "full_time") return "Full-time";
+  if (lower === "part-time" || lower === "part_time") return "Part-time";
+  if (lower === "contract") return "Contract";
+  if (lower === "internship") return "Internship";
+  return value;
+}
 
-  if (v.includes("entry")) return "Entry level";
-  if (v.includes("junior")) return "Entry / Junior";
-  if (v.includes("mid")) return "Mid level";
-  if (v.includes("senior")) return "Senior level";
-  if (v.includes("lead") || v.includes("principal")) return "Lead / Principal";
-  if (v.includes("exec")) return "Executive";
+function deriveWorkMode(job: PublicJob): string | null {
+  const loc = (job.location || "").toLowerCase();
+  const tags = (job.tags || []).map((t) => t.toLowerCase());
 
-  return seniority;
+  if (loc.includes("remote") || tags.includes("remote")) return "Remote";
+  if (loc.includes("hybrid") || tags.includes("hybrid")) return "Hybrid";
+  if (loc.includes("flexible") || tags.includes("flexible")) return "Flexible";
+  if (loc.includes("on-site") || loc.includes("onsite")) return "On-site";
+
+  return null;
+}
+
+function descriptionPreview(description: string | null, maxLength = 180) {
+  if (!description) return null;
+  const clean = description.replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLength) return clean;
+  return `${clean.slice(0, maxLength - 1)}…`;
+}
+
+function MetaItem({
+  icon,
+  label,
+}: {
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-slate-600">
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+// small, minimal icon (using just initials) in a brand-coloured circle
+function SocialIcon({
+  href,
+  label,
+  bgColor,
+  children,
+}: {
+  href: string;
+  label: string;
+  bgColor: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      title={label}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold text-white shadow-sm transition hover:scale-110 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#172965]/60 focus:ring-offset-1"
+      style={{ backgroundColor: bgColor }}
+    >
+      {children}
+    </a>
+  );
 }
 
 export default async function JobsPage() {
@@ -84,52 +138,19 @@ export default async function JobsPage() {
     console.error("Jobs page – error loading jobs:", error);
   }
 
-  const rows = (data ?? []) as PublicJob[];
+  const allJobs = (data ?? []) as PublicJob[];
 
-  // Only show open + public roles on the public jobs page
-  const openPublicJobs = rows.filter(
-    (job) => job.status === "open" && job.visibility === "public"
+  // Only show open + public roles, but be forgiving with casing/whitespace
+  const jobs = allJobs.filter(
+    (job) =>
+      (job.status ?? "").trim().toLowerCase() === "open" &&
+      (job.visibility ?? "").trim().toLowerCase() === "public"
   );
 
-  const cardJobs: JobCardData[] = openPublicJobs
-    .map((job) => {
-      const slugOrId = job.slug || job.id;
-      if (!slugOrId) {
-        console.warn("Jobs page – job missing slug and id", job);
-        return null;
-      }
-
-      const url = `${BASE_URL}/jobs/${encodeURIComponent(slugOrId)}`;
-
-      const type =
-        normaliseEmploymentType(job.employment_type) ?? "Full-time";
-
-      const experienceLevel = deriveExperienceLabel(job.seniority);
-
-      const skills = job.tags ?? [];
-
-      return {
-        id: job.id,
-        title: job.title,
-        company: "Resourcin client", // we don’t have per-client names in this schema
-        location: job.location || "Location flexible",
-        type,
-        salary: "Not disclosed",
-        applicants: 0, // can wire real counts later from job_applications
-        postedDate: job.created_at,
-        experienceLevel,
-        department: job.department || "",
-        description: job.description || "",
-        skills,
-        shareUrl: url,
-      } satisfies JobCardData;
-    })
-    .filter((j): j is JobCardData => j !== null);
-
-  const count = cardJobs.length;
+  const count = jobs.length;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10">
+    <main className="mx-auto max-w-4xl px-4 py-10">
       <header className="mb-6 border-b border-slate-100 pb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           For candidates
@@ -139,7 +160,8 @@ export default async function JobsPage() {
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
           Browse live mandates from Resourcin and our clients. Apply in a few
-          minutes; no account required.
+          minutes; no account required. We&apos;ll only reach out when
+          there&apos;s a strong match.
         </p>
         {count > 0 && (
           <p className="mt-1 text-[11px] text-slate-500">
@@ -150,21 +172,14 @@ export default async function JobsPage() {
 
       {count === 0 ? (
         <p className="mt-8 text-sm text-slate-500">
-          No public roles are currently open. Once you publish roles in the ATS
-          with status <code className="rounded bg-slate-100 px-1 text-[11px]">
-            open
-          </code>{" "}
-          and visibility{" "}
-          <code className="rounded bg-slate-100 px-1 text-[11px]">
-            public
-          </code>
-          , they&apos;ll appear here automatically.
+          No public roles are currently open. Check back soon or{" "}
+          <Link
+            href="/talent-network"
+            className="font-medium text-[#172965] hover:underline"
+          >
+            join our talent network
+          </Link>
+          .
         </p>
       ) : (
-        <section className="mt-4">
-          <JobsGridClient jobs={cardJobs} />
-        </section>
-      )}
-    </main>
-  );
-}
+        <section className="mt-4 rounded-2xl border border-slate-100 bg-white/70">
