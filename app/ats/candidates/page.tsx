@@ -1,53 +1,14 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
-import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { CandidatesAccordion } from "@/components/ats/CandidatesAccordion";
+import { CandidatesAccordion, Candidate } from "@/components/ats/CandidatesAccordion";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Candidates | Resourcin ATS",
+  title: "ATS – Candidates | Resourcin",
   description:
-    "All candidates who have applied to open mandates in the Resourcin ATS.",
-};
-
-// Shape that comes back from Supabase (note: job is an ARRAY)
-type RawRow = {
-  id: string;
-  job_id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  location: string | null;
-  stage: string;
-  status: string;
-  created_at: string;
-  cv_url: string | null;
-  job: {
-    id: string;
-    title: string;
-    slug: string | null;
-  }[];
-};
-
-// Shape we actually want to use in the UI (job is a single object or null)
-export type CandidateRow = {
-  id: string;
-  job_id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  location: string | null;
-  stage: string;
-  status: string;
-  created_at: string;
-  cv_url: string | null;
-  job: {
-    id: string;
-    title: string;
-    slug: string | null;
-  } | null;
+    "Global view of candidates and applications flowing through the Resourcin ATS.",
 };
 
 export default async function CandidatesPage() {
@@ -75,30 +36,32 @@ export default async function CandidatesPage() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("ATS candidates – error loading candidates:", error);
+    console.error("ATS candidates – error loading applications:", error);
   }
 
-  const rows = (data ?? []) as RawRow[];
+  const rows = (data ?? []) as any[];
 
-  const candidates: CandidateRow[] = rows.map((row) => {
-    const jobRecord = row.job && row.job.length > 0 ? row.job[0] : null;
+  const candidates: Candidate[] = rows.map((row) => {
+    const jobRel = row.job;
+    const job =
+      Array.isArray(jobRel) && jobRel.length > 0 ? jobRel[0] : jobRel ?? null;
 
     return {
-      id: row.id,
-      job_id: row.job_id,
-      full_name: row.full_name,
-      email: row.email,
-      phone: row.phone ?? null,
-      location: row.location ?? null,
-      stage: row.stage,
-      status: row.status,
-      created_at: row.created_at,
-      cv_url: row.cv_url ?? null,
-      job: jobRecord
+      id: row.id as string,
+      job_id: row.job_id as string,
+      full_name: row.full_name as string,
+      email: row.email as string,
+      phone: (row.phone as string | null) ?? null,
+      location: (row.location as string | null) ?? null,
+      stage: (row.stage as string) ?? "APPLIED",
+      status: (row.status as string) ?? "PENDING",
+      created_at: row.created_at as string,
+      cv_url: (row.cv_url as string | null) ?? null,
+      job: job
         ? {
-            id: jobRecord.id,
-            title: jobRecord.title,
-            slug: jobRecord.slug ?? null,
+            id: job.id as string,
+            title: job.title as string,
+            slug: (job.slug as string | null) ?? null,
           }
         : null,
     };
@@ -106,37 +69,31 @@ export default async function CandidatesPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-4 flex items-center justify-between">
+      <header className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            ATS
-          </p>
-          <h1 className="mt-1 text-xl font-semibold text-slate-900">
             Candidates
+          </p>
+          <h1 className="text-lg font-semibold text-slate-900">
+            Global application inbox
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            All applicants across active and recent mandates.
+            All candidates flowing into the Resourcin ATS, across roles.
           </p>
         </div>
-
-        <Link
-          href="/ats/jobs"
-          className="hidden text-[11px] font-medium text-[#172965] underline-offset-2 hover:underline sm:inline-flex"
-        >
-          View jobs
-        </Link>
+        <div className="text-right text-[11px] text-slate-500">
+          <p>
+            Total candidates:{" "}
+            <span className="font-semibold text-slate-700">
+              {candidates.length}
+            </span>
+          </p>
+        </div>
       </header>
 
-      {candidates.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-          No candidates yet. Once applications come in, they&apos;ll appear
-          here grouped by role.
-        </div>
-      ) : (
-        <section className="mt-4">
-          <CandidatesAccordion candidates={candidates} />
-        </section>
-      )}
+      <section className="mt-4">
+        <CandidatesAccordion candidates={candidates} />
+      </section>
     </main>
   );
 }
