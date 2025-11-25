@@ -70,15 +70,26 @@ export function PublicJobApplyForm({ job }: Props) {
           // ignore JSON parse errors
         }
         setError(msg);
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
       } else {
-        setSuccess("Thank you. Your application has been received.");
+        setSuccess(
+          "Thank you – your application has been submitted successfully. We'll review your profile and reach out if there's a strong match for this role or similar mandates we're running."
+        );
         form.reset();
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
       }
     } catch (err) {
       console.error(err);
       setError(
         "We couldn't submit your application. Please try again or email your CV directly."
       );
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -94,226 +105,232 @@ export function PublicJobApplyForm({ job }: Props) {
   const createdLabel = formatDate(job.created_at);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)]">
-      {/* Left: job recap */}
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Apply to
-        </p>
-        <h1 className="mt-1 text-lg font-semibold text-slate-900">
-          {job.title}
-        </h1>
-
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-          {job.department && (
-            <span className="rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-700">
-              {job.department}
-            </span>
-          )}
-
-          {client ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700">
-              {client.logo_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={client.logo_url}
-                  alt={client.name}
-                  className="h-4 w-4 rounded-sm object-contain"
-                />
-              )}
-              <span className="font-medium">
-                {isConfidential ? "Confidential search" : client.name}
-              </span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700">
-              <span className="font-medium">Resourcin</span>
-            </span>
-          )}
+    <div className="space-y-4">
+      {/* Top-of-page banners */}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] text-red-800">
+          {error}
         </div>
+      )}
 
-        {job.short_description && (
-          <p className="mt-3 text-sm text-slate-700">
-            {job.short_description}
+      {success && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[11px] text-emerald-900">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            Application received
           </p>
-        )}
-
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-700">
-          {job.location && (
-            <MetaItem icon={<IconLocation />} label={job.location} />
-          )}
-          {workModeLabel && (
-            <MetaItem icon={<IconGlobe />} label={workModeLabel} />
-          )}
-          {employmentTypeLabel && (
-            <MetaItem icon={<IconBriefcase />} label={employmentTypeLabel} />
-          )}
-          {experienceLevelLabel && (
-            <MetaItem icon={<IconAward />} label={experienceLevelLabel} />
-          )}
+          <p className="mt-1 text-xs text-emerald-900">{success}</p>
         </div>
+      )}
 
-        {salaryLabel && (
-          <div className="mt-3 text-[11px] text-slate-700">
-            <span className="font-medium">Compensation: </span>
-            <span>{salaryLabel}</span>
-          </div>
-        )}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)]">
+        {/* Left: job recap */}
+        <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Apply to
+          </p>
+          <h1 className="mt-1 text-lg font-semibold text-slate-900">
+            {job.title}
+          </h1>
 
-        <p className="mt-3 text-[11px] text-slate-500">
-          Posted {createdLabel}. Applications go directly into the Resourcin ATS
-          pipeline for this mandate.
-        </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            {job.department && (
+              <span className="rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-700">
+                {job.department}
+              </span>
+            )}
 
-        {job.tags && job.tags.length > 0 && (
-          <div className="mt-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Tags
-            </p>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {job.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-                >
-                  #{tag}
+            {client ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700">
+                {client.logo_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={client.logo_url}
+                    alt={client.name}
+                    className="h-4 w-4 rounded-sm object-contain"
+                  />
+                )}
+                <span className="font-medium">
+                  {isConfidential ? "Confidential search" : client.name}
                 </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Right: application form */}
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Submit your application
-        </h2>
-        <p className="mt-2 text-[11px] text-slate-600">
-          You can apply without creating an account. We&apos;ll only reach out
-          when there&apos;s a strong match.
-        </p>
-
-        {error && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
-            {success}
-          </div>
-        )}
-
-        <form
-          className="mt-4 space-y-4"
-          onSubmit={handleSubmit}
-          encType="multipart/form-data"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700">
-                Full name
-                <input
-                  type="text"
-                  name="full_name"
-                  required
-                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-                />
-              </label>
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700">
-                Email
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-                />
-              </label>
-            </div>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700">
+                <span className="font-medium">Resourcin</span>
+              </span>
+            )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700">
-                Phone (optional)
-                <input
-                  type="tel"
-                  name="phone"
-                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-                />
-              </label>
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-slate-700">
-                Location (city, country)
-                <input
-                  type="text"
-                  name="location"
-                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-                />
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-slate-700">
-              LinkedIn profile (optional)
-              <input
-                type="url"
-                name="linkedin_url"
-                placeholder="https://www.linkedin.com/in/username"
-                className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-              />
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-slate-700">
-              CV / Résumé
-              <input
-                type="file"
-                name="cv"
-                accept=".pdf,.doc,.docx"
-                className="mt-1 block w-full text-[11px] text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-200"
-              />
-            </label>
-            <p className="mt-1 text-[10px] text-slate-500">
-              PDF or Word preferred. If upload fails, you can email your CV
-              directly.
+          {job.short_description && (
+            <p className="mt-3 text-sm text-slate-700">
+              {job.short_description}
             </p>
+          )}
+
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-700">
+            {job.location && (
+              <MetaItem icon={<IconLocation />} label={job.location} />
+            )}
+            {workModeLabel && (
+              <MetaItem icon={<IconGlobe />} label={workModeLabel} />
+            )}
+            {employmentTypeLabel && (
+              <MetaItem icon={<IconBriefcase />} label={employmentTypeLabel} />
+            )}
+            {experienceLevelLabel && (
+              <MetaItem icon={<IconAward />} label={experienceLevelLabel} />
+            )}
           </div>
 
-          <div>
-            <label className="block text-[11px] font-medium text-slate-700">
-              Short note / motivation (optional)
-              <textarea
-                name="cover_letter"
-                rows={4}
-                className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-                placeholder="A few sentences on why this role and why now."
-              />
-            </label>
-          </div>
+          {salaryLabel && (
+            <div className="mt-3 text-[11px] text-slate-700">
+              <span className="font-medium">Compensation: </span>
+              <span>{salaryLabel}</span>
+            </div>
+          )}
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-[10px] text-slate-500">
-              By submitting, you agree that Resourcin may store your details for
-              this role and closely related mandates. We don&apos;t spam.
-            </p>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submitting ? "Submitting…" : "Submit application"}
-            </button>
-          </div>
-        </form>
-      </section>
+          <p className="mt-3 text-[11px] text-slate-500">
+            Posted {createdLabel}. Applications go directly into the Resourcin
+            ATS pipeline for this mandate.
+          </p>
+
+          {job.tags && job.tags.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Tags
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {job.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Right: application form */}
+        <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Submit your application
+          </h2>
+          <p className="mt-2 text-[11px] text-slate-600">
+            You can apply without creating an account. We&apos;ll only reach out
+            when there&apos;s a strong match.
+          </p>
+
+          <form
+            className="mt-4 space-y-4"
+            onSubmit={handleSubmit}
+            encType="multipart/form-data"
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700">
+                  Full name
+                  <input
+                    type="text"
+                    name="full_name"
+                    required
+                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700">
+                  Email
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700">
+                  Phone (optional)
+                  <input
+                    type="tel"
+                    name="phone"
+                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-slate-700">
+                  Location (city, country)
+                  <input
+                    type="text"
+                    name="location"
+                    className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700">
+                LinkedIn profile (optional)
+                <input
+                  type="url"
+                  name="linkedin_url"
+                  placeholder="https://www.linkedin.com/in/username"
+                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+                />
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700">
+                CV / Résumé
+                <input
+                  type="file"
+                  name="cv"
+                  accept=".pdf,.doc,.docx"
+                  className="mt-1 block w-full text-[11px] text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+                />
+              </label>
+              <p className="mt-1 text-[10px] text-slate-500">
+                PDF or Word preferred. If upload fails, you can email your CV
+                directly.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-700">
+                Short note / motivation (optional)
+                <textarea
+                  name="cover_letter"
+                  rows={4}
+                  className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+                  placeholder="A few sentences on why this role and why now."
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[10px] text-slate-500">
+                By submitting, you agree that Resourcin may store your details
+                for this role and closely related mandates. We don&apos;t spam.
+              </p>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {submitting ? "Submitting…" : "Submit application"}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
     </div>
   );
 }
@@ -368,8 +385,7 @@ function formatExperienceLevel(value: string | null) {
   if (lower.includes("senior")) return "Senior level";
   if (lower.includes("lead") || lower.includes("principal"))
     return "Lead / Principal";
-  if (lower.includes("exec") || lower.includes("c-level"))
-    return "Executive";
+  if (lower.includes("exec") || lower.includes("c-level")) return "Executive";
   return value;
 }
 
