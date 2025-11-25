@@ -152,7 +152,6 @@ export default function JobsExplorer({ initialJobs }: Props) {
     const q = search.trim().toLowerCase();
 
     return initialJobs.filter((job) => {
-      // Search across title, short_description, location, department
       if (q) {
         const haystack = [
           job.title,
@@ -211,15 +210,18 @@ export default function JobsExplorer({ initialJobs }: Props) {
       {/* Header */}
       <header className="mb-8">
         <div className="inline-flex items-center gap-2 rounded-full bg-[#172965]/5 px-3 py-1">
-          <span className="h-2 w-2 rounded-full bg-[#64C247]" />
-          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#172965]">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BRAND_LIGHT_GREEN }} />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: BRAND_BLUE }}>
             Opportunities
           </span>
         </div>
 
         <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-[#172965] md:text-4xl">
+            <h1
+              className="text-3xl font-semibold tracking-tight md:text-4xl"
+              style={{ color: BRAND_BLUE }}
+            >
               Open roles via Resourcin.
             </h1>
             <p className="mt-3 max-w-2xl text-sm text-gray-600">
@@ -230,7 +232,7 @@ export default function JobsExplorer({ initialJobs }: Props) {
             </p>
           </div>
           <div className="rounded-xl border border-[#172965]/15 bg-white px-3 py-2 text-right text-xs shadow-sm">
-            <div className="font-medium text-[#172965]">
+            <div className="font-medium" style={{ color: BRAND_BLUE }}>
               {filteredCount} role{filteredCount === 1 ? "" : "s"} showing
             </div>
             <div className="text-[11px] text-gray-500">
@@ -246,7 +248,7 @@ export default function JobsExplorer({ initialJobs }: Props) {
         {/* Sidebar filters */}
         <aside className="space-y-4 rounded-2xl border border-[#172965]/15 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-[#172965]">
+            <h2 className="text-sm font-semibold" style={{ color: BRAND_BLUE }}>
               Filter roles
             </h2>
             <button
@@ -409,37 +411,33 @@ export default function JobsExplorer({ initialJobs }: Props) {
                   className="rounded-2xl border border-[#172965]/12 bg-white p-4 shadow-sm transition hover:border-[#172965] hover:shadow-md md:p-5"
                 >
                   <div className="flex flex-col gap-4">
-                    {/* Top row: title + badge + posted date */}
+                    {/* Top row: title + (confidential badge) + posted date */}
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-base font-semibold text-[#172965] md:text-lg">
+                          <h2
+                            className="text-base font-semibold md:text-lg"
+                            style={{ color: BRAND_BLUE }}
+                          >
                             <Link href={href} className="hover:underline">
                               {job.title}
                             </Link>
                           </h2>
-                          <span
-                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                            style={
-                              isConfidential
-                                ? {
-                                    backgroundColor: BRAND_YELLOW,
-                                    color: BRAND_BLUE,
-                                    borderColor: BRAND_YELLOW,
-                                    borderWidth: 1,
-                                  }
-                                : {
-                                    backgroundColor: BRAND_LIGHT_GREEN,
-                                    color: "white",
-                                    borderColor: BRAND_DARK_GREEN,
-                                    borderWidth: 1,
-                                  }
-                            }
-                          >
-                            {isConfidential
-                              ? "Confidential search"
-                              : "Open role"}
-                          </span>
+
+                          {/* Only show badge for confidential roles */}
+                          {isConfidential && (
+                            <span
+                              className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                              style={{
+                                backgroundColor: BRAND_YELLOW,
+                                color: BRAND_BLUE,
+                                borderColor: BRAND_YELLOW,
+                                borderWidth: 1,
+                              }}
+                            >
+                              Confidential search
+                            </span>
+                          )}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
                           {job.location && (
@@ -513,12 +511,8 @@ export default function JobsExplorer({ initialJobs }: Props) {
                       </p>
                     )}
 
-                    {/* Footer: primary CTA */}
-                    <div className="flex items-center justify-between gap-3 pt-1">
-                      <div className="text-[11px] text-gray-400">
-                        Powered by ThinkATS – every shortlist is curated, not
-                        just keyword-matched.
-                      </div>
+                    {/* Footer: only CTA on the right now */}
+                    <div className="flex items-center justify-end gap-3 pt-1">
                       <Link
                         href={href}
                         className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-white"
