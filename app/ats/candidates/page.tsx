@@ -25,7 +25,12 @@ type RawRow = {
   status: string;
   created_at: string;
   cv_url: string | null;
-  job: { id: string; title: string; slug: string | null }[] | null;
+  job: {
+    id: string;
+    title: string;
+    slug: string | null;
+    tenant_id: string;
+  }[] | null;
 };
 
 export default async function AtsCandidatesPage() {
@@ -48,11 +53,11 @@ export default async function AtsCandidatesPage() {
       job:jobs (
         id,
         title,
-        slug
+        slug,
+        tenant_id
       )
     `
     )
-    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -61,7 +66,13 @@ export default async function AtsCandidatesPage() {
 
   const rows = (data ?? []) as RawRow[];
 
-  const candidates = rows.map((row) => {
+  // ✅ Only keep applications where the related job belongs to the current tenant
+  const filtered = rows.filter((row) => {
+    const jobRelation = row.job?.[0];
+    return jobRelation && jobRelation.tenant_id === tenantId;
+  });
+
+  const candidates = filtered.map((row) => {
     const jobRelation = row.job?.[0] ?? null;
 
     return {
