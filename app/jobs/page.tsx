@@ -34,6 +34,9 @@ export default async function JobsPage() {
       )
     `
     )
+    // Only show live public roles
+    .eq("status", "open")
+    .eq("visibility", "public")
     .order("created_at", { ascending: false });
 
   if (error) {
