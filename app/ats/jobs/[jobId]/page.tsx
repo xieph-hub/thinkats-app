@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import JobDetailShell from "@/components/ats/JobDetailShell";
+import { JobDetailShell } from "@/components/ats/JobDetailShell";
 
 export const dynamic = "force-dynamic";
 
