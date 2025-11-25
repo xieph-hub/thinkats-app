@@ -4,12 +4,6 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-type JobRow = {
-  id: string;
-  slug: string | null;
-  tenant_id: string | null;
-};
-
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value
@@ -23,137 +17,145 @@ export async function POST(
   try {
     const identifier = params.jobIdOrSlug;
 
-    // We expect multipart/form-data from the public form
     const formData = await req.formData();
 
-    // optional override of jobId, but we will always trust DB lookup
-    const jobIdOverride = formData.get("jobId") as string | null;
+    // --- 1) Resolve job by slug, then by id (UUID) ---
+    let jobId: string | null = null;
+    let jobSlug: string | null = null;
 
-    // 1) Resolve job by slug first, then by id if identifier is a UUID
-    let job: JobRow | null = null;
-
-    const { data: slugData, error: slugError } = await supabaseAdmin
+    const { data: slugRow, error: slugError } = await supabaseAdmin
       .from("jobs")
-      .select("id, slug, tenant_id")
+      .select("id, slug, status")
       .eq("slug", identifier)
-      .eq("visibility", "public")
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
 
-    if (!slugError && slugData && slugData.length > 0) {
-      job = slugData[0] as JobRow;
+    if (slugError) {
+      console.error("Apply API – error looking up job by slug:", slugError);
     }
 
-    if (!job && isUuid(identifier)) {
-      const { data: idData, error: idError } = await supabaseAdmin
-        .from("jobs")
-        .select("id, slug, tenant_id")
-        .eq("id", identifier)
-        .eq("visibility", "public")
-        .limit(1);
+    if (slugRow?.id) {
+      jobId = slugRow.id as string;
+      jobSlug = (slugRow.slug as string | null) ?? null;
+    }
 
-      if (!idError && idData && idData.length > 0) {
-        job = idData[0] as JobRow;
+    if (!jobId && isUuid(identifier)) {
+      const { data: idRow, error: idError } = await supabaseAdmin
+        .from("jobs")
+        .select("id, slug, status")
+        .eq("id", identifier)
+        .limit(1)
+        .maybeSingle();
+
+      if (idError) {
+        console.error("Apply API – error looking up job by id:", idError);
+      }
+
+      if (idRow?.id) {
+        jobId = idRow.id as string;
+        jobSlug = (idRow.slug as string | null) ?? null;
       }
     }
 
-    if (!job) {
+    if (!jobId) {
       return NextResponse.json(
-        { error: "This job is no longer accepting applications." },
+        { error: "This role is no longer available or cannot be found." },
         { status: 404 }
       );
     }
 
-    const jobId = job.id;
-    const tenantId = job.tenant_id ?? null; // if you decide to store tenant_id later
+    // --- 2) Extract form fields ---
+    const fullName = (formData.get("full_name") ?? "").toString().trim();
+    const email = (formData.get("email") ?? "").toString().trim();
 
-    // 2) Extract fields from form
-    const full_name = (formData.get("full_name") as string | null)?.trim();
-    const email = (formData.get("email") as string | null)?.trim();
-    const phone = (formData.get("phone") as string | null)?.trim() || null;
-    const location =
-      (formData.get("location") as string | null)?.trim() || null;
-    const linkedin_url =
-      (formData.get("linkedin_url") as string | null)?.trim() || null;
-    const cover_letter =
-      (formData.get("cover_letter") as string | null)?.trim() || null;
-
-    if (!full_name || !email) {
+    if (!fullName || !email) {
       return NextResponse.json(
-        {
-          error:
-            "Full name and email are required. Please fill these in and try again.",
-        },
+        { error: "Full name and email are required." },
         { status: 400 }
       );
     }
 
-    // 3) Handle CV upload (optional but recommended)
-    const cvFile = formData.get("cv") as File | null;
-    let cv_url: string | null = null;
+    const phone = (formData.get("phone") ?? "").toString().trim() || null;
+    const location = (formData.get("location") ?? "").toString().trim() || null;
+    const linkedinUrl =
+      (formData.get("linkedin_url") ?? "").toString().trim() || null;
+    const portfolioUrl =
+      (formData.get("portfolio_url") ?? "").toString().trim() || null;
+    const githubUrl =
+      (formData.get("github_url") ?? "").toString().trim() || null;
+    const coverLetter =
+      (formData.get("cover_letter") ?? "").toString().trim() || null;
+    const howHeard =
+      (formData.get("how_heard") ?? "").toString().trim() || null;
 
-    if (cvFile && cvFile.size > 0) {
-      const arrayBuffer = await cvFile.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+    const source =
+      (formData.get("source") ?? "").toString().trim() ||
+      "public_job_site";
 
-      const ext =
-        cvFile.name.split(".").pop()?.toLowerCase() === "pdf"
-          ? "pdf"
-          : cvFile.name.split(".").pop() || "bin";
+    // --- 3) Handle CV upload to resourcin-uploads bucket ---
+    let cvUrl: string | null = null;
 
-      const objectPath = `cvs/${jobId}/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${ext}`;
+    const cvFile = formData.get("cv");
+    if (cvFile instanceof File && cvFile.size > 0) {
+      const originalName = cvFile.name || "cv.pdf";
+      const safeName = originalName
+        .toLowerCase()
+        .replace(/[^a-z0-9.]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const timestamp = Date.now();
+      const path = `cv-uploads/${jobId}/${timestamp}-${safeName}`;
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from("resourcin-uploads")
-        .upload(objectPath, buffer, {
-          contentType: cvFile.type || "application/octet-stream",
+        .upload(path, cvFile, {
+          cacheControl: "3600",
           upsert: false,
         });
 
       if (uploadError) {
-        console.error("CV upload error:", uploadError);
-        // We don't hard-fail the whole request; candidate can still be created
+        console.error("Apply API – error uploading CV:", uploadError);
+        // We still allow the application to be created, just without cv_url.
       } else {
-        const { data: publicUrlData } = supabaseAdmin.storage
+        const {
+          data: { publicUrl },
+        } = supabaseAdmin.storage
           .from("resourcin-uploads")
-          .getPublicUrl(objectPath);
+          .getPublicUrl(path);
 
-        cv_url = publicUrlData?.publicUrl ?? null;
+        cvUrl = publicUrl || null;
       }
     }
 
-    // 4) Insert into job_applications
-    const insertPayload: Record<string, unknown> = {
+    // --- 4) Insert into job_applications table ---
+    const insertPayload = {
       job_id: jobId,
-      full_name,
+      candidate_id: null, // you can attach to a talent network later
+      full_name: fullName,
       email,
       phone,
       location,
-      linkedin_url,
-      portfolio_url: null,
-      cv_url,
-      cover_letter,
-      source: "public_jobs_page",
-      // Let defaults handle stage/status, but you can override if you want:
-      // stage: "APPLIED",
-      // status: "PENDING",
-      screening_answers: null,
-      how_heard: null,
-      data_privacy_consent: null,
-      terms_consent: null,
-      marketing_opt_in: null,
-      reference_code: null,
+      linkedin_url: linkedinUrl,
+      portfolio_url: portfolioUrl,
+      github_url: githubUrl,
+      cv_url: cvUrl,
+      cover_letter: coverLetter,
+      source,
+      stage: "APPLIED",
+      status: "PENDING",
+      how_heard: howHeard,
+      data_privacy_consent: true,
+      terms_consent: true,
+      marketing_opt_in: false,
     };
 
-    const { data: inserted, error: insertError } = await supabaseAdmin
+    const { data: appRow, error: appError } = await supabaseAdmin
       .from("job_applications")
       .insert(insertPayload)
       .select("id")
       .single();
 
-    if (insertError || !inserted) {
-      console.error("Error inserting job application:", insertError);
+    if (appError || !appRow) {
+      console.error("Apply API – error inserting job_application:", appError);
       return NextResponse.json(
         {
           error:
@@ -166,12 +168,15 @@ export async function POST(
     return NextResponse.json(
       {
         ok: true,
+        applicationId: appRow.id,
+        jobId,
+        jobSlug,
         message: "Thank you. Your application has been received.",
       },
       { status: 201 }
     );
   } catch (err) {
-    console.error("Unexpected error in public job apply route:", err);
+    console.error("Apply API – unexpected error:", err);
     return NextResponse.json(
       {
         error:
