@@ -1,24 +1,60 @@
 // lib/tenant.ts
+//
+// Central place to resolve "who is the current tenant?".
+//
+// For now, this is always Resourcin, looked up by slug.
+// Env:
+//   RESOURCIN_TENANT_SLUG = "resourcin"   (or whatever you set in Vercel)
 
-// The Resourcin tenant ID in Supabase.tenants
-const RESOURCIN_TENANT_ID = "54286a10-0503-409b-a9d4-a324e9283c1c";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+let tenantIdPromise: Promise<string> | null = null;
 
 /**
- * Returns the current tenant ID.
- * For now, we default to the Resourcin tenant.
+ * Resolve the current tenant id from the `tenants` table based on slug.
+ * Cached after the first call.
  */
-export function getCurrentTenantId(): string {
-  return RESOURCIN_TENANT_ID;
+export async function getCurrentTenantId(): Promise<string> {
+  if (tenantIdPromise) return tenantIdPromise;
+
+  tenantIdPromise = (async () => {
+    const slug =
+      process.env.RESOURCIN_TENANT_SLUG?.trim().toLowerCase() ||
+      "resourcin";
+
+    const { data, error } = await supabaseAdmin
+      .from("tenants")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (error || !data) {
+      console.error("getCurrentTenantId: could not resolve tenant", {
+        slug,
+        error,
+      });
+      throw new Error("Tenant not configured for Resourcin");
+    }
+
+    return data.id as string;
+  })();
+
+  return tenantIdPromise;
 }
 
 /**
- * Legacy fallback for older code that expects getDefaultTenant().
- * You can safely remove this once all files import getCurrentTenantId instead.
+ * Legacy-style helper – if any old code still expects a "tenant object".
+ * Prefer using getCurrentTenantId() directly going forward.
  */
-export function getDefaultTenant() {
+export async function getDefaultTenant() {
+  const id = await getCurrentTenantId();
+  const slug =
+    process.env.RESOURCIN_TENANT_SLUG?.trim().toLowerCase() ||
+    "resourcin";
+
   return {
-    id: RESOURCIN_TENANT_ID,
+    id,
     name: "Resourcin",
-    slug: "resourcin",
+    slug,
   };
 }
