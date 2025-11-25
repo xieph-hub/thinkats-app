@@ -1,3 +1,4 @@
+// app/ats/jobs/new/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -51,13 +52,7 @@ const defaultState: JobFormState = {
   requiredSkills: "",
 };
 
-// NOTE: this should match your tenants.id for Resourcin.
-// Prefer setting NEXT_PUBLIC_RESOURCIN_TENANT_ID in Vercel env.
-const RESOURCIN_TENANT_ID =
-  process.env.NEXT_PUBLIC_RESOURCIN_TENANT_ID ?? "tenant_resourcin_1";
-
 // TODO: replace with real client_companies IDs once you have them wired.
-// For now this still gives you a real “pick client” UX.
 const clientOptions: { value: string; label: string }[] = [
   { value: "", label: "No client (internal / Resourcin role)" },
   { value: "qlife_clinics", label: "QLife Clinics" },
@@ -86,7 +81,6 @@ export default function NewJobPage() {
     try {
       // Map to API body that route.ts expects
       const payload = {
-        tenantId: RESOURCIN_TENANT_ID,
         title: form.title.trim(),
         department: form.department.trim() || null,
         location: form.location.trim(),
@@ -179,7 +173,9 @@ export default function NewJobPage() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Department / Function</label>
+              <label className="text-sm font-medium">
+                Department / Function
+              </label>
               <input
                 className="w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-gray-900"
                 value={form.department}
@@ -317,8 +313,8 @@ export default function NewJobPage() {
               <p className="text-xs text-gray-500">
                 Saved as{" "}
                 <span className="font-mono">client_company_id</span>. When
-                visibility is public, you can show the client&apos;s
-                name/logo on the job.
+                visibility is public, you can show the client&apos;s name/logo
+                on the job.
               </p>
             </div>
           </div>
@@ -497,17 +493,14 @@ export default function NewJobPage() {
           <div className="text-xs text-gray-500">
             <div>
               <span className="font-medium text-gray-700">Save as draft</span>{" "}
-              sends <span className="font-mono">submit_mode = &quot;draft&quot;</span>{" "}
-              and results in <span className="font-mono">status = &quot;draft&quot;</span>.
+              sends <span className="font-mono">submit_mode = "draft"</span> and
+              results in <span className="font-mono">status = "draft"</span>.
             </div>
             <div>
               <span className="font-medium text-gray-700">Publish now</span>{" "}
-              sends{" "}
-              <span className="font-mono">
-                submit_mode = &quot;publish&quot;
-              </span>{" "}
+              sends <span className="font-mono">submit_mode = "publish"</span>{" "}
               and route.ts sets{" "}
-              <span className="font-mono">status = &quot;open&quot;</span>.
+              <span className="font-mono">status = "open"</span>.
             </div>
           </div>
 
