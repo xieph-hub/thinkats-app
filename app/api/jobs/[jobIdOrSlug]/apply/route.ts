@@ -4,8 +4,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-const CV_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_CV_BUCKET || "candidate-cvs";
+// Your actual CV bucket
+const CV_BUCKET = "resourcin-uploads";
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -24,13 +24,15 @@ export async function POST(
     // 1) Resolve job (by jobId in form if present, otherwise by slug/UUID)
     let jobId = (formData.get("jobId") as string | null) || null;
 
-    let jobRow: {
-      id: string;
-      tenant_id: string | null;
-      visibility: string | null;
-      status: string | null;
-      slug: string | null;
-    } | null = null;
+    let jobRow:
+      | {
+          id: string;
+          tenant_id: string | null;
+          visibility: string | null;
+          status: string | null;
+          slug: string | null;
+        }
+      | null = null;
 
     // Try by explicit jobId first
     if (jobId && isUuid(jobId)) {
@@ -73,7 +75,7 @@ export async function POST(
       );
     }
 
-    // Optional: basic guard so we don’t accept for closed/internal roles
+    // Optional: guard against weird visibility
     if (
       jobRow.visibility &&
       jobRow.visibility !== "public" &&
@@ -85,7 +87,7 @@ export async function POST(
       );
     }
 
-    // 2) Extract applicant fields from form
+    // 2) Applicant fields
     const full_name = (formData.get("full_name") as string | null)?.trim();
     const email = (formData.get("email") as string | null)?.trim();
     const phone = (formData.get("phone") as string | null)?.trim() || null;
@@ -103,7 +105,7 @@ export async function POST(
       );
     }
 
-    // 3) Handle CV upload (optional but strongly recommended)
+    // 3) CV upload → Supabase storage (resourcin-uploads)
     let cv_url: string | null = null;
     const cvFile = formData.get("cv");
 
@@ -161,9 +163,7 @@ export async function POST(
         cv_url,
         cover_letter,
         source: "public_jobs_page",
-        // Let DB defaults handle stage/status, but you *could* set explicitly:
-        // stage: "APPLIED",
-        // status: "PENDING",
+        // Use DB defaults for stage/status
         data_privacy_consent: true,
         terms_consent: true,
         marketing_opt_in: false,
