@@ -4,7 +4,7 @@
 //
 // For now, this is always Resourcin, looked up by slug.
 // Env:
-//   RESOURCIN_TENANT_SLUG = "resourcin"   (or whatever you set in Vercel)
+//   RESOURCIN_TENANT_SLUG = "resourcin"
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -19,8 +19,7 @@ export async function getCurrentTenantId(): Promise<string> {
 
   tenantIdPromise = (async () => {
     const slug =
-      process.env.RESOURCIN_TENANT_SLUG?.trim().toLowerCase() ||
-      "resourcin";
+      process.env.RESOURCIN_TENANT_SLUG?.trim().toLowerCase() || "resourcin";
 
     const { data, error } = await supabaseAdmin
       .from("tenants")
@@ -43,14 +42,12 @@ export async function getCurrentTenantId(): Promise<string> {
 }
 
 /**
- * Legacy-style helper – if any old code still expects a "tenant object".
- * Prefer using getCurrentTenantId() directly going forward.
+ * Optional legacy helper if any old code still expects an object.
  */
 export async function getDefaultTenant() {
   const id = await getCurrentTenantId();
   const slug =
-    process.env.RESOURCIN_TENANT_SLUG?.trim().toLowerCase() ||
-    "resourcin";
+    process.env.RESOURCIN_TENANT_SLUG?.trim().toLowerCase() || "resourcin";
 
   return {
     id,
