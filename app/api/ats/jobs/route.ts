@@ -1,6 +1,7 @@
 // app/api/ats/jobs/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenantId } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -21,15 +22,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const tenantId = body.tenantId as string | undefined;
-    if (!tenantId) {
-      return NextResponse.json(
-        { error: "Missing tenantId" },
-        { status: 400 }
-      );
-    }
+    // 🚩 Tenant is now resolved server-side, not from the request body
+    const tenantId = getCurrentTenantId();
 
-    // --- NEW: optional client company id (for multi-client posting) ---
+    // --- optional client company id (for multi-client posting) ---
     const clientCompanyId =
       (body.clientCompanyId as string | undefined) ??
       (body.client_company_id as string | undefined) ??
@@ -203,7 +199,7 @@ export async function POST(req: NextRequest) {
       slug,
     };
 
-    // --- NEW: attach client company if provided ---
+    // attach client company if provided
     if (clientCompanyId) {
       insertPayload.client_company_id = clientCompanyId;
     }
