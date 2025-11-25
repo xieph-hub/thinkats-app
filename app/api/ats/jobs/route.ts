@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // 🚩 Tenant is now resolved server-side, not from the request body
-    const tenantId = getCurrentTenantId();
+    // 🔐 Single source of truth for tenant
+    const tenantId = await getCurrentTenantId();
 
     // --- optional client company id (for multi-client posting) ---
     const clientCompanyId =
@@ -199,7 +199,6 @@ export async function POST(req: NextRequest) {
       slug,
     };
 
-    // attach client company if provided
     if (clientCompanyId) {
       insertPayload.client_company_id = clientCompanyId;
     }
