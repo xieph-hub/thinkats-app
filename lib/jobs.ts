@@ -2,41 +2,6 @@
 //
 // Central helpers for working with the `jobs` table in Supabase.
 // Everything goes through the admin client (no Prisma).
-//
-// public.jobs core columns (plus some extra ATS fields):
-//
-// id                    uuid        PK
-// tenant_id             uuid        NOT NULL
-// external_id           text        NULL
-// title                 text        NOT NULL
-// department            text        NULL
-// location              text        NULL
-// employment_type       text        NULL
-// seniority             text        NULL
-// description           text        NULL
-// hiring_manager_id     uuid        NULL
-// status                text        DEFAULT 'open'
-// visibility            text        DEFAULT 'public'
-// tags                  text[]      DEFAULT '{}'::text[]
-// created_by            uuid        NULL
-// created_at            timestamptz DEFAULT now()
-// updated_at            timestamptz DEFAULT now()
-// slug                  text        NULL
-// short_description     text        NULL
-// location_type         text        NULL
-// experience_level      text        NULL
-// years_experience_min  int         NULL
-// years_experience_max  int         NULL
-// salary_min            numeric     NULL
-// salary_max            numeric     NULL
-// salary_currency       text        NULL
-// salary_visible        boolean     NULL
-// required_skills       text[]      NULL
-// education_required    text        NULL
-// education_field       text        NULL
-// internal_only         boolean     DEFAULT false
-// confidential          boolean     DEFAULT false
-// work_mode             text        NULL
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenantId } from "@/lib/tenant";
@@ -60,7 +25,7 @@ export type JobsTableRow = {
   updated_at: string;
   slug: string | null;
 
-  // Additional ATS-ish fields (optional so existing code doesn’t break)
+  // Additional ATS-ish fields (all optional so existing code doesn't break)
   short_description?: string | null;
   location_type?: string | null;
   experience_level?: string | null;
@@ -80,10 +45,6 @@ export type JobsTableRow = {
 
 /**
  * List all jobs for the *current* tenant (ATS view).
- *
- * - Uses getCurrentTenantId()
- * - Reads from `public.jobs`
- * - Sorted newest first
  */
 export async function listJobsForCurrentTenant(): Promise<JobsTableRow[]> {
   const tenantId = await getCurrentTenantId();
@@ -146,8 +107,6 @@ export async function listPublicJobsForCurrentTenant(): Promise<JobsTableRow[]> 
 
 /**
  * Fetch a single job for the *current* tenant by its slug.
- *
- * Useful for public /jobs/[slug] and internal ATS pages that are slug-based.
  */
 export async function getJobForCurrentTenantBySlug(
   slug: string
@@ -184,8 +143,7 @@ export async function getJobForCurrentTenantBySlug(
 }
 
 /**
- * Fetch a job by its id for the current tenant.
- * Handy for ATS route `/ats/jobs/[jobId]`.
+ * Fetch a job by its id for the current tenant (ATS).
  */
 export async function getJobForCurrentTenantById(
   jobId: string
