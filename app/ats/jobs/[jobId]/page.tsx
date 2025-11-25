@@ -1,13 +1,34 @@
 // app/ats/jobs/[jobId]/page.tsx
+import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { ApplicationsSplitView } from "@/components/ats/ApplicationsSplitView";
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "ATS job pipeline | Resourcin",
+  description:
+    "Internal pipeline view for a specific mandate managed in the Resourcin ATS.",
+};
+
+type ClientCompanyRow = {
+  name: string;
+  logo_url: string | null;
+  slug: string | null;
+};
 
 type JobRow = {
   id: string;
+  slug: string | null;
   title: string;
+  department: string | null;
   location: string | null;
+  employment_type: string | null;
   status: string | null;
+  visibility: string | null;
+  created_at: string;
+  client_company: ClientCompanyRow[] | null;
 };
 
 type ApplicationRow = {
@@ -17,78 +38,68 @@ type ApplicationRow = {
   email: string;
   phone: string | null;
   location: string | null;
-  status: string | null;
+  linkedin_url: string | null;
+  portfolio_url: string | null;
   cv_url: string | null;
+  cover_letter: string | null;
+  source: string | null;
+  stage: string;
+  status: string;
   created_at: string;
-  status_changed_at: string | null;
-  status_note: string | null;
+  reference_code: string | null;
 };
 
-type InterviewRow = {
-  id: string;
-  application_id: string;
-  scheduled_at: string;
-  type: string | null;
-  location: string | null;
-  notes: string | null;
-};
+function formatDate(dateStr: string) {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
 
-type ApplicationStatus =
-  | "applied"
-  | "screening"
-  | "interview"
-  | "offer"
-  | "rejected";
-
-type TimelineEvent = {
-  label: string;
-  at: string;
-  note?: string;
-};
-
-type ApplicationsSplitViewApplication = {
-  id: string;
-  fullName: string;
-  email: string;
-  status: ApplicationStatus;
-  appliedAt: string;
-  location?: string;
-  cvUrl?: string;
-  phone?: string;
-  timeline?: TimelineEvent[];
-  latestNote?: string;
-};
-
-type PageProps = {
+export default async function AtsJobDetailPage({
+  params,
+}: {
   params: { jobId: string };
-};
-
-export const dynamic = "force-dynamic";
-
-export default async function AtsJobPage({ params }: PageProps) {
+}) {
   const jobId = params.jobId;
 
-  if (!jobId) {
-    notFound();
-  }
-
   // 1) Load job
-  const { data: jobData, error: jobError } = await supabaseAdmin
+  const { data: job, error: jobError } = await supabaseAdmin
     .from("jobs")
-    .select("id, title, location, status")
+    .select(
+      `
+      id,
+      slug,
+      title,
+      department,
+      location,
+      employment_type,
+      status,
+      visibility,
+      created_at,
+      client_company:client_companies (
+        name,
+        logo_url,
+        slug
+      )
+    `
+    )
     .eq("id", jobId)
-    .maybeSingle<JobRow>();
+    .single();
 
   if (jobError) {
-    console.error("ATS job page – error loading job:", jobError);
+    console.error("ATS job detail – job query error:", jobError);
   }
 
-  if (!jobData) {
+  if (!job) {
     notFound();
   }
 
-  // 2) Load applications
-  const { data: appsData, error: appsError } = await supabaseAdmin
+  // 2) Load applications for this job (NO extra filters)
+  const { data: applications, error: appsError } = await supabaseAdmin
     .from("job_applications")
     .select(
       `
@@ -98,158 +109,215 @@ export default async function AtsJobPage({ params }: PageProps) {
       email,
       phone,
       location,
-      status,
+      linkedin_url,
+      portfolio_url,
       cv_url,
+      cover_letter,
+      source,
+      stage,
+      status,
       created_at,
-      status_changed_at,
-      status_note
+      reference_code
     `
     )
     .eq("job_id", jobId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false });
 
   if (appsError) {
-    console.error("ATS job page – error loading applications:", appsError);
+    console.error("ATS job detail – applications query error:", appsError);
   }
 
-  const appRows: ApplicationRow[] = (appsData ?? []) as ApplicationRow[];
-
-  // 3) Load interviews for those applications
-  let interviewRows: InterviewRow[] = [];
-
-  if (appRows.length > 0) {
-    const appIds = appRows.map((a) => a.id);
-
-    const { data: interviewsData, error: interviewsError } =
-      await supabaseAdmin
-        .from("application_interviews")
-        .select(
-          `
-          id,
-          application_id,
-          scheduled_at,
-          type,
-          location,
-          notes
-        `
-        )
-        .in("application_id", appIds);
-
-    if (interviewsError) {
-      console.error(
-        "ATS job page – error loading interviews:",
-        interviewsError
-      );
-    }
-
-    interviewRows = (interviewsData ?? []) as InterviewRow[];
-  }
-
-  // 4) Shape for ApplicationsSplitView
-  const allowedStatuses: ApplicationStatus[] = [
-    "applied",
-    "screening",
-    "interview",
-    "offer",
-    "rejected",
-  ];
-
-  const applications: ApplicationsSplitViewApplication[] = appRows.map(
-    (row) => {
-      const rawStatus = (row.status || "applied").toLowerCase();
-      const safeStatus: ApplicationStatus = allowedStatuses.includes(
-        rawStatus as ApplicationStatus
-      )
-        ? (rawStatus as ApplicationStatus)
-        : "applied";
-
-      const timeline: TimelineEvent[] = [];
-
-      // Applied
-      if (row.created_at) {
-        timeline.push({
-          label: "Applied",
-          at: row.created_at,
-        });
-      }
-
-      // Status change
-      if (row.status_changed_at) {
-        const niceStatus =
-          safeStatus.charAt(0).toUpperCase() + safeStatus.slice(1);
-        timeline.push({
-          label: `Moved to ${niceStatus}`,
-          at: row.status_changed_at,
-          note: row.status_note || undefined,
-        });
-      }
-
-      // Interviews
-      const myInterviews = interviewRows.filter(
-        (iv) => iv.application_id === row.id
-      );
-      for (const iv of myInterviews) {
-        const typeLabel = iv.type
-          ? iv.type.charAt(0).toUpperCase() + iv.type.slice(1)
-          : "Interview";
-        timeline.push({
-          label: `Interview scheduled (${typeLabel})`,
-          at: iv.scheduled_at,
-          note: iv.notes || undefined,
-        });
-      }
-
-      // Sort by time ascending
-      timeline.sort(
-        (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
-      );
-
-      // Derive latestNote (prefer the most recent event that has a note)
-      const latestNoteFromTimeline =
-        [...timeline].reverse().find((ev) => !!ev.note)?.note;
-
-      const latestNote =
-        latestNoteFromTimeline || row.status_note || undefined;
-
-      return {
-        id: row.id,
-        fullName: row.full_name,
-        email: row.email,
-        status: safeStatus,
-        appliedAt: row.created_at,
-        location: row.location ?? undefined,
-        cvUrl: row.cv_url ?? undefined,
-        phone: row.phone ?? undefined,
-        timeline,
-        latestNote,
-      };
-    }
-  );
-
-  const applicationsCount = applications.length;
+  const apps = (applications ?? []) as ApplicationRow[];
+  const client = (job as JobRow).client_company?.[0] ?? null;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      <header className="mb-4 border-b border-slate-100 pb-3">
+    <main className="mx-auto max-w-6xl px-4 py-6">
+      {/* Breadcrumb */}
+      <div className="mb-4 text-[11px] text-slate-500">
+        <Link
+          href="/ats/jobs"
+          className="inline-flex items-center gap-1 text-slate-500 hover:text-[#172965]"
+        >
+          <span aria-hidden="true">←</span>
+          <span>Back to ATS jobs</span>
+        </Link>
+      </div>
+
+      {/* Header */}
+      <header className="mb-6 border-b border-slate-100 pb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS • Job pipeline
+          ATS pipeline
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-900">
-          {jobData.title}
-        </h1>
-        <p className="mt-1 text-[12px] text-slate-500">
-          {jobData.location || "Location not specified"}
-          {jobData.status ? ` • Status: ${jobData.status}` : null}
-          {applicationsCount > 0
-            ? ` • ${applicationsCount} application${
-                applicationsCount === 1 ? "" : "s"
-              }`
-            : " • No applications yet"}
-        </p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">
+              {(job as JobRow).title}
+            </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+              {(job as JobRow).department && (
+                <span className="rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-700">
+                  {(job as JobRow).department}
+                </span>
+              )}
+              {(job as JobRow).location && (
+                <span className="rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-700">
+                  {(job as JobRow).location}
+                </span>
+              )}
+              {(job as JobRow).employment_type && (
+                <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">
+                  {(job as JobRow).employment_type}
+                </span>
+              )}
+              {(job as JobRow).status && (
+                <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">
+                  {(job as JobRow).status}
+                  {(job as JobRow).visibility
+                    ? ` · ${(job as JobRow).visibility}`
+                    : ""}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="text-right text-[11px] text-slate-500">
+            <p>Created {formatDate((job as JobRow).created_at)}</p>
+            <p>
+              Applicants:{" "}
+              <span className="font-semibold text-slate-800">
+                {apps.length}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {client && (
+          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-[11px] text-slate-700">
+            {client.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={client.logo_url}
+                alt={client.name}
+                className="h-5 w-5 rounded-sm object-contain"
+              />
+            )}
+            <span className="font-medium">{client.name}</span>
+          </div>
+        )}
       </header>
 
-      <section>
-        <ApplicationsSplitView applications={applications} />
+      {/* Applications table */}
+      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Applications
+          </h2>
+          <p className="text-[11px] text-slate-500">
+            Showing {apps.length} application
+            {apps.length === 1 ? "" : "s"} for this role.
+          </p>
+        </div>
+
+        {apps.length === 0 ? (
+          <p className="text-[12px] text-slate-500">
+            No applications yet. Once candidates apply via the public job page,
+            they will appear here automatically.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-y-1 text-left text-[12px]">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-[0.12em] text-slate-500">
+                  <th className="px-2 py-1">Candidate</th>
+                  <th className="px-2 py-1">Contact</th>
+                  <th className="px-2 py-1">Location</th>
+                  <th className="px-2 py-1">Stage / Status</th>
+                  <th className="px-2 py-1">Applied</th>
+                  <th className="px-2 py-1">CV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {apps.map((app) => (
+                  <tr
+                    key={app.id}
+                    className="rounded-lg bg-slate-50/60 align-top text-[12px] text-slate-800"
+                  >
+                    <td className="px-2 py-2">
+                      <div className="font-semibold">{app.full_name}</div>
+                      {app.reference_code && (
+                        <div className="text-[10px] text-slate-500">
+                          Ref: {app.reference_code}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div>{app.email}</div>
+                      {app.phone && (
+                        <div className="text-[10px] text-slate-500">
+                          {app.phone}
+                        </div>
+                      )}
+                      {app.linkedin_url && (
+                        <a
+                          href={app.linkedin_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 block text-[10px] text-[#0A66C2] hover:underline"
+                        >
+                          LinkedIn profile
+                        </a>
+                      )}
+                      {app.portfolio_url && (
+                        <a
+                          href={app.portfolio_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 block text-[10px] text-[#172965] hover:underline"
+                        >
+                          Portfolio
+                        </a>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      {app.location || (
+                        <span className="text-[11px] text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="inline-flex flex-col gap-0.5">
+                        <span className="inline-flex w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                          {app.stage}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {app.status}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-[11px] text-slate-600">
+                      {formatDate(app.created_at)}
+                    </td>
+                    <td className="px-2 py-2">
+                      {app.cv_url ? (
+                        <a
+                          href={app.cv_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1 text-[10px] font-semibold text-white shadow-sm hover:bg-[#111c4c]"
+                        >
+                          View CV
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">
+                          No CV on file
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );
