@@ -1,17 +1,31 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { CandidatesAccordion, Candidate } from "@/components/ats/CandidatesAccordion";
+import { CandidatesAccordion } from "@/components/ats/CandidatesAccordion";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ATS – Candidates | Resourcin",
   description:
-    "Global view of candidates and applications flowing through the Resourcin ATS.",
+    "All candidates in the Resourcin ATS across open and closed mandates.",
 };
 
-export default async function CandidatesPage() {
+type RawRow = {
+  id: string;
+  job_id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  location: string | null;
+  stage: string;
+  status: string;
+  created_at: string;
+  cv_url: string | null;
+  job: { id: string; title: string; slug: string | null }[] | null;
+};
+
+export default async function AtsCandidatesPage() {
   const { data, error } = await supabaseAdmin
     .from("job_applications")
     .select(
@@ -36,32 +50,30 @@ export default async function CandidatesPage() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("ATS candidates – error loading applications:", error);
+    console.error("ATS candidates – error loading candidates:", error);
   }
 
-  const rows = (data ?? []) as any[];
+  const rows = (data ?? []) as RawRow[];
 
-  const candidates: Candidate[] = rows.map((row) => {
-    const jobRel = row.job;
-    const job =
-      Array.isArray(jobRel) && jobRel.length > 0 ? jobRel[0] : jobRel ?? null;
+  const candidates = rows.map((row) => {
+    const jobRelation = row.job?.[0] ?? null;
 
     return {
-      id: row.id as string,
-      job_id: row.job_id as string,
-      full_name: row.full_name as string,
-      email: row.email as string,
-      phone: (row.phone as string | null) ?? null,
-      location: (row.location as string | null) ?? null,
-      stage: (row.stage as string) ?? "APPLIED",
-      status: (row.status as string) ?? "PENDING",
-      created_at: row.created_at as string,
-      cv_url: (row.cv_url as string | null) ?? null,
-      job: job
+      id: row.id,
+      job_id: row.job_id,
+      full_name: row.full_name,
+      email: row.email,
+      phone: row.phone,
+      location: row.location,
+      stage: row.stage,
+      status: row.status,
+      created_at: row.created_at,
+      cv_url: row.cv_url,
+      job: jobRelation
         ? {
-            id: job.id as string,
-            title: job.title as string,
-            slug: (job.slug as string | null) ?? null,
+            id: jobRelation.id,
+            title: jobRelation.title,
+            slug: jobRelation.slug,
           }
         : null,
     };
@@ -69,31 +81,17 @@ export default async function CandidatesPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Candidates
-          </p>
-          <h1 className="text-lg font-semibold text-slate-900">
-            Global application inbox
-          </h1>
-          <p className="mt-1 text-xs text-slate-600">
-            All candidates flowing into the Resourcin ATS, across roles.
-          </p>
-        </div>
-        <div className="text-right text-[11px] text-slate-500">
-          <p>
-            Total candidates:{" "}
-            <span className="font-semibold text-slate-700">
-              {candidates.length}
-            </span>
-          </p>
-        </div>
+      <header className="mb-4 flex flex-col gap-1">
+        <h1 className="text-lg font-semibold text-slate-900">
+          Candidates in pipeline
+        </h1>
+        <p className="text-xs text-slate-500">
+          All applicants across mandates. Use this view to jump quickly into CVs
+          and specific roles.
+        </p>
       </header>
 
-      <section className="mt-4">
-        <CandidatesAccordion candidates={candidates} />
-      </section>
+      <CandidatesAccordion candidates={candidates} />
     </main>
   );
 }
