@@ -29,6 +29,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // --- NEW: optional client company id (for multi-client posting) ---
+    const clientCompanyId =
+      (body.clientCompanyId as string | undefined) ??
+      (body.client_company_id as string | undefined) ??
+      undefined;
+
     // ---- CORE FIELDS ----
     const title = (body.title as string | undefined)?.trim();
     const description = (body.description as string | undefined)?.trim();
@@ -92,8 +98,6 @@ export async function POST(req: NextRequest) {
       (body.educationField as string | undefined) || null;
 
     // ---- SUBMIT MODE → status ----
-    // Front-end may send: submit_mode = "publish" | "draft"
-    // We default to "draft" if not specified.
     const submitModeRaw =
       (body.submit_mode as string | undefined) ??
       (body.submitMode as string | undefined) ??
@@ -108,7 +112,6 @@ export async function POST(req: NextRequest) {
     }
 
     // ---- VISIBILITY + INTERNAL / CONFIDENTIAL ----
-    // New model: visibility string, but we still respect old booleans if present.
     const visibilityRaw = (body.visibility as string | undefined)?.toLowerCase();
 
     const legacyInternalOnly =
@@ -123,7 +126,6 @@ export async function POST(req: NextRequest) {
     } else if (visibilityRaw === "confidential") {
       visibility = "confidential";
     } else {
-      // fall back to old booleans if visibility is not explicitly set
       if (legacyConfidential) {
         visibility = "confidential";
       } else if (legacyInternalOnly) {
@@ -135,7 +137,6 @@ export async function POST(req: NextRequest) {
     const confidential = visibility === "confidential";
 
     // ---- WORK MODE ----
-    // Prefer new work_mode field; fall back to locationType if provided.
     const workModeRaw =
       (body.work_mode as string | undefined)?.toLowerCase() || null;
 
@@ -201,6 +202,11 @@ export async function POST(req: NextRequest) {
       tags: tags.length ? tags : null,
       slug,
     };
+
+    // --- NEW: attach client company if provided ---
+    if (clientCompanyId) {
+      insertPayload.client_company_id = clientCompanyId;
+    }
 
     const { data, error } = await supabaseAdmin
       .from("jobs")
