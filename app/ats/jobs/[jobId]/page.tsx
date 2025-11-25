@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenantId } from "@/lib/tenant";
 import { JobDetailShell } from "@/components/ats/JobDetailShell";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
 
 type JobRow = {
   id: string;
+  tenant_id: string;
   slug: string | null;
   title: string;
   short_description: string | null;
@@ -65,13 +67,15 @@ export default async function AtsJobDetailPage({
   params: { jobId: string };
 }) {
   const jobId = params.jobId;
+  const tenantId = await getCurrentTenantId();
 
-  // 1) Load job itself
+  // 1) Load job itself, scoped by tenant
   const { data: jobData, error: jobError } = await supabaseAdmin
     .from("jobs")
     .select(
       `
       id,
+      tenant_id,
       slug,
       title,
       short_description,
@@ -104,6 +108,7 @@ export default async function AtsJobDetailPage({
       )
     `
     )
+    .eq("tenant_id", tenantId)
     .eq("id", jobId)
     .maybeSingle();
 
@@ -117,7 +122,7 @@ export default async function AtsJobDetailPage({
 
   const job = jobData as JobRow;
 
-  // 2) Load applications for this job
+  // 2) Load applications for this job, scoped by tenant
   const { data: appData, error: appError } = await supabaseAdmin
     .from("job_applications")
     .select(
@@ -134,7 +139,8 @@ export default async function AtsJobDetailPage({
       cv_url
     `
     )
-    .eq("job_id", jobId)
+    .eq("tenant_id", job.tenant_id)
+    .eq("job_id", job.id)
     .order("created_at", { ascending: false });
 
   if (appError) {
