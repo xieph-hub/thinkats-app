@@ -17,6 +17,12 @@ const SITE_URL =
   process.env.SITE_URL ??
   "https://resourcin.com";
 
+// Brand colours
+const BRAND_BLUE = "#172965";
+const BRAND_YELLOW = "#FFC000";
+const BRAND_DARK_GREEN = "#306B34";
+const BRAND_LIGHT_GREEN = "#64C247";
+
 // Simple brand-ish SVG icons so no extra deps
 function LinkedInIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -204,26 +210,30 @@ export default function JobsExplorer({ initialJobs }: Props) {
     <div className="mx-auto max-w-6xl px-4 py-16">
       {/* Header */}
       <header className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-gray-500">
-          Opportunities
-        </p>
-        <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="inline-flex items-center gap-2 rounded-full bg-[#172965]/5 px-3 py-1">
+          <span className="h-2 w-2 rounded-full bg-[#64C247]" />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#172965]">
+            Opportunities
+          </span>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-[#172965] md:text-4xl">
               Open roles via Resourcin.
             </h1>
-            <p className="mt-3 max-w-2xl text-sm text-gray-500">
+            <p className="mt-3 max-w-2xl text-sm text-gray-600">
               Mandates we&apos;re actively leading for founders, operators and
               HR leaders – from senior individual contributors to C-suite
               roles. Use the filters to zero in on function, location and work
               mode.
             </p>
           </div>
-          <div className="text-right text-xs text-gray-500">
-            <div className="font-medium text-gray-800">
+          <div className="rounded-xl border border-[#172965]/15 bg-white px-3 py-2 text-right text-xs shadow-sm">
+            <div className="font-medium text-[#172965]">
               {filteredCount} role{filteredCount === 1 ? "" : "s"} showing
             </div>
-            <div className="text-[11px]">
+            <div className="text-[11px] text-gray-500">
               out of {totalCount} open mandate
               {totalCount === 1 ? "" : "s"}
             </div>
@@ -234,13 +244,15 @@ export default function JobsExplorer({ initialJobs }: Props) {
       {/* Layout: sidebar + list */}
       <div className="grid gap-6 lg:grid-cols-[260px,1fr]">
         {/* Sidebar filters */}
-        <aside className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <aside className="space-y-4 rounded-2xl border border-[#172965]/15 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Filter roles</h2>
+            <h2 className="text-sm font-semibold text-[#172965]">
+              Filter roles
+            </h2>
             <button
               type="button"
               onClick={resetFilters}
-              className="text-[11px] font-medium text-gray-500 hover:text-gray-800"
+              className="text-[11px] font-medium text-gray-500 hover:text-[#172965]"
             >
               Clear all
             </button>
@@ -256,13 +268,13 @@ export default function JobsExplorer({ initialJobs }: Props) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Title, company, keyword..."
-                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:bg-white"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:bg-white"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="absolute inset-y-0 right-2 flex items-center text-xs text-gray-400 hover:text-gray-700"
+                  className="absolute inset-y-0 right-2 flex items-center text-xs text-gray-400 hover:text-[#172965]"
                 >
                   ✕
                 </button>
@@ -278,7 +290,7 @@ export default function JobsExplorer({ initialJobs }: Props) {
             <select
               value={locationFilter}
               onChange={(e) => setLocationFilter(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:bg-white"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:bg-white"
             >
               <option value="all">All locations</option>
               {uniqueLocations.map((loc) => (
@@ -297,7 +309,7 @@ export default function JobsExplorer({ initialJobs }: Props) {
             <select
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-gray-900 focus:bg-white"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:bg-white"
             >
               <option value="all">All functions</option>
               {uniqueDepartments.map((dept) => (
@@ -324,12 +336,14 @@ export default function JobsExplorer({ initialJobs }: Props) {
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => setWorkModeFilter(opt.value as WorkModeFilter)}
+                  onClick={() =>
+                    setWorkModeFilter(opt.value as WorkModeFilter)
+                  }
                   className={[
                     "rounded-lg border px-2 py-1 text-left",
                     workModeFilter === opt.value
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300",
+                      ? "border-[#172965] bg-[#172965] text-white"
+                      : "border-gray-200 bg-gray-50 text-gray-700 hover:border-[#172965]/40",
                   ].join(" ")}
                 >
                   {opt.label}
@@ -358,8 +372,8 @@ export default function JobsExplorer({ initialJobs }: Props) {
                   className={[
                     "rounded-full border px-3 py-1",
                     visibilityFilter === opt.value
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300",
+                      ? "border-[#172965] bg-[#172965] text-white"
+                      : "border-gray-200 bg-gray-50 text-gray-700 hover:border-[#172965]/40",
                   ].join(" ")}
                 >
                   {opt.label}
@@ -392,25 +406,35 @@ export default function JobsExplorer({ initialJobs }: Props) {
               return (
                 <article
                   key={job.id}
-                  className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-gray-900 hover:shadow-md md:p-5"
+                  className="rounded-2xl border border-[#172965]/12 bg-white p-4 shadow-sm transition hover:border-[#172965] hover:shadow-md md:p-5"
                 >
                   <div className="flex flex-col gap-4">
                     {/* Top row: title + badge + posted date */}
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-base font-semibold md:text-lg">
+                          <h2 className="text-base font-semibold text-[#172965] md:text-lg">
                             <Link href={href} className="hover:underline">
                               {job.title}
                             </Link>
                           </h2>
                           <span
-                            className={[
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
+                            style={
                               isConfidential
-                                ? "border border-amber-200 bg-amber-50 text-amber-700"
-                                : "border border-emerald-200 bg-emerald-50 text-emerald-700",
-                            ].join(" ")}
+                                ? {
+                                    backgroundColor: BRAND_YELLOW,
+                                    color: BRAND_BLUE,
+                                    borderColor: BRAND_YELLOW,
+                                    borderWidth: 1,
+                                  }
+                                : {
+                                    backgroundColor: BRAND_LIGHT_GREEN,
+                                    color: "white",
+                                    borderColor: BRAND_DARK_GREEN,
+                                    borderWidth: 1,
+                                  }
+                            }
                           >
                             {isConfidential
                               ? "Confidential search"
@@ -450,7 +474,7 @@ export default function JobsExplorer({ initialJobs }: Props) {
                         <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-gray-500">
                           Share role
                         </span>
-                        <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2 py-1">
+                        <div className="inline-flex items-center gap-1 rounded-full border border-[#172965]/20 bg-gray-50 px-2 py-1">
                           <a
                             href={share.linkedin}
                             target="_blank"
@@ -492,12 +516,13 @@ export default function JobsExplorer({ initialJobs }: Props) {
                     {/* Footer: primary CTA */}
                     <div className="flex items-center justify-between gap-3 pt-1">
                       <div className="text-[11px] text-gray-400">
-                        Run by Resourcin&apos;s ThinkATS – your profile is
-                        reviewed by a human before any shortlist is shared.
+                        Powered by ThinkATS – every shortlist is curated, not
+                        just keyword-matched.
                       </div>
                       <Link
                         href={href}
-                        className="inline-flex items-center gap-1 rounded-full bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-black"
+                        className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium text-white"
+                        style={{ backgroundColor: BRAND_BLUE }}
                       >
                         View role details
                         <span aria-hidden="true">↗</span>
