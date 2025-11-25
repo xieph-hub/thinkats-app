@@ -1,6 +1,7 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenantId } from "@/lib/tenant";
 import { CandidatesAccordion } from "@/components/ats/CandidatesAccordion";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
   description:
     "All candidates in the Resourcin ATS across open and closed mandates.",
 };
+
+const BRAND_BLUE = "#172965";
 
 type RawRow = {
   id: string;
@@ -26,6 +29,8 @@ type RawRow = {
 };
 
 export default async function AtsCandidatesPage() {
+  const tenantId = await getCurrentTenantId();
+
   const { data, error } = await supabaseAdmin
     .from("job_applications")
     .select(
@@ -47,6 +52,7 @@ export default async function AtsCandidatesPage() {
       )
     `
     )
+    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -82,7 +88,10 @@ export default async function AtsCandidatesPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-4 flex flex-col gap-1">
-        <h1 className="text-lg font-semibold text-slate-900">
+        <h1
+          className="text-lg font-semibold"
+          style={{ color: BRAND_BLUE }}
+        >
           Candidates in pipeline
         </h1>
         <p className="text-xs text-slate-500">
