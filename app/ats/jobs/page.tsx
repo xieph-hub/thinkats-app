@@ -1,6 +1,7 @@
 // app/ats/jobs/page.tsx
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenantId } from "@/lib/tenant";
 import {
   JobsIndexClient,
   type AtsJobSummary,
@@ -46,6 +47,8 @@ function deriveWorkMode(job: RawJobRow): string | null {
 }
 
 export default async function AtsJobsPage() {
+  const tenantId = await getCurrentTenantId();
+
   const [{ data: jobsData, error: jobsError }, { data: appsData, error: appsError }] =
     await Promise.all([
       supabaseAdmin
@@ -64,10 +67,12 @@ export default async function AtsJobsPage() {
           tags
         `
         )
+        .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("job_applications")
-        .select("id, job_id, status"),
+        .select("id, job_id, status")
+        .eq("tenant_id", tenantId),
     ]);
 
   if (jobsError) {
