@@ -12,8 +12,6 @@ export const metadata: Metadata = {
     "All candidates in the Resourcin ATS across open and closed mandates.",
 };
 
-const BRAND_BLUE = "#172965";
-
 type RawRow = {
   id: string;
   job_id: string;
@@ -50,7 +48,7 @@ export default async function AtsCandidatesPage() {
       status,
       created_at,
       cv_url,
-      job:jobs (
+      job:jobs!inner (
         id,
         title,
         slug,
@@ -58,6 +56,8 @@ export default async function AtsCandidatesPage() {
       )
     `
     )
+    // 🔐 Scope by the *job's* tenant, not the application row
+    .eq("jobs.tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -66,13 +66,7 @@ export default async function AtsCandidatesPage() {
 
   const rows = (data ?? []) as RawRow[];
 
-  // ✅ Only keep applications where the related job belongs to the current tenant
-  const filtered = rows.filter((row) => {
-    const jobRelation = row.job?.[0];
-    return jobRelation && jobRelation.tenant_id === tenantId;
-  });
-
-  const candidates = filtered.map((row) => {
+  const candidates = rows.map((row) => {
     const jobRelation = row.job?.[0] ?? null;
 
     return {
@@ -99,10 +93,7 @@ export default async function AtsCandidatesPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-4 flex flex-col gap-1">
-        <h1
-          className="text-lg font-semibold"
-          style={{ color: BRAND_BLUE }}
-        >
+        <h1 className="text-lg font-semibold text-[#172965]">
           Candidates in pipeline
         </h1>
         <p className="text-xs text-slate-500">
