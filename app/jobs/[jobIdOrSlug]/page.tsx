@@ -32,25 +32,30 @@ async function getDefaultTenant() {
   });
 }
 
+// Avoid P2023 by NOT querying id with a non-UUID slug
+function looksLikeUuid(value: string): boolean {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value,
+  );
+}
+
 async function getPublicJob(jobIdOrSlug: string) {
   const tenant = await getDefaultTenant();
   if (!tenant) return null;
 
+  const baseWhere = {
+    tenantId: tenant.id,
+    status: "open",
+    visibility: "public",
+    internalOnly: false,
+  } as const;
+
+  const where = looksLikeUuid(jobIdOrSlug)
+    ? { ...baseWhere, id: jobIdOrSlug }
+    : { ...baseWhere, slug: jobIdOrSlug };
+
   const job = await prisma.job.findFirst({
-    where: {
-      tenantId: tenant.id,
-      AND: [
-        {
-          OR: [
-            { id: jobIdOrSlug },
-            { slug: jobIdOrSlug },
-          ],
-        },
-        { status: "open" },
-        { visibility: "public" },
-        { internalOnly: false },
-      ],
-    },
+    where,
     include: {
       clientCompany: true,
     },
@@ -295,7 +300,7 @@ export default async function JobDetailPage({
             team will be in touch to walk you through next steps.
           </p>
 
-          <JobApplyForm jobId={job.id} />
+          <JobApplyForm jobId={job.id} jobTitle={job.title} />
 
           <p className="mt-2 text-[11px] text-slate-500">
             By submitting an application, you agree that Resourcin may contact
