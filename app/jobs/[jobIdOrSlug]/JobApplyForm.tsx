@@ -1,180 +1,221 @@
+// app/jobs/[jobIdOrSlug]/JobApplyForm.tsx
 "use client";
 
 import { useState } from "react";
 
-type Props = {
+type JobApplyFormProps = {
   jobId: string;
+  jobTitle?: string;
 };
 
-export function JobApplyForm({ jobId }: Props) {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [location, setLocation] = useState("");
-  const [currentTitle, setCurrentTitle] = useState("");
-  const [currentCompany, setCurrentCompany] = useState("");
-  const [cvFile, setCvFile] = useState<File | null>(null);
+type Status = "idle" | "submitting" | "success" | "error";
 
-  const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+export default function JobApplyForm({ jobId, jobTitle }: JobApplyFormProps) {
+  const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSubmitting(true);
+    setStatus("submitting");
     setError(null);
-    setSuccessMessage(null);
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    // Ensure jobId is present for the API
+    formData.set("jobId", jobId);
 
     try {
-      const formData = new FormData();
-      formData.append("fullName", fullName);
-      formData.append("email", email);
-      if (location) formData.append("location", location);
-      if (currentTitle) formData.append("currentTitle", currentTitle);
-      if (currentCompany) formData.append("currentCompany", currentCompany);
-      if (cvFile) formData.append("cv", cvFile);
-
-      const res = await fetch(`/api/jobs/${jobId}/apply`, {
+      const res = await fetch("/api/jobs/apply", {
         method: "POST",
         body: formData,
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          data.error ||
-            "We couldn't submit your application. Please try again or email your CV instead."
-        );
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || !json?.success) {
+        const message =
+          json?.error || "Could not submit your application. Please try again.";
+        setError(message);
+        setStatus("error");
+        return;
       }
 
-      setSuccessMessage("Thank you. Your application has been received.");
-      setFullName("");
-      setEmail("");
-      setLocation("");
-      setCurrentTitle("");
-      setCurrentCompany("");
-      setCvFile(null);
-
-      const input = document.getElementById(
-        "job-apply-cv-input"
-      ) as HTMLInputElement | null;
-      if (input) {
-        input.value = "";
-      }
-    } catch (err: any) {
-      setError(
-        err?.message ||
-          "We couldn't submit your application. Please try again or email your CV instead."
-      );
-    } finally {
-      setSubmitting(false);
+      setStatus("success");
+      form.reset();
+    } catch (err) {
+      console.error("Submit application error", err);
+      setError("Could not submit your application. Please try again.");
+      setStatus("error");
     }
   }
 
+  if (status === "success") {
+    return (
+      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+        <p className="font-medium">
+          Thank you. Your application has been received.
+        </p>
+        <p className="mt-1">
+          We&apos;ll review your profile
+          {jobTitle ? (
+            <>
+              {" "}
+              for <span className="font-semibold">{jobTitle}</span>
+            </>
+          ) : null}{" "}
+          and be in touch if there&apos;s a fit.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      {successMessage && (
-        <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          {successMessage}
-        </div>
-      )}
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 text-sm"
+      encType="multipart/form-data"
+    >
+      {/* Hidden jobId for the API */}
+      <input type="hidden" name="jobId" value={jobId} />
 
-      {error && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-700">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
             Full name *
           </label>
           <input
-            type="text"
+            name="fullName"
             required
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
           />
         </div>
-
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-700">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
             Email *
           </label>
           <input
+            name="email"
             type="email"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
           />
         </div>
+      </div>
 
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-700">
-            Current role / company
-          </label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <input
-              type="text"
-              value={currentTitle}
-              onChange={(e) => setCurrentTitle(e.target.value)}
-              placeholder="Current title"
-              className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-            />
-            <input
-              type="text"
-              value={currentCompany}
-              onChange={(e) => setCurrentCompany(e.target.value)}
-              placeholder="Current company"
-              className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-700">
-            Location
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            Phone
           </label>
           <input
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="City, Country"
-            className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+            name="phone"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
           />
         </div>
-
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-700">
-            CV / Resume (PDF or DOC)
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            Location (city, country)
           </label>
           <input
-            id="job-apply-cv-input"
-            type="file"
-            accept=".pdf,.doc,.docx"
-            onChange={(e) => {
-              const file = e.target.files?.[0] || null;
-              setCvFile(file);
-            }}
-            className="block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            name="location"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
           />
-          <p className="text-[11px] text-slate-400">
-            If this fails, you can email your CV instead.
-          </p>
         </div>
+      </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-1 w-full rounded-md bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
-        >
-          {submitting ? "Submitting…" : "Submit application"}
-        </button>
-      </form>
-    </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            LinkedIn
+          </label>
+          <input
+            name="linkedinUrl"
+            placeholder="https://linkedin.com/in/..."
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            Portfolio / website
+          </label>
+          <input
+            name="portfolioUrl"
+            placeholder="https://..."
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-700">
+          CV / résumé (URL or upload)
+        </label>
+        <input
+          name="cvUrl"
+          placeholder="Paste a public CV link (Google Drive, Dropbox, etc.)"
+          className="mb-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+        />
+        <input
+          name="cv"
+          type="file"
+          className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-200"
+        />
+      </div>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-700">
+          Cover letter / short note
+        </label>
+        <textarea
+          name="coverLetter"
+          rows={4}
+          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            Notice period
+          </label>
+          <input
+            name="noticePeriod"
+            placeholder="e.g. 4 weeks"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            Current gross (annual)
+          </label>
+          <input
+            name="currentGrossAnnual"
+            placeholder="e.g. 15,000,000 NGN"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-700">
+            Expected gross (annual)
+          </label>
+          <input
+            name="grossAnnualExpectation"
+            placeholder="e.g. 20,000,000 NGN"
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
+      <button
+        type="submit"
+        disabled={status === "submitting"}
+        className="inline-flex w-full items-center justify-center rounded-md bg-resourcin-blue px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-resourcin-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {status === "submitting" ? "Submitting..." : "Submit application"}
+      </button>
+    </form>
   );
 }
-
-export default JobApplyForm;
