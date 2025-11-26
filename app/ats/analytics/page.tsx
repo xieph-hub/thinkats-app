@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "ThinkATS | Analytics | Resourcin",
   description:
-    "Pipeline health, application volume and stage distribution across tenants in ThinkATS.",
+    "Pipeline health, application volume, sources, time-to-hire and recruiter performance across tenants in ThinkATS.",
 };
 
 interface AnalyticsSearchParams {
@@ -23,6 +23,11 @@ function resolveParam(value: string | string[] | undefined): string {
 
 function normaliseStatus(status: string | null | undefined) {
   return (status || "").toLowerCase();
+}
+
+function daysBetween(a: Date, b: Date): number {
+  const diffMs = b.getTime() - a.getTime();
+  return diffMs <= 0 ? 0 : diffMs / (1000 * 60 * 60 * 24);
 }
 
 export default async function AtsAnalyticsPage({
@@ -62,10 +67,14 @@ export default async function AtsAnalyticsPage({
       id: true,
       status: true,
       createdAt: true,
+      hiringManagerId: true,
     },
   });
 
   const jobIds = jobs.map((j) => j.id);
+
+  const jobsById = new Map<string, (typeof jobs)[number]>();
+  jobs.forEach((job) => jobsById.set(job.id, job));
 
   const totalJobs = jobs.length;
   const openJobs = jobs.filter(
@@ -79,38 +88,43 @@ export default async function AtsAnalyticsPage({
   ).length;
 
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(
+    now.getTime() - 30 * 24 * 60 * 60 * 1000,
+  );
 
   const jobsLast30Days = jobs.filter(
     (job) => job.createdAt >= thirtyDaysAgo,
   ).length;
 
   // -----------------------------
-  // Applications & candidates
+  // Applications (single fetch)
   // -----------------------------
-  const [totalApplications, newApplicationsLast30Days, totalCandidates] =
-    await Promise.all([
-      jobIds.length
-        ? prisma.jobApplication.count({
-            where: { jobId: { in: jobIds } },
-          })
-        : Promise.resolve(0),
-      jobIds.length
-        ? prisma.jobApplication.count({
-            where: {
-              jobId: { in: jobIds },
-              createdAt: { gte: thirtyDaysAgo },
-            },
-          })
-        : Promise.resolve(0),
-      prisma.candidate.count({
-        where: { tenantId: selectedTenantId },
-      }),
-    ]);
+  const applications =
+    jobIds.length === 0
+      ? []
+      : await prisma.jobApplication.findMany({
+          where: { jobId: { in: jobIds } },
+          select: {
+            id: true,
+            jobId: true,
+            createdAt: true,
+            stage: true,
+            source: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+  const totalApplications = applications.length;
+  const newApplicationsLast30Days = applications.filter(
+    (app) => app.createdAt >= thirtyDaysAgo,
+  ).length;
+
+  const totalCandidates = await prisma.candidate.count({
+    where: { tenantId: selectedTenantId },
+  });
 
   // -----------------------------
   // Stage distribution
-  // (keep in sync with pipeline columns)
   // -----------------------------
   const stageDefinitions = [
     { key: "APPLIED", label: "Applied" },
@@ -121,28 +135,212 @@ export default async function AtsAnalyticsPage({
     { key: "REJECTED", label: "Rejected" },
   ];
 
-  const stageCounts = await Promise.all(
-    stageDefinitions.map((def) =>
-      jobIds.length
-        ? prisma.jobApplication.count({
-            where: {
-              jobId: { in: jobIds },
-              stage: def.key,
-            },
-          })
-        : Promise.resolve(0),
-    ),
-  );
-
-  const stageBreakdown = stageDefinitions.map((def, idx) => ({
-    ...def,
-    count: stageCounts[idx],
-  }));
+  const stageBreakdown = stageDefinitions.map((def) => {
+    const count = applications.filter(
+      (app) => app.stage === def.key,
+    ).length;
+    return { ...def, count };
+  });
 
   const totalStageCandidates = stageBreakdown.reduce(
     (sum, s) => sum + s.count,
     0,
   );
+
+  // -----------------------------
+  // Source effectiveness
+  // -----------------------------
+  type SourceStat = {
+    label: string;
+    key: string;
+    count: number;
+  };
+
+  const sourceMap = new Map<string, number>();
+
+  for (const app of applications) {
+    let raw = (app.source || "").trim();
+    if (!raw) raw = "Unknown";
+
+    const normalised = raw.toLowerCase();
+    // simple normalisation for common sources
+    let key = normalised;
+    if (["linkedin", "linked-in"].includes(normalised)) {
+      key = "linkedin";
+    } else if (
+      ["indeed"].includes(normalised) ||
+      normalised.includes("indeed")
+    ) {
+      key = "indeed";
+    } else if (
+      ["referral", "employee referral"].includes(
+        normalised,
+      )
+    ) {
+      key = "referral";
+    }
+
+    const current = sourceMap.get(key) ?? 0;
+    sourceMap.set(key, current + 1);
+  }
+
+  const sourceStats: SourceStat[] = Array.from(
+    sourceMap.entries(),
+  )
+    .map(([key, count]) => {
+      let label = key;
+      if (key === "linkedin") label = "LinkedIn";
+      if (key === "indeed") label = "Indeed";
+      if (key === "referral") label = "Referral";
+      if (key === "unknown") label = "Unknown";
+      return { key, label, count };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  const topSources = sourceStats.slice(0, 5);
+
+  // -----------------------------
+  // Time-to-hire & time-to-first-application
+  //
+  // Approximation:
+  // - Time to first application: first app.createdAt - job.createdAt
+  // - Time to "hire": earliest app.createdAt where stage === "HIRED" - job.createdAt
+  // (we don't track stage-change timestamps yet)
+  // -----------------------------
+  const applicationsByJob = new Map<string, typeof applications>();
+
+  for (const app of applications) {
+    const list = applicationsByJob.get(app.jobId) ?? [];
+    list.push(app);
+    applicationsByJob.set(app.jobId, list);
+  }
+
+  const timeToFirstAppDays: number[] = [];
+  const timeToHireDays: number[] = [];
+
+  for (const job of jobs) {
+    const jobApps = applicationsByJob.get(job.id);
+    if (!jobApps || jobApps.length === 0) continue;
+
+    const sortedByCreated = [...jobApps].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+
+    const firstApp = sortedByCreated[0];
+    const tFirst = daysBetween(job.createdAt, firstApp.createdAt);
+    if (tFirst >= 0) {
+      timeToFirstAppDays.push(tFirst);
+    }
+
+    // "Hire" approximation: earliest application that ended up in HIRED stage
+    const hiredApps = sortedByCreated.filter(
+      (app) => app.stage === "HIRED",
+    );
+    if (hiredApps.length > 0) {
+      const firstHired = hiredApps[0];
+      const tHire = daysBetween(
+        job.createdAt,
+        firstHired.createdAt,
+      );
+      if (tHire >= 0) {
+        timeToHireDays.push(tHire);
+      }
+    }
+  }
+
+  const avg = (values: number[]): number | null => {
+    if (!values.length) return null;
+    const sum = values.reduce((s, v) => s + v, 0);
+    return sum / values.length;
+  };
+
+  const median = (values: number[]): number | null => {
+    if (!values.length) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length - 1) / 2;
+    const low = Math.floor(mid);
+    const high = Math.ceil(mid);
+    if (low === high) return sorted[low];
+    return (sorted[low] + sorted[high]) / 2;
+  };
+
+  const avgTimeToFirstApp = avg(timeToFirstAppDays);
+  const medianTimeToFirstApp = median(timeToFirstAppDays);
+
+  const avgTimeToHire = avg(timeToHireDays);
+  const medianTimeToHire = median(timeToHireDays);
+
+  // -----------------------------
+  // Recruiter performance
+  // Group by hiringManagerId on Job
+  // -----------------------------
+  type RecruiterStat = {
+    key: string; // hiringManagerId or "unassigned"
+    hiringManagerId: string | null;
+    jobCount: number;
+    openJobs: number;
+    totalApplications: number;
+    hires: number;
+  };
+
+  const recruiterMap = new Map<string, RecruiterStat>();
+
+  const getKeyForJob = (job: (typeof jobs)[number]) =>
+    job.hiringManagerId || "unassigned";
+
+  // Seed with job counts
+  for (const job of jobs) {
+    const key = getKeyForJob(job);
+    let stat = recruiterMap.get(key);
+    if (!stat) {
+      stat = {
+        key,
+        hiringManagerId: job.hiringManagerId,
+        jobCount: 0,
+        openJobs: 0,
+        totalApplications: 0,
+        hires: 0,
+      };
+      recruiterMap.set(key, stat);
+    }
+
+    stat.jobCount += 1;
+    if (normaliseStatus(job.status as any) === "open") {
+      stat.openJobs += 1;
+    }
+  }
+
+  // Add application volume + hires
+  for (const app of applications) {
+    const job = jobsById.get(app.jobId);
+    if (!job) continue;
+    const key = getKeyForJob(job);
+    let stat = recruiterMap.get(key);
+    if (!stat) {
+      stat = {
+        key,
+        hiringManagerId: job.hiringManagerId,
+        jobCount: 0,
+        openJobs: 0,
+        totalApplications: 0,
+        hires: 0,
+      };
+      recruiterMap.set(key, stat);
+    }
+    stat.totalApplications += 1;
+    if (app.stage === "HIRED") {
+      stat.hires += 1;
+    }
+  }
+
+  const recruiterStats = Array.from(recruiterMap.values())
+    .filter((stat) => stat.jobCount > 0 || stat.totalApplications > 0)
+    .sort((a, b) => {
+      // Sort primary by hires desc, then applications desc
+      if (b.hires !== a.hires) return b.hires - a.hires;
+      return b.totalApplications - a.totalApplications;
+    })
+    .slice(0, 6);
 
   const clearTenantHref = "/ats/analytics";
 
@@ -158,7 +356,7 @@ export default async function AtsAnalyticsPage({
             ThinkATS · Analytics
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Funnel health, application volume and stage distribution for{" "}
+            Funnel health, volume, sources and team performance for{" "}
             <span className="font-medium text-slate-900">
               {selectedTenant.name ??
                 selectedTenant.slug ??
@@ -251,78 +449,140 @@ export default async function AtsAnalyticsPage({
         </div>
       </div>
 
-      {/* Stage distribution + funnel */}
+      {/* Main analytics grid */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
-        {/* Stage distribution */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Pipeline stage distribution
-              </h2>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Where candidates currently sit across your funnel.
-              </p>
+        {/* Left column: stages + sources */}
+        <div className="space-y-6">
+          {/* Stage distribution */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Pipeline stage distribution
+                </h2>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Where candidates currently sit across your funnel.
+                </p>
+              </div>
+              <span className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-1 text-[10px] font-medium text-[#172965]">
+                ThinkATS · Funnel
+              </span>
             </div>
-            <span className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-1 text-[10px] font-medium text-[#172965]">
-              ThinkATS · Funnel
-            </span>
+
+            {totalStageCandidates === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                No applications yet for this tenant. Once candidates
+                start applying, you’ll see a breakdown of where they
+                sit in the pipeline.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {stageBreakdown.map((stage) => {
+                  const pct =
+                    totalStageCandidates > 0
+                      ? Math.round(
+                          (stage.count /
+                            totalStageCandidates) *
+                            100,
+                        )
+                      : 0;
+
+                  return (
+                    <div
+                      key={stage.key}
+                      className="space-y-1 rounded-md bg-slate-50 p-2"
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-slate-700">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {stage.label}
+                          </span>
+                          <span className="text-slate-400">
+                            ({stage.key})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900">
+                            {stage.count}
+                          </span>
+                          <span className="text-slate-400">
+                            {pct}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+                        <div
+                          className="h-1.5 rounded-full bg-[#FFC000]"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {totalStageCandidates === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
-              No applications yet for this tenant. Once candidates start
-              applying, you’ll see a breakdown of where they sit in the
-              pipeline.
+          {/* Source effectiveness */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Source effectiveness
+                </h2>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Which channels are actually bringing in candidates.
+                </p>
+              </div>
+              <span className="inline-flex items-center rounded-full bg-[#64C247]/10 px-2 py-1 text-[10px] font-medium text-[#306B34]">
+                Volume by source
+              </span>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {stageBreakdown.map((stage) => {
-                const pct =
-                  totalStageCandidates > 0
-                    ? Math.round(
-                        (stage.count / totalStageCandidates) * 100,
-                      )
-                    : 0;
 
-                return (
-                  <div
-                    key={stage.key}
-                    className="space-y-1 rounded-md bg-slate-50 p-2"
-                  >
-                    <div className="flex items-center justify-between text-[11px] text-slate-700">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {stage.label}
-                        </span>
-                        <span className="text-slate-400">
-                          ({stage.key})
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
+            {totalApplications === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                No applications yet — once candidates apply, you’ll see
+                a breakdown by source (LinkedIn, referrals, etc.).
+              </div>
+            ) : topSources.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                All applications have unknown / empty sources. Consider
+                capturing source in your apply flows.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {topSources.map((src) => {
+                  const pct = Math.round(
+                    (src.count / totalApplications) * 100,
+                  );
+
+                  return (
+                    <div
+                      key={src.key}
+                      className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-[11px]"
+                    >
+                      <div className="flex flex-col">
                         <span className="font-medium text-slate-900">
-                          {stage.count}
+                          {src.label}
                         </span>
-                        <span className="text-slate-400">
-                          {pct}%
+                        <span className="text-slate-500">
+                          {pct}% of applications
                         </span>
                       </div>
+                      <span className="text-xs font-semibold text-[#172965]">
+                        {src.count}
+                      </span>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
-                      <div
-                        className="h-1.5 rounded-full bg-[#FFC000]"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Quick funnel summary */}
+        {/* Right column: funnel summary + time-to-* */}
         <div className="flex flex-col gap-4">
+          {/* Funnel snapshot */}
           <div className="rounded-xl border border-slate-200 bg-[#172965] p-4 text-white shadow-sm">
             <h2 className="text-sm font-semibold">
               Funnel snapshot (last 30 days)
@@ -363,32 +623,179 @@ export default async function AtsAnalyticsPage({
             </dl>
           </div>
 
+          {/* Time-to-hire block */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 text-[11px] text-slate-600 shadow-sm">
+            <h3 className="text-xs font-semibold text-slate-900">
+              Speed metrics (days)
+            </h3>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  Time to first application
+                </p>
+                <p className="mt-1 text-lg font-semibold text-[#172965]">
+                  {avgTimeToFirstApp != null
+                    ? avgTimeToFirstApp.toFixed(1)
+                    : "—"}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Median:{" "}
+                  {medianTimeToFirstApp != null
+                    ? medianTimeToFirstApp.toFixed(1)
+                    : "—"}
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                  Time to hire
+                </p>
+                <p className="mt-1 text-lg font-semibold text-[#306B34]">
+                  {avgTimeToHire != null
+                    ? avgTimeToHire.toFixed(1)
+                    : "—"}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  Median:{" "}
+                  {medianTimeToHire != null
+                    ? medianTimeToHire.toFixed(1)
+                    : "—"}
+                </p>
+                <p className="mt-2 text-[10px] text-slate-400">
+                  Based on jobs with at least one application in{" "}
+                  <span className="font-medium">HIRED</span> stage.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* How to use */}
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-[11px] text-slate-600 shadow-sm">
             <h3 className="text-xs font-semibold text-slate-900">
               How to use this view
             </h3>
             <ul className="mt-2 list-disc space-y-1 pl-4">
               <li>
-                Watch for <span className="font-medium">bottlenecks</span>{" "}
-                where candidates pile up in one stage.
+                Watch for{" "}
+                <span className="font-medium">bottlenecks</span> where
+                candidates pile up in one stage.
               </li>
               <li>
                 Compare{" "}
                 <span className="font-medium">
-                  applications per open job
+                  sources and recruiter load
                 </span>{" "}
-                across tenants once you’re live with multiple clients.
+                when you onboard more clients/roles.
               </li>
               <li>
-                Use this page in{" "}
+                Use average{" "}
                 <span className="font-medium">
-                  weekly hiring reviews
+                  time-to-first-application
                 </span>{" "}
-                with founders and hiring managers.
+                and{" "}
+                <span className="font-medium">time-to-hire</span> as
+                SLAs in commercial conversations.
               </li>
             </ul>
           </div>
         </div>
+      </div>
+
+      {/* Recruiter performance */}
+      <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Recruiter / owner performance
+            </h2>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Grouped by <code>hiringManagerId</code> on each job. This
+              becomes more powerful once jobs are consistently assigned.
+            </p>
+          </div>
+          <span className="inline-flex items-center rounded-full bg-[#FFC000]/10 px-2 py-1 text-[10px] font-medium text-[#8a6000]">
+            Early performance view
+          </span>
+        </div>
+
+        {recruiterStats.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+            No jobs or applications yet linked to hiring managers. Once
+            roles are assigned, you’ll see per-owner volumes and hires.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-separate border-spacing-y-1 text-[11px]">
+              <thead className="text-[10px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="rounded-l-lg bg-slate-50 px-3 py-2 text-left font-medium">
+                    Owner (hiringManagerId)
+                  </th>
+                  <th className="bg-slate-50 px-3 py-2 text-right font-medium">
+                    Jobs
+                  </th>
+                  <th className="bg-slate-50 px-3 py-2 text-right font-medium">
+                    Open jobs
+                  </th>
+                  <th className="bg-slate-50 px-3 py-2 text-right font-medium">
+                    Applications
+                  </th>
+                  <th className="rounded-r-lg bg-slate-50 px-3 py-2 text-right font-medium">
+                    Hires
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {recruiterStats.map((stat) => {
+                  const label =
+                    stat.hiringManagerId ??
+                    (stat.key === "unassigned"
+                      ? "Unassigned"
+                      : stat.key);
+                  const display =
+                    label.length > 18
+                      ? label.slice(0, 16) + "…"
+                      : label;
+
+                  return (
+                    <tr
+                      key={stat.key}
+                      className="rounded-lg bg-white text-slate-700 shadow-sm"
+                    >
+                      <td className="rounded-l-lg px-3 py-2">
+                        <span className="font-medium text-slate-900">
+                          {display}
+                        </span>
+                        {stat.hiringManagerId && (
+                          <span className="ml-2 text-[10px] text-slate-400">
+                            {stat.hiringManagerId.length > 10
+                              ? stat.hiringManagerId.slice(
+                                  0,
+                                  10,
+                                ) + "…"
+                              : stat.hiringManagerId}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {stat.jobCount}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {stat.openJobs}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {stat.totalApplications}
+                      </td>
+                      <td className="rounded-r-lg px-3 py-2 text-right text-[#306B34]">
+                        {stat.hires}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
