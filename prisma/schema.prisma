@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,6 +14,7 @@ model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  type      String?  // e.g. "AGENCY", "CLIENT" if you want later
 
   jobs            Job[]
   clientCompanies ClientCompany[]
@@ -55,21 +58,23 @@ model Job {
   description      String?
   department       String?
   location         String?
-  locationType     String?
-  employmentType   String?
+  locationType     String?   // "ONSITE" | "HYBRID" | "REMOTE" etc if you want to standardise later
+  employmentType   String?   // "FULL_TIME" | "PART_TIME" | "CONTRACT" | ...
   seniority        String?
-  tags             String[]
+  tags             String[]  @default([])
 
   isPublished    Boolean  @default(false)
   isPublic       Boolean  @default(true)
   isConfidential Boolean  @default(false)
-  status         String   @default("OPEN")
+  status         String   @default("OPEN")  // "OPEN" | "ON_HOLD" | "CLOSED" etc
   publishedAt    DateTime?
 
   applications JobApplication[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([tenantId, status])
 }
 
 model Candidate {
@@ -84,8 +89,8 @@ model Candidate {
   currentTitle    String?
   location        String?
   cvUrl           String?
-  source          String?
-  isTalentNetwork Boolean  @default(false)
+  source          String?   // "DIRECT_APPLY", "TALENT_NETWORK", etc
+  isTalentNetwork Boolean   @default(false)
 
   applications JobApplication[]
 
@@ -93,6 +98,7 @@ model Candidate {
   updatedAt DateTime @updatedAt
 
   @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model PipelineStage {
@@ -108,6 +114,8 @@ model PipelineStage {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([tenantId, sortOrder])
 }
 
 model JobApplication {
@@ -115,8 +123,8 @@ model JobApplication {
   tenantId  String
   tenant    Tenant  @relation(fields: [tenantId], references: [id])
 
-  jobId     String
-  job       Job     @relation(fields: [jobId], references: [id])
+  jobId   String
+  job     Job     @relation(fields: [jobId], references: [id])
 
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id])
@@ -127,16 +135,20 @@ model JobApplication {
   pipelineStageId String?
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id])
 
-  status      String   @default("IN_REVIEW")
-  source      String?
+  status      String   @default("IN_REVIEW") // "IN_REVIEW", "SHORTLISTED", "REJECTED", etc
+  source      String?  // "careers_site", "referral", etc
   cvUrl       String?
   submittedAt DateTime?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, jobId])
+  @@index([pipelineStageId])
 }
 
-// Optional: keep your placeholder or delete it
+// Optional; you can keep this or delete it if you no longer need it.
+// It doesn't hurt anything to leave it.
 model PrismaPlaceholder {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
