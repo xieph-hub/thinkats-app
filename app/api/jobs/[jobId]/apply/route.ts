@@ -1,174 +1,200 @@
 // app/api/jobs/[jobId]/apply/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
-import { uploadCvToSupabase } from "@/lib/storage";
-import {
-  sendCandidateApplicationConfirmationEmail,
-  sendInternalNewApplicationEmail,
-} from "@/lib/email";
 
-export const runtime = "nodejs";
+const DEFAULT_TENANT_SLUG =
+  process.env.RESOURCIN_TENANT_SLUG || "resourcin";
+
+async function getDefaultTenantId() {
+  if (process.env.RESOURCIN_TENANT_ID) {
+    return process.env.RESOURCIN_TENANT_ID;
+  }
+
+  const tenant = await prisma.tenant.findFirst({
+    where: { slug: DEFAULT_TENANT_SLUG },
+  });
+
+  if (!tenant) {
+    throw new Error(
+      `Default tenant not found for slug "${DEFAULT_TENANT_SLUG}". ` +
+        `Create a tenant row in Supabase (tenants table) or set RESOURCIN_TENANT_ID.`,
+    );
+  }
+
+  return tenant.id;
+}
 
 export async function POST(
-  req: NextRequest,
-  { params }: { params: { jobId: string } }
+  req: Request,
+  { params }: { params: { jobId: string } },
 ) {
   try {
-    const tenant = await getResourcinTenant();
-    const jobId = params.jobId;
+    const { jobId } = params;
 
+    if (!jobId) {
+      return NextResponse.json(
+        { success: false, error: "Job ID is required in the URL." },
+        { status: 400 },
+      );
+    }
+
+    const body = await req.json();
+
+    const {
+      fullName,
+      email,
+      phone,
+      location,
+      linkedinUrl,
+      portfolioUrl,
+      githubUrl,
+      cvUrl,
+      coverLetter,
+      source,
+      screeningAnswers,
+      howHeard,
+      workPermitStatus,
+      grossAnnualExpectation,
+      currentGrossAnnual,
+      noticePeriod,
+      gender,
+      ethnicity,
+      dataPrivacyConsent,
+      termsConsent,
+      marketingOptIn,
+      referenceCode,
+    } = body || {};
+
+    // --------------------------------------------------------------
+    // Basic validation
+    // --------------------------------------------------------------
+    if (!fullName || typeof fullName !== "string" || fullName.trim().length < 2) {
+      return NextResponse.json(
+        { success: false, error: "Full name is required." },
+        { status: 400 },
+      );
+    }
+
+    if (!email || typeof email !== "string") {
+      return NextResponse.json(
+        { success: false, error: "Email is required." },
+        { status: 400 },
+      );
+    }
+
+    const tenantId = await getDefaultTenantId();
+
+    // --------------------------------------------------------------
+    // 1) Look up the job (must belong to tenant, be public & open)
+    // --------------------------------------------------------------
     const job = await prisma.job.findFirst({
       where: {
         id: jobId,
-        tenantId: tenant.id,
-        isPublished: true,
-        isPublic: true,
-        status: "OPEN",
+        tenantId,
+        visibility: "public",  // <-- real field in your Prisma schema
+        status: "open",        // <-- real field, default "open"
+        internalOnly: false,   // public apply endpoint can't hit internal roles
       },
     });
 
     if (!job) {
       return NextResponse.json(
-        { error: "Job not found or not open for applications" },
-        { status: 404 }
+        {
+          success: false,
+          error: "This job is not accepting applications or does not exist.",
+        },
+        { status: 404 },
       );
     }
 
-    const formData = await req.formData();
-
-    const fullName = (formData.get("fullName") as string | null)?.trim();
-    const email = (formData.get("email") as string | null)?.trim();
-    const location = (formData.get("location") as string | null)?.trim();
-    const currentTitle = (formData.get("currentTitle") as string | null)?.trim();
-    const currentCompany = (formData.get("currentCompany") as string | null)?.trim();
-    const cvFile = formData.get("cv") as File | null;
-
-    if (!fullName || !email) {
-      return NextResponse.json(
-        { error: "Full name and email are required" },
-        { status: 400 }
-      );
-    }
-
-    // 1) Create or update Candidate
-    let candidate = await prisma.candidate.findFirst({
+    // --------------------------------------------------------------
+    // 2) Find or create candidate (by tenant + email)
+    // --------------------------------------------------------------
+    const existingCandidate = await prisma.candidate.findFirst({
       where: {
-        tenantId: tenant.id,
+        tenantId,
         email,
       },
     });
 
-    if (candidate) {
-      candidate = await prisma.candidate.update({
-        where: { id: candidate.id },
+    const candidate =
+      existingCandidate ??
+      (await prisma.candidate.create({
         data: {
-          fullName,
-          location: location || candidate.location,
-          currentTitle: currentTitle || candidate.currentTitle,
-          currentCompany: currentCompany || candidate.currentCompany,
-          source: candidate.source || "DIRECT_APPLY",
-        },
-      });
-    } else {
-      candidate = await prisma.candidate.create({
-        data: {
-          tenantId: tenant.id,
+          tenantId,
           fullName,
           email,
-          location: location || null,
-          currentTitle: currentTitle || null,
-          currentCompany: currentCompany || null,
-          source: "DIRECT_APPLY",
+          phone: phone ?? null,
+          location: location ?? null,
+          linkedinUrl: linkedinUrl ?? null,
+          currentTitle: null,
+          currentCompany: null,
+          cvUrl: cvUrl ?? null,
+          source: source ?? "job_application",
         },
-      });
-    }
+      }));
 
-    // 2) Upload CV via shared helper
-    let cvUrl: string | null = null;
-
-    if (cvFile) {
-      try {
-        const { publicUrl } = await uploadCvToSupabase({
-          tenantId: tenant.id,
-          jobId: job.id,
-          candidateId: candidate.id,
-          file: cvFile,
-        });
-
-        if (publicUrl) {
-          cvUrl = publicUrl;
-
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data: {
-              cvUrl,
-            },
-          });
-        }
-      } catch (err) {
-        console.error("Unexpected CV upload error:", err);
-        // Do not fail the application if file upload fails
-      }
-    }
-
-    // 3) Find default pipeline stage
-    const defaultStage = await prisma.pipelineStage.findFirst({
-      where: { tenantId: tenant.id },
-      orderBy: { sortOrder: "asc" },
-    });
-
-    // 4) Create JobApplication
+    // --------------------------------------------------------------
+    // 3) Create job application
+    // --------------------------------------------------------------
     const application = await prisma.jobApplication.create({
       data: {
-        tenantId: tenant.id,
         jobId: job.id,
         candidateId: candidate.id,
-        clientCompanyId: job.clientCompanyId,
-        pipelineStageId: defaultStage?.id ?? null,
-        status: "IN_REVIEW",
-        source: "careers_site",
-        cvUrl,
-        submittedAt: new Date(),
+
+        fullName,
+        email,
+        phone: phone ?? null,
+        location: location ?? null,
+        linkedinUrl: linkedinUrl ?? null,
+        portfolioUrl: portfolioUrl ?? null,
+        githubUrl: githubUrl ?? null,
+        cvUrl: cvUrl ?? null,
+        coverLetter: coverLetter ?? null,
+        source: source ?? null,
+
+        workPermitStatus: workPermitStatus ?? null,
+        grossAnnualExpectation: grossAnnualExpectation ?? null,
+        currentGrossAnnual: currentGrossAnnual ?? null,
+        noticePeriod: noticePeriod ?? null,
+        gender: gender ?? null,
+        ethnicity: ethnicity ?? null,
+        howHeard: howHeard ?? null,
+
+        dataPrivacyConsent:
+          typeof dataPrivacyConsent === "boolean"
+            ? dataPrivacyConsent
+            : null,
+        termsConsent:
+          typeof termsConsent === "boolean" ? termsConsent : null,
+        marketingOptIn:
+          typeof marketingOptIn === "boolean" ? marketingOptIn : null,
+
+        referenceCode: referenceCode ?? null,
+        screeningAnswers: screeningAnswers ?? null,
+
+        // stage + status default from DB:
+        // stage: 'APPLIED'
+        // status: 'PENDING'
       },
     });
-
-    // 5) Fire notifications (don't break the request if email fails)
-    try {
-      await Promise.all([
-        sendCandidateApplicationConfirmationEmail({
-          to: candidate.email,
-          candidateName: candidate.fullName,
-          jobTitle: job.title,
-          timelineDays: 7, // adjust if you want a different SLA
-        }),
-        sendInternalNewApplicationEmail({
-          jobId: job.id,
-          jobTitle: job.title,
-          candidateName: candidate.fullName,
-          candidateEmail: candidate.email,
-        }),
-      ]);
-    } catch (err) {
-      console.error("Error sending notification emails:", err);
-      // Intentionally swallow error – application should still succeed
-    }
 
     return NextResponse.json(
       {
         success: true,
         applicationId: application.id,
+        message: "Application received.",
       },
-      { status: 200 }
+      { status: 201 },
     );
-  } catch (err) {
+  } catch (err: any) {
     console.error("POST /api/jobs/[jobId]/apply error", err);
     return NextResponse.json(
       {
-        error:
-          "We couldn't submit your application due to a server error. Please try again or email your CV.",
+        success: false,
+        error: "Failed to submit application.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
