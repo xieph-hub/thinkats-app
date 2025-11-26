@@ -23,13 +23,12 @@ export default async function AtsJobDetailPage({
     notFound();
   }
 
-  // Derive pipeline columns from existing applications' stages.
-  // If you later have a dedicated PipelineStage list, you can replace this.
+  // Build stage columns from applications’ pipelineStage
   const stageMap = new Map<string, PipelineColumn>();
 
   for (const app of job.applications) {
     const stageId = app.pipelineStage?.id ?? "unassigned";
-    const stageName = app.pipelineStage?.name ?? "Unassigned";
+    const stageName = app.pipelineStage?.name ?? "New / Unassigned";
 
     if (!stageMap.has(stageId)) {
       stageMap.set(stageId, { id: stageId, name: stageName });
@@ -38,7 +37,10 @@ export default async function AtsJobDetailPage({
 
   // Ensure at least one column exists
   if (stageMap.size === 0) {
-    stageMap.set("unassigned", { id: "unassigned", name: "New / Unassigned" });
+    stageMap.set("unassigned", {
+      id: "unassigned",
+      name: "New / Unassigned",
+    });
   }
 
   const stages = Array.from(stageMap.values());
@@ -65,12 +67,14 @@ export default async function AtsJobDetailPage({
                 ? job.clientCompany.name
                 : "Resourcin-branded"}
             </span>
+
             {job.location && (
               <>
                 <span className="text-slate-300">•</span>
                 <span>{job.location}</span>
               </>
             )}
+
             <span className="text-slate-300">•</span>
             <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
               {job.status}
@@ -129,6 +133,7 @@ export default async function AtsJobDetailPage({
                       key={app.id}
                       className="rounded-md bg-white p-3 text-xs shadow-sm ring-1 ring-slate-200"
                     >
+                      {/* Candidate basics */}
                       <div className="flex items-center justify-between gap-2">
                         <div>
                           <div className="text-sm font-semibold text-slate-900">
@@ -143,6 +148,7 @@ export default async function AtsJobDetailPage({
                         </div>
                       </div>
 
+                      {/* Details */}
                       <div className="mt-2 space-y-1 text-[11px] text-slate-500">
                         <div className="truncate">
                           <span className="font-medium">Email: </span>
@@ -153,6 +159,7 @@ export default async function AtsJobDetailPage({
                             {app.candidate.email}
                           </a>
                         </div>
+
                         {app.candidate.location && (
                           <div className="truncate">
                             <span className="font-medium">Location: </span>
@@ -161,6 +168,7 @@ export default async function AtsJobDetailPage({
                         )}
                       </div>
 
+                      {/* Footer: submitted date + CV link */}
                       <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
                         <span>
                           Submitted:{" "}
