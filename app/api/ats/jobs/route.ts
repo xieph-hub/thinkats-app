@@ -1,10 +1,11 @@
-// app/api/jobs/[jobId]/apply/route.ts
+// app/api/ats/jobs/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 const DEFAULT_TENANT_SLUG =
   process.env.RESOURCIN_TENANT_SLUG || "resourcin";
 
+// Resolve the default tenant ID once per request
 async function getDefaultTenantId() {
   if (process.env.RESOURCIN_TENANT_ID) {
     return process.env.RESOURCIN_TENANT_ID;
@@ -24,176 +25,194 @@ async function getDefaultTenantId() {
   return tenant.id;
 }
 
-export async function POST(
-  req: Request,
-  { params }: { params: { jobId: string } },
-) {
-  try {
-    const { jobId } = params;
-    if (!jobId) {
-      return NextResponse.json(
-        { success: false, error: "Job ID is required in the URL." },
-        { status: 400 },
-      );
-    }
+function slugify(raw: string): string {
+  return raw
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
+// 🚨 IMPORTANT: note there is NO `{ params }` here.
+// This route is /api/ats/jobs, not /api/ats/jobs/[jobId].
+export async function POST(req: Request) {
+  try {
     const body = await req.json();
 
-    const {
-      fullName,
-      email,
-      phone,
-      location,
-      linkedinUrl,
-      portfolioUrl,
-      githubUrl,
-      cvUrl,
-      coverLetter,
-      source,
-      screeningAnswers,
-      howHeard,
-      workPermitStatus,
-      grossAnnualExpectation,
-      currentGrossAnnual,
-      noticePeriod,
-      gender,
-      ethnicity,
-      dataPrivacyConsent,
-      termsConsent,
-      marketingOptIn,
-      referenceCode,
-    } = body || {};
-
-    // Basic validation
-    if (!fullName || typeof fullName !== "string" || fullName.trim().length < 2) {
+    if (!body || typeof body.title !== "string" || body.title.trim().length < 3) {
       return NextResponse.json(
-        { success: false, error: "Full name is required." },
-        { status: 400 },
-      );
-    }
-
-    if (!email || typeof email !== "string") {
-      return NextResponse.json(
-        { success: false, error: "Email is required." },
+        {
+          success: false,
+          error: "Job title is required and must be at least 3 characters.",
+        },
         { status: 400 },
       );
     }
 
     const tenantId = await getDefaultTenantId();
 
-    // ------------------------------------------------------------------
-    // 1) Look up the job (must belong to tenant, be public & open)
-    // ------------------------------------------------------------------
-    const job = await prisma.job.findFirst({
-      where: {
-        id: jobId,
-        tenantId,
-        visibility: "public",  // matches your Prisma `visibility` field
-        status: "open",        // matches your Prisma default "open"
-        internalOnly: false,   // don’t allow internal-only via public apply endpoint
-      },
-    });
+    const {
+      // Core
+      title,
+      department,
+      location,
+      locationType,
+      employmentType,
+      experienceLevel,
+      seniority,
+      workMode,
 
-    if (!job) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "This job is not accepting applications or does not exist.",
-        },
-        { status: 404 },
-      );
+      // Client
+      clientCompanyId,
+
+      // Narrative
+      overview,
+      aboutClient,
+      responsibilities,
+      requirements,
+      benefits,
+      shortDescription,
+
+      // Meta
+      externalId,
+
+      // Arrays
+      tags,
+      requiredSkills,
+
+      // Compensation
+      salaryMin,
+      salaryMax,
+      salaryCurrency,
+      salaryVisible,
+
+      // Visibility flags from UI
+      isPublic,
+      isPublished,
+      isConfidential,
+      internalOnly,
+
+      // Optional slug override
+      slug,
+    } = body;
+
+    // ------------------------------------------------------------------
+    // Slug generation & uniqueness per tenant
+    // ------------------------------------------------------------------
+    const baseSlug = slug ? slugify(slug) : slugify(title);
+    let finalSlug: string | null = null;
+
+    if (baseSlug) {
+      let candidate = baseSlug;
+      let suffix = 1;
+
+      // Keep incrementing suffix until free
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const existing = await prisma.job.findFirst({
+          where: { tenantId, slug: candidate },
+        });
+        if (!existing) {
+          finalSlug = candidate;
+          break;
+        }
+        suffix += 1;
+        candidate = `${baseSlug}-${suffix}`;
+      }
     }
 
     // ------------------------------------------------------------------
-    // 2) Find or create candidate for this tenant + email
+    // Map UI flags → actual DB fields
     // ------------------------------------------------------------------
-    const existingCandidate = await prisma.candidate.findFirst({
-      where: {
-        tenantId,
-        email,
-      },
-    });
+    const visibility: string =
+      typeof isPublic === "boolean" && isPublic === false ? "internal" : "public";
 
-    const candidate =
-      existingCandidate ??
-      (await prisma.candidate.create({
-        data: {
-          tenantId,
-          fullName,
-          email,
-          phone: phone ?? null,
-          location: location ?? null,
-          linkedinUrl: linkedinUrl ?? null,
-          currentTitle: null,
-          currentCompany: null,
-          cvUrl: cvUrl ?? null,
-          source: source ?? "job_application",
-        },
-      }));
+    const status: string =
+      typeof isPublished === "boolean" && isPublished === false ? "draft" : "open";
 
-    // ------------------------------------------------------------------
-    // 3) Create job application
-    // ------------------------------------------------------------------
-    const application = await prisma.jobApplication.create({
+    const internalOnlyValue: boolean =
+      typeof internalOnly === "boolean"
+        ? internalOnly
+        : typeof isPublic === "boolean" && isPublic === false
+        ? true
+        : false;
+
+    const confidentialValue: boolean =
+      typeof isConfidential === "boolean" ? isConfidential : false;
+
+    // Prisma Decimal accepts string/number/Decimal
+    const salaryMinValue =
+      salaryMin !== undefined && salaryMin !== null && salaryMin !== ""
+        ? (salaryMin as any)
+        : null;
+    const salaryMaxValue =
+      salaryMax !== undefined && salaryMax !== null && salaryMax !== ""
+        ? (salaryMax as any)
+        : null;
+
+    const job = await prisma.job.create({
       data: {
-        jobId: job.id,
-        candidateId: candidate.id,
+        tenantId,
 
-        fullName,
-        email,
-        phone: phone ?? null,
+        // Core
+        title,
+        department: department ?? null,
         location: location ?? null,
-        linkedinUrl: linkedinUrl ?? null,
-        portfolioUrl: portfolioUrl ?? null,
-        githubUrl: githubUrl ?? null,
-        cvUrl: cvUrl ?? null,
-        coverLetter: coverLetter ?? null,
-        source: source ?? null,
+        locationType: locationType ?? null,
+        employmentType: employmentType ?? null,
+        experienceLevel: experienceLevel ?? null,
+        seniority: seniority ?? null,
+        workMode: workMode ?? null,
 
-        // Diversity / extra fields
-        workPermitStatus: workPermitStatus ?? null,
-        grossAnnualExpectation: grossAnnualExpectation ?? null,
-        currentGrossAnnual: currentGrossAnnual ?? null,
-        noticePeriod: noticePeriod ?? null,
-        gender: gender ?? null,
-        ethnicity: ethnicity ?? null,
-        howHeard: howHeard ?? null,
+        // Client
+        clientCompanyId: clientCompanyId ?? null,
 
-        dataPrivacyConsent:
-          typeof dataPrivacyConsent === "boolean"
-            ? dataPrivacyConsent
-            : null,
-        termsConsent:
-          typeof termsConsent === "boolean" ? termsConsent : null,
-        marketingOptIn:
-          typeof marketingOptIn === "boolean" ? marketingOptIn : null,
+        // Narrative
+        overview: overview ?? null,
+        aboutClient: aboutClient ?? null,
+        responsibilities: responsibilities ?? null,
+        requirements: requirements ?? null,
+        benefits: benefits ?? null,
+        shortDescription: shortDescription ?? null,
 
-        referenceCode: referenceCode ?? null,
-        screeningAnswers: screeningAnswers ?? null,
+        // Meta
+        externalId: externalId ?? null,
 
-        // status & stage will default via DB:
-        //   stage: 'APPLIED'
-        //   status: 'PENDING'
+        // Arrays
+        tags: Array.isArray(tags) ? tags : [],
+        requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : [],
+
+        // Compensation
+        salaryMin: salaryMinValue,
+        salaryMax: salaryMaxValue,
+        salaryCurrency: salaryCurrency ?? null,
+        salaryVisible:
+          typeof salaryVisible === "boolean" ? salaryVisible : false,
+
+        // Visibility / flags
+        visibility,
+        status,
+        internalOnly: internalOnlyValue,
+        confidential: confidentialValue,
+
+        // Slug
+        slug: finalSlug,
       },
     });
-
-    // (Optional) You could also insert an ApplicationEvent here, but
-    // keeping it minimal to avoid breaking anything else.
 
     return NextResponse.json(
       {
         success: true,
-        applicationId: application.id,
-        message: "Application received.",
+        job,
       },
       { status: 201 },
     );
-  } catch (err: any) {
-    console.error("POST /api/jobs/[jobId]/apply error", err);
+  } catch (err) {
+    console.error("POST /api/ats/jobs error", err);
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to submit application.",
+        error: "Failed to create job",
       },
       { status: 500 },
     );
