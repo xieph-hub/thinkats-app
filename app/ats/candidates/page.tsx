@@ -56,7 +56,7 @@ export default async function AtsCandidatesPage() {
       )
     `
     )
-    // 🔐 Scope by the *job's* tenant, not the application row
+    // Scope to Resourcin via the *job's* tenant
     .eq("jobs.tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
