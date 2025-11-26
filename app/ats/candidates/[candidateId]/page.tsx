@@ -92,11 +92,12 @@ async function getCandidateRecord(candidateKey: string) {
   // 1) Try to resolve directly on Candidate by id / email
   const orClauses: any[] = [];
 
+  // Only touch the UUID id column if it actually looks like one
   if (looksLikeUuid(candidateKey)) {
     orClauses.push({ id: candidateKey });
   }
 
-  // Allow email-based keys (for legacy rows or email links)
+  // Always allow email-based keys (for legacy records or inbox links)
   orClauses.push({ email: candidateKey });
 
   let candidate =
@@ -122,7 +123,8 @@ async function getCandidateRecord(candidateKey: string) {
         });
 
   // 2) Fallback: maybe the key is actually a JobApplication.id
-  if (!candidate) {
+  //    ⬇️ ONLY if the key looks like a UUID, so Prisma doesn't choke
+  if (!candidate && looksLikeUuid(candidateKey)) {
     const app = await prisma.jobApplication.findUnique({
       where: { id: candidateKey },
       include: {
@@ -173,9 +175,7 @@ export default async function CandidateDetailPage({
   const { tenant, candidate } = data;
 
   const displayName =
-    candidate.fullName ||
-    candidate.email ||
-    candidate.id;
+    candidate.fullName || candidate.email || candidate.id;
 
   const primaryEmail = candidate.email || "";
   const createdAtLabel = formatDate(candidate.createdAt as Date);
