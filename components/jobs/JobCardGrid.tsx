@@ -36,7 +36,6 @@ const JobCardGrid: React.FC<JobCardGridProps> = ({
         const linkedInHref = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
         const xHref = `https://x.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`;
         const whatsappHref = `https://wa.me/?text=${encodedTitle}%20-%20${encodedUrl}`;
-        const mailHref = `mailto:?subject=${encodedTitle}&body=${encodedUrl}`;
 
         return (
           <article
@@ -95,24 +94,6 @@ const JobCardGrid: React.FC<JobCardGridProps> = ({
                     <path
                       fill="currentColor"
                       d="M16 6a10 10 0 0 0-8.66 15.06L6 26l5.11-1.34A10 10 0 1 0 16 6zm0 2a8 8 0 0 1 6.86 12.24l-.2.32A8 8 0 0 1 9.1 12.1 8 8 0 0 1 16 8zm-3.17 4.4c-.24-.05-.47-.1-.68-.03-.2.06-.62.3-.62.73 0 .43.36 1.26.83 1.98.42.65 1.33 1.8 2.86 2.52 1.41.65 1.9.59 2.23.52.34-.06 1.1-.45 1.25-.9.16-.45.16-.84.11-.92-.05-.08-.18-.13-.38-.23s-1.1-.54-1.27-.6c-.17-.06-.3-.1-.43.1-.13.2-.5.6-.61.72-.11.13-.22.14-.41.05-.2-.1-.83-.34-1.58-1.04-.58-.54-.96-1.2-1.07-1.4-.11-.19-.01-.29.08-.39.08-.08.2-.22.29-.33.1-.11.13-.19.2-.32.07-.13.03-.27-.01-.37-.03-.1-.9-2.15-1.23-2.95-.32-.8-.33-.76-.45-.79z"
-                    />
-                  </svg>
-                </a>
-
-                {/* Email */}
-                <a
-                  href={mailHref}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"
-                  aria-label="Share by email"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                    className="h-4 w-4"
-                  >
-                    <path
-                      fill="currentColor"
-                      d="M4 6h16a1 1 0 0 1 .8 1.6l-.08.09L13 15a2 2 0 0 1-2.5.13l-.16-.13L3.28 7.69A1 1 0 0 1 4 6zm0 4.41V18h16v-7.59l-6.7 6.3a4 4 0 0 1-5.06.2l-.2-.17z"
                     />
                   </svg>
                 </a>
