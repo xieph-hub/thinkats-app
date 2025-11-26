@@ -10,9 +10,9 @@ datasource db {
   directUrl = env("DIRECT_URL")     // Supabase direct URL
 }
 
-/* -------------------------------------------------------------------------- */
-/*  TENANTS                                                                   */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// TENANTS
+// --------------------------------------------------------------------------
 
 model Tenant {
   id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -40,9 +40,9 @@ model Tenant {
   @@map("tenants")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  USERS & USER ↔ TENANT ROLES                                               */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// USERS & USER ↔ TENANT ROLES
+// --------------------------------------------------------------------------
 
 model User {
   id        String           @id @db.Uuid
@@ -70,9 +70,9 @@ model UserTenantRole {
   @@map("user_tenant_roles")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  CLIENT COMPANIES                                                          */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// CLIENT COMPANIES
+// --------------------------------------------------------------------------
 
 model ClientCompany {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -88,9 +88,9 @@ model ClientCompany {
   @@map("client_companies")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  JOBS                                                                      */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// JOBS
+// --------------------------------------------------------------------------
 
 model Job {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -143,9 +143,9 @@ model Job {
   @@map("jobs")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  CANDIDATES, TAGS & CANDIDATE TAGS                                        */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// CANDIDATES, TAGS & CANDIDATE TAGS
+// --------------------------------------------------------------------------
 
 model Candidate {
   id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -179,7 +179,7 @@ model Tag {
   createdAt DateTime       @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime       @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  tenant    Tenant         @relation(fields: [tenantId], references: [id])
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
   candidates CandidateTag[]
 
   @@map("tags")
@@ -199,9 +199,9 @@ model CandidateTag {
   @@map("candidate_tags")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  JOB APPLICATIONS, EVENTS & INTERVIEWS                                     */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// JOB APPLICATIONS, EVENTS & INTERVIEWS
+// --------------------------------------------------------------------------
 
 model JobApplication {
   id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -271,9 +271,9 @@ model ApplicationInterview {
   @@map("application_interviews")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  JOB STAGES                                                                */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// JOB STAGES
+// --------------------------------------------------------------------------
 
 model JobStage {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -291,9 +291,9 @@ model JobStage {
   @@map("job_stages")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  CAREER SITE SETTINGS                                                      */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// CAREER SITE SETTINGS
+// --------------------------------------------------------------------------
 
 model CareerSiteSettings {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -313,9 +313,9 @@ model CareerSiteSettings {
   @@map("career_site_settings")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  EMAIL TEMPLATES & SENT EMAILS                                             */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// EMAIL TEMPLATES & SENT EMAILS
+// --------------------------------------------------------------------------
 
 model EmailTemplate {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -330,7 +330,6 @@ model EmailTemplate {
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  // createdBy  User?       @relation(fields: [createdById], references: [id]) // optional back-ref if you ever need it
   sentEmails SentEmail[]
 
   @@map("email_templates")
@@ -351,18 +350,17 @@ model SentEmail {
   createdById       String?   @map("created_by") @db.Uuid
   sentAt            DateTime  @map("sent_at") @default(now()) @db.Timestamptz(6)
 
-  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+  tenant    Tenant        @relation(fields: [tenantId], references: [id])
   template  EmailTemplate? @relation(fields: [templateId], references: [id])
-  candidate Candidate?   @relation(fields: [candidateId], references: [id])
-  job       Job?         @relation(fields: [jobId], references: [id])
-  // createdBy User?        @relation(fields: [createdById], references: [id]) // optional back-ref
+  candidate Candidate?    @relation(fields: [candidateId], references: [id])
+  job       Job?          @relation(fields: [jobId], references: [id])
 
   @@map("sent_emails")
 }
 
-/* -------------------------------------------------------------------------- */
-/*  NOTES & ACTIVITY LOG                                                      */
-/* -------------------------------------------------------------------------- */
+// --------------------------------------------------------------------------
+// NOTES & ACTIVITY LOG
+// --------------------------------------------------------------------------
 
 model Note {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -379,7 +377,6 @@ model Note {
   tenant      Tenant          @relation(fields: [tenantId], references: [id])
   candidate   Candidate?      @relation(fields: [candidateId], references: [id])
   application JobApplication? @relation(fields: [applicationId], references: [id])
-  // author      User            @relation(fields: [authorId], references: [id]) // optional back-ref
 
   @@map("notes")
 }
@@ -395,7 +392,6 @@ model ActivityLog {
   createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
-  // actor  User?  @relation(fields: [actorId], references: [id]) // optional back-ref
 
   @@map("activity_log")
 }
