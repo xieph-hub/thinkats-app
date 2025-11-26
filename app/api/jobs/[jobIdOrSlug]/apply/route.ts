@@ -1,13 +1,62 @@
 // app/api/jobs/[jobIdOrSlug]/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenantId } from "@/lib/tenant"; // still used in job resolution
 
 export const runtime = "nodejs";
 
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value
-  );
+type ApplyBody = {
+  jobId?: string;
+  job_id?: string;
+  jobSlug?: string;
+  slug?: string;
+  fullName?: string;
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  cvUrl?: string;
+  cv_url?: string;
+  source?: string;
+};
+
+async function resolveJobForCurrentTenant(jobIdOrSlug: string) {
+  const tenantId = await getCurrentTenantId();
+
+  if (!tenantId) {
+    throw new Error("No current tenant id");
+  }
+
+  // 1) Try match by id
+  let { data: job, error } = await supabaseAdmin
+    .from("jobs")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("id", jobIdOrSlug)
+    .single();
+
+  if (!job || error) {
+    // 2) Fall back to slug
+    const { data: jobBySlug, error: slugError } = await supabaseAdmin
+      .from("jobs")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("slug", jobIdOrSlug)
+      .single();
+
+    if (!jobBySlug || slugError) {
+      throw new Error("Job not found for this tenant");
+    }
+
+    job = jobBySlug;
+  }
+
+  return job as {
+    id: string;
+    tenant_id: string;
+    title: string;
+    slug: string | null;
+  };
 }
 
 export async function POST(
@@ -15,173 +64,79 @@ export async function POST(
   { params }: { params: { jobIdOrSlug: string } }
 ) {
   try {
-    const identifier = params.jobIdOrSlug;
+    const body = (await req.json()) as ApplyBody;
 
-    const formData = await req.formData();
+    const rawJobId =
+      body.jobId ||
+      body.job_id ||
+      body.jobSlug ||
+      body.slug ||
+      params.jobIdOrSlug;
 
-    // --- 1) Resolve job by slug, then by id (UUID) ---
-    let jobId: string | null = null;
-    let jobSlug: string | null = null;
-
-    const { data: slugRow, error: slugError } = await supabaseAdmin
-      .from("jobs")
-      .select("id, slug, status")
-      .eq("slug", identifier)
-      .limit(1)
-      .maybeSingle();
-
-    if (slugError) {
-      console.error("Apply API – error looking up job by slug:", slugError);
-    }
-
-    if (slugRow?.id) {
-      jobId = slugRow.id as string;
-      jobSlug = (slugRow.slug as string | null) ?? null;
-    }
-
-    if (!jobId && isUuid(identifier)) {
-      const { data: idRow, error: idError } = await supabaseAdmin
-        .from("jobs")
-        .select("id, slug, status")
-        .eq("id", identifier)
-        .limit(1)
-        .maybeSingle();
-
-      if (idError) {
-        console.error("Apply API – error looking up job by id:", idError);
-      }
-
-      if (idRow?.id) {
-        jobId = idRow.id as string;
-        jobSlug = (idRow.slug as string | null) ?? null;
-      }
-    }
-
-    if (!jobId) {
+    if (!rawJobId) {
       return NextResponse.json(
-        { error: "This role is no longer available or cannot be found." },
-        { status: 404 }
-      );
-    }
-
-    // --- 2) Extract form fields ---
-    const fullName = (formData.get("full_name") ?? "").toString().trim();
-    const email = (formData.get("email") ?? "").toString().trim();
-
-    if (!fullName || !email) {
-      return NextResponse.json(
-        { error: "Full name and email are required." },
+        { error: "Missing job identifier" },
         { status: 400 }
       );
     }
 
-    const phone = (formData.get("phone") ?? "").toString().trim() || null;
-    const location = (formData.get("location") ?? "").toString().trim() || null;
-    const linkedinUrl =
-      (formData.get("linkedin_url") ?? "").toString().trim() || null;
-    const portfolioUrl =
-      (formData.get("portfolio_url") ?? "").toString().trim() || null;
-    const githubUrl =
-      (formData.get("github_url") ?? "").toString().trim() || null;
-    const coverLetter =
-      (formData.get("cover_letter") ?? "").toString().trim() || null;
-    const howHeard =
-      (formData.get("how_heard") ?? "").toString().trim() || null;
+    const job = await resolveJobForCurrentTenant(rawJobId);
 
-    const source =
-      (formData.get("source") ?? "").toString().trim() ||
-      "public_job_site";
+    const full_name = (body.fullName || body.full_name || "").trim();
+    const email = (body.email || "").trim().toLowerCase();
+    const phone = (body.phone || "").trim();
+    const location = (body.location || "").trim();
+    const cv_url = (body.cvUrl || body.cv_url || "").trim();
+    const source = (body.source || "PUBLIC_JOB_BOARD").trim();
 
-    // --- 3) Handle CV upload to resourcin-uploads bucket ---
-    let cvUrl: string | null = null;
-
-    const cvFile = formData.get("cv");
-    if (cvFile instanceof File && cvFile.size > 0) {
-      const originalName = cvFile.name || "cv.pdf";
-      const safeName = originalName
-        .toLowerCase()
-        .replace(/[^a-z0-9.]+/g, "-")
-        .replace(/^-+|-+$/g, "");
-      const timestamp = Date.now();
-      const path = `cv-uploads/${jobId}/${timestamp}-${safeName}`;
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from("resourcin-uploads")
-        .upload(path, cvFile, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error("Apply API – error uploading CV:", uploadError);
-        // We still allow the application to be created, just without cv_url.
-      } else {
-        const {
-          data: { publicUrl },
-        } = supabaseAdmin.storage
-          .from("resourcin-uploads")
-          .getPublicUrl(path);
-
-        cvUrl = publicUrl || null;
-      }
+    if (!full_name || !email || !cv_url) {
+      return NextResponse.json(
+        {
+          error:
+            "full_name, email and cv_url are required to submit an application.",
+        },
+        { status: 400 }
+      );
     }
 
-    // --- 4) Insert into job_applications table ---
+    // 🔑 IMPORTANT: job_applications has **no tenant_id column**, so we do NOT send it.
     const insertPayload = {
-      job_id: jobId,
-      candidate_id: null, // you can attach to a talent network later
-      full_name: fullName,
+      job_id: job.id,
+      full_name,
       email,
-      phone,
-      location,
-      linkedin_url: linkedinUrl,
-      portfolio_url: portfolioUrl,
-      github_url: githubUrl,
-      cv_url: cvUrl,
-      cover_letter: coverLetter,
-      source,
+      phone: phone || null,
+      location: location || null,
+      cv_url,
       stage: "APPLIED",
       status: "PENDING",
-      how_heard: howHeard,
-      data_privacy_consent: true,
-      terms_consent: true,
-      marketing_opt_in: false,
+      source,
     };
 
-    const { data: appRow, error: appError } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("job_applications")
       .insert(insertPayload)
       .select("id")
       .single();
 
-    if (appError || !appRow) {
-      console.error("Apply API – error inserting job_application:", appError);
+    if (error || !data) {
+      console.error("Error inserting job_application", error);
       return NextResponse.json(
-        {
-          error:
-            "We couldn't submit your application. Please try again or email your CV directly.",
-        },
+        { error: "Failed to submit application" },
         { status: 500 }
       );
     }
 
     return NextResponse.json(
       {
-        ok: true,
-        applicationId: appRow.id,
-        jobId,
-        jobSlug,
-        message: "Thank you. Your application has been received.",
+        applicationId: data.id as string,
+        message: "Application received",
       },
       { status: 201 }
     );
-  } catch (err) {
-    console.error("Apply API – unexpected error:", err);
+  } catch (err: any) {
+    console.error("Error in job application endpoint", err);
     return NextResponse.json(
-      {
-        error:
-          "We couldn't submit your application. Please try again or email your CV directly.",
-      },
+      { error: "Unexpected error while submitting application" },
       { status: 500 }
     );
   }
