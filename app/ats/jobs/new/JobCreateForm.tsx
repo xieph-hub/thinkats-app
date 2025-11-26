@@ -10,10 +10,6 @@ type ClientCompanyOption = {
   logoUrl: string | null;
 };
 
-type JobCreateFormProps = {
-  clientCompanies: ClientCompanyOption[];
-};
-
 type CreateJobResponse = {
   id?: string;
   slug?: string | null;
@@ -24,12 +20,15 @@ function slugify(input: string) {
   return input
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, "-"
-    )
+    .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 
-const JobCreateForm: React.FC<JobCreateFormProps> = ({ clientCompanies }) => {
+export default function JobCreateForm(props: any) {
+  const { clientCompanies } = (props || {}) as {
+    clientCompanies: ClientCompanyOption[];
+  };
+
   const router = useRouter();
 
   const [title, setTitle] = useState("");
@@ -53,7 +52,7 @@ const JobCreateForm: React.FC<JobCreateFormProps> = ({ clientCompanies }) => {
   const [error, setError] = useState<string | null>(null);
 
   const selectedClient = useMemo(
-    () => clientCompanies.find((c) => c.id === clientCompanyId) || null,
+    () => clientCompanies?.find((c) => c.id === clientCompanyId) || null,
     [clientCompanies, clientCompanyId]
   );
 
@@ -157,7 +156,7 @@ const JobCreateForm: React.FC<JobCreateFormProps> = ({ clientCompanies }) => {
             className="block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
           >
             <option value="">No specific client (Resourcin / internal)</option>
-            {clientCompanies.map((c) => (
+            {clientCompanies?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -326,6 +325,4 @@ const JobCreateForm: React.FC<JobCreateFormProps> = ({ clientCompanies }) => {
       </div>
     </form>
   );
-};
-
-export default JobCreateForm;
+}
