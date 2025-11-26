@@ -16,6 +16,7 @@ type RouteContext = {
  */
 export async function POST(req: Request, context: RouteContext = {}) {
   try {
+    // ✅ SAFE: no destructuring from undefined
     const jobId = context.params?.jobId;
 
     if (!jobId) {
