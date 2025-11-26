@@ -383,7 +383,7 @@ export default async function AtsAnalyticsPage({
     }
   }
 
-  // Collect unique hiringManagerIds and resolve to User names
+  // Collect unique hiringManagerIds and resolve to User (email only)
   const uniqueHiringManagerIds = Array.from(
     new Set(
       jobs
@@ -401,7 +401,6 @@ export default async function AtsAnalyticsPage({
           },
           select: {
             id: true,
-            name: true,
             email: true,
           },
         });
@@ -865,7 +864,7 @@ export default async function AtsAnalyticsPage({
               </li>
               <li>
                 Compare{" "}
-                  <span className="font-medium">
+                <span className="font-medium">
                   sources and recruiter loads
                 </span>{" "}
                 before committing SLAs to clients.
@@ -936,19 +935,16 @@ export default async function AtsAnalyticsPage({
                     : null;
 
                   const primaryLabel =
-                    user?.name ||
                     user?.email ||
                     (stat.key === "unassigned"
                       ? "Unassigned"
                       : stat.key);
 
                   const secondaryLabel =
-                    user?.email && user?.email !== primaryLabel
-                      ? user.email
-                      : stat.hiringManagerId &&
-                          stat.hiringManagerId !== primaryLabel
-                        ? stat.hiringManagerId
-                        : null;
+                    stat.hiringManagerId &&
+                    stat.hiringManagerId !== primaryLabel
+                      ? stat.hiringManagerId
+                      : null;
 
                   return (
                     <tr
