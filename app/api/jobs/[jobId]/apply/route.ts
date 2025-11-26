@@ -1,99 +1,40 @@
 // app/api/jobs/[jobId]/apply/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
 
-const DEFAULT_TENANT_SLUG =
-  process.env.RESOURCIN_TENANT_SLUG || "resourcin";
+type RouteContext = {
+  params: {
+    jobId: string;
+  };
+};
 
-async function getDefaultTenantId() {
-  if (process.env.RESOURCIN_TENANT_ID) {
-    return process.env.RESOURCIN_TENANT_ID;
-  }
-
-  const tenant = await prisma.tenant.findFirst({
-    where: { slug: DEFAULT_TENANT_SLUG },
-  });
-
-  if (!tenant) {
-    throw new Error(
-      `Default tenant not found for slug "${DEFAULT_TENANT_SLUG}". ` +
-        `Create a tenant row in Supabase (tenants table) or set RESOURCIN_TENANT_ID.`,
-    );
-  }
-
-  return tenant.id;
-}
-
-export async function POST(
-  req: Request,
-  { params }: { params: { jobId: string } },
-) {
+/**
+ * Public job application endpoint.
+ * Accepts either JSON or multipart/form-data.
+ * Creates/updates Candidate + creates JobApplication.
+ */
+export async function POST(req: Request, { params }: RouteContext) {
   try {
     const { jobId } = params;
 
     if (!jobId) {
       return NextResponse.json(
-        { success: false, error: "Job ID is required in the URL." },
+        { success: false, error: "Missing jobId in route params." },
         { status: 400 },
       );
     }
 
-    const body = await req.json();
+    const tenant = await getResourcinTenant();
 
-    const {
-      fullName,
-      email,
-      phone,
-      location,
-      linkedinUrl,
-      portfolioUrl,
-      githubUrl,
-      cvUrl,
-      coverLetter,
-      source,
-      screeningAnswers,
-      howHeard,
-      workPermitStatus,
-      grossAnnualExpectation,
-      currentGrossAnnual,
-      noticePeriod,
-      gender,
-      ethnicity,
-      dataPrivacyConsent,
-      termsConsent,
-      marketingOptIn,
-      referenceCode,
-    } = body || {};
-
-    // --------------------------------------------------------------
-    // Basic validation
-    // --------------------------------------------------------------
-    if (!fullName || typeof fullName !== "string" || fullName.trim().length < 2) {
-      return NextResponse.json(
-        { success: false, error: "Full name is required." },
-        { status: 400 },
-      );
-    }
-
-    if (!email || typeof email !== "string") {
-      return NextResponse.json(
-        { success: false, error: "Email is required." },
-        { status: 400 },
-      );
-    }
-
-    const tenantId = await getDefaultTenantId();
-
-    // --------------------------------------------------------------
-    // 1) Look up the job (must belong to tenant, be public & open)
-    // --------------------------------------------------------------
+    // Ensure job exists, is public, open, and not internal-only
     const job = await prisma.job.findFirst({
       where: {
         id: jobId,
-        tenantId,
-        visibility: "public",  // <-- real field in your Prisma schema
-        status: "open",        // <-- real field, default "open"
-        internalOnly: false,   // public apply endpoint can't hit internal roles
+        tenantId: tenant.id,
+        visibility: "public",
+        status: "open",
+        internalOnly: false,
       },
     });
 
@@ -101,18 +42,96 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "This job is not accepting applications or does not exist.",
+          error:
+            "This role is not accepting applications or was not found.",
         },
         { status: 404 },
       );
     }
 
-    // --------------------------------------------------------------
-    // 2) Find or create candidate (by tenant + email)
-    // --------------------------------------------------------------
+    const contentType = req.headers.get("content-type") || "";
+
+    // Common fields we’ll populate from either JSON or form-data
+    let fullName = "";
+    let email = "";
+    let phone: string | null = null;
+    let location: string | null = null;
+    let linkedinUrl: string | null = null;
+    let portfolioUrl: string | null = null;
+    let githubUrl: string | null = null;
+    let coverLetter: string | null = null;
+    let cvUrl: string | null = null;
+    let source: string | null = null;
+    let howHeard: string | null = null;
+    let noticePeriod: string | null = null;
+    let currentGrossAnnual: string | null = null;
+    let grossAnnualExpectation: string | null = null;
+
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+
+      fullName = (body.fullName ?? "").trim();
+      email = (body.email ?? "").trim().toLowerCase();
+      phone = body.phone ?? null;
+      location = body.location ?? null;
+      linkedinUrl = body.linkedinUrl ?? null;
+      portfolioUrl = body.portfolioUrl ?? null;
+      githubUrl = body.githubUrl ?? null;
+      coverLetter = body.coverLetter ?? null;
+      cvUrl = body.cvUrl ?? null;
+      source = body.source ?? null;
+      howHeard = body.howHeard ?? null;
+      noticePeriod = body.noticePeriod ?? null;
+      currentGrossAnnual = body.currentGrossAnnual ?? null;
+      grossAnnualExpectation = body.grossAnnualExpectation ?? null;
+    } else {
+      const formData = await req.formData();
+
+      const getStr = (key: string): string | null => {
+        const v = formData.get(key);
+        if (v == null) return null;
+        return String(v).trim() || null;
+      };
+
+      fullName = getStr("fullName") || "";
+      email = (getStr("email") || "").toLowerCase();
+      phone = getStr("phone");
+      location = getStr("location");
+      linkedinUrl = getStr("linkedinUrl") || getStr("linkedin");
+      portfolioUrl = getStr("portfolioUrl");
+      githubUrl = getStr("githubUrl");
+      coverLetter = getStr("coverLetter");
+      source = getStr("source");
+      howHeard = getStr("howHeard");
+      noticePeriod = getStr("noticePeriod");
+      currentGrossAnnual = getStr("currentGrossAnnual");
+      grossAnnualExpectation = getStr("grossAnnualExpectation");
+
+      // If you already have a separate upload endpoint that returns cvUrl,
+      // the form can send that as a hidden field. We read it here.
+      cvUrl = getStr("cvUrl");
+
+      // If, later, you want to handle raw file upload here:
+      // const cvFile = formData.get("cv") as File | null;
+      // -> upload to storage, then set cvUrl to the public URL.
+    }
+
+    if (!fullName || !email) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Name and email are required.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // ------------------------------------------------------------------
+    // Candidate: find by (tenantId, email) or create
+    // ------------------------------------------------------------------
     const existingCandidate = await prisma.candidate.findFirst({
       where: {
-        tenantId,
+        tenantId: job.tenantId,
         email,
       },
     });
@@ -121,61 +140,66 @@ export async function POST(
       existingCandidate ??
       (await prisma.candidate.create({
         data: {
-          tenantId,
+          tenantId: job.tenantId,
           fullName,
           email,
-          phone: phone ?? null,
-          location: location ?? null,
-          linkedinUrl: linkedinUrl ?? null,
+          phone,
+          location,
+          linkedinUrl,
           currentTitle: null,
           currentCompany: null,
-          cvUrl: cvUrl ?? null,
-          source: source ?? "job_application",
+          cvUrl,
+          source,
         },
       }));
 
-    // --------------------------------------------------------------
-    // 3) Create job application
-    // --------------------------------------------------------------
+    // Optionally keep candidate profile fresh
+    const shouldUpdateCandidate =
+      !existingCandidate ||
+      candidate.fullName !== fullName ||
+      candidate.phone !== phone ||
+      candidate.location !== location ||
+      candidate.linkedinUrl !== linkedinUrl ||
+      candidate.cvUrl !== cvUrl;
+
+    if (shouldUpdateCandidate) {
+      await prisma.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          fullName,
+          phone,
+          location,
+          linkedinUrl,
+          cvUrl,
+          source,
+        },
+      });
+    }
+
+    // ------------------------------------------------------------------
+    // Create JobApplication
+    // ------------------------------------------------------------------
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
         candidateId: candidate.id,
-
         fullName,
         email,
-        phone: phone ?? null,
-        location: location ?? null,
-        linkedinUrl: linkedinUrl ?? null,
-        portfolioUrl: portfolioUrl ?? null,
-        githubUrl: githubUrl ?? null,
-        cvUrl: cvUrl ?? null,
-        coverLetter: coverLetter ?? null,
-        source: source ?? null,
-
-        workPermitStatus: workPermitStatus ?? null,
-        grossAnnualExpectation: grossAnnualExpectation ?? null,
-        currentGrossAnnual: currentGrossAnnual ?? null,
-        noticePeriod: noticePeriod ?? null,
-        gender: gender ?? null,
-        ethnicity: ethnicity ?? null,
-        howHeard: howHeard ?? null,
-
-        dataPrivacyConsent:
-          typeof dataPrivacyConsent === "boolean"
-            ? dataPrivacyConsent
-            : null,
-        termsConsent:
-          typeof termsConsent === "boolean" ? termsConsent : null,
-        marketingOptIn:
-          typeof marketingOptIn === "boolean" ? marketingOptIn : null,
-
-        referenceCode: referenceCode ?? null,
-        screeningAnswers: screeningAnswers ?? null,
-
-        // stage + status default from DB:
-        // stage: 'APPLIED'
-        // status: 'PENDING'
+        phone,
+        location,
+        linkedinUrl,
+        portfolioUrl,
+        githubUrl,
+        cvUrl,
+        coverLetter,
+        source,
+        howHeard,
+        noticePeriod,
+        currentGrossAnnual,
+        grossAnnualExpectation,
+        // stage and status default from schema:
+        // stage  = "APPLIED"
+        // status = "PENDING"
       },
     });
 
@@ -187,7 +211,7 @@ export async function POST(
       },
       { status: 201 },
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error("POST /api/jobs/[jobId]/apply error", err);
     return NextResponse.json(
       {
