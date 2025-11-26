@@ -25,7 +25,7 @@ export async function listTenantJobs(tenantId: string) {
 }
 
 /**
- * Single job + its pipeline (applications, candidates, stages) for ATS.
+ * Single job + its pipeline (applications, candidates) for ATS.
  * Used by /ats/jobs/[jobId]
  */
 export async function getJobWithPipeline(jobId: string, tenantId: string) {
@@ -37,11 +37,12 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
     include: {
       clientCompany: true,
       applications: {
-        // ✅ Use createdAt (which exists on JobApplication) instead of submittedAt
+        // Use a field that actually exists on JobApplication
         orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
-          pipelineStage: true,
+          // ⬇️ removed pipelineStage because Prisma model doesn't have it
+          // pipelineStage: true,
         },
       },
     },
