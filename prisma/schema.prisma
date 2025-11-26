@@ -25,17 +25,18 @@ model Tenant {
   updatedAt           DateTime    @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   // Relations
-  jobs            Job[]
-  clientCompanies ClientCompany[]
-  candidates      Candidate[]
-  stages          JobStage[]
-  careerSite      CareerSiteSettings?
-  activityLog     ActivityLog[]
-  emailTemplates  EmailTemplate[]
-  candidateTags   CandidateTag[]
-  notes           Note[]
-  sentEmails      SentEmail[]
-  userTenantRoles UserTenantRole[]
+  jobs               Job[]
+  clientCompanies    ClientCompany[]
+  candidates         Candidate[]
+  stages             JobStage[]
+  careerSiteSettings CareerSiteSettings[]
+  activityLog        ActivityLog[]
+  emailTemplates     EmailTemplate[]
+  candidateTags      CandidateTag[]
+  notes              Note[]
+  sentEmails         SentEmail[]
+  userTenantRoles    UserTenantRole[]
+  tags               Tag[]
 
   @@map("tenants")
 }
@@ -122,8 +123,8 @@ model Job {
   experienceLevel    String?   @map("experience_level")
   yearsExperienceMin Int?      @map("years_experience_min")
   yearsExperienceMax Int?      @map("years_experience_max")
-  salaryMin          Decimal?  @map("salary_min")  @db.Numeric
-  salaryMax          Decimal?  @map("salary_max")  @db.Numeric
+  salaryMin          Decimal?  @map("salary_min")
+  salaryMax          Decimal?  @map("salary_max")
   salaryCurrency     String?   @map("salary_currency")
   salaryVisible      Boolean?  @map("salary_visible")
   requiredSkills     String[]  @default([]) @map("required_skills") @db.Text
@@ -138,7 +139,6 @@ model Job {
   applications  JobApplication[]
   stages        JobStage[]
   sentEmails    SentEmail[]
-  notes         Note[]
 
   @@map("jobs")
 }
@@ -188,210 +188,4 @@ model Tag {
 model CandidateTag {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
-  candidateId String   @map("candidate_id") @db.Uuid
-  tagId       String   @map("tag_id") @db.Uuid
-  createdAt   DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  candidate Candidate @relation(fields: [candidateId], references: [id])
-  tag       Tag       @relation(fields: [tagId], references: [id])
-
-  @@map("candidate_tags")
-}
-
-// --------------------------------------------------------------------------
-// JOB APPLICATIONS, EVENTS & INTERVIEWS
-// --------------------------------------------------------------------------
-
-model JobApplication {
-  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  jobId                  String    @map("job_id") @db.Uuid
-  candidateId            String?   @map("candidate_id") @db.Uuid
-  fullName               String    @map("full_name")
-  email                  String
-  phone                  String?
-  location               String?
-  linkedinUrl            String?   @map("linkedin_url")
-  portfolioUrl           String?   @map("portfolio_url")
-  cvUrl                  String?   @map("cv_url")
-  coverLetter            String?   @map("cover_letter")
-  source                 String?
-  stage                  String    @default("APPLIED") @db.Text
-  status                 String    @default("PENDING") @db.Text
-  createdAt              DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt              DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
-  workPermitStatus       String?   @map("work_permit_status")
-  grossAnnualExpectation String?   @map("gross_annual_expectation")
-  currentGrossAnnual     String?   @map("current_gross_annual")
-  noticePeriod           String?   @map("notice_period")
-  githubUrl              String?   @map("github_url")
-  screeningAnswers       Json?     @map("screening_answers")
-  gender                 String?
-  ethnicity              String?
-  howHeard               String?   @map("how_heard")
-  dataPrivacyConsent     Boolean?  @map("data_privacy_consent")
-  termsConsent           Boolean?  @map("terms_consent")
-  marketingOptIn         Boolean?  @map("marketing_opt_in")
-  referenceCode          String?   @map("reference_code")
-  statusNote             String?   @map("status_note")
-  statusChangedAt        DateTime? @map("status_changed_at") @db.Timestamptz(6)
-
-  job        Job                 @relation(fields: [jobId], references: [id])
-  candidate  Candidate?          @relation(fields: [candidateId], references: [id])
-  events     ApplicationEvent[]
-  interviews ApplicationInterview[]
-  notes      Note[]
-
-  @@map("job_applications")
-}
-
-model ApplicationEvent {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  applicationId String    @map("application_id") @db.Uuid
-  type          String
-  payload       Json?     @map("payload")
-  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
-
-  application JobApplication @relation(fields: [applicationId], references: [id])
-
-  @@map("application_events")
-}
-
-model ApplicationInterview {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  applicationId String   @map("application_id") @db.Uuid
-  scheduledAt   DateTime @map("scheduled_at") @db.Timestamptz(6)
-  type          String?  @map("type")
-  location      String?  @map("location")
-  notes         String?  @map("notes")
-  createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-
-  application JobApplication @relation(fields: [applicationId], references: [id])
-
-  @@map("application_interviews")
-}
-
-// --------------------------------------------------------------------------
-// JOB STAGES
-// --------------------------------------------------------------------------
-
-model JobStage {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  jobId      String   @map("job_id") @db.Uuid
-  name       String
-  position   Int
-  isTerminal Boolean  @map("is_terminal") @default(false)
-  createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  job    Job    @relation(fields: [jobId], references: [id])
-
-  @@map("job_stages")
-}
-
-// --------------------------------------------------------------------------
-// CAREER SITE SETTINGS
-// --------------------------------------------------------------------------
-
-model CareerSiteSettings {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  logoUrl      String?  @map("logo_url")
-  primaryColor String?  @map("primary_color")
-  accentColor  String?  @map("accent_color")
-  heroTitle    String?  @map("hero_title")
-  heroSubtitle String?  @map("hero_subtitle")
-  aboutHtml    String?  @map("about_html")
-  isPublic     Boolean  @map("is_public") @default(true)
-  createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-
-  @@map("career_site_settings")
-}
-
-// --------------------------------------------------------------------------
-// EMAIL TEMPLATES & SENT EMAILS
-// --------------------------------------------------------------------------
-
-model EmailTemplate {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  name         String
-  templateType String?  @map("template_type")
-  subject      String
-  body         String
-  isDefault    Boolean  @map("is_default") @default(false)
-  createdById  String?  @map("created_by") @db.Uuid
-  createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
-
-  tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  sentEmails SentEmail[]
-
-  @@map("email_templates")
-}
-
-model SentEmail {
-  id                String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String     @map("tenant_id") @db.Uuid
-  templateId        String?    @map("template_id") @db.Uuid
-  toEmail           String     @map("to_email")
-  candidateId       String?    @map("candidate_id") @db.Uuid
-  jobId             String?    @map("job_id") @db.Uuid
-  subject           String
-  body              String
-  status            String     @default("sent") @db.Text
-  errorMessage      String?    @map("error_message")
-  providerMessageId String?    @map("provider_message_id")
-  createdById       String?    @map("created_by") @db.Uuid
-  sentAt            DateTime   @map("sent_at") @default(now()) @db.Timestamptz(6)
-
-  tenant    Tenant        @relation(fields: [tenantId], references: [id])
-  template  EmailTemplate? @relation(fields: [templateId], references: [id])
-  candidate Candidate?    @relation(fields: [candidateId], references: [id])
-  job       Job?          @relation(fields: [jobId], references: [id])
-
-  @@map("sent_emails")
-}
-
-// --------------------------------------------------------------------------
-// NOTES & ACTIVITY LOG
-// --------------------------------------------------------------------------
-
-model Note {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  candidateId   String?   @map("candidate_id") @db.Uuid
-  applicationId String?   @map("application_id") @db.Uuid
-  authorId      String    @map("author_id") @db.Uuid
-  noteType      String?   @map("note_type") @default("general")
-  body          String
-  isPrivate     Boolean   @map("is_private") @default(false)
-  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
-
-  tenant      Tenant          @relation(fields: [tenantId], references: [id])
-  candidate   Candidate?      @relation(fields: [candidateId], references: [id])
-  application JobApplication? @relation(fields: [applicationId], references: [id])
-
-  @@map("notes")
-}
-
-model ActivityLog {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String   @map("tenant_id") @db.Uuid
-  actorId    String?  @map("actor_id") @db.Uuid
-  entityType String   @map("entity_type")
-  entityId   String   @map("entity_id") @db.Uuid
-  action     String
-  metadata   Json?    @map("metadata")
-  createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-
-  @@map("activity_log")
-}
+  can
