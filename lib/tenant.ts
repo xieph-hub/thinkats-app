@@ -1,28 +1,48 @@
 // lib/tenant.ts
-import { cache } from "react";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+// Shape of the row in your Supabase `tenants` table
+export type TenantRow = {
+  id: string;
+  slug: string;
+  name: string;
+  status: string;
+  primary_contact_email: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 const RESOURCIN_TENANT_SLUG =
   process.env.RESOURCIN_TENANT_SLUG || "resourcin";
 
-export const getTenantBySlug = cache(async (slug: string) => {
-  let tenant = await prisma.tenant.findUnique({
-    where: { slug },
-  });
+/**
+ * Single-tenant helper for now.
+ * Finds the Resourcin tenant by slug using Supabase directly.
+ */
+export async function getResourcinTenant(): Promise<TenantRow> {
+  const { data, error } = await supabaseAdmin
+    .from("tenants")
+    .select("*")
+    .eq("slug", RESOURCIN_TENANT_SLUG)
+    .single();
 
-  if (!tenant) {
-    // Auto-provision the Resourcin tenant if it's missing
-    tenant = await prisma.tenant.create({
-      data: {
-        slug,
-        name: "Resourcin",
-      },
+  if (error || !data) {
+    console.error("Failed to load tenant from Supabase", {
+      slug: RESOURCIN_TENANT_SLUG,
+      error,
     });
+    throw new Error("Resourcin tenant not found");
   }
 
-  return tenant;
-});
+  return data as TenantRow;
+}
 
-export const getResourcinTenant = cache(async () => {
-  return getTenantBySlug(RESOURCIN_TENANT_SLUG);
-});
+/**
+ * For now, “current tenant” = Resourcin.
+ * This keeps existing callers happy (/ats/*, /jobs/*).
+ */
+export async function getCurrentTenantId(): Promise<string> {
+  const tenant = await getResourcinTenant();
+  return tenant.id;
+}
