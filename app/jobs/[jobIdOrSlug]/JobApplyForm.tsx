@@ -22,7 +22,7 @@ export default function JobApplyForm({ jobId, jobTitle }: JobApplyFormProps) {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    // Ensure jobId is present for the API
+    // 🔑 Ensure jobId is present for the API
     formData.set("jobId", jobId);
 
     try {
