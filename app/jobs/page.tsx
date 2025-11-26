@@ -29,14 +29,65 @@ type RawJobRow = {
   internal_only: boolean | null;
   confidential: boolean | null;
   created_at: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string | null;
+  salary_visible: boolean | null;
 };
+
+function formatEmploymentType(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  switch (raw) {
+    case "full_time":
+      return "Full-time";
+    case "part_time":
+      return "Part-time";
+    case "contract":
+      return "Contract";
+    case "temporary":
+      return "Temporary";
+    case "internship":
+      return "Internship";
+    default:
+      return raw;
+  }
+}
+
+function formatSalary(row: RawJobRow): string | undefined {
+  if (!row.salary_visible) return undefined;
+  if (!row.salary_min && !row.salary_max) return undefined;
+
+  const currency = (row.salary_currency || "NGN").toUpperCase();
+  const symbol =
+    currency === "NGN"
+      ? "₦"
+      : currency === "USD"
+      ? "$"
+      : currency === "KES"
+      ? "KSh "
+      : currency === "GHS"
+      ? "GH₵"
+      : currency === "ZAR"
+      ? "R"
+      : `${currency} `;
+
+  const fmt = (n: number | null) =>
+    n == null ? "" : n.toLocaleString("en-NG", { maximumFractionDigits: 0 });
+
+  if (row.salary_min && row.salary_max) {
+    return `${symbol}${fmt(row.salary_min)} – ${symbol}${fmt(row.salary_max)}`;
+  }
+  if (row.salary_min) {
+    return `From ${symbol}${fmt(row.salary_min)}`;
+  }
+  if (row.salary_max) {
+    return `Up to ${symbol}${fmt(row.salary_max)}`;
+  }
+  return undefined;
+}
 
 export default async function JobsPage() {
   const tenantId = await getCurrentTenantId();
-
-  if (!tenantId) {
-    console.warn("JobsPage: no current tenant id – returning empty list");
-  }
 
   const { data, error } = await supabaseAdmin
     .from("jobs")
@@ -56,7 +107,11 @@ export default async function JobsPage() {
       visibility,
       internal_only,
       confidential,
-      created_at
+      created_at,
+      salary_min,
+      salary_max,
+      salary_currency,
+      salary_visible
     `
     )
     .eq("tenant_id", tenantId)
@@ -68,38 +123,43 @@ export default async function JobsPage() {
 
   const rows = (data ?? []) as RawJobRow[];
 
-  // Only show jobs that should appear on the public board
+  // Only show open + public, not internal-only
   const publicRows = rows.filter((row) => {
     const status = (row.status || "").toLowerCase();
     const visibility = (row.visibility || "").toLowerCase();
-
     const isOpen = status === "open";
     const isPublic = visibility === "public";
     const isInternal = row.internal_only === true;
-
-    // Hide internal-only jobs from the public board.
     return isOpen && isPublic && !isInternal;
   });
 
   const jobs: JobCardData[] = publicRows.map((row) => {
     const slugOrId = row.slug ?? row.id;
+    const company = row.confidential
+      ? "Confidential search – via Resourcin"
+      : "Resourcin";
+    const type = formatEmploymentType(row.employment_type);
+    const salary = formatSalary(row);
 
-    const card: JobCardData = {
+    return {
       id: row.id,
       title: row.title,
       location: row.location ?? "Location flexible",
-      employmentType: row.employment_type ?? undefined,
-      experienceLevel: row.experience_level ?? undefined,
+      postedAt: row.created_at,
+      shareUrl: `/jobs/${slugOrId}`,
+
+      // Optional / rich fields
+      company,
+      type,
+      salary,
+      applicants: 0, // we can wire real counts later if you want
       workMode: row.work_mode ?? undefined,
+      experienceLevel: row.experience_level ?? undefined,
       department: row.department ?? undefined,
       shortDescription: row.short_description ?? undefined,
       tags: row.tags ?? [],
-      postedAt: row.created_at,
-      shareUrl: `/jobs/${slugOrId}`,
       isConfidential: row.confidential === true,
-    } as JobCardData;
-
-    return card;
+    };
   });
 
   return (
@@ -113,7 +173,7 @@ export default async function JobsPage() {
         </p>
         <h1
           className="mt-2 text-3xl font-semibold"
-          style={{ color: "#172965" }} // Resourcin blue
+          style={{ color: "#172965" }}
         >
           Opportunities via Resourcin
         </h1>
