@@ -10,10 +10,138 @@ datasource db {
   directUrl = env("DIRECT_URL")    // direct connection
 }
 
-// We are not actively using Prisma in the app right now.
-// This tiny placeholder model only exists so that
-// `prisma generate` succeeds during Vercel's postinstall.
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  // e.g. "AGENCY" | "CLIENT" if you want later
+  type      String? 
 
+  jobs             Job[]
+  clientCompanies  ClientCompany[]
+  candidates       Candidate[]
+  pipelineStages   PipelineStage[]
+  jobApplications  JobApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ClientCompany {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+
+  name       String
+  slug       String?  @unique
+  logoUrl    String?
+  websiteUrl String?
+  isActive   Boolean  @default(true)
+
+  jobs            Job[]
+  jobApplications JobApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Job {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+
+  clientCompanyId String?
+  clientCompany   ClientCompany? @relation(fields: [clientCompanyId], references: [id])
+
+  title            String
+  slug             String?  @unique
+  shortDescription String?
+  description      String?
+  department       String?
+  location         String?
+  locationType     String?  // "ONSITE" | "HYBRID" | "REMOTE" etc
+  employmentType   String?  // "FULL_TIME" | "PART_TIME" | ...
+  seniority        String?
+  tags             String[] // or Json if you prefer
+
+  isPublished    Boolean  @default(false)
+  isPublic       Boolean  @default(true)
+  isConfidential Boolean  @default(false)
+  status         String   @default("OPEN") // "OPEN" | "ON_HOLD" | "CLOSED" etc
+  publishedAt    DateTime?
+
+  applications JobApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Candidate {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+
+  fullName        String
+  email           String
+  phone           String?
+  currentCompany  String?
+  currentTitle    String?
+  location        String?
+  cvUrl           String?
+  source          String?  // "DIRECT_APPLY", "TALENT_NETWORK", etc
+  isTalentNetwork Boolean  @default(false)
+
+  applications JobApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, email])
+}
+
+model PipelineStage {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+
+  name      String
+  sortOrder Int
+  isDefault Boolean @default(false)
+
+  applications JobApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model JobApplication {
+  id        String  @id @default(cuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+
+  jobId     String
+  job       Job     @relation(fields: [jobId], references: [id])
+
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  clientCompanyId String?
+  clientCompany   ClientCompany? @relation(fields: [clientCompanyId], references: [id])
+
+  pipelineStageId String?
+  pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id])
+
+  status      String   @default("IN_REVIEW") // "IN_REVIEW", "SHORTLISTED", etc
+  source      String?  // "careers_site", "referral", etc
+  cvUrl       String?
+  submittedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// You can keep this or remove it if no longer needed.
+// It doesn't hurt anything to leave it.
 model PrismaPlaceholder {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
