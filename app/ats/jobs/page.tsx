@@ -71,8 +71,7 @@ export default async function AtsJobsPage() {
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("job_applications")
-        .select("id, job_id, status")
-        .eq("tenant_id", tenantId),
+        .select("id, job_id, status"), // 🔁 no tenant filter here
     ]);
 
   if (jobsError) {
