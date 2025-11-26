@@ -43,7 +43,7 @@ function looksLikeUuid(value: string) {
   );
 }
 
-// Simple stage config to mirror the rest of ThinkATS
+// Stage config to stay consistent with ThinkATS
 const STAGES = [
   {
     key: "APPLIED",
@@ -89,28 +89,51 @@ export default async function AtsCandidateDetailPage({
 }: {
   params: PageParams;
 }) {
-  const { candidateId } = params;
+  const { candidateId: candidateKey } = params;
 
-  // -----------------------------
-  // 1. Load candidate by ID (UUID) or fallback
-  // -----------------------------
-  let candidate =
-    looksLikeUuid(candidateId)
-      ? await prisma.candidate.findUnique({
-          where: { id: candidateId },
-        })
-      : await prisma.candidate.findFirst({
-          where: {
-            // Fallback: let non-UUID URLs resolve via email (or other string fields later)
-            email: candidateId,
-          },
-        });
+  // ------------------------------------
+  // 1) Try candidate.id when it looks like a UUID
+  // ------------------------------------
+  let candidate: any = null;
+
+  if (looksLikeUuid(candidateKey)) {
+    candidate = await prisma.candidate.findUnique({
+      where: { id: candidateKey },
+    });
+  }
+
+  // ------------------------------------
+  // 2) If still not found and it looks like a UUID,
+  //    try treating it as a JobApplication ID and
+  //    resolve the linked candidate.
+  // ------------------------------------
+  if (!candidate && looksLikeUuid(candidateKey)) {
+    const application = await prisma.jobApplication.findUnique({
+      where: { id: candidateKey },
+      include: { candidate: true },
+    });
+
+    if (application?.candidate) {
+      candidate = application.candidate;
+    }
+  }
+
+  // ------------------------------------
+  // 3) Fallback: treat key as an email address
+  // ------------------------------------
+  if (!candidate) {
+    candidate = await prisma.candidate.findFirst({
+      where: {
+        // use `any`-style where to avoid TS complaining about dynamic fields later
+        email: candidateKey,
+      } as any,
+    });
+  }
 
   if (!candidate) {
     notFound();
   }
 
-  // Use `any` locally so we can gracefully read optional / non-typed fields
   const c = candidate as any;
 
   const primaryLabel: string =
@@ -140,9 +163,9 @@ export default async function AtsCandidateDetailPage({
   const updatedAt: Date | null =
     (c.updatedAt as Date | undefined) ?? null;
 
-  // -----------------------------
-  // 2. Load all applications for this candidate
-  // -----------------------------
+  // ------------------------------------
+  // 4) Load all applications for this candidate
+  // ------------------------------------
   const applications = await prisma.jobApplication.findMany({
     where: { candidateId: candidate.id },
     select: {
@@ -182,7 +205,6 @@ export default async function AtsCandidateDetailPage({
 
   const hasApplications = applications.length > 0;
 
-  // Simple heuristics for first/last touch
   const lastActivity =
     applications.length > 0
       ? applications[0].createdAt
@@ -192,7 +214,6 @@ export default async function AtsCandidateDetailPage({
       ? applications[applications.length - 1].createdAt
       : createdAt;
 
-  // Concise list of sources for sidebar
   const uniqueSources = Array.from(
     new Set(
       applications
@@ -285,9 +306,9 @@ export default async function AtsCandidateDetailPage({
         </div>
       </div>
 
-      {/* Main layout: left profile, right application history */}
+      {/* Main layout */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,2fr)]">
-        {/* Candidate profile sidebar */}
+        {/* Sidebar */}
         <aside className="space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">
