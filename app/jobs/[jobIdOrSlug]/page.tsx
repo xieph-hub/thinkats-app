@@ -46,9 +46,9 @@ async function getPublicJob(jobIdOrSlug: string) {
             { slug: jobIdOrSlug },
           ],
         },
-        { status: "open" },        // only open roles
-        { visibility: "public" },  // only public roles
-        { internalOnly: false },   // don’t show internal-only jobs
+        { status: "open" },
+        { visibility: "public" },
+        { internalOnly: false },
       ],
     },
     include: {
@@ -295,7 +295,7 @@ export default async function JobDetailPage({
             team will be in touch to walk you through next steps.
           </p>
 
-          <JobApplyForm jobId={job.id} jobTitle={job.title} />
+          <JobApplyForm jobId={job.id} />
 
           <p className="mt-2 text-[11px] text-slate-500">
             By submitting an application, you agree that Resourcin may contact
