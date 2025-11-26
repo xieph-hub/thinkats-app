@@ -6,7 +6,7 @@ export async function listTenantJobs(tenantId: string) {
     where: {
       tenantId,
       status: {
-        not: "CLOSED", // adjust if your enum name differs
+        not: "CLOSED", // adjust if your enum name is different
       },
     },
     orderBy: {
@@ -14,25 +14,6 @@ export async function listTenantJobs(tenantId: string) {
     },
     include: {
       clientCompany: true,
-    },
-  });
-}
-
-export async function getJobWithPipeline(jobId: string, tenantId: string) {
-  return prisma.job.findFirst({
-    where: {
-      id: jobId,
-      tenantId,
-    },
-    include: {
-      clientCompany: true,
-      applications: {
-        orderBy: { submittedAt: "desc" },
-        include: {
-          candidate: true,
-          pipelineStage: true,
-        },
-      },
     },
   });
 }
