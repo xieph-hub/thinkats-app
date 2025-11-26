@@ -400,7 +400,7 @@ export default async function JobDetailPage({
     (job.required_skills && job.required_skills.length > 0);
 
   const slugOrId = job.slug || job.id;
-  const applyHref = `/jobs/${encodeURIComponent(slugOrId)}/apply`;
+  const applyHref = `/jobs/${encodeURIComponent(slugOrId)}`;
 
   // Build JobCardData so the header matches /jobs cards
   const shareUrl = `${BASE_URL}/jobs/${encodeURIComponent(slugOrId)}`;
@@ -408,21 +408,22 @@ export default async function JobDetailPage({
   const cardData: JobCardData = {
     id: job.id,
     title: job.title,
+    location: job.location || "Location flexible",
+    postedAt: job.created_at,
+    shareUrl,
     company: client
       ? isConfidential
         ? "Confidential search – via Resourcin"
         : client.name
-      : "Resourcin mandate",
-    location: job.location || undefined,
-    department: job.department || undefined,
-    employmentType: employmentTypeLabel || undefined,
-    experienceLevel: experienceLevelLabel || undefined,
+      : "Resourcin",
+    type: employmentTypeLabel || undefined, // ✅ correct field name for JobCardData
+    salary: salaryLabel || undefined,
+    applicants: 0,
     workMode: workModeLabel || undefined,
-    salary: salaryLabel,
+    experienceLevel: experienceLevelLabel || undefined,
+    department: job.department || undefined,
     shortDescription: job.short_description || undefined,
     tags: job.tags || [],
-    postedAt: job.created_at,
-    shareUrl,
     isConfidential,
   };
 
@@ -445,7 +446,6 @@ export default async function JobDetailPage({
 
         <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
           <SocialShareRow job={job} />
-
           <Link
             href={applyHref}
             className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#111c4c]"
@@ -455,7 +455,7 @@ export default async function JobDetailPage({
         </div>
       </section>
 
-      {/* Main content – same sections as before */}
+      {/* Main content – overview, responsibilities, requirements, about client */}
       <div className="space-y-6">
         {/* Overview */}
         <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
