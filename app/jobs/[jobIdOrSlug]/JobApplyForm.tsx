@@ -3,219 +3,317 @@
 
 import { useState } from "react";
 
-type JobApplyFormProps = {
+type Props = {
   jobId: string;
-  jobTitle?: string;
 };
 
-type Status = "idle" | "submitting" | "success" | "error";
-
-export default function JobApplyForm({ jobId, jobTitle }: JobApplyFormProps) {
-  const [status, setStatus] = useState<Status>("idle");
-  const [error, setError] = useState<string | null>(null);
+export default function JobApplyForm({ jobId }: Props) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setStatus("submitting");
-    setError(null);
-
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-
-    // 🔑 Ensure jobId is present for the API
-    formData.set("jobId", jobId);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
 
     try {
+      const form = e.currentTarget;
+      const formData = new FormData(form);
+
+      // pass jobId to API
+      formData.append("jobId", jobId);
+
       const res = await fetch("/api/jobs/apply", {
         method: "POST",
         body: formData,
       });
 
-      const json = await res.json().catch(() => null);
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // ignore JSON parse errors, we'll fall back to generic error
+      }
 
-      if (!res.ok || !json?.success) {
-        const message =
-          json?.error || "Could not submit your application. Please try again.";
-        setError(message);
-        setStatus("error");
+      if (!res.ok || data?.success === false) {
+        const msg =
+          data?.error ||
+          "Could not submit your application. Please try again in a moment.";
+        setErrorMessage(msg);
         return;
       }
 
-      setStatus("success");
+      setSuccessMessage("Thank you. Your application has been received.");
       form.reset();
     } catch (err) {
-      console.error("Submit application error", err);
-      setError("Could not submit your application. Please try again.");
-      setStatus("error");
+      console.error("JobApplyForm submit error", err);
+      setErrorMessage(
+        "Something went wrong while submitting. Please try again in a moment.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  if (status === "success") {
-    return (
-      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-        <p className="font-medium">
-          Thank you. Your application has been received.
-        </p>
-        <p className="mt-1">
-          We&apos;ll review your profile
-          {jobTitle ? (
-            <>
-              {" "}
-              for <span className="font-semibold">{jobTitle}</span>
-            </>
-          ) : null}{" "}
-          and be in touch if there&apos;s a fit.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-3 text-sm"
-      encType="multipart/form-data"
-    >
-      {/* Hidden jobId for the API */}
-      <input type="hidden" name="jobId" value={jobId} />
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
+    <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Name + Email */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="fullName"
+            className="block text-xs font-medium text-slate-700"
+          >
             Full name *
           </label>
           <input
+            id="fullName"
             name="fullName"
+            type="text"
             required
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="Jane Doe"
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="email"
+            className="block text-xs font-medium text-slate-700"
+          >
             Email *
           </label>
           <input
+            id="email"
             name="email"
             type="email"
             required
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="you@example.com"
           />
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
+      {/* Phone + Location */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="phone"
+            className="block text-xs font-medium text-slate-700"
+          >
             Phone
           </label>
           <input
+            id="phone"
             name="phone"
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+            type="tel"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="+234..."
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="location"
+            className="block text-xs font-medium text-slate-700"
+          >
             Location (city, country)
           </label>
           <input
+            id="location"
             name="location"
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="Lagos, Nigeria"
           />
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
+      {/* Links */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="linkedinUrl"
+            className="block text-xs font-medium text-slate-700"
+          >
             LinkedIn
           </label>
           <input
+            id="linkedinUrl"
             name="linkedinUrl"
-            placeholder="https://linkedin.com/in/..."
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+            type="url"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="https://www.linkedin.com/in/..."
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
-            Portfolio / website
+
+        <div className="space-y-1.5">
+          <label
+            htmlFor="githubUrl"
+            className="block text-xs font-medium text-slate-700"
+          >
+            GitHub / Portfolio
           </label>
           <input
-            name="portfolioUrl"
-            placeholder="https://..."
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
+            id="githubUrl"
+            name="githubUrl"
+            type="url"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="https://github.com/... or portfolio link"
           />
         </div>
       </div>
 
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-700">
-          CV / résumé (URL or upload)
-        </label>
-        <input
-          name="cvUrl"
-          placeholder="Paste a public CV link (Google Drive, Dropbox, etc.)"
-          className="mb-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
-        />
-        <input
-          name="cv"
-          type="file"
-          className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-200"
-        />
-      </div>
+      {/* Comp + notice period */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="currentGrossAnnual"
+            className="block text-xs font-medium text-slate-700"
+          >
+            Current gross annual (currency + amount)
+          </label>
+          <input
+            id="currentGrossAnnual"
+            name="currentGrossAnnual"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="e.g. NGN 18,000,000"
+          />
+        </div>
 
-      <div>
-        <label className="mb-1 block text-xs font-medium text-slate-700">
-          Cover letter / short note
-        </label>
-        <textarea
-          name="coverLetter"
-          rows={4}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
-        />
-      </div>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="grossAnnualExpectation"
+            className="block text-xs font-medium text-slate-700"
+          >
+            Expected gross annual
+          </label>
+          <input
+            id="grossAnnualExpectation"
+            name="grossAnnualExpectation"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="e.g. NGN 22,000,000"
+          />
+        </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="noticePeriod"
+            className="block text-xs font-medium text-slate-700"
+          >
             Notice period
           </label>
           <input
+            id="noticePeriod"
             name="noticePeriod"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="e.g. 4 weeks"
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
-            Current gross (annual)
-          </label>
-          <input
-            name="currentGrossAnnual"
-            placeholder="e.g. 15,000,000 NGN"
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
-            Expected gross (annual)
-          </label>
-          <input
-            name="grossAnnualExpectation"
-            placeholder="e.g. 20,000,000 NGN"
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm outline-none ring-0 focus:border-resourcin-blue focus:ring-1 focus:ring-resourcin-blue"
           />
         </div>
       </div>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {/* How they heard + source */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <label
+            htmlFor="howHeard"
+            className="block text-xs font-medium text-slate-700"
+          >
+            How did you hear about this role?
+          </label>
+          <input
+            id="howHeard"
+            name="howHeard"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="Resourcin site, LinkedIn, referral, etc."
+          />
+        </div>
 
-      <button
-        type="submit"
-        disabled={status === "submitting"}
-        className="inline-flex w-full items-center justify-center rounded-md bg-resourcin-blue px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-resourcin-blue/90 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {status === "submitting" ? "Submitting..." : "Submit application"}
-      </button>
+        <div className="space-y-1.5">
+          <label
+            htmlFor="source"
+            className="block text-xs font-medium text-slate-700"
+          >
+            Source (internal)
+          </label>
+          <input
+            id="source"
+            name="source"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="(Your tracking, optional)"
+          />
+        </div>
+      </div>
+
+      {/* CV upload (frontend only for now, API can later store it) */}
+      <div className="space-y-1.5">
+        <label
+          htmlFor="cv"
+          className="block text-xs font-medium text-slate-700"
+        >
+          CV / Resume (PDF or DOCX)
+        </label>
+        <input
+          id="cv"
+          name="cv"
+          type="file"
+          accept=".pdf,.doc,.docx"
+          className="block w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:border-slate-400"
+        />
+        <p className="text-[11px] text-slate-500">
+          If the upload fails, you can email your CV manually and we’ll attach
+          it to your profile from our end.
+        </p>
+      </div>
+
+      {/* Cover letter */}
+      <div className="space-y-1.5">
+        <label
+          htmlFor="coverLetter"
+          className="block text-xs font-medium text-slate-700"
+        >
+          Short note or cover letter
+        </label>
+        <textarea
+          id="coverLetter"
+          name="coverLetter"
+          rows={4}
+          className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs leading-relaxed text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+          placeholder="A short context on why you might be a strong fit..."
+        />
+      </div>
+
+      {/* Messages + submit button */}
+      <div className="flex flex-col gap-2 pt-1">
+        {errorMessage && (
+          <div className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="rounded-md bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+            {successMessage}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isSubmitting ? "Submitting..." : "Submit application"}
+          </button>
+        </div>
+      </div>
     </form>
   );
 }
