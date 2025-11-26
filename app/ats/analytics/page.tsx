@@ -8,17 +8,26 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "ThinkATS | Analytics | Resourcin",
   description:
-    "Pipeline health, application volume, sources, time-to-hire and recruiter performance across tenants in ThinkATS.",
+    "Pipeline health, application volume, sources, speed metrics and recruiter performance across tenants in ThinkATS.",
 };
 
 interface AnalyticsSearchParams {
   tenantId?: string | string[];
+  from?: string | string[];
+  to?: string | string[];
 }
 
 function resolveParam(value: string | string[] | undefined): string {
   if (!value) return "";
   if (Array.isArray(value)) return value[0] ?? "";
   return value;
+}
+
+function parseDate(value: string | null): Date | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
 }
 
 function normaliseStatus(status: string | null | undefined) {
@@ -58,7 +67,51 @@ export default async function AtsAnalyticsPage({
   const selectedTenantId = selectedTenant.id;
 
   // -----------------------------
-  // Load jobs for this tenant
+  // Resolve date range
+  // Default: last 30 days if nothing provided
+  // -----------------------------
+  const rawFrom = resolveParam(searchParams?.from) || null;
+  const rawTo = resolveParam(searchParams?.to) || null;
+
+  const now = new Date();
+  let fromDate = parseDate(rawFrom);
+  let toDate = parseDate(rawTo);
+
+  if (!fromDate && !toDate) {
+    // default to last 30 days
+    toDate = now;
+    fromDate = new Date(
+      now.getTime() - 30 * 24 * 60 * 60 * 1000,
+    );
+  } else {
+    // if only one side is missing, fill it sensibly
+    if (!fromDate && toDate) {
+      fromDate = new Date(
+        toDate.getTime() - 30 * 24 * 60 * 60 * 1000,
+      );
+    }
+    if (fromDate && !toDate) {
+      toDate = now;
+    }
+  }
+
+  // Safety fallback
+  if (!fromDate) fromDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  if (!toDate) toDate = now;
+
+  // Normalise end-of-day for inclusive range
+  const toDateInclusive = new Date(toDate);
+  toDateInclusive.setHours(23, 59, 59, 999);
+
+  const fromInputValue = fromDate.toISOString().slice(0, 10);
+  const toInputValue = toDate.toISOString().slice(0, 10);
+  const rangeDays = Math.max(
+    1,
+    Math.round(daysBetween(fromDate, toDateInclusive)),
+  );
+
+  // -----------------------------
+  // Load jobs for this tenant (all time)
   // -----------------------------
   const jobs = await prisma.job.findMany({
     where: { tenantId: selectedTenantId },
@@ -87,23 +140,26 @@ export default async function AtsAnalyticsPage({
     (job) => normaliseStatus(job.status as any) === "closed",
   ).length;
 
-  const now = new Date();
-  const thirtyDaysAgo = new Date(
-    now.getTime() - 30 * 24 * 60 * 60 * 1000,
-  );
-
-  const jobsLast30Days = jobs.filter(
-    (job) => job.createdAt >= thirtyDaysAgo,
+  const jobsCreatedInRange = jobs.filter(
+    (job) =>
+      job.createdAt >= fromDate &&
+      job.createdAt <= toDateInclusive,
   ).length;
 
   // -----------------------------
-  // Applications (single fetch)
+  // Applications (limited by date range)
   // -----------------------------
   const applications =
     jobIds.length === 0
       ? []
       : await prisma.jobApplication.findMany({
-          where: { jobId: { in: jobIds } },
+          where: {
+            jobId: { in: jobIds },
+            createdAt: {
+              gte: fromDate,
+              lte: toDateInclusive,
+            },
+          },
           select: {
             id: true,
             jobId: true,
@@ -115,10 +171,6 @@ export default async function AtsAnalyticsPage({
         });
 
   const totalApplications = applications.length;
-  const newApplicationsLast30Days = applications.filter(
-    (app) => app.createdAt >= thirtyDaysAgo,
-  ).length;
-
   const totalCandidates = await prisma.candidate.count({
     where: { tenantId: selectedTenantId },
   });
@@ -163,8 +215,8 @@ export default async function AtsAnalyticsPage({
     if (!raw) raw = "Unknown";
 
     const normalised = raw.toLowerCase();
-    // simple normalisation for common sources
     let key = normalised;
+
     if (["linkedin", "linked-in"].includes(normalised)) {
       key = "linkedin";
     } else if (
@@ -178,6 +230,8 @@ export default async function AtsAnalyticsPage({
       )
     ) {
       key = "referral";
+    } else if (!normalised || normalised === "unknown") {
+      key = "unknown";
     }
 
     const current = sourceMap.get(key) ?? 0;
@@ -200,14 +254,12 @@ export default async function AtsAnalyticsPage({
   const topSources = sourceStats.slice(0, 5);
 
   // -----------------------------
-  // Time-to-hire & time-to-first-application
-  //
-  // Approximation:
-  // - Time to first application: first app.createdAt - job.createdAt
-  // - Time to "hire": earliest app.createdAt where stage === "HIRED" - job.createdAt
-  // (we don't track stage-change timestamps yet)
+  // Time-to-hire & time-to-first-application (approx)
   // -----------------------------
-  const applicationsByJob = new Map<string, typeof applications>();
+  const applicationsByJob = new Map<
+    string,
+    (typeof applications)[number][]
+  >();
 
   for (const app of applications) {
     const list = applicationsByJob.get(app.jobId) ?? [];
@@ -232,7 +284,6 @@ export default async function AtsAnalyticsPage({
       timeToFirstAppDays.push(tFirst);
     }
 
-    // "Hire" approximation: earliest application that ended up in HIRED stage
     const hiredApps = sortedByCreated.filter(
       (app) => app.stage === "HIRED",
     );
@@ -257,9 +308,9 @@ export default async function AtsAnalyticsPage({
   const median = (values: number[]): number | null => {
     if (!values.length) return null;
     const sorted = [...values].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length - 1) / 2;
-    const low = Math.floor(mid);
-    const high = Math.ceil(mid);
+    const midIndex = (sorted.length - 1) / 2;
+    const low = Math.floor(midIndex);
+    const high = Math.ceil(midIndex);
     if (low === high) return sorted[low];
     return (sorted[low] + sorted[high]) / 2;
   };
@@ -271,8 +322,7 @@ export default async function AtsAnalyticsPage({
   const medianTimeToHire = median(timeToHireDays);
 
   // -----------------------------
-  // Recruiter performance
-  // Group by hiringManagerId on Job
+  // Recruiter performance (by hiringManagerId) + user lookup
   // -----------------------------
   type RecruiterStat = {
     key: string; // hiringManagerId or "unassigned"
@@ -288,7 +338,7 @@ export default async function AtsAnalyticsPage({
   const getKeyForJob = (job: (typeof jobs)[number]) =>
     job.hiringManagerId || "unassigned";
 
-  // Seed with job counts
+  // seed from jobs
   for (const job of jobs) {
     const key = getKeyForJob(job);
     let stat = recruiterMap.get(key);
@@ -310,7 +360,7 @@ export default async function AtsAnalyticsPage({
     }
   }
 
-  // Add application volume + hires
+  // add application volume + hires (only from range)
   for (const app of applications) {
     const job = jobsById.get(app.jobId);
     if (!job) continue;
@@ -333,20 +383,59 @@ export default async function AtsAnalyticsPage({
     }
   }
 
+  // Collect unique hiringManagerIds and resolve to User names
+  const uniqueHiringManagerIds = Array.from(
+    new Set(
+      jobs
+        .map((j) => j.hiringManagerId)
+        .filter((id): id is string => !!id),
+    ),
+  );
+
+  const users =
+    uniqueHiringManagerIds.length === 0
+      ? []
+      : await prisma.user.findMany({
+          where: {
+            id: { in: uniqueHiringManagerIds },
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        });
+
+  const userById = new Map<string, (typeof users)[number]>();
+  users.forEach((u) => userById.set(u.id, u));
+
   const recruiterStats = Array.from(recruiterMap.values())
     .filter((stat) => stat.jobCount > 0 || stat.totalApplications > 0)
     .sort((a, b) => {
-      // Sort primary by hires desc, then applications desc
       if (b.hires !== a.hires) return b.hires - a.hires;
       return b.totalApplications - a.totalApplications;
     })
-    .slice(0, 6);
+    .slice(0, 8);
 
-  const clearTenantHref = "/ats/analytics";
+  // -----------------------------
+  // Export URL (CSV)
+  // -----------------------------
+  const exportHref = (() => {
+    const url = new URL(
+      "/ats/analytics/export",
+      "http://dummy.local",
+    );
+    url.searchParams.set("tenantId", selectedTenantId);
+    url.searchParams.set("from", fromInputValue);
+    url.searchParams.set("to", toInputValue);
+    return url.pathname + url.search;
+  })();
 
   // -----------------------------
   // Render
   // -----------------------------
+  const clearTenantHref = "/ats/analytics";
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-0">
       {/* Header */}
@@ -366,37 +455,129 @@ export default async function AtsAnalyticsPage({
           </p>
         </div>
 
-        {/* Tenant selector */}
-        <form method="GET" className="flex items-center gap-2">
-          <select
-            name="tenantId"
-            defaultValue={selectedTenantId}
-            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-700 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-          >
-            {tenants.map((tenant) => (
-              <option key={tenant.id} value={tenant.id}>
-                {tenant.name ?? tenant.slug ?? tenant.id}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+          {/* Tenant selector */}
+          <form method="GET" className="flex items-center gap-2">
+            <input
+              type="hidden"
+              name="from"
+              value={fromInputValue}
+            />
+            <input
+              type="hidden"
+              name="to"
+              value={toInputValue}
+            />
 
-          <button
-            type="submit"
-            className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-medium text-white shadow-sm hover:bg-[#0f1c45]"
-          >
-            Switch tenant
-          </button>
-
-          {tenantParam && (
-            <a
-              href={clearTenantHref}
-              className="text-[11px] text-slate-500 hover:text-slate-800"
+            <select
+              name="tenantId"
+              defaultValue={selectedTenantId}
+              className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-700 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
             >
-              Clear
-            </a>
-          )}
-        </form>
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name ?? tenant.slug ?? tenant.id}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="submit"
+              className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-medium text-white shadow-sm hover:bg-[#0f1c45]"
+            >
+              Switch tenant
+            </button>
+
+            {tenantParam && (
+              <a
+                href={clearTenantHref}
+                className="text-[11px] text-slate-500 hover:text-slate-800"
+              >
+                Clear
+              </a>
+            )}
+          </form>
+
+          {/* Export */}
+          <a
+            href={exportHref}
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
+          >
+            ⬇ Export CSV
+          </a>
+        </div>
       </div>
+
+      {/* Date range filter */}
+      <form
+        method="GET"
+        className="mb-6 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+      >
+        <input
+          type="hidden"
+          name="tenantId"
+          value={selectedTenantId}
+        />
+
+        <div className="flex flex-1 flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <span className="font-medium text-slate-700">
+              Date range
+            </span>
+            <div className="flex items-center gap-2">
+              <div>
+                <label
+                  htmlFor="from"
+                  className="mr-1 text-[10px] text-slate-500"
+                >
+                  From
+                </label>
+                <input
+                  id="from"
+                  name="from"
+                  type="date"
+                  defaultValue={fromInputValue}
+                  className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="to"
+                  className="mr-1 text-[10px] text-slate-500"
+                >
+                  To
+                </label>
+                <input
+                  id="to"
+                  name="to"
+                  type="date"
+                  defaultValue={toInputValue}
+                  className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[10px] text-slate-500">
+            Showing applications between{" "}
+            <span className="font-medium">
+              {fromInputValue}
+            </span>{" "}
+            and{" "}
+            <span className="font-medium">
+              {toInputValue}
+            </span>{" "}
+            ({rangeDays} days).
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          className="inline-flex items-center rounded-md bg-[#172965] px-3 py-1.5 text-[11px] font-medium text-white hover:bg-[#0f1c45]"
+        >
+          Apply range
+        </button>
+      </form>
 
       {/* Top row: hiring snapshot */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -420,19 +601,20 @@ export default async function AtsAnalyticsPage({
             {draftJobs} / {closedJobs}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            {jobsLast30Days} roles created in the last 30 days
+            {jobsCreatedInRange} roles created in this period
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Total applications
+            Applications in range
           </p>
           <p className="mt-2 text-2xl font-semibold text-[#306B34]">
             {totalApplications}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            {newApplicationsLast30Days} in the last 30 days
+            ~
+            {(totalApplications / rangeDays).toFixed(1)} per day
           </p>
         </div>
 
@@ -461,7 +643,8 @@ export default async function AtsAnalyticsPage({
                   Pipeline stage distribution
                 </h2>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Where candidates currently sit across your funnel.
+                  Where candidates currently sit across your funnel in
+                  this period.
                 </p>
               </div>
               <span className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-1 text-[10px] font-medium text-[#172965]">
@@ -471,9 +654,8 @@ export default async function AtsAnalyticsPage({
 
             {totalStageCandidates === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
-                No applications yet for this tenant. Once candidates
-                start applying, you’ll see a breakdown of where they
-                sit in the pipeline.
+                No applications in this date range. Adjust the range to
+                see your funnel.
               </div>
             ) : (
               <div className="space-y-3">
@@ -531,7 +713,8 @@ export default async function AtsAnalyticsPage({
                   Source effectiveness
                 </h2>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Which channels are actually bringing in candidates.
+                  Which channels are actually bringing in candidates in
+                  this period.
                 </p>
               </div>
               <span className="inline-flex items-center rounded-full bg-[#64C247]/10 px-2 py-1 text-[10px] font-medium text-[#306B34]">
@@ -541,8 +724,9 @@ export default async function AtsAnalyticsPage({
 
             {totalApplications === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
-                No applications yet — once candidates apply, you’ll see
-                a breakdown by source (LinkedIn, referrals, etc.).
+                No applications in this date range. Once candidates
+                apply, you’ll see a breakdown by source (LinkedIn,
+                referrals, etc.).
               </div>
             ) : topSources.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
@@ -585,10 +769,11 @@ export default async function AtsAnalyticsPage({
           {/* Funnel snapshot */}
           <div className="rounded-xl border border-slate-200 bg-[#172965] p-4 text-white shadow-sm">
             <h2 className="text-sm font-semibold">
-              Funnel snapshot (last 30 days)
+              Funnel snapshot (selected period)
             </h2>
             <p className="mt-1 text-[11px] text-slate-100/80">
-              High-level view of volume vs. active roles.
+              High-level view of volume vs. active roles between the
+              selected dates.
             </p>
 
             <dl className="mt-4 space-y-2 text-[11px]">
@@ -604,20 +789,18 @@ export default async function AtsAnalyticsPage({
               </div>
               <div className="flex items-center justify-between">
                 <dt className="text-slate-100/80">
-                  New applications per day (30d)
+                  Applications per day (range)
                 </dt>
                 <dd className="font-semibold text-[#FFC000]">
-                  {(
-                    newApplicationsLast30Days / 30
-                  ).toFixed(1)}
+                  {(totalApplications / rangeDays).toFixed(1)}
                 </dd>
               </div>
               <div className="flex items-center justify-between">
                 <dt className="text-slate-100/80">
-                  Roles created (30d)
+                  Roles created in range
                 </dt>
                 <dd className="font-semibold text-[#FFC000]">
-                  {jobsLast30Days}
+                  {jobsCreatedInRange}
                 </dd>
               </div>
             </dl>
@@ -678,14 +861,14 @@ export default async function AtsAnalyticsPage({
               <li>
                 Watch for{" "}
                 <span className="font-medium">bottlenecks</span> where
-                candidates pile up in one stage.
+                candidates pile up in a single stage.
               </li>
               <li>
                 Compare{" "}
-                <span className="font-medium">
-                  sources and recruiter load
+                  <span className="font-medium">
+                  sources and recruiter loads
                 </span>{" "}
-                when you onboard more clients/roles.
+                before committing SLAs to clients.
               </li>
               <li>
                 Use average{" "}
@@ -694,7 +877,7 @@ export default async function AtsAnalyticsPage({
                 </span>{" "}
                 and{" "}
                 <span className="font-medium">time-to-hire</span> as
-                SLAs in commercial conversations.
+                benchmarks for ThinkATS performance.
               </li>
             </ul>
           </div>
@@ -709,8 +892,8 @@ export default async function AtsAnalyticsPage({
               Recruiter / owner performance
             </h2>
             <p className="mt-1 text-[11px] text-slate-500">
-              Grouped by <code>hiringManagerId</code> on each job. This
-              becomes more powerful once jobs are consistently assigned.
+              Grouped by <code>hiringManagerId</code> on each job,
+              enriched with user profiles where available.
             </p>
           </div>
           <span className="inline-flex items-center rounded-full bg-[#FFC000]/10 px-2 py-1 text-[10px] font-medium text-[#8a6000]">
@@ -720,8 +903,9 @@ export default async function AtsAnalyticsPage({
 
         {recruiterStats.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
-            No jobs or applications yet linked to hiring managers. Once
-            roles are assigned, you’ll see per-owner volumes and hires.
+            No jobs or applications yet linked to hiring managers in
+            this tenant. Once roles are assigned, you’ll see per-owner
+            volumes and hires.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -729,7 +913,7 @@ export default async function AtsAnalyticsPage({
               <thead className="text-[10px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="rounded-l-lg bg-slate-50 px-3 py-2 text-left font-medium">
-                    Owner (hiringManagerId)
+                    Owner
                   </th>
                   <th className="bg-slate-50 px-3 py-2 text-right font-medium">
                     Jobs
@@ -738,24 +922,33 @@ export default async function AtsAnalyticsPage({
                     Open jobs
                   </th>
                   <th className="bg-slate-50 px-3 py-2 text-right font-medium">
-                    Applications
+                    Applications (range)
                   </th>
                   <th className="rounded-r-lg bg-slate-50 px-3 py-2 text-right font-medium">
-                    Hires
+                    Hires (range)
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {recruiterStats.map((stat) => {
-                  const label =
-                    stat.hiringManagerId ??
+                  const user = stat.hiringManagerId
+                    ? userById.get(stat.hiringManagerId)
+                    : null;
+
+                  const primaryLabel =
+                    user?.name ||
+                    user?.email ||
                     (stat.key === "unassigned"
                       ? "Unassigned"
                       : stat.key);
-                  const display =
-                    label.length > 18
-                      ? label.slice(0, 16) + "…"
-                      : label;
+
+                  const secondaryLabel =
+                    user?.email && user?.email !== primaryLabel
+                      ? user.email
+                      : stat.hiringManagerId &&
+                          stat.hiringManagerId !== primaryLabel
+                        ? stat.hiringManagerId
+                        : null;
 
                   return (
                     <tr
@@ -763,19 +956,16 @@ export default async function AtsAnalyticsPage({
                       className="rounded-lg bg-white text-slate-700 shadow-sm"
                     >
                       <td className="rounded-l-lg px-3 py-2">
-                        <span className="font-medium text-slate-900">
-                          {display}
-                        </span>
-                        {stat.hiringManagerId && (
-                          <span className="ml-2 text-[10px] text-slate-400">
-                            {stat.hiringManagerId.length > 10
-                              ? stat.hiringManagerId.slice(
-                                  0,
-                                  10,
-                                ) + "…"
-                              : stat.hiringManagerId}
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-900">
+                            {primaryLabel}
                           </span>
-                        )}
+                          {secondaryLabel && (
+                            <span className="text-[10px] text-slate-400">
+                              {secondaryLabel}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right">
                         {stat.jobCount}
