@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import { uploadCvToSupabase } from "@/lib/storage";
+import {
+  sendCandidateApplicationConfirmationEmail,
+  sendInternalNewApplicationEmail,
+} from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -95,7 +99,6 @@ export async function POST(
         if (publicUrl) {
           cvUrl = publicUrl;
 
-          // Optionally store on Candidate profile
           await prisma.candidate.update({
             where: { id: candidate.id },
             data: {
@@ -105,7 +108,7 @@ export async function POST(
         }
       } catch (err) {
         console.error("Unexpected CV upload error:", err);
-        // We don't fail the whole application if CV upload fails
+        // Do not fail the application if file upload fails
       }
     }
 
@@ -129,6 +132,27 @@ export async function POST(
         submittedAt: new Date(),
       },
     });
+
+    // 5) Fire notifications (don't break the request if email fails)
+    try {
+      await Promise.all([
+        sendCandidateApplicationConfirmationEmail({
+          to: candidate.email,
+          candidateName: candidate.fullName,
+          jobTitle: job.title,
+          timelineDays: 7, // adjust if you want a different SLA
+        }),
+        sendInternalNewApplicationEmail({
+          jobId: job.id,
+          jobTitle: job.title,
+          candidateName: candidate.fullName,
+          candidateEmail: candidate.email,
+        }),
+      ]);
+    } catch (err) {
+      console.error("Error sending notification emails:", err);
+      // Intentionally swallow error – application should still succeed
+    }
 
     return NextResponse.json(
       {
