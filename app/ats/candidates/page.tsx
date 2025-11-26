@@ -6,6 +6,9 @@ import { listTenantJobs } from "@/lib/jobs";
 
 export const dynamic = "force-dynamic";
 
+// ----------------------
+// Small helpers
+// ----------------------
 function formatDate(date: Date | null | undefined) {
   if (!date) return "";
   return date.toLocaleDateString("en-GB", {
@@ -97,6 +100,9 @@ function getCandidateLinkId(app: any): string | null {
   return null;
 }
 
+// ----------------------
+// Data loader
+// ----------------------
 async function getCandidatesInboxData(searchParams: {
   q?: string;
   jobId?: string;
@@ -216,6 +222,9 @@ async function getCandidatesInboxData(searchParams: {
   };
 }
 
+// ----------------------
+// Page component
+// ----------------------
 export default async function CandidatesInboxPage({
   searchParams,
 }: {
@@ -236,7 +245,12 @@ export default async function CandidatesInboxPage({
       ? searchParams.view
       : "all";
 
-  const data = await getCandidatesInboxData({ q, jobId, source, view });
+  const data = await getCandidatesInboxData({
+    q,
+    jobId,
+    source,
+    view,
+  });
 
   if (!data) {
     return (
@@ -522,9 +536,8 @@ export default async function CandidatesInboxPage({
 
         {applications.length === 0 ? (
           <div className="px-4 py-10 text-center text-xs text-slate-500">
-            No applications match your filters yet. Adjust your
-            filters or share your careers page to start receiving
-            candidates.
+            No applications match your filters yet. Adjust your filters
+            or share your careers page to start receiving candidates.
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -567,10 +580,8 @@ export default async function CandidatesInboxPage({
                         <div className="flex flex-wrap items-center gap-2">
                           {candidateLinkId ? (
                             <Link
-                              href={`/ats/candidates/${encodeURIComponent(
-                                candidateLinkId,
-                              )}`}
-                              className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"
+                              href={`/ats/candidates/${candidateLinkId}`}
+                              className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"`
                             >
                               {candidateName}
                             </Link>
