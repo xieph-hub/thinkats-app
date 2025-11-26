@@ -1,95 +1,94 @@
 // app/jobs/JobsExplorer.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import JobCardGrid from "@/components/jobs/JobCardGrid";
 import type { JobCardData } from "@/components/jobs/JobCard";
-import { JobCardGrid } from "@/components/jobs/JobCardGrid";
 
 type Props = {
   jobs: JobCardData[];
 };
 
-type WorkModeFilter = "all" | "remote" | "hybrid" | "onsite" | "flexible";
-type ExperienceFilter =
-  | "all"
-  | "junior"
-  | "mid"
-  | "senior"
-  | "lead"
-  | "director";
-
-export default function JobsExplorer({ jobs }: Props) {
+const JobsExplorer: React.FC<Props> = ({ jobs }) => {
   const router = useRouter();
 
-  // UI state
   const [search, setSearch] = useState("");
-  const [location, setLocation] = useState("");
-  const [workMode, setWorkMode] = useState<WorkModeFilter>("all");
-  const [experience, setExperience] = useState<ExperienceFilter>("all");
-  const [onlyConfidential, setOnlyConfidential] = useState(false);
+  const [locationFilter, setLocationFilter] = useState<string>("all");
+  const [seniorityFilter, setSeniorityFilter] = useState<string>("all");
+  const [workModeFilter, setWorkModeFilter] = useState<string>("all");
 
-  // Filtering
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const job of jobs) {
+      if (job.location) set.add(job.location);
+    }
+    return Array.from(set).sort();
+  }, [jobs]);
+
+  const seniorityOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const job of jobs) {
+      if (job.experienceLevel) set.add(job.experienceLevel);
+    }
+    return Array.from(set).sort();
+  }, [jobs]);
+
+  const workModeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const job of jobs) {
+      if (job.workMode) set.add(job.workMode);
+    }
+    return Array.from(set).sort();
+  }, [jobs]);
+
   const filteredJobs = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const locQ = location.trim().toLowerCase();
-
     return jobs.filter((job) => {
-      // free-text search
+      const q = search.trim().toLowerCase();
+
       if (q) {
         const haystack = [
           job.title,
-          job.company ?? "",
-          job.location ?? "",
-          job.department ?? "",
-          (job.tags ?? []).join(" "),
+          job.company,
+          job.location,
+          job.department,
+          job.shortDescription,
+          ...(job.tags ?? []),
         ]
+          .filter(Boolean)
           .join(" ")
           .toLowerCase();
 
-        if (!haystack.includes(q)) return false;
+        if (!haystack.includes(q)) {
+          return false;
+        }
       }
 
-      // location filter
-      if (locQ) {
-        const jobLoc = (job.location ?? "").toLowerCase();
-        if (!jobLoc.includes(locQ)) return false;
+      if (
+        locationFilter !== "all" &&
+        (job.location ?? "").toLowerCase() !== locationFilter.toLowerCase()
+      ) {
+        return false;
       }
 
-      // work mode filter
-      if (workMode !== "all") {
-        const wm = (job.workMode ?? "").toLowerCase();
-        if (wm !== workMode) return false;
+      if (
+        seniorityFilter !== "all" &&
+        (job.experienceLevel ?? "").toLowerCase() !==
+          seniorityFilter.toLowerCase()
+      ) {
+        return false;
       }
 
-      // experience filter
-      if (experience !== "all") {
-        const exp = (job.experienceLevel ?? "").toLowerCase();
-        if (!exp.includes(experience)) return false;
-      }
-
-      // confidential-only
-      if (onlyConfidential && !job.isConfidential) {
+      if (
+        workModeFilter !== "all" &&
+        (job.workMode ?? "").toLowerCase() !== workModeFilter.toLowerCase()
+      ) {
         return false;
       }
 
       return true;
     });
-  }, [jobs, search, location, workMode, experience, onlyConfidential]);
-
-  const totalCount = jobs.length;
-  const filteredCount = filteredJobs.length;
-  const remoteCount = jobs.filter(
-    (j) => (j.workMode ?? "").toLowerCase() === "remote"
-  ).length;
-
-  // Small styling helpers – using Resourcin brand blue
-  const filterPillBase =
-    "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium border transition-colors";
-  const activePill =
-    "border-[#172965] bg-[#172965] text-white shadow-sm";
-  const inactivePill =
-    "border-slate-200 bg-white text-slate-600 hover:border-slate-300";
+  }, [jobs, search, locationFilter, seniorityFilter, workModeFilter]);
 
   return (
     <div className="grid gap-8 md:grid-cols-[260px,1fr]">
@@ -97,193 +96,114 @@ export default function JobsExplorer({ jobs }: Props) {
       <aside className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Filter
+            Filters
           </p>
-          <h2 className="mt-1 text-sm font-semibold text-slate-900">
-            Narrow your search
-          </h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Narrow roles by keyword, location, seniority and work mode.
+          </p>
         </div>
 
         {/* Search */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-600">
-            Keyword
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-700">
+            Search roles
           </label>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Title, company, tags…"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/50"
+            placeholder="e.g. Head of Sales, Lagos"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-0 transition focus:border-[#172965] focus:ring-2 focus:ring-[#172965]/10"
           />
         </div>
 
         {/* Location */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-600">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-700">
             Location
           </label>
-          <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="e.g. Lagos, Nairobi, Remote"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/50"
-          />
+          <select
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 transition focus:border-[#172965] focus:ring-2 focus:ring-[#172965]/10"
+          >
+            <option value="all">All locations</option>
+            {locationOptions.map((loc) => (
+              <option key={loc} value={loc}>
+                {loc}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Seniority */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-700">
+            Seniority
+          </label>
+          <select
+            value={seniorityFilter}
+            onChange={(e) => setSeniorityFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 transition focus:border-[#172965] focus:ring-2 focus:ring-[#172965]/10"
+          >
+            <option value="all">All levels</option>
+            {seniorityOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Work mode */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-600">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-slate-700">
             Work mode
           </label>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { value: "all", label: "Any" },
-              { value: "remote", label: "Remote" },
-              { value: "hybrid", label: "Hybrid" },
-              { value: "onsite", label: "On-site" },
-              { value: "flexible", label: "Flexible" },
-            ].map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setWorkMode(opt.value as WorkModeFilter)}
-                className={`${filterPillBase} ${
-                  workMode === opt.value ? activePill : inactivePill
-                }`}
-              >
-                {opt.label}
-              </button>
+          <select
+            value={workModeFilter}
+            onChange={(e) => setWorkModeFilter(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 transition focus:border-[#172965] focus:ring-2 focus:ring-[#172965]/10"
+          >
+            <option value="all">Any</option>
+            {workModeOptions.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
             ))}
-          </div>
+          </select>
         </div>
 
-        {/* Experience */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-600">
-            Seniority
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { value: "all", label: "Any" },
-              { value: "junior", label: "Junior" },
-              { value: "mid", label: "Mid-level" },
-              { value: "senior", label: "Senior" },
-              { value: "lead", label: "Lead" },
-              { value: "director", label: "Director+" },
-            ].map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setExperience(opt.value as ExperienceFilter)}
-                className={`${filterPillBase} ${
-                  experience === opt.value ? activePill : inactivePill
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Confidential only */}
-        <div className="space-y-2 border-t border-slate-100 pt-4">
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-              checked={onlyConfidential}
-              onChange={(e) => setOnlyConfidential(e.target.checked)}
-            />
-            Show only{" "}
-            <span className="font-semibold text-slate-900">
-              confidential searches
-            </span>
-          </label>
-          <p className="text-[11px] text-slate-500">
-            Helpful when you’re scanning executive or sensitive mandates.
-          </p>
-        </div>
-
-        {/* Quick stats */}
-        <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-xs">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-              Total roles
-            </p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">
-              {totalCount}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">
-              Remote
-            </p>
-            <p className="mt-1 text-lg font-semibold text-slate-900">
-              {remoteCount}
-            </p>
-          </div>
-        </div>
+        {/* Reset */}
+        <button
+          type="button"
+          onClick={() => {
+            setSearch("");
+            setLocationFilter("all");
+            setSeniorityFilter("all");
+            setWorkModeFilter("all");
+          }}
+          className="mt-2 inline-flex w-full items-center justify-center rounded-full border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          Clear all filters
+        </button>
       </aside>
 
-      {/* Main results */}
-      <section className="space-y-4">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-          <div>
-            <p
-              className="text-[11px] font-semibold uppercase tracking-[0.18em]"
-              style={{ color: "#172965" }} // Resourcin blue
-            >
-              Live mandates
-            </p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-900">
-              {filteredCount}{" "}
-              <span className="font-normal text-slate-600">
-                role{filteredCount === 1 ? "" : "s"} matching your filters
-              </span>
-            </h2>
-            {search && (
-              <p className="mt-1 text-xs text-slate-500">
-                Showing results for{" "}
-                <span className="font-semibold">{search}</span>
-              </p>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSearch("");
-              setLocation("");
-              setWorkMode("all");
-              setExperience("all");
-              setOnlyConfidential(false);
-            }}
-            className="self-start rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Reset filters
-          </button>
-        </div>
-
-        {filteredJobs.length === 0 ? (
-          <div className="flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
-            <p className="text-sm font-medium text-slate-800">
-              No roles match these filters (yet).
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Try clearing some filters or searching with broader terms.
-            </p>
-          </div>
-        ) : (
-          <JobCardGrid
-            jobs={filteredJobs}
-            onOpenJob={(job) => router.push(job.shareUrl)}
-            onApply={(job) => router.push(job.shareUrl + "#apply")}
-            onSave={(job) => {
-              console.log("Save job", job.id);
-            }}
-          />
-        )}
+      {/* Jobs grid – no count text, filters just work */}
+      <section className="space-y-3">
+        <JobCardGrid
+          jobs={filteredJobs}
+          onOpenJob={(job) => {
+            const url = job.shareUrl || `/jobs/${job.id}`;
+            router.push(url);
+          }}
+          onApply={(job) => {
+            const url = (job.shareUrl || `/jobs/${job.id}`) + "#apply";
+            router.push(url);
+          }}
+        />
       </section>
     </div>
   );
-}
+};
+
+export default JobsExplorer;
