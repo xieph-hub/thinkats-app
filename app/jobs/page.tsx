@@ -14,31 +14,107 @@ export const metadata: Metadata = {
 
 type RawJobRow = {
   id: string;
+  slug: string | null;
   title: string;
+  short_description: string | null;
   location: string | null;
+  employment_type: string | null;
+  experience_level: string | null;
+  work_mode: string | null;
+  department: string | null;
+  tags: string[] | null;
   status: string | null;
   visibility: string | null;
   internal_only: boolean | null;
   confidential: boolean | null;
   created_at: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string | null;
+  salary_visible: boolean | null;
 };
 
+function formatEmploymentType(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  switch (raw) {
+    case "full_time":
+    case "full-time":
+      return "Full-time";
+    case "part_time":
+    case "part-time":
+      return "Part-time";
+    case "contract":
+      return "Contract";
+    case "temporary":
+      return "Temporary";
+    case "internship":
+      return "Internship";
+    default:
+      return raw;
+  }
+}
+
+function formatSalary(row: RawJobRow): string | undefined {
+  if (!row.salary_visible) return undefined;
+  if (!row.salary_min && !row.salary_max) return undefined;
+
+  const currency = (row.salary_currency || "NGN").toUpperCase();
+  const symbol =
+    currency === "NGN"
+      ? "₦"
+      : currency === "USD"
+      ? "$"
+      : currency === "KES"
+      ? "KSh "
+      : currency === "GHS"
+      ? "GH₵"
+      : currency === "ZAR"
+      ? "R"
+      : `${currency} `;
+
+  const fmt = (n: number | null) =>
+    n == null ? "" : n.toLocaleString("en-NG", { maximumFractionDigits: 0 });
+
+  if (row.salary_min && row.salary_max) {
+    return `${symbol}${fmt(row.salary_min)} – ${symbol}${fmt(row.salary_max)}`;
+  }
+  if (row.salary_min) {
+    return `From ${symbol}${fmt(row.salary_min)}`;
+  }
+  if (row.salary_max) {
+    return `Up to ${symbol}${fmt(row.salary_max)}`;
+  }
+  return undefined;
+}
+
 export default async function JobsPage() {
-  // ⬇️ No tenant filter – public board
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
       `
       id,
+      slug,
       title,
+      short_description,
       location,
+      employment_type,
+      experience_level,
+      work_mode,
+      department,
+      tags,
       status,
       visibility,
       internal_only,
       confidential,
-      created_at
+      created_at,
+      salary_min,
+      salary_max,
+      salary_currency,
+      salary_visible
     `
     )
+    .eq("status", "open")
+    .eq("visibility", "public")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -47,34 +123,35 @@ export default async function JobsPage() {
 
   const rows = (data ?? []) as RawJobRow[];
 
-  // Only show open + public + not internal
-  const publicRows = rows.filter((row) => {
-    const status = (row.status || "").toLowerCase();
-    const visibility = (row.visibility || "").toLowerCase();
-    const isOpen = status === "open";
-    const isPublic = visibility === "public";
-    const isInternal = row.internal_only === true;
-    return isOpen && isPublic && !isInternal;
-  });
+  // Hide internal-only roles on the public site
+  const publicRows = rows.filter((row) => row.internal_only !== true);
 
-  const jobs: JobCardData[] = publicRows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    location: row.location ?? "Location flexible",
-    company: row.confidential
+  const jobs: JobCardData[] = publicRows.map((row) => {
+    const slugOrId = row.slug ?? row.id;
+    const company = row.confidential
       ? "Confidential search – via Resourcin"
-      : "Resourcin",
-    postedAt: row.created_at,
-    shareUrl: `/jobs/${row.id}`,
-    // everything else in JobCardData is optional and can be added later
-  }));
+      : "Resourcin";
+    const type = formatEmploymentType(row.employment_type);
+    const salary = formatSalary(row);
 
-  console.log(
-    "JobsPage – total rows:",
-    rows.length,
-    "public rows shown:",
-    publicRows.length
-  );
+    return {
+      id: row.id,
+      title: row.title,
+      location: row.location ?? "Location flexible",
+      postedAt: row.created_at,
+      shareUrl: `/jobs/${slugOrId}`,
+      company,
+      type,
+      salary,
+      applicants: 0,
+      workMode: row.work_mode ?? undefined,
+      experienceLevel: row.experience_level ?? undefined,
+      department: row.department ?? undefined,
+      shortDescription: row.short_description ?? undefined,
+      tags: row.tags ?? [],
+      isConfidential: row.confidential === true,
+    };
+  });
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
