@@ -125,7 +125,7 @@ export async function POST(
 
       const { data: uploadResult, error: uploadError } =
         await supabaseAdmin.storage
-          .from("resourcin-uploads") // ✅ your existing bucket
+          .from("resourcin-uploads") // ✅ your bucket
           .upload(filePath, uploadCvFile, {
             contentType: uploadCvFile.type || "application/octet-stream",
             upsert: false,
@@ -168,9 +168,8 @@ export async function POST(
       );
     }
 
-    // 5) Insert into job_applications
+    // 5) Insert into job_applications (no tenant_id column here)
     const insertPayload = {
-      tenant_id: job.tenant_id,
       job_id: job.id,
       full_name,
       email,
@@ -199,7 +198,7 @@ export async function POST(
       );
     }
 
-    // 6) Nice success response – your front-end can keep the existing copy
+    // 6) Success response (keep your nice front-end copy)
     return NextResponse.json(
       {
         applicationId: data.id as string,
@@ -213,7 +212,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "We couldn’t submit your application due to a temporary issue. Please try again, or email your CV to hello@resourcin.com.",
+          "We couldn’t submit your application right now. Please try again, or email your CV to hello@resourcin.com.",
       },
       { status: 500 }
     );
