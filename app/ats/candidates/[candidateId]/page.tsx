@@ -3,452 +3,337 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "ThinkATS | Candidate | Resourcin",
+  title: "Candidate profile | ThinkATS",
   description:
-    "Single-candidate profile view showing contact details, history and applications across ThinkATS.",
+    "Single candidate view across roles, stages and applications in ThinkATS.",
 };
 
-type PageParams = {
-  candidateId: string;
-};
+// ───────────────────────────────
+// Utilities
+// ───────────────────────────────
 
-function formatDate(date: Date | null | undefined) {
-  if (!date) return "";
-  return date.toLocaleDateString("en-GB", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatDateTime(date: Date | null | undefined) {
-  if (!date) return "";
-  return date.toLocaleString("en-GB", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// ✅ Only treat the param as a UUID if it actually looks like one
 function looksLikeUuid(value: string) {
   return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
     value,
   );
 }
 
-// Stage config to stay consistent with ThinkATS
-const STAGES = [
-  {
-    key: "APPLIED",
-    label: "Applied",
-    badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
-  },
-  {
-    key: "SCREENING",
-    label: "Screening",
-    badgeClass:
-      "bg-[#FFC000]/10 text-[#8a6000] border-[#FFC000]/30",
-  },
-  {
-    key: "INTERVIEW",
-    label: "Interviewing",
-    badgeClass:
-      "bg-[#172965]/10 text-[#172965] border-[#172965]/30",
-  },
-  {
-    key: "OFFER",
-    label: "Offer",
-    badgeClass:
-      "bg-[#64C247]/10 text-[#306B34] border-[#64C247]/40",
-  },
-  {
-    key: "HIRED",
-    label: "Hired",
-    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100",
-  },
-  {
-    key: "REJECTED",
-    label: "Rejected",
-    badgeClass: "bg-red-50 text-red-700 border-red-100",
-  },
-];
+function formatDate(date: Date | null | undefined) {
+  if (!date) return "";
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
-const STAGE_MAP = new Map<string, (typeof STAGES)[number]>(
-  STAGES.map((s) => [s.key, s]),
-);
+function normalize(value: string | null | undefined) {
+  if (!value) return "";
+  return String(value).toUpperCase();
+}
 
-export default async function AtsCandidateDetailPage({
-  params,
-}: {
-  params: PageParams;
-}) {
-  const { candidateId: candidateKey } = params;
+function humanLabel(value: string | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const clean = value.toString().trim().replace(/\s+/g, " ");
+  return clean
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
-  // ------------------------------------
-  // 1) Try candidate.id when it looks like a UUID
-  // ------------------------------------
-  let candidate: any = null;
+function stageBadgeClass(stage: string | null | undefined) {
+  const v = normalize(stage);
+  if (v === "OFFER") {
+    return "rounded-full bg-[#FFC000]/10 px-2 py-0.5 text-[10px] font-medium text-[#7A5600]";
+  }
+  if (v === "HIRED") {
+    return "rounded-full bg-[#64C247]/10 px-2 py-0.5 text-[10px] font-medium text-[#306B34]";
+  }
+  if (v === "REJECTED") {
+    return "rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700";
+  }
+  if (v === "SCREENING" || v === "INTERVIEW" || v === "INTERVIEWING") {
+    return "rounded-full bg-[#172965]/10 px-2 py-0.5 text-[10px] font-medium text-[#172965]";
+  }
+  return "rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600";
+}
+
+function statusBadgeClass(status: string | null | undefined) {
+  const v = normalize(status);
+  if (v === "PENDING" || v === "OPEN") {
+    return "rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600";
+  }
+  if (v === "ACTIVE" || v === "IN_PROGRESS") {
+    return "rounded-full bg-[#172965]/10 px-2 py-0.5 text-[10px] font-medium text-[#172965]";
+  }
+  if (v === "ON_HOLD") {
+    return "rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700";
+  }
+  if (v === "REJECTED" || v === "ARCHIVED") {
+    return "rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700";
+  }
+  return "rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600";
+}
+
+// ───────────────────────────────
+// Data loader with safe lookups
+// ───────────────────────────────
+
+async function getCandidateRecord(candidateKey: string) {
+  const tenant = await getResourcinTenant();
+  if (!tenant) return null;
+
+  // 1) Try to resolve directly on Candidate by id / email
+  const orClauses: any[] = [];
 
   if (looksLikeUuid(candidateKey)) {
-    candidate = await prisma.candidate.findUnique({
-      where: { id: candidateKey },
-    });
+    orClauses.push({ id: candidateKey });
   }
 
-  // ------------------------------------
-  // 2) If still not found and it looks like a UUID,
-  //    try treating it as a JobApplication ID and
-  //    resolve the linked candidate.
-  // ------------------------------------
-  if (!candidate && looksLikeUuid(candidateKey)) {
-    const application = await prisma.jobApplication.findUnique({
-      where: { id: candidateKey },
-      include: { candidate: true },
-    });
+  // Allow email-based keys (for legacy rows or email links)
+  orClauses.push({ email: candidateKey });
 
-    if (application?.candidate) {
-      candidate = application.candidate;
-    }
-  }
-
-  // ------------------------------------
-  // 3) Fallback: treat key as an email address
-  // ------------------------------------
-  if (!candidate) {
-    candidate = await prisma.candidate.findFirst({
-      where: {
-        // use `any`-style where to avoid TS complaining about dynamic fields later
-        email: candidateKey,
-      } as any,
-    });
-  }
-
-  if (!candidate) {
-    notFound();
-  }
-
-  const c = candidate as any;
-
-  const primaryLabel: string =
-    (c.fullName as string | undefined) ||
-    (c.name as string | undefined) ||
-    (c.firstName && c.lastName
-      ? `${c.firstName} ${c.lastName}`
-      : undefined) ||
-    (c.email as string | undefined) ||
-    candidate.id;
-
-  const email: string | null =
-    (c.email as string | undefined) || null;
-  const phone: string | null =
-    (c.phone as string | undefined) || null;
-  const location: string | null =
-    (c.location as string | undefined) || null;
-  const headline: string | null =
-    (c.headline as string | undefined) || null;
-  const linkedinUrl: string | null =
-    (c.linkedinUrl as string | undefined) || null;
-  const currentCompany: string | null =
-    (c.currentCompany as string | undefined) || null;
-
-  const createdAt: Date | null =
-    (c.createdAt as Date | undefined) ?? null;
-  const updatedAt: Date | null =
-    (c.updatedAt as Date | undefined) ?? null;
-
-  // ------------------------------------
-  // 4) Load all applications for this candidate
-  // ------------------------------------
-  const applications = await prisma.jobApplication.findMany({
-    where: { candidateId: candidate.id },
-    select: {
-      id: true,
-      jobId: true,
-      createdAt: true,
-      stage: true,
-      source: true,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-
-  const jobIds = Array.from(
-    new Set(applications.map((a) => a.jobId)),
-  );
-
-  const jobs =
-    jobIds.length === 0
-      ? []
-      : await prisma.job.findMany({
-          where: { id: { in: jobIds } },
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            slug: true,
-            createdAt: true,
-            location: true,
-            employmentType: true,
+  let candidate =
+    orClauses.length === 0
+      ? null
+      : await prisma.candidate.findFirst({
+          where: {
+            tenantId: tenant.id,
+            OR: orClauses,
+          },
+          include: {
+            applications: {
+              orderBy: { createdAt: "desc" },
+              include: {
+                job: {
+                  include: {
+                    clientCompany: true,
+                  },
+                },
+              },
+            },
           },
         });
 
-  const jobsById = new Map<string, (typeof jobs)[number]>();
-  jobs.forEach((job) => jobsById.set(job.id, job));
+  // 2) Fallback: maybe the key is actually a JobApplication.id
+  if (!candidate) {
+    const app = await prisma.jobApplication.findUnique({
+      where: { id: candidateKey },
+      include: {
+        candidate: {
+          include: {
+            applications: {
+              orderBy: { createdAt: "desc" },
+              include: {
+                job: {
+                  include: {
+                    clientCompany: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
 
-  const hasApplications = applications.length > 0;
+    if (app?.candidate && app.candidate.tenantId === tenant.id) {
+      candidate = app.candidate as any;
+    }
+  }
 
-  const lastActivity =
-    applications.length > 0
-      ? applications[0].createdAt
-      : createdAt;
-  const firstSeen =
-    applications.length > 0
-      ? applications[applications.length - 1].createdAt
-      : createdAt;
+  if (!candidate) return null;
 
-  const uniqueSources = Array.from(
-    new Set(
-      applications
-        .map((a) => (a.source || "").trim())
-        .filter(Boolean),
-    ),
-  ).slice(0, 4);
+  return { tenant, candidate };
+}
+
+// ───────────────────────────────
+// Page
+// ───────────────────────────────
+
+export default async function CandidateDetailPage({
+  params,
+}: {
+  params: { candidateId: string };
+}) {
+  const { candidateId } = params;
+
+  const data = await getCandidateRecord(candidateId);
+
+  if (!data) {
+    notFound();
+  }
+
+  const { tenant, candidate } = data;
+
+  const displayName =
+    candidate.fullName ||
+    candidate.email ||
+    candidate.id;
+
+  const primaryEmail = candidate.email || "";
+  const createdAtLabel = formatDate(candidate.createdAt as Date);
+
+  const applications = candidate.applications ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-0">
-      {/* Header */}
-      <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+    <div className="mx-auto max-w-5xl px-4 py-8 lg:px-0">
+      {/* Header / breadcrumb */}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
             href="/ats/candidates"
-            className="inline-flex items-center text-[11px] font-medium text-slate-500 hover:text-slate-800"
+            className="inline-flex items-center text-[11px] font-medium text-slate-500 hover:text-[#172965]"
           >
             <span className="mr-1.5">←</span>
-            Back to candidate inbox
+            Back to candidates
           </Link>
 
-          <h1 className="mt-3 text-2xl font-semibold text-slate-900 sm:text-3xl">
-            {primaryLabel}
+          <h1 className="mt-3 text-2xl font-semibold text-slate-900">
+            {displayName}
           </h1>
 
-          {headline && (
-            <p className="mt-1 text-xs text-slate-600">
-              {headline}
-            </p>
-          )}
-
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-            {email && (
-              <a
-                href={`mailto:${email}`}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 hover:border-[#172965] hover:text-[#172965]"
-              >
-                ✉ {email}
-              </a>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            {primaryEmail && (
+              <>
+                <a
+                  href={`mailto:${primaryEmail}`}
+                  className="text-[#172965] hover:underline"
+                >
+                  {primaryEmail}
+                </a>
+                <span className="text-slate-300">•</span>
+              </>
             )}
-            {phone && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                ☎ {phone}
+            <span>
+              Candidate in{" "}
+              <span className="font-medium">
+                {tenant.name || tenant.slug || "Resourcin"}
               </span>
-            )}
-            {location && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                📍 {location}
-              </span>
-            )}
-            {currentCompany && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                💼 {currentCompany}
-              </span>
-            )}
-            {linkedinUrl && (
-              <a
-                href={linkedinUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 hover:border-[#172965] hover:text-[#172965]"
-              >
-                in LinkedIn profile
-              </a>
+            </span>
+            {createdAtLabel && (
+              <>
+                <span className="text-slate-300">•</span>
+                <span>Added {createdAtLabel}</span>
+              </>
             )}
           </div>
         </div>
 
         {/* Quick meta */}
-        <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
-          <span className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-1 font-medium text-[#172965]">
-            ThinkATS · Candidate
-          </span>
-          {createdAt && (
-            <p>
-              Added:{" "}
-              <span className="font-medium text-slate-800">
-                {formatDate(createdAt)}
-              </span>
-            </p>
-          )}
-          {lastActivity && (
-            <p>
-              Last activity:{" "}
-              <span className="font-medium text-slate-800">
-                {formatDateTime(lastActivity)}
-              </span>
-            </p>
-          )}
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-right text-[11px] text-slate-600">
+          <div className="font-mono text-[10px] text-slate-400">
+            ID: {candidate.id}
+          </div>
+          <div className="mt-1 text-[11px]">
+            {applications.length}{" "}
+            {applications.length === 1
+              ? "application"
+              : "applications"}
+          </div>
         </div>
       </div>
 
-      {/* Main layout */}
+      {/* Layout: left = profile summary, right = applications */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,2fr)]">
-        {/* Sidebar */}
-        <aside className="space-y-4">
+        {/* Left: basic profile */}
+        <div className="space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">
-              Profile snapshot
+              Profile
             </h2>
-            <p className="mt-1 text-[11px] text-slate-500">
-              High-level view of who this person is and how they
-              entered your funnel.
-            </p>
-
             <dl className="mt-3 space-y-2 text-[11px] text-slate-600">
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-slate-500">
-                  Candidate ID
-                </dt>
-                <dd className="max-w-[220px] truncate text-right font-mono text-[10px] text-slate-700">
-                  {candidate.id}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-slate-500">Name</dt>
+                <dd className="text-right font-medium text-slate-900">
+                  {candidate.fullName || "Not captured"}
                 </dd>
               </div>
-
-              {email && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500">Email</dt>
-                  <dd className="max-w-[220px] truncate text-right">
-                    {email}
-                  </dd>
-                </div>
-              )}
-
-              {phone && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500">Phone</dt>
-                  <dd className="max-w-[220px] truncate text-right">
-                    {phone}
-                  </dd>
-                </div>
-              )}
-
-              {location && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500">
-                    Location
-                  </dt>
-                  <dd className="max-w-[220px] truncate text-right">
-                    {location}
-                  </dd>
-                </div>
-              )}
-
-              {currentCompany && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500">
-                    Current company
-                  </dt>
-                  <dd className="max-w-[220px] truncate text-right">
-                    {currentCompany}
-                  </dd>
-                </div>
-              )}
-
-              {firstSeen && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500">
-                    First seen in ATS
-                  </dt>
-                  <dd className="max-w-[220px] truncate text-right">
-                    {formatDate(firstSeen)}
-                  </dd>
-                </div>
-              )}
-
-              {updatedAt && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-slate-500">
-                    Last updated
-                  </dt>
-                  <dd className="max-w-[220px] truncate text-right">
-                    {formatDate(updatedAt)}
-                  </dd>
-                </div>
-              )}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-slate-500">Email</dt>
+                <dd className="text-right">
+                  {primaryEmail ? (
+                    <a
+                      href={`mailto:${primaryEmail}`}
+                      className="font-medium text-[#172965] hover:underline"
+                    >
+                      {primaryEmail}
+                    </a>
+                  ) : (
+                    <span className="text-slate-400">
+                      Not captured
+                    </span>
+                  )}
+                </dd>
+              </div>
             </dl>
+
+            {candidate.linkedinUrl && (
+              <div className="mt-3">
+                <a
+                  href={candidate.linkedinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[11px] font-medium text-[#172965] hover:bg-slate-100"
+                >
+                  View LinkedIn profile
+                </a>
+              </div>
+            )}
+
+            {candidate.cvUrl && (
+              <div className="mt-2">
+                <a
+                  href={candidate.cvUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
+                >
+                  View uploaded CV
+                </a>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-[11px] text-slate-600 shadow-sm">
             <h3 className="text-xs font-semibold text-slate-900">
-              Sources & signals
+              How this view works
             </h3>
-            {uniqueSources.length === 0 ? (
-              <p className="mt-2 text-[11px] text-slate-500">
-                No explicit sources logged yet for this candidate. As
-                you capture source on apply flows, they’ll show up
-                here.
-              </p>
-            ) : (
-              <ul className="mt-2 flex flex-wrap gap-2">
-                {uniqueSources.map((s) => (
-                  <li
-                    key={s}
-                    className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px]"
-                  >
-                    {s}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <p className="mt-3 text-[10px] text-slate-400">
-              Future iterations can add AI-parsed skills, seniority,
-              salary bands and notes here. For now this keeps the
-              candidate context tight and readable.
+            <p className="mt-2">
+              This page aggregates all applications linked to this
+              candidate across roles in{" "}
+              <span className="font-medium">
+                {tenant.name || tenant.slug || "Resourcin"}
+              </span>
+              . Use it to see their journey across jobs, stages and
+              statuses.
             </p>
           </div>
-        </aside>
+        </div>
 
-        {/* Application history */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {/* Right: applications table */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-slate-900">
-                Application history
+                Applications
               </h2>
               <p className="mt-1 text-[11px] text-slate-500">
-                All roles this person has engaged with, plus current
-                stage and source.
+                Most recent first. Stages and statuses reflect your
+                ATS configuration.
               </p>
             </div>
-            <span className="inline-flex items-center rounded-full bg-[#64C247]/10 px-2 py-1 text-[10px] font-medium text-[#306B34]">
-              {applications.length}{" "}
-              {applications.length === 1
-                ? "application"
-                : "applications"}
-            </span>
           </div>
 
-          {!hasApplications ? (
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-xs text-slate-500">
-              No applications yet linked to this candidate. Once they
-              apply to a role via ThinkATS or are added manually,
-              their history will appear here.
+          {applications.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+              No applications are linked to this candidate yet.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -459,108 +344,89 @@ export default async function AtsCandidateDetailPage({
                       Role
                     </th>
                     <th className="bg-slate-50 px-3 py-2 text-left font-medium">
+                      Client
+                    </th>
+                    <th className="bg-slate-50 px-3 py-2 text-left font-medium">
                       Stage
+                    </th>
+                    <th className="bg-slate-50 px-3 py-2 text-left font-medium">
+                      Status
                     </th>
                     <th className="bg-slate-50 px-3 py-2 text-left font-medium">
                       Source
                     </th>
-                    <th className="bg-slate-50 px-3 py-2 text-left font-medium">
-                      Applied
-                    </th>
                     <th className="rounded-r-lg bg-slate-50 px-3 py-2 text-right font-medium">
-                      Links
+                      Applied
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {applications.map((app) => {
-                    const job = jobsById.get(app.jobId);
-                    const stageKey = (app.stage || "").toString();
-                    const stageConfig =
-                      STAGE_MAP.get(stageKey) ?? null;
-
-                    const stageLabel =
-                      stageConfig?.label || stageKey || "Unknown";
-
-                    const stageClass =
-                      stageConfig?.badgeClass ||
-                      "bg-slate-50 text-slate-700 border-slate-200";
-
-                    const sourceLabel =
-                      (app.source || "").trim() || "—";
-
-                    const appliedDate = formatDate(app.createdAt);
+                    const stageLabel = humanLabel(
+                      (app as any).stage as string | null | undefined,
+                      "Applied",
+                    );
+                    const statusLabel = humanLabel(
+                      (app as any).status as string | null | undefined,
+                      "Pending",
+                    );
+                    const stage = (app as any).stage as
+                      | string
+                      | null
+                      | undefined;
+                    const status = (app as any).status as
+                      | string
+                      | null
+                      | undefined;
 
                     return (
                       <tr
                         key={app.id}
                         className="rounded-lg bg-white text-slate-700 shadow-sm"
                       >
-                        <td className="rounded-l-lg px-3 py-2 align-top">
+                        <td className="rounded-l-lg px-3 py-2">
                           <div className="flex flex-col">
                             <Link
-                              href={
-                                job
-                                  ? `/ats/jobs/${job.id}`
-                                  : "#"
-                              }
-                              className="max-w-xs truncate text-[11px] font-medium text-slate-900 hover:text-[#172965] hover:underline"
+                              href={`/ats/jobs/${app.jobId}`}
+                              className="text-[11px] font-medium text-slate-900 hover:text-[#172965]"
                             >
-                              {job?.title ??
-                                "Job no longer available"}
+                              {app.job?.title || "Unknown role"}
                             </Link>
-                            <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
-                              {job?.location && (
-                                <span>{job.location}</span>
-                              )}
-                              {job?.employmentType && (
-                                <>
-                                  {job.location && (
-                                    <span className="text-slate-300">
-                                      ·
-                                    </span>
-                                  )}
-                                  <span>
-                                    {job.employmentType}
-                                  </span>
-                                </>
-                              )}
-                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              Application ID: {app.id}
+                            </span>
                           </div>
                         </td>
-                        <td className="px-3 py-2 align-top">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${stageClass}`}
-                          >
+                        <td className="px-3 py-2">
+                          {app.job?.clientCompany?.name ? (
+                            <span className="text-[11px] text-slate-800">
+                              {app.job.clientCompany.name}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">
+                              Resourcin client
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={stageBadgeClass(stage)}>
                             {stageLabel}
                           </span>
                         </td>
-                        <td className="px-3 py-2 align-top text-[11px] text-slate-600">
-                          {sourceLabel}
+                        <td className="px-3 py-2">
+                          <span className={statusBadgeClass(status)}>
+                            {statusLabel}
+                          </span>
                         </td>
-                        <td className="px-3 py-2 align-top text-[11px] text-slate-600">
-                          {appliedDate || "—"}
+                        <td className="px-3 py-2">
+                          {app.source || (
+                            <span className="text-slate-400">
+                              Unknown
+                            </span>
+                          )}
                         </td>
-                        <td className="rounded-r-lg px-3 py-2 align-top text-right text-[10px]">
-                          <div className="flex flex-col items-end gap-1">
-                            {job && (
-                              <Link
-                                href={`/ats/jobs/${job.id}`}
-                                className="text-[#172965] hover:underline"
-                              >
-                                Open pipeline
-                              </Link>
-                            )}
-                            {job?.slug && (
-                              <Link
-                                href={`/jobs/${job.slug}`}
-                                className="text-slate-500 hover:underline"
-                                target="_blank"
-                              >
-                                Public role
-                              </Link>
-                            )}
-                          </div>
+                        <td className="rounded-r-lg px-3 py-2 text-right text-slate-500">
+                          {formatDate(app.createdAt as Date)}
                         </td>
                       </tr>
                     );
@@ -569,7 +435,7 @@ export default async function AtsCandidateDetailPage({
               </table>
             </div>
           )}
-        </section>
+        </div>
       </div>
     </div>
   );
