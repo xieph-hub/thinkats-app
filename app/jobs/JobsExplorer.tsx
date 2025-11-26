@@ -11,25 +11,31 @@ type Props = {
 };
 
 type WorkModeFilter = "all" | "remote" | "hybrid" | "onsite" | "flexible";
-type ExperienceFilter = "all" | "junior" | "mid" | "senior" | "lead" | "director";
+type ExperienceFilter =
+  | "all"
+  | "junior"
+  | "mid"
+  | "senior"
+  | "lead"
+  | "director";
 
 export default function JobsExplorer({ jobs }: Props) {
   const router = useRouter();
 
-  // --------- UI state ----------
+  // UI state
   const [search, setSearch] = useState("");
   const [location, setLocation] = useState("");
   const [workMode, setWorkMode] = useState<WorkModeFilter>("all");
   const [experience, setExperience] = useState<ExperienceFilter>("all");
   const [onlyConfidential, setOnlyConfidential] = useState(false);
 
-  // --------- Filtering ----------
+  // Filtering
   const filteredJobs = useMemo(() => {
     const q = search.trim().toLowerCase();
     const locQ = location.trim().toLowerCase();
 
     return jobs.filter((job) => {
-      // global search: title, company, tags, department
+      // free-text search
       if (q) {
         const haystack = [
           job.title,
@@ -56,13 +62,13 @@ export default function JobsExplorer({ jobs }: Props) {
         if (wm !== workMode) return false;
       }
 
-      // experience filter (loosely matched on text)
+      // experience filter
       if (experience !== "all") {
         const exp = (job.experienceLevel ?? "").toLowerCase();
         if (!exp.includes(experience)) return false;
       }
 
-      // confidential-only toggle
+      // confidential-only
       if (onlyConfidential && !job.isConfidential) {
         return false;
       }
@@ -77,12 +83,11 @@ export default function JobsExplorer({ jobs }: Props) {
     (j) => (j.workMode ?? "").toLowerCase() === "remote"
   ).length;
 
-  // ---------- UI helpers ----------
+  // Small styling helpers – using Resourcin brand blue
   const filterPillBase =
     "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium border transition-colors";
-
   const activePill =
-    "border-[#172965] bg-[#172965] text-white shadow-sm"; // Resourcin blue
+    "border-[#172965] bg-[#172965] text-white shadow-sm";
   const inactivePill =
     "border-slate-200 bg-white text-slate-600 hover:border-slate-300";
 
@@ -131,19 +136,17 @@ export default function JobsExplorer({ jobs }: Props) {
             Work mode
           </label>
           <div className="flex flex-wrap gap-2">
-            {(
-              [
-                { value: "all", label: "Any" },
-                { value: "remote", label: "Remote" },
-                { value: "hybrid", label: "Hybrid" },
-                { value: "onsite", label: "On-site" },
-                { value: "flexible", label: "Flexible" },
-              ] as const
-            ).map((opt) => (
+            {[
+              { value: "all", label: "Any" },
+              { value: "remote", label: "Remote" },
+              { value: "hybrid", label: "Hybrid" },
+              { value: "onsite", label: "On-site" },
+              { value: "flexible", label: "Flexible" },
+            ].map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setWorkMode(opt.value)}
+                onClick={() => setWorkMode(opt.value as WorkModeFilter)}
                 className={`${filterPillBase} ${
                   workMode === opt.value ? activePill : inactivePill
                 }`}
@@ -160,20 +163,18 @@ export default function JobsExplorer({ jobs }: Props) {
             Seniority
           </label>
           <div className="flex flex-wrap gap-2">
-            {(
-              [
-                { value: "all", label: "Any" },
-                { value: "junior", label: "Junior" },
-                { value: "mid", label: "Mid-level" },
-                { value: "senior", label: "Senior" },
-                { value: "lead", label: "Lead" },
-                { value: "director", label: "Director+" },
-              ] as const
-            ).map((opt) => (
+            {[
+              { value: "all", label: "Any" },
+              { value: "junior", label: "Junior" },
+              { value: "mid", label: "Mid-level" },
+              { value: "senior", label: "Senior" },
+              { value: "lead", label: "Lead" },
+              { value: "director", label: "Director+" },
+            ].map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => setExperience(opt.value)}
+                onClick={() => setExperience(opt.value as ExperienceFilter)}
                 className={`${filterPillBase} ${
                   experience === opt.value ? activePill : inactivePill
                 }`}
@@ -184,7 +185,7 @@ export default function JobsExplorer({ jobs }: Props) {
           </div>
         </div>
 
-        {/* Confidential toggle */}
+        {/* Confidential only */}
         <div className="space-y-2 border-t border-slate-100 pt-4">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
             <input
@@ -199,7 +200,7 @@ export default function JobsExplorer({ jobs }: Props) {
             </span>
           </label>
           <p className="text-[11px] text-slate-500">
-            Useful when you&apos;re looking at executive or sensitive mandates.
+            Helpful when you’re scanning executive or sensitive mandates.
           </p>
         </div>
 
@@ -230,7 +231,7 @@ export default function JobsExplorer({ jobs }: Props) {
           <div>
             <p
               className="text-[11px] font-semibold uppercase tracking-[0.18em]"
-              style={{ color: "#172965" }}
+              style={{ color: "#172965" }} // Resourcin blue
             >
               Live mandates
             </p>
@@ -242,7 +243,8 @@ export default function JobsExplorer({ jobs }: Props) {
             </h2>
             {search && (
               <p className="mt-1 text-xs text-slate-500">
-                Showing results for <span className="font-semibold">{search}</span>
+                Showing results for{" "}
+                <span className="font-semibold">{search}</span>
               </p>
             )}
           </div>
@@ -256,4 +258,32 @@ export default function JobsExplorer({ jobs }: Props) {
               setExperience("all");
               setOnlyConfidential(false);
             }}
-            clas
+            className="self-start rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Reset filters
+          </button>
+        </div>
+
+        {filteredJobs.length === 0 ? (
+          <div className="flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
+            <p className="text-sm font-medium text-slate-800">
+              No roles match these filters (yet).
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Try clearing some filters or searching with broader terms.
+            </p>
+          </div>
+        ) : (
+          <JobCardGrid
+            jobs={filteredJobs}
+            onOpenJob={(job) => router.push(job.shareUrl)}
+            onApply={(job) => router.push(job.shareUrl + "#apply")}
+            onSave={(job) => {
+              console.log("Save job", job.id);
+            }}
+          />
+        )}
+      </section>
+    </div>
+  );
+}
