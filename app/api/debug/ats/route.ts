@@ -18,7 +18,7 @@ export async function GET() {
 
     const { data: apps, error: appsError } = await supabaseAdmin
       .from("job_applications")
-      .select("id, job_id, tenant_id, full_name, email, created_at, stage, status")
+      .select("id, job_id, full_name, email, created_at, stage, status")
       .order("created_at", { ascending: false })
       .limit(20);
 
