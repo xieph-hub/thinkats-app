@@ -25,7 +25,7 @@ export default function JobsExplorer({ jobs }: JobsExplorerProps) {
 
       <div className="grid gap-4 md:grid-cols-2">
         {jobs.map((job) => (
-          <JobCard key={job.id} {...job} />
+          <JobCard key={job.id} job={job} />
         ))}
       </div>
     </section>
