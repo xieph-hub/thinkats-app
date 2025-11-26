@@ -1,7 +1,6 @@
 // app/api/jobs/[jobIdOrSlug]/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenantId } from "@/lib/tenant"; // still used in job resolution
 
 export const runtime = "nodejs";
 
@@ -20,42 +19,57 @@ type ApplyBody = {
   source?: string;
 };
 
-async function resolveJobForCurrentTenant(jobIdOrSlug: string) {
-  const tenantId = await getCurrentTenantId();
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
 
-  if (!tenantId) {
-    throw new Error("No current tenant id");
-  }
+// Public-safe job resolver – no tenant cookie required
+async function resolvePublicJob(jobIdOrSlug: string) {
+  const isId = isUuid(jobIdOrSlug);
 
-  // 1) Try match by id
-  let { data: job, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("jobs")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("id", jobIdOrSlug)
-    .single();
+    .select(
+      `
+      id,
+      tenant_id,
+      title,
+      slug,
+      status,
+      visibility
+    `
+    )
+    .eq("visibility", "public");
 
-  if (!job || error) {
-    // 2) Fall back to slug
-    const { data: jobBySlug, error: slugError } = await supabaseAdmin
-      .from("jobs")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .eq("slug", jobIdOrSlug)
-      .single();
+  // Only allow applications to open roles
+  query = query.eq("status", "open");
 
-    if (!jobBySlug || slugError) {
-      throw new Error("Job not found for this tenant");
-    }
-
-    job = jobBySlug;
+  if (isId) {
+    query = query.eq("id", jobIdOrSlug);
+  } else {
+    query = query.eq("slug", jobIdOrSlug);
   }
 
-  return job as {
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    console.error("Error loading job for application:", error);
+    throw new Error("Error loading job");
+  }
+
+  if (!data) {
+    throw new Error("Job not found or not open");
+  }
+
+  return data as {
     id: string;
     tenant_id: string;
     title: string;
     slug: string | null;
+    status: string | null;
+    visibility: string | null;
   };
 }
 
@@ -80,8 +94,10 @@ export async function POST(
       );
     }
 
-    const job = await resolveJobForCurrentTenant(rawJobId);
+    // 1) Resolve the job purely from slug/id (public-safe)
+    const job = await resolvePublicJob(rawJobId);
 
+    // 2) Normalise fields
     const full_name = (body.fullName || body.full_name || "").trim();
     const email = (body.email || "").trim().toLowerCase();
     const phone = (body.phone || "").trim();
@@ -99,7 +115,8 @@ export async function POST(
       );
     }
 
-    // 🔑 IMPORTANT: job_applications has **no tenant_id column**, so we do NOT send it.
+    // 3) Insert into job_applications
+    // IMPORTANT: we do NOT send tenant_id here, your table currently does not have that column.
     const insertPayload = {
       job_id: job.id,
       full_name,
