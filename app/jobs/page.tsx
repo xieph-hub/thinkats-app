@@ -1,7 +1,6 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenantId } from "@/lib/tenant";
 import JobsExplorer from "./JobsExplorer";
 import type { JobCardData } from "@/components/jobs/JobCard";
 
@@ -87,8 +86,7 @@ function formatSalary(row: RawJobRow): string | undefined {
 }
 
 export default async function JobsPage() {
-  const tenantId = await getCurrentTenantId();
-
+  // ⬇️ PUBLIC BOARD: no tenant filter here
   const { data, error } = await supabaseAdmin
     .from("jobs")
     .select(
@@ -114,7 +112,6 @@ export default async function JobsPage() {
       salary_visible
     `
     )
-    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -129,7 +126,8 @@ export default async function JobsPage() {
     const visibility = (row.visibility || "").toLowerCase();
     const isOpen = status === "open";
     const isPublic = visibility === "public";
-    const isInternal = row.internal_only === true;
+    const isInternal =
+      row.internal_only === true || (row.internal_only as any) === "true";
     return isOpen && isPublic && !isInternal;
   });
 
@@ -148,11 +146,11 @@ export default async function JobsPage() {
       postedAt: row.created_at,
       shareUrl: `/jobs/${slugOrId}`,
 
-      // Optional / rich fields
+      // Optional / rich fields expected by JobCard
       company,
       type,
       salary,
-      applicants: 0, // we can wire real counts later if you want
+      applicants: 0, // can wire real counts later
       workMode: row.work_mode ?? undefined,
       experienceLevel: row.experience_level ?? undefined,
       department: row.department ?? undefined,
@@ -167,7 +165,7 @@ export default async function JobsPage() {
       <header className="mb-8">
         <p
           className="text-xs font-semibold uppercase tracking-[0.18em]"
-          style={{ color: "#172965" }} // Resourcin blue
+          style={{ color: "#172965" }}
         >
           Open roles
         </p>
