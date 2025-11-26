@@ -5,15 +5,42 @@ import { listPublicJobsForResourcin } from "@/lib/jobs";
 
 export const dynamic = "force-dynamic";
 
+type PublicJob = {
+  id: string;
+  title: string;
+  location: string | null;
+  employmentType: string | null;
+  slug: string | null;
+  confidential: boolean;
+  client: {
+    name: string;
+    logoUrl: string | null;
+  } | null;
+};
+
 export default async function JobsPage() {
-  const jobs = await listPublicJobsForResourcin();
+  const rawJobs = await listPublicJobsForResourcin();
+
+  // Map Prisma rows → clean view model so TS stops complaining
+  const jobs: PublicJob[] = rawJobs.map((job: any) => ({
+    id: job.id,
+    title: job.title,
+    location: job.location ?? null,
+    employmentType: job.employmentType ?? null,
+    slug: job.slug ?? null,
+    confidential: !!job.confidential,
+    client: job.clientCompany
+      ? {
+          name: job.clientCompany.name as string,
+          logoUrl: (job.clientCompany.logoUrl ?? null) as string | null,
+        }
+      : null,
+  }));
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold text-slate-900">
-          Open roles
-        </h1>
+        <h1 className="text-3xl font-semibold text-slate-900">Open roles</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
           Roles managed by Resourcin and our clients across Nigeria, Africa and
           beyond.
@@ -27,8 +54,8 @@ export default async function JobsPage() {
       ) : (
         <div className="space-y-3">
           {jobs.map((job) => {
-            const isConfidential = !!job.confidential;
-            const client = job.clientCompany;
+            const isConfidential = job.confidential;
+            const client = job.client;
 
             const clientLabel = (() => {
               if (!client) return "Resourcin";
