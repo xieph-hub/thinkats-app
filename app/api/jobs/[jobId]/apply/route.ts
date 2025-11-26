@@ -2,19 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { createClient } from "@supabase/supabase-js";
+import { uploadCvToSupabase } from "@/lib/storage";
 
 export const runtime = "nodejs";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase =
-  supabaseUrl && supabaseServiceRoleKey
-    ? createClient(supabaseUrl, supabaseServiceRoleKey)
-    : null;
-
-const CV_BUCKET = "resourcin-uploads";
 
 export async function POST(
   req: NextRequest,
@@ -57,7 +47,7 @@ export async function POST(
       );
     }
 
-    // 1) Create or update Candidate (without relying on composite unique)
+    // 1) Create or update Candidate
     let candidate = await prisma.candidate.findFirst({
       where: {
         tenantId: tenant.id,
@@ -90,30 +80,22 @@ export async function POST(
       });
     }
 
-    // 2) Upload CV to Supabase (if file & client configured)
+    // 2) Upload CV via shared helper
     let cvUrl: string | null = null;
 
-    if (supabase && cvFile) {
+    if (cvFile) {
       try {
-        const ext = cvFile.name.split(".").pop() || "cv";
-        const path = `${tenant.id}/${job.id}/${candidate.id}-${Date.now()}.${ext}`;
+        const { publicUrl } = await uploadCvToSupabase({
+          tenantId: tenant.id,
+          jobId: job.id,
+          candidateId: candidate.id,
+          file: cvFile,
+        });
 
-        const { error: uploadError } = await supabase.storage
-          .from(CV_BUCKET)
-          .upload(path, cvFile, {
-            contentType: cvFile.type || "application/octet-stream",
-            upsert: false,
-          });
+        if (publicUrl) {
+          cvUrl = publicUrl;
 
-        if (uploadError) {
-          console.error("Supabase CV upload error:", uploadError);
-        } else {
-          const { data: publicData } = supabase.storage
-            .from(CV_BUCKET)
-            .getPublicUrl(path);
-          cvUrl = publicData?.publicUrl || null;
-
-          // store on Candidate too if you like
+          // Optionally store on Candidate profile
           await prisma.candidate.update({
             where: { id: candidate.id },
             data: {
@@ -122,11 +104,12 @@ export async function POST(
           });
         }
       } catch (err) {
-        console.error("Supabase CV upload unexpected error:", err);
+        console.error("Unexpected CV upload error:", err);
+        // We don't fail the whole application if CV upload fails
       }
     }
 
-    // 3) Get default pipeline stage (first by sortOrder)
+    // 3) Find default pipeline stage
     const defaultStage = await prisma.pipelineStage.findFirst({
       where: { tenantId: tenant.id },
       orderBy: { sortOrder: "asc" },
