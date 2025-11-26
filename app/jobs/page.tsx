@@ -150,7 +150,7 @@ export default async function JobsPage() {
       company,
       type,
       salary,
-      applicants: 0, // can wire real counts later
+      applicants: 0,
       workMode: row.work_mode ?? undefined,
       experienceLevel: row.experience_level ?? undefined,
       department: row.department ?? undefined,
@@ -165,7 +165,7 @@ export default async function JobsPage() {
       <header className="mb-8">
         <p
           className="text-xs font-semibold uppercase tracking-[0.18em]"
-          style={{ color: "#172965" }}
+          style={{ color: "#172965" }} // Resourcin blue
         >
           Open roles
         </p>
