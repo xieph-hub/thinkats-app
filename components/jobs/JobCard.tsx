@@ -1,79 +1,152 @@
 // components/jobs/JobCard.tsx
-
 import React from "react";
 
-export type JobCardData = {
+export interface JobCardData {
   id: string;
   title: string;
-  company?: string | null;
-  location?: string | null;
-  department?: string | null;
-  type?: string | null; // e.g. "Full time"
-  employmentType?: string | null; // alt key, often from DB
-  experienceLevel?: string | null; // e.g. "Senior"
-  workMode?: string | null; // e.g. "Remote", "Hybrid"
-  salary?: string | null; // formatted label, e.g. "₦12m – ₦18m"
-  applicants?: number | null; // kept in type, not rendered
-  shortDescription?: string | null;
-  tags?: string[] | null;
-  postedAt?: string | null; // ISO string or already formatted
-  shareUrl?: string | null;
-  isConfidential?: boolean | null;
-};
+  company?: string;
+  location?: string;
+  department?: string;
+  employmentType?: string;
+  experienceLevel?: string;
+  workMode?: string;
+  salary?: string | null;
+  shortDescription?: string;
+  tags?: string[];
+  postedAt?: string;
+  shareUrl?: string;
+  isConfidential?: boolean;
 
-type JobCardProps = {
+  // keep these optional in case other parts of the app use them now or later
+  type?: string;
+  applicants?: number;
+  statusLabel?: string;
+}
+
+interface JobCardProps {
   job: JobCardData;
-};
+}
 
-// Small inline icons – no dependency on external icon libraries
-const IconLocation = () => (
-  <svg
-    className="h-3.5 w-3.5 text-slate-400"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
-    <path
-      fill="currentColor"
-      d="M12 2a7 7 0 0 0-7 7c0 4.08 4.1 8.58 6.15 10.57a1.2 1.2 0 0 0 1.7 0C14.9 17.58 19 13.08 19 9a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 14.5 9 2.5 2.5 0 0 1 12 11.5z"
-    />
-  </svg>
-);
+/** Utility: format "Posted" date nicely */
+function formatPosted(dateStr?: string) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
 
-const IconWorkMode = () => (
-  <svg
-    className="h-3.5 w-3.5 text-slate-400"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
-    <path
-      fill="currentColor"
-      d="M4 5a2 2 0 0 1 2-2h12a1 1 0 0 1 .8 1.6L18 7h1a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2 0v2h7l2-2z"
-    />
-  </svg>
-);
+/** Generic pill wrapper */
+function MetaPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700">
+      {children}
+    </span>
+  );
+}
 
-const IconContract = () => (
-  <svg
-    className="h-3.5 w-3.5 text-slate-400"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
-    <path
-      fill="currentColor"
-      d="M7 3a2 2 0 0 0-2 2v14l3-2 3 2 3-2 3 2V5a2 2 0 0 0-2-2zm0 2h10v10.59l-1-.67-2 1.33-3-2-3 2-1 .67z"
-    />
-  </svg>
-);
+/** Icon: red location pin */
+function LocationIcon() {
+  return (
+    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-50 text-red-500">
+      <svg
+        viewBox="0 0 20 20"
+        aria-hidden="true"
+        className="h-3.5 w-3.5"
+        fill="none"
+      >
+        <path
+          d="M10 2.5a4.5 4.5 0 0 0-4.5 4.5c0 3.038 3.287 6.87 4.063 7.69a.6.6 0 0 0 .874 0C11.213 13.87 14.5 10.038 14.5 7A4.5 4.5 0 0 0 10 2.5Z"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+        <circle
+          cx="10"
+          cy="7"
+          r="1.6"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+      </svg>
+    </span>
+  );
+}
 
-const MetaPill: React.FC<{ icon: React.ReactNode; label: string }> = ({
-  icon,
-  label,
-}) => (
-  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 ring-1 ring-slate-200">
-    {icon}
-    <span>{label}</span>
-  </span>
-);
+/** Icon: globe for work mode (remote / hybrid / onsite) */
+function WorkModeIcon() {
+  return (
+    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-50 text-sky-600">
+      <svg
+        viewBox="0 0 20 20"
+        aria-hidden="true"
+        className="h-3.5 w-3.5"
+        fill="none"
+      >
+        <circle
+          cx="10"
+          cy="10"
+          r="6.2"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+        <path
+          d="M10 3.8c-1.5 1.7-2.3 3.9-2.3 6.2 0 2.3.8 4.5 2.3 6.2m0-12.4c1.5 1.7 2.3 3.9 2.3 6.2 0 2.3-.8 4.5-2.3 6.2M4.2 10h11.6"
+          stroke="currentColor"
+          strokeWidth="1.1"
+        />
+      </svg>
+    </span>
+  );
+}
+
+/** Icon: briefcase for employment type (full-time, contract, etc.) */
+function BriefcaseIcon() {
+  return (
+    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-50 text-amber-700">
+      <svg
+        viewBox="0 0 20 20"
+        aria-hidden="true"
+        className="h-3.5 w-3.5"
+        fill="none"
+      >
+        <rect
+          x="3"
+          y="6"
+          width="14"
+          height="9"
+          rx="1.8"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+        <path
+          d="M7.5 6V5.4A1.9 1.9 0 0 1 9.4 3.5h1.2a1.9 1.9 0 0 1 1.9 1.9V6"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+        <path
+          d="M3.5 9.5h4m5 0h4"
+          stroke="currentColor"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+/** Optional: small dot + text status, kept subtle */
+function StatusDot({ label }: { label?: string }) {
+  if (!label) return null;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      {label}
+    </span>
+  );
+}
 
 const JobCard: React.FC<JobCardProps> = ({ job }) => {
   const {
@@ -81,132 +154,120 @@ const JobCard: React.FC<JobCardProps> = ({ job }) => {
     company,
     location,
     department,
-    type,
     employmentType,
     experienceLevel,
     workMode,
     salary,
     shortDescription,
-    tags,
+    tags = [],
     postedAt,
     isConfidential,
+    statusLabel,
   } = job;
 
-  const safeTitle = title || "Untitled role";
-
-  const safeCompany = isConfidential
-    ? "Confidential search – via Resourcin"
-    : company || "Resourcin mandate";
-
-  let postedLabel = "";
-  if (postedAt) {
-    const d = new Date(postedAt);
-    if (!isNaN(d.getTime())) {
-      postedLabel = d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      });
-    } else {
-      postedLabel = postedAt;
-    }
-  }
-
-  const metaPills: { key: string; icon: React.ReactNode; label: string }[] = [];
-
-  if (location) {
-    metaPills.push({
-      key: "location",
-      icon: <IconLocation />,
-      label: location,
-    });
-  }
-
-  if (workMode) {
-    metaPills.push({
-      key: "workMode",
-      icon: <IconWorkMode />,
-      label: workMode,
-    });
-  }
-
-  if (employmentType || type) {
-    metaPills.push({
-      key: "type",
-      icon: <IconContract />,
-      label: employmentType || type || "",
-    });
-  }
+  const posted = formatPosted(postedAt);
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Title + company + dept + posted tag */}
-      <header className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900 md:text-base">
-            {safeTitle}
+    <article className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:border-slate-300 hover:shadow-md">
+      {/* Title + company row */}
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="text-sm font-semibold text-slate-900">
+            {title || "Untitled role"}
           </h2>
-
-          <p className="mt-0.5 text-xs font-medium text-[#172965] md:text-[13px]">
-            {safeCompany}
-          </p>
-
-          {department && (
-            <p className="mt-0.5 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-              {department}
-            </p>
-          )}
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            {company && (
+              <span className="font-medium text-slate-800">
+                {isConfidential
+                  ? "Confidential search – via Resourcin"
+                  : company}
+              </span>
+            )}
+            {department && (
+              <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                {department}
+              </span>
+            )}
+            {statusLabel && <StatusDot label={statusLabel} />}
+          </div>
         </div>
 
-        {postedLabel && (
-          <span className="rounded-full bg-[#FFC000]/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[#946200]">
-            Posted {postedLabel}
-          </span>
+        {salary && (
+          <div className="ml-auto text-right">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500">
+              Range
+            </p>
+            <p className="text-xs font-semibold text-slate-900">{salary}</p>
+          </div>
         )}
       </header>
 
-      {/* Meta row with icons */}
-      {metaPills.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {metaPills.map((pill) => (
-            <MetaPill key={pill.key} icon={pill.icon} label={pill.label} />
-          ))}
-        </div>
-      )}
+      {/* Meta icons row – THIS is the part we’re “giving life” */}
+      <div className="flex flex-wrap gap-2 text-[11px]">
+        {location && (
+          <MetaPill>
+            <LocationIcon />
+            <span className="truncate">{location}</span>
+          </MetaPill>
+        )}
+
+        {workMode && (
+          <MetaPill>
+            <WorkModeIcon />
+            <span className="truncate">{workMode}</span>
+          </MetaPill>
+        )}
+
+        {employmentType && (
+          <MetaPill>
+            <BriefcaseIcon />
+            <span className="truncate">{employmentType}</span>
+          </MetaPill>
+        )}
+
+        {experienceLevel && (
+          <MetaPill>
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-50 text-violet-600">
+              <span className="text-[9px] font-semibold leading-none">
+                Exp
+              </span>
+            </span>
+            <span className="truncate">{experienceLevel}</span>
+          </MetaPill>
+        )}
+      </div>
 
       {/* Short description */}
       {shortDescription && (
-        <p className="text-xs text-slate-600 md:text-[13px]">
-          {shortDescription}
-        </p>
+        <p className="text-xs text-slate-700">{shortDescription}</p>
       )}
 
-      {/* Salary only – no applicant counts */}
-      {salary && (
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#306B34]" />
-            <span className="font-medium text-slate-700">{salary}</span>
-          </span>
-        </div>
-      )}
-
-      {/* Tags */}
-      {tags && tags.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {tags.slice(0, 6).map((tag) => (
+      {/* Footer: tags + posted */}
+      <footer className="mt-1 flex flex-wrap items-center justify-between gap-3 text-[10px] text-slate-500">
+        <div className="flex flex-wrap gap-1.5">
+          {tags.slice(0, 4).map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-0.5 text-[10px] font-medium text-[#172965]"
+              className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
             >
-              {tag}
+              #{tag}
             </span>
           ))}
+          {tags.length > 4 && (
+            <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+              +{tags.length - 4} more
+            </span>
+          )}
         </div>
-      )}
-    </div>
+
+        {posted && (
+          <span className="ml-auto text-[10px] text-slate-500">
+            Posted {posted}
+          </span>
+        )}
+      </footer>
+    </article>
   );
 };
 
-export { JobCard };
 export default JobCard;
