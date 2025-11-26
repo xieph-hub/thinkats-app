@@ -5,14 +5,14 @@ import JobCreateForm from "./JobCreateForm";
 export const dynamic = "force-dynamic";
 
 export default async function NewJobPage() {
-  // Later we can scope this by tenantId
+  // TODO: later: filter by current tenant
   const clientCompanies = await prisma.clientCompany.findMany({
     orderBy: { name: "asc" },
     select: {
       id: true,
       name: true,
       slug: true,
-      logoUrl: true, // make sure Prisma model has logoUrl @map("logo_url")
+      logoUrl: true, // ensure Prisma model has logoUrl @map("logo_url")
     },
   });
 
