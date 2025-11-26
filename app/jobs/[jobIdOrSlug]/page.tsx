@@ -32,30 +32,22 @@ async function getDefaultTenant() {
   });
 }
 
-// Avoid P2023 by NOT querying id with a non-UUID slug
-function looksLikeUuid(value: string): boolean {
-  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-    value,
-  );
-}
-
 async function getPublicJob(jobIdOrSlug: string) {
   const tenant = await getDefaultTenant();
   if (!tenant) return null;
 
-  const baseWhere = {
-    tenantId: tenant.id,
-    status: "open",
-    visibility: "public",
-    internalOnly: false,
-  } as const;
-
-  const where = looksLikeUuid(jobIdOrSlug)
-    ? { ...baseWhere, id: jobIdOrSlug }
-    : { ...baseWhere, slug: jobIdOrSlug };
-
   const job = await prisma.job.findFirst({
-    where,
+    where: {
+      tenantId: tenant.id,
+      AND: [
+        {
+          OR: [{ id: jobIdOrSlug }, { slug: jobIdOrSlug }],
+        },
+        { status: "open" },
+        { visibility: "public" },
+        { internalOnly: false },
+      ],
+    },
     include: {
       clientCompany: true,
     },
@@ -248,38 +240,42 @@ export default async function JobDetailPage({
           )}
 
           {job.responsibilities && (
-  <section className="space-y-2">
-    <h2 className="text-sm font-semibold text-slate-900">
-      Responsibilities
-    </h2>
-    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
-      {job.responsibilities}
-    </p>
-  </section>
-)}
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Responsibilities
+              </h2>
+              <div className="prose prose-sm max-w-none text-slate-700">
+                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
+                  {job.responsibilities}
+                </pre>
+              </div>
+            </section>
+          )}
 
-{job.requirements && (
-  <section className="space-y-2">
-    <h2 className="text-sm font-semibold text-slate-900">
-      Requirements
-    </h2>
-    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
-      {job.requirements}
-    </p>
-  </section>
-)}
+          {job.requirements && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Requirements
+              </h2>
+              <div className="prose prose-sm max-w-none text-slate-700">
+                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
+                  {job.requirements}
+                </pre>
+              </div>
+            </section>
+          )}
 
-{job.benefits && (
-  <section className="space-y-2">
-    <h2 className="text-sm font-semibold text-slate-900">
-      Benefits
-    </h2>
-    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
-      {job.benefits}
-    </p>
-  </section>
-)}
-
+          {job.benefits && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Benefits
+              </h2>
+              <div className="prose prose-sm max-w-none text-slate-700">
+                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
+                  {job.benefits}
+                </pre>
+              </div>
+            </section>
           )}
         </div>
 
@@ -296,7 +292,7 @@ export default async function JobDetailPage({
             team will be in touch to walk you through next steps.
           </p>
 
-          <JobApplyForm jobId={job.id} jobTitle={job.title} />
+          <JobApplyForm jobId={job.id} />
 
           <p className="mt-2 text-[11px] text-slate-500">
             By submitting an application, you agree that Resourcin may contact
