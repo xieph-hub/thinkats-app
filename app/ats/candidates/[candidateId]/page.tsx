@@ -89,70 +89,101 @@ async function getCandidateRecord(candidateKey: string) {
   const tenant = await getResourcinTenant();
   if (!tenant) return null;
 
-  // 1) Try to resolve directly on Candidate by id / email
+  if (!candidateKey || candidateKey === "null") {
+    return null;
+  }
+
+  // 1) Try Candidate by (id if UUID) OR email, scoped to tenant
+  const candidateWhere: any = {
+    tenantId: tenant.id,
+  };
   const orClauses: any[] = [];
 
-  // Only touch the UUID id column if it actually looks like one
   if (looksLikeUuid(candidateKey)) {
     orClauses.push({ id: candidateKey });
   }
-
-  // Always allow email-based keys (for legacy records or inbox links)
+  // Always allow email-based lookup – this matches your `/ats/candidates/[email]` case
   orClauses.push({ email: candidateKey });
 
-  let candidate =
-    orClauses.length === 0
-      ? null
-      : await prisma.candidate.findFirst({
-          where: {
-            tenantId: tenant.id,
-            OR: orClauses,
-          },
-          include: {
-            applications: {
-              orderBy: { createdAt: "desc" },
-              include: {
-                job: {
-                  include: {
-                    clientCompany: true,
-                  },
-                },
-              },
-            },
-          },
-        });
+  if (orClauses.length > 0) {
+    candidateWhere.OR = orClauses;
+  }
 
-  // 2) Fallback: maybe the key is actually a JobApplication.id
-  //    ⬇️ ONLY if the key looks like a UUID, so Prisma doesn't choke
-  if (!candidate && looksLikeUuid(candidateKey)) {
-    const app = await prisma.jobApplication.findUnique({
-      where: { id: candidateKey },
-      include: {
-        candidate: {
-          include: {
-            applications: {
-              orderBy: { createdAt: "desc" },
-              include: {
-                job: {
-                  include: {
-                    clientCompany: true,
-                  },
-                },
-              },
+  let candidate: any = await prisma.candidate.findFirst({
+    where: candidateWhere,
+    include: {
+      applications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          job: {
+            include: {
+              clientCompany: true,
             },
           },
         },
       },
-    });
+    },
+  });
 
-    if (app?.candidate && app.candidate.tenantId === tenant.id) {
-      candidate = app.candidate as any;
-    }
+  if (candidate) {
+    return { tenant, candidate };
   }
 
-  if (!candidate) return null;
+  // 2) Fallback: legacy data where we may only have JobApplication rows
+  //    (e.g. key is an email string, but no Candidate exists yet).
 
-  return { tenant, candidate };
+  const appWhere: any = {
+    job: { tenantId: tenant.id },
+  };
+
+  const appOr: any[] = [];
+
+  // If the key is a UUID, it might actually be a JobApplication.id
+  if (looksLikeUuid(candidateKey)) {
+    appOr.push({ id: candidateKey });
+  }
+
+  // If it looks like an email, search by application email
+  if (candidateKey.includes("@")) {
+    appOr.push({ email: candidateKey });
+  }
+
+  if (appOr.length > 0) {
+    appWhere.OR = appOr;
+  } else {
+    // Last-ditch: treat it as a name match
+    appWhere.fullName = candidateKey;
+  }
+
+  const apps = await prisma.jobApplication.findMany({
+    where: appWhere,
+    orderBy: { createdAt: "desc" },
+    include: {
+      job: {
+        include: {
+          clientCompany: true,
+        },
+      },
+    },
+  });
+
+  if (!apps.length) return null;
+
+  const first = apps[0];
+
+  const syntheticCandidate: any = {
+    // Make sure we always have some stable ID for the UI
+    id: `legacy:${candidateKey}`,
+    tenantId: tenant.id,
+    fullName: (first as any).fullName ?? null,
+    email: (first as any).email ?? null,
+    linkedinUrl: (first as any).linkedinUrl ?? null,
+    cvUrl: (first as any).cvUrl ?? null,
+    createdAt: first.createdAt,
+    applications: apps,
+  };
+
+  return { tenant, candidate: syntheticCandidate };
 }
 
 // ───────────────────────────────
@@ -166,13 +197,13 @@ export default async function CandidateDetailPage({
 }) {
   const { candidateId } = params;
 
-  const data = await getCandidateRecord(candidateId);
+  const data = await getCandidateRecord(decodeURIComponent(candidateId));
 
   if (!data) {
     notFound();
   }
 
-  const { tenant, candidate } = data;
+  const { tenant, candidate } = data as any;
 
   const displayName =
     candidate.fullName || candidate.email || candidate.id;
@@ -180,7 +211,7 @@ export default async function CandidateDetailPage({
   const primaryEmail = candidate.email || "";
   const createdAtLabel = formatDate(candidate.createdAt as Date);
 
-  const applications = candidate.applications ?? [];
+  const applications = (candidate.applications ?? []) as any[];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-0">
@@ -311,8 +342,8 @@ export default async function CandidateDetailPage({
               <span className="font-medium">
                 {tenant.name || tenant.slug || "Resourcin"}
               </span>
-              . Use it to see their journey across jobs, stages and
-              statuses.
+              . It falls back gracefully for older records that only
+              exist as job applications.
             </p>
           </div>
         </div>
@@ -326,7 +357,7 @@ export default async function CandidateDetailPage({
               </h2>
               <p className="mt-1 text-[11px] text-slate-500">
                 Most recent first. Stages and statuses reflect your
-                ATS configuration.
+                ThinkATS configuration.
               </p>
             </div>
           </div>
@@ -362,14 +393,6 @@ export default async function CandidateDetailPage({
                 </thead>
                 <tbody>
                   {applications.map((app) => {
-                    const stageLabel = humanLabel(
-                      (app as any).stage as string | null | undefined,
-                      "Applied",
-                    );
-                    const statusLabel = humanLabel(
-                      (app as any).status as string | null | undefined,
-                      "Pending",
-                    );
                     const stage = (app as any).stage as
                       | string
                       | null
@@ -378,6 +401,11 @@ export default async function CandidateDetailPage({
                       | string
                       | null
                       | undefined;
+                    const stageLabel = humanLabel(stage, "Applied");
+                    const statusLabel = humanLabel(
+                      status,
+                      "Pending",
+                    );
 
                     return (
                       <tr
