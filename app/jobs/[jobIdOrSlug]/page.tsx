@@ -248,42 +248,38 @@ export default async function JobDetailPage({
           )}
 
           {job.responsibilities && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Responsibilities
-              </h2>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
-                  {job.responsibilities}
-                </pre>
-              </div>
-            </section>
-          )}
+  <section className="space-y-2">
+    <h2 className="text-sm font-semibold text-slate-900">
+      Responsibilities
+    </h2>
+    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+      {job.responsibilities}
+    </p>
+  </section>
+)}
 
-          {job.requirements && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Requirements
-              </h2>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
-                  {job.requirements}
-                </pre>
-              </div>
-            </section>
-          )}
+{job.requirements && (
+  <section className="space-y-2">
+    <h2 className="text-sm font-semibold text-slate-900">
+      Requirements
+    </h2>
+    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+      {job.requirements}
+    </p>
+  </section>
+)}
 
-          {job.benefits && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Benefits
-              </h2>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
-                  {job.benefits}
-                </pre>
-              </div>
-            </section>
+{job.benefits && (
+  <section className="space-y-2">
+    <h2 className="text-sm font-semibold text-slate-900">
+      Benefits
+    </h2>
+    <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+      {job.benefits}
+    </p>
+  </section>
+)}
+
           )}
         </div>
 
