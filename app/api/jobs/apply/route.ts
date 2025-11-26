@@ -8,7 +8,6 @@ export async function POST(req: Request) {
     const contentType = req.headers.get("content-type") || "";
     let jobId: string | null = null;
 
-    // We'll collect everything into this payload object
     let payload: any = {};
 
     if (contentType.includes("application/json")) {
@@ -55,7 +54,6 @@ export async function POST(req: Request) {
 
     const tenant = await getResourcinTenant();
 
-    // Ensure job exists, is public, open, and not internal-only
     const job = await prisma.job.findFirst({
       where: {
         id: jobId,
@@ -90,9 +88,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ------------------------------------------------------------------
-    // Candidate: find by (tenantId, email) or create
-    // ------------------------------------------------------------------
     const existingCandidate = await prisma.candidate.findFirst({
       where: {
         tenantId: job.tenantId,
@@ -139,9 +134,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // ------------------------------------------------------------------
-    // Create JobApplication
-    // ------------------------------------------------------------------
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -160,7 +152,6 @@ export async function POST(req: Request) {
         noticePeriod: payload.noticePeriod ?? null,
         currentGrossAnnual: payload.currentGrossAnnual ?? null,
         grossAnnualExpectation: payload.grossAnnualExpectation ?? null,
-        // stage/status default from schema: APPLIED / PENDING
       },
     });
 
