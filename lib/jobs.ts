@@ -1,5 +1,6 @@
 // lib/jobs.ts
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
 
 /**
  * Internal ATS job list for a given tenant.
@@ -10,7 +11,7 @@ export async function listTenantJobs(tenantId: string) {
     where: {
       tenantId,
       status: {
-        not: "CLOSED", // adjust if your enum value is different
+        not: "CLOSED",
       },
     },
     orderBy: {
@@ -41,6 +42,55 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
           pipelineStage: true,
         },
       },
+    },
+  });
+}
+
+/**
+ * Public jobs for Resourcin careers page.
+ * Filters by tenant + isPublished + isPublic + status = OPEN.
+ * Used by /jobs
+ */
+export async function listPublicJobsForResourcin() {
+  const tenant = await getResourcinTenant();
+
+  return prisma.job.findMany({
+    where: {
+      tenantId: tenant.id,
+      isPublished: true,
+      isPublic: true,
+      status: "OPEN",
+    },
+    orderBy: {
+      publishedAt: "desc",
+    },
+    include: {
+      clientCompany: true,
+    },
+  });
+}
+
+/**
+ * Single public job for careers detail page.
+ * Allows lookup by ID or slug.
+ * Used by /jobs/[jobIdOrSlug]
+ */
+export async function getPublicJobBySlugOrId(jobIdOrSlug: string) {
+  const tenant = await getResourcinTenant();
+
+  return prisma.job.findFirst({
+    where: {
+      tenantId: tenant.id,
+      isPublished: true,
+      isPublic: true,
+      status: "OPEN",
+      OR: [
+        { id: jobIdOrSlug },
+        { slug: jobIdOrSlug },
+      ],
+    },
+    include: {
+      clientCompany: true,
     },
   });
 }
