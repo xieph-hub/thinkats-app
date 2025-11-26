@@ -32,22 +32,34 @@ async function getDefaultTenant() {
   });
 }
 
+// ✅ Only treat the param as an ID if it actually looks like a UUID
+function looksLikeUuid(value: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value,
+  );
+}
+
 async function getPublicJob(jobIdOrSlug: string) {
   const tenant = await getDefaultTenant();
   if (!tenant) return null;
 
+  const where: any = {
+    tenantId: tenant.id,
+    status: "open",
+    visibility: "public",
+    internalOnly: false,
+  };
+
+  if (looksLikeUuid(jobIdOrSlug)) {
+    // If it looks like a UUID, allow match by id OR slug
+    where.OR = [{ id: jobIdOrSlug }, { slug: jobIdOrSlug }];
+  } else {
+    // If it's clearly a slug, don't even touch the UUID column
+    where.slug = jobIdOrSlug;
+  }
+
   const job = await prisma.job.findFirst({
-    where: {
-      tenantId: tenant.id,
-      AND: [
-        {
-          OR: [{ id: jobIdOrSlug }, { slug: jobIdOrSlug }],
-        },
-        { status: "open" },
-        { visibility: "public" },
-        { internalOnly: false },
-      ],
-    },
+    where,
     include: {
       clientCompany: true,
     },
