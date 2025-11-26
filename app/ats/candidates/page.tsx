@@ -567,7 +567,9 @@ export default async function CandidatesInboxPage({
                         <div className="flex flex-wrap items-center gap-2">
                           {candidateLinkId ? (
                             <Link
-                              href={`/ats/candidates/${candidateLinkId}`}
+                              href={`/ats/candidates/${encodeURIComponent(
+                                candidateLinkId,
+                              )}`}
                               className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"
                             >
                               {candidateName}
@@ -640,7 +642,7 @@ export default async function CandidatesInboxPage({
 
                     <Link
                       href={`/ats/jobs/${app.jobId}`}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"`
                     >
                       Open job pipeline
                     </Link>
