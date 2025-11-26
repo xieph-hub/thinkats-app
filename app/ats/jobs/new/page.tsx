@@ -1,6 +1,6 @@
 // app/ats/jobs/new/page.tsx
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import JobCreateForm from "./JobCreateForm";
+import JobCreateWizard from "./JobCreateWizard";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,6 @@ type ClientCompanyRow = {
 };
 
 export default async function NewJobPage() {
-  // Later we can scope by tenant_id if needed
   const { data, error } = await supabaseAdmin
     .from("client_companies")
     .select("id, name, slug, logo_url")
@@ -37,11 +36,11 @@ export default async function NewJobPage() {
       </h1>
       <p className="mt-1 text-xs text-slate-500">
         Capture the bare minimum you need to launch a search. You can refine
-        the description, compensation and stages later.
+        the details and pipeline later.
       </p>
 
-      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6">
-        <JobCreateForm clientCompanies={clientCompanies} />
+      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-0 sm:p-0">
+        <JobCreateWizard clientCompanies={clientCompanies} />
       </div>
     </div>
   );
