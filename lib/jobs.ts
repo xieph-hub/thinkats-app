@@ -20,6 +20,11 @@ export async function listTenantJobs(tenantId: string) {
     },
     include: {
       clientCompany: true,
+      _count: {
+        select: {
+          applications: true,
+        },
+      },
     },
   });
 }
@@ -41,8 +46,7 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
         orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
-          // ⬇️ removed pipelineStage because Prisma model doesn't have it
-          // pipelineStage: true,
+          // pipelineStage removed because Prisma model doesn't have it
         },
       },
     },
@@ -87,10 +91,7 @@ export async function getPublicJobBySlugOrId(jobIdOrSlug: string) {
       visibility: "public",
       status: "open",
       internalOnly: false,
-      OR: [
-        { id: jobIdOrSlug },
-        { slug: jobIdOrSlug },
-      ],
+      OR: [{ id: jobIdOrSlug }, { slug: jobIdOrSlug }],
     },
     include: {
       clientCompany: true,
