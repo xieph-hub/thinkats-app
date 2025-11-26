@@ -66,48 +66,60 @@ export async function POST(
   try {
     const contentType = req.headers.get("content-type") || "";
     let body: ApplyBody;
+    let uploadCvFile: File | null = null;
 
-    // 🔹 1) JSON body (what we originally expected)
+    // 🔹 JSON body (fetch with JSON.stringify)
     if (contentType.includes("application/json")) {
       body = (await req.json()) as ApplyBody;
     }
-    // 🔹 2) Fallback: multipart/form-data or urlencoded (what the browser sends with file uploads)
+    // 🔹 Multipart / form-encoded (HTML form with file upload)
     else if (
       contentType.includes("multipart/form-data") ||
       contentType.includes("application/x-www-form-urlencoded")
     ) {
       const formData = await req.formData();
 
-      body = {
-        jobId: (formData.get("jobId") || formData.get("job_id") || undefined) as
-          | string
-          | undefined,
-        jobSlug: (formData.get("jobSlug") ||
-          formData.get("slug") ||
-          undefined) as string | undefined,
-        fullName: (formData.get("fullName") ||
-          formData.get("full_name") ||
-          "") as string,
-        email: (formData.get("email") || "") as string,
-        phone: (formData.get("phone") || "") as string,
-        location: (formData.get("location") || "") as string,
-        cvUrl: (formData.get("cvUrl") ||
-          formData.get("cv_url") ||
-          "") as string,
-        source: (formData.get("source") ||
-          "PUBLIC_JOB_BOARD") as string | undefined,
-      };
+      const possibleJobId =
+        (formData.get("jobId") as string | null) ??
+        (formData.get("job_id") as string | null) ??
+        null;
+      const possibleSlug =
+        (formData.get("jobSlug") as string | null) ??
+        (formData.get("slug") as string | null) ??
+        null;
 
-      // NOTE:
-      // If you're *directly* posting the File here as `cv`,
-      // you would handle Supabase upload in this block:
-      //
-      // const cvFile = formData.get("cv");
-      // if (cvFile instanceof File) { ... upload to Supabase and set body.cvUrl ... }
-      //
-      // Right now we assume the FE already uploads and sends `cvUrl`.
+      // capture the file if present (name="cv" is the usual pattern)
+      const fileCandidate = formData.get("cv");
+      if (fileCandidate instanceof File) {
+        uploadCvFile = fileCandidate;
+      }
+
+      body = {
+        jobId: possibleJobId || undefined,
+        jobSlug: possibleSlug || undefined,
+        fullName:
+          ((formData.get("fullName") ||
+            formData.get("full_name") ||
+            formData.get("name")) as string | null) ?? "",
+        full_name:
+          ((formData.get("full_name") ||
+            formData.get("fullName") ||
+            formData.get("name")) as string | null) ?? "",
+        email: ((formData.get("email") as string | null) ?? "").toString(),
+        phone: ((formData.get("phone") as string | null) ?? "").toString(),
+        location: ((formData.get("location") as string | null) ?? "").toString(),
+        cvUrl:
+          ((formData.get("cvUrl") ||
+            formData.get("cv_url")) as string | null) ?? "",
+        cv_url:
+          ((formData.get("cv_url") ||
+            formData.get("cvUrl")) as string | null) ?? "",
+        source:
+          ((formData.get("source") as string | null) ??
+            "PUBLIC_JOB_BOARD") || undefined,
+      };
     }
-    // 🔹 3) Anything else – try JSON once, then bail
+    // 🔹 Fallback: try JSON once for anything else
     else {
       try {
         body = (await req.json()) as ApplyBody;
@@ -122,7 +134,7 @@ export async function POST(
         return NextResponse.json(
           {
             error:
-              "Unsupported request format. Please refresh the page and try again.",
+              "We couldn’t read your application payload. Please refresh the page and try again.",
           },
           { status: 400 }
         );
@@ -138,25 +150,96 @@ export async function POST(
 
     if (!rawJobId) {
       return NextResponse.json(
-        { error: "Missing job identifier" },
+        { error: "Missing job identifier for this application." },
         { status: 400 }
       );
     }
 
+    // 🔹 Resolve job (also validates tenant)
     const job = await resolveJobForCurrentTenant(rawJobId);
+
+    // 🔹 If we received a file but no cvUrl string, upload it to Supabase Storage
+    let cvUrlFromUpload: string | null = null;
+
+    if (
+      uploadCvFile instanceof File &&
+      !body.cvUrl &&
+      !body.cv_url
+    ) {
+      try {
+        const originalName = uploadCvFile.name || "cv.pdf";
+        const ext = originalName.includes(".")
+          ? originalName.split(".").pop()
+          : "pdf";
+
+        const rawName =
+          (body.fullName ||
+            body.full_name ||
+            "candidate") as string;
+
+        const safeBase =
+          rawName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/(^-|-$)/g, "") || "candidate";
+
+        const filePath = `cvs/${job.id}/${Date.now()}-${safeBase}.${ext}`;
+
+        const { data: uploadResult, error: uploadError } =
+          await supabaseAdmin.storage
+            .from("candidate-cvs") // 🔸 make sure you have a bucket named `candidate-cvs`
+            .upload(filePath, uploadCvFile, {
+              contentType:
+                uploadCvFile.type || "application/octet-stream",
+              upsert: false,
+            });
+
+        if (uploadError || !uploadResult) {
+          console.error("Error uploading CV to storage", uploadError);
+          return NextResponse.json(
+            {
+              error:
+                "We couldn’t upload your CV. Please try again in a moment.",
+            },
+            { status: 500 }
+          );
+        }
+
+        const { data: publicUrlData } = supabaseAdmin.storage
+          .from("candidate-cvs")
+          .getPublicUrl(uploadResult.path);
+
+        cvUrlFromUpload = publicUrlData?.publicUrl ?? null;
+      } catch (err) {
+        console.error("Unexpected error while uploading CV", err);
+        return NextResponse.json(
+          {
+            error:
+              "We couldn’t upload your CV right now. Please try again in a moment.",
+          },
+          { status: 500 }
+        );
+      }
+    }
 
     const full_name = (body.fullName || body.full_name || "").trim();
     const email = (body.email || "").trim().toLowerCase();
     const phone = (body.phone || "").trim();
     const location = (body.location || "").trim();
-    const cv_url = (body.cvUrl || body.cv_url || "").trim();
+    const cv_url = (
+      body.cvUrl ||
+      body.cv_url ||
+      cvUrlFromUpload ||
+      ""
+    ).trim();
     const source = (body.source || "PUBLIC_JOB_BOARD").trim();
 
+    // 🔹 Friendly validation message
     if (!full_name || !email || !cv_url) {
       return NextResponse.json(
         {
           error:
-            "full_name, email and cv_url are required to submit an application.",
+            "Please add your full name, email address and CV before submitting.",
         },
         { status: 400 }
       );
@@ -184,7 +267,10 @@ export async function POST(
     if (error || !data) {
       console.error("Error inserting job_application", error);
       return NextResponse.json(
-        { error: "Failed to submit application" },
+        {
+          error:
+            "We couldn’t save your application. Please try again in a moment.",
+        },
         { status: 500 }
       );
     }
@@ -193,7 +279,7 @@ export async function POST(
       {
         applicationId: data.id as string,
         message:
-          "Thank you — we’ve received your application. If there’s a strong match between your experience and this role, we’ll be in touch.",
+          "Thank you. Your application has been received. If there’s a strong match with this mandate, we’ll be in touch.",
       },
       { status: 201 }
     );
@@ -202,7 +288,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "Unexpected error while submitting your application. Please try again in a moment.",
+          "Unexpected error while submitting your application. Please try again shortly.",
       },
       { status: 500 }
     );
