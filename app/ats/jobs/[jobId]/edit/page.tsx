@@ -51,19 +51,16 @@ function buildTenantCareerUrl(tenant: any): string {
 
   const slug = tenant?.slug || tenant?.id || "careers";
 
-  // Support pattern like: https://{tenant}.resourcin.com
   if (base.includes("{tenant}")) {
     return base.replace("{tenant}", slug);
   }
 
   const trimmed = base.replace(/\/$/, "");
 
-  // If base already points to /jobs, keep it as is and let tenant be a query
   if (trimmed.endsWith("/jobs")) {
     return `${trimmed}?tenant=${encodeURIComponent(slug)}`;
   }
 
-  // Fallback: append /jobs?tenant=slug
   return `${trimmed}/jobs?tenant=${encodeURIComponent(slug)}`;
 }
 
@@ -71,11 +68,9 @@ function buildJobPublicUrl(tenant: any, job: any): string {
   const root = buildTenantCareerUrl(tenant);
   const slugOrId = job.slug || job.id;
 
-  // If root already has a query string, append /[slug] before the query
   if (root.includes("?")) {
     const [base, query] = root.split("?");
     const trimmedBase = base.replace(/\/$/, "");
-    // base is something like /jobs
     return `${trimmedBase}/${slugOrId}?${query}`;
   }
 
@@ -135,7 +130,6 @@ export default async function EditJobPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-0">
-      {/* Header */}
       <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <Link
@@ -199,13 +193,13 @@ export default async function EditJobPage({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
-        {/* Main edit form */}
+        {/* MAIN EDIT FORM */}
         <form
           method="POST"
-          action={`/ats/jobs/${job.id}/edit`}
+          action={`/api/ats/jobs/${job.id}/edit`}
           className="space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
-          {/* Identity & basics */}
+          {/* Core details */}
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-900">
               Core details
@@ -340,7 +334,7 @@ export default async function EditJobPage({
             </div>
           </section>
 
-          {/* Narrative sections */}
+          {/* Narrative */}
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-900">
               Narrative & responsibilities
@@ -414,7 +408,7 @@ export default async function EditJobPage({
             </div>
           </section>
 
-          {/* Meta / tags / salary / visibility */}
+          {/* Meta / salary / visibility */}
           <section className="space-y-4 rounded-lg bg-slate-50 p-3">
             <h2 className="text-sm font-semibold text-slate-900">
               Meta, salary & visibility
@@ -651,7 +645,7 @@ export default async function EditJobPage({
           </div>
         </form>
 
-        {/* Right column: career URLs and meta */}
+        {/* RIGHT COLUMN */}
         <div className="space-y-4">
           <CareerLinks
             careerSiteUrl={careerSiteUrl}
