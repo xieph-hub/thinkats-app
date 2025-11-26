@@ -27,7 +27,7 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
+function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
