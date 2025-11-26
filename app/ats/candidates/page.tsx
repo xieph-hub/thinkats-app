@@ -73,6 +73,30 @@ type RawSearchParams = {
   [key: string]: string | string[] | undefined;
 };
 
+// 🔑 Safely derive the candidate link id
+function getCandidateLinkId(app: any): string | null {
+  // Prefer the Candidate relation if present
+  if (app.candidate?.id && app.candidate.id !== "null") {
+    return app.candidate.id;
+  }
+
+  // Fall back to the foreign key on JobApplication if it exists
+  if (app.candidateId && app.candidateId !== "null") {
+    return app.candidateId;
+  }
+
+  // As a last resort, you *can* link by email – candidate detail
+  // page is written to understand non-UUID identifiers too.
+  if (app.candidate?.email) {
+    return app.candidate.email;
+  }
+  if (app.email) {
+    return app.email;
+  }
+
+  return null;
+}
+
 async function getCandidatesInboxData(searchParams: {
   q?: string;
   jobId?: string;
@@ -520,6 +544,8 @@ export default async function CandidatesInboxPage({
               const stageLabel = formatLabel(stage, "Applied");
               const statusLabel = formatLabel(status, "Pending");
 
+              const candidateLinkId = getCandidateLinkId(app);
+
               return (
                 <div
                   key={app.id}
@@ -539,12 +565,19 @@ export default async function CandidatesInboxPage({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/ats/candidates/${app.candidateId}`}
-                            className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"
-                          >
-                            {candidateName}
-                          </Link>
+                          {candidateLinkId ? (
+                            <Link
+                              href={`/ats/candidates/${candidateLinkId}`}
+                              className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"
+                            >
+                              {candidateName}
+                            </Link>
+                          ) : (
+                            <span className="truncate text-sm font-medium text-slate-900">
+                              {candidateName || "Unknown candidate"}
+                            </span>
+                          )}
+
                           <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
                             {app.location || "Location unknown"}
                           </span>
