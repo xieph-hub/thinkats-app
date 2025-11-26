@@ -1,60 +1,12 @@
 // app/api/ats/jobs/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { z } from "zod";
-
-const jobPayloadSchema = z.object({
-  // Core
-  title: z.string().min(3),
-  department: z.string().optional(),
-  location: z.string().optional(),
-  locationType: z.string().optional(),
-  employmentType: z.string().optional(),
-  experienceLevel: z.string().optional(),
-  seniority: z.string().optional(),
-  workMode: z.string().optional(),
-
-  // Client
-  clientCompanyId: z.string().optional(),
-
-  // Narrative sections
-  overview: z.string().optional(),
-  aboutClient: z.string().optional(),
-  responsibilities: z.string().optional(),
-  requirements: z.string().optional(),
-  benefits: z.string().optional(),
-  shortDescription: z.string().optional(),
-
-  // Meta / taxonomies (currently mostly UI-level)
-  industry: z.string().optional(),
-  function: z.string().optional(),
-
-  // Arrays
-  tags: z.array(z.string()).optional(),
-  requiredSkills: z.array(z.string()).optional(),
-
-  // Compensation
-  salaryMin: z.union([z.number(), z.string()]).optional(),
-  salaryMax: z.union([z.number(), z.string()]).optional(),
-  salaryCurrency: z.string().optional(),
-  salaryVisible: z.boolean().optional(),
-
-  // Visibility / flags from the wizard
-  isPublic: z.boolean().optional(),
-  isPublished: z.boolean().optional(),
-  isConfidential: z.boolean().optional(),
-  internalOnly: z.boolean().optional(),
-
-  // Optional external / slug
-  externalId: z.string().optional(),
-  slug: z.string().optional(),
-});
 
 const DEFAULT_TENANT_SLUG =
   process.env.RESOURCIN_TENANT_SLUG || "resourcin";
 
+// Resolve the default tenant ID once per request
 async function getDefaultTenantId() {
-  // If you ever set this, we skip the lookup
   if (process.env.RESOURCIN_TENANT_ID) {
     return process.env.RESOURCIN_TENANT_ID;
   }
@@ -66,7 +18,7 @@ async function getDefaultTenantId() {
   if (!tenant) {
     throw new Error(
       `Default tenant not found for slug "${DEFAULT_TENANT_SLUG}". ` +
-        `Create a tenant row or set RESOURCIN_TENANT_ID.`,
+        `Create a tenant row in Supabase (tenants table) or set RESOURCIN_TENANT_ID.`,
     );
   }
 
@@ -83,22 +35,23 @@ function slugify(raw: string): string {
 
 export async function POST(req: Request) {
   try {
-    const json = await req.json();
-    const parsed = jobPayloadSchema.parse(json);
+    const body = await req.json();
+
+    // ------------------------------------------------------------------
+    // Minimal validation (no zod)
+    // ------------------------------------------------------------------
+    if (!body || typeof body.title !== "string" || body.title.trim().length < 3) {
+      return NextResponse.json(
+        { success: false, error: "Job title is required and must be at least 3 characters." },
+        { status: 400 },
+      );
+    }
 
     const tenantId = await getDefaultTenantId();
 
+    // Destructure expected fields from the wizard payload
     const {
-      isPublic,
-      isPublished,
-      isConfidential,
-      internalOnly,
-      tags,
-      requiredSkills,
-      salaryMin,
-      salaryMax,
-      slug,
-      // everything else:
+      // Core
       title,
       department,
       location,
@@ -107,18 +60,40 @@ export async function POST(req: Request) {
       experienceLevel,
       seniority,
       workMode,
+
+      // Client
       clientCompanyId,
+
+      // Narrative
       overview,
       aboutClient,
       responsibilities,
       requirements,
       benefits,
       shortDescription,
+
+      // Meta
       externalId,
+
+      // Arrays
+      tags,
+      requiredSkills,
+
+      // Compensation
+      salaryMin,
+      salaryMax,
       salaryCurrency,
       salaryVisible,
-      // industry, function are currently UI-level only
-    } = parsed;
+
+      // Visibility flags from UI
+      isPublic,
+      isPublished,
+      isConfidential,
+      internalOnly,
+
+      // Optional slug override
+      slug,
+    } = body;
 
     // ------------------------------------------------------------------
     // Slug generation & uniqueness per tenant
@@ -130,10 +105,8 @@ export async function POST(req: Request) {
       let candidate = baseSlug;
       let suffix = 1;
 
-      // Ensure uniqueness within this tenant
-      // (very cheap query at your current scale)
-      // If you ever add a unique index on (tenant_id, slug),
-      // this logic plus DB constraint will keep it tight.
+      // Keep incrementing suffix until free
+      // (cheap at your current scale)
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const existing = await prisma.job.findFirst({
@@ -149,28 +122,31 @@ export async function POST(req: Request) {
     }
 
     // ------------------------------------------------------------------
-    // Map wizard flags → real Prisma fields
+    // Map UI flags → actual DB fields
     // ------------------------------------------------------------------
-    const visibility = isPublic === false ? "internal" : "public";
-    const status = isPublished === false ? "draft" : "open";
+    const visibility: string =
+      typeof isPublic === "boolean" && isPublic === false ? "internal" : "public";
 
-    const internalOnlyValue =
+    const status: string =
+      typeof isPublished === "boolean" && isPublished === false ? "draft" : "open";
+
+    const internalOnlyValue: boolean =
       typeof internalOnly === "boolean"
         ? internalOnly
-        : isPublic === false
+        : typeof isPublic === "boolean" && isPublic === false
         ? true
         : false;
 
-    const confidentialValue =
+    const confidentialValue: boolean =
       typeof isConfidential === "boolean" ? isConfidential : false;
 
-    // Prisma Decimal columns accept string/number/Decimal.
+    // Prisma Decimal accepts string/number/Decimal
     const salaryMinValue =
-      salaryMin !== undefined && salaryMin !== null
+      salaryMin !== undefined && salaryMin !== null && salaryMin !== ""
         ? (salaryMin as any)
         : null;
     const salaryMaxValue =
-      salaryMax !== undefined && salaryMax !== null
+      salaryMax !== undefined && salaryMax !== null && salaryMax !== ""
         ? (salaryMax as any)
         : null;
 
@@ -178,6 +154,7 @@ export async function POST(req: Request) {
       data: {
         tenantId,
 
+        // Core
         title,
         department: department ?? null,
         location: location ?? null,
@@ -190,7 +167,7 @@ export async function POST(req: Request) {
         // Client
         clientCompanyId: clientCompanyId ?? null,
 
-        // Narrative sections
+        // Narrative
         overview: overview ?? null,
         aboutClient: aboutClient ?? null,
         responsibilities: responsibilities ?? null,
@@ -202,16 +179,17 @@ export async function POST(req: Request) {
         externalId: externalId ?? null,
 
         // Arrays
-        tags: tags ?? [],
-        requiredSkills: requiredSkills ?? [],
+        tags: Array.isArray(tags) ? tags : [],
+        requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : [],
 
         // Compensation
         salaryMin: salaryMinValue,
         salaryMax: salaryMaxValue,
         salaryCurrency: salaryCurrency ?? null,
-        salaryVisible: typeof salaryVisible === "boolean" ? salaryVisible : false,
+        salaryVisible:
+          typeof salaryVisible === "boolean" ? salaryVisible : false,
 
-        // Visibility / flags mapped to real fields
+        // Visibility / flags
         visibility,
         status,
         internalOnly: internalOnlyValue,
@@ -231,18 +209,6 @@ export async function POST(req: Request) {
     );
   } catch (err: any) {
     console.error("POST /api/ats/jobs error", err);
-    // Zod validation error
-    if (err?.name === "ZodError") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid job payload",
-          issues: err.issues,
-        },
-        { status: 400 },
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,
