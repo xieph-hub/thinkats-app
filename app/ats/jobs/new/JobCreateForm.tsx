@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type ClientCompanyOption = {
   id: string;
   name: string;
   slug: string | null;
+  logoUrl: string | null;
 };
 
 type JobCreateFormProps = {
@@ -23,11 +24,12 @@ function slugify(input: string) {
   return input
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^a-z0-9]+/g, "-"
+    )
     .replace(/^-+|-+$/g, "");
 }
 
-function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
+const JobCreateForm: React.FC<JobCreateFormProps> = ({ clientCompanies }) => {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
@@ -49,6 +51,11 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedClient = useMemo(
+    () => clientCompanies.find((c) => c.id === clientCompanyId) || null,
+    [clientCompanies, clientCompanyId]
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -110,6 +117,7 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         </div>
       )}
 
+      {/* Title */}
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-700">
           Job title *
@@ -123,6 +131,7 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         />
       </div>
 
+      {/* Slug */}
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-700">
           Slug (optional)
@@ -136,25 +145,46 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         />
       </div>
 
-      {/* Client company selection */}
-      <div className="space-y-1">
-        <label className="block text-xs font-medium text-slate-700">
-          Client (optional)
-        </label>
-        <select
-          value={clientCompanyId}
-          onChange={(e) => setClientCompanyId(e.target.value)}
-          className="block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
-        >
-          <option value="">No specific client (internal / generic)</option>
-          {clientCompanies.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+      {/* Client company + logo */}
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-slate-700">
+            Client (optional)
+          </label>
+          <select
+            value={clientCompanyId}
+            onChange={(e) => setClientCompanyId(e.target.value)}
+            className="block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+          >
+            <option value="">No specific client (Resourcin / internal)</option>
+            {clientCompanies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedClient && selectedClient.logoUrl && (
+          <div className="flex items-center gap-2 rounded-md border border-slate-100 bg-slate-50 px-2.5 py-2">
+            <img
+              src={selectedClient.logoUrl}
+              alt={selectedClient.name}
+              className="h-8 w-8 rounded border border-slate-200 bg-white object-contain"
+            />
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-slate-800">
+                {selectedClient.name}
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Logo preview for this mandate
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Location + department */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
@@ -183,6 +213,7 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         </div>
       </div>
 
+      {/* Employment type / seniority / work mode */}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-700">
@@ -227,6 +258,7 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         </div>
       </div>
 
+      {/* Visibility + confidential */}
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-700">
           Visibility
@@ -257,6 +289,7 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         </label>
       </div>
 
+      {/* Short description */}
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-700">
           Short description
@@ -269,6 +302,7 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
         />
       </div>
 
+      {/* Full description */}
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-700">
           Full description
@@ -292,6 +326,6 @@ function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
       </div>
     </form>
   );
-}
+};
 
 export default JobCreateForm;
