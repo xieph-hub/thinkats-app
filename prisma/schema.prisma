@@ -1,27 +1,23 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")  // pooled connection
-  directUrl = env("DIRECT_URL")    // direct connection
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
-  // e.g. "AGENCY" | "CLIENT" if you want later
-  type      String? 
 
-  jobs             Job[]
-  clientCompanies  ClientCompany[]
-  candidates       Candidate[]
-  pipelineStages   PipelineStage[]
-  jobApplications  JobApplication[]
+  jobs            Job[]
+  clientCompanies ClientCompany[]
+  candidates      Candidate[]
+  pipelineStages  PipelineStage[]
+  jobApplications JobApplication[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -59,15 +55,15 @@ model Job {
   description      String?
   department       String?
   location         String?
-  locationType     String?  // "ONSITE" | "HYBRID" | "REMOTE" etc
-  employmentType   String?  // "FULL_TIME" | "PART_TIME" | ...
+  locationType     String?
+  employmentType   String?
   seniority        String?
-  tags             String[] // or Json if you prefer
+  tags             String[]
 
   isPublished    Boolean  @default(false)
   isPublic       Boolean  @default(true)
   isConfidential Boolean  @default(false)
-  status         String   @default("OPEN") // "OPEN" | "ON_HOLD" | "CLOSED" etc
+  status         String   @default("OPEN")
   publishedAt    DateTime?
 
   applications JobApplication[]
@@ -88,7 +84,7 @@ model Candidate {
   currentTitle    String?
   location        String?
   cvUrl           String?
-  source          String?  // "DIRECT_APPLY", "TALENT_NETWORK", etc
+  source          String?
   isTalentNetwork Boolean  @default(false)
 
   applications JobApplication[]
@@ -131,8 +127,8 @@ model JobApplication {
   pipelineStageId String?
   pipelineStage   PipelineStage? @relation(fields: [pipelineStageId], references: [id])
 
-  status      String   @default("IN_REVIEW") // "IN_REVIEW", "SHORTLISTED", etc
-  source      String?  // "careers_site", "referral", etc
+  status      String   @default("IN_REVIEW")
+  source      String?
   cvUrl       String?
   submittedAt DateTime?
 
@@ -140,8 +136,7 @@ model JobApplication {
   updatedAt   DateTime @updatedAt
 }
 
-// You can keep this or remove it if no longer needed.
-// It doesn't hurt anything to leave it.
+// Optional: keep your placeholder or delete it
 model PrismaPlaceholder {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
