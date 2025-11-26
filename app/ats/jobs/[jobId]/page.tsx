@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getResourcinTenant } from "@/lib/tenant";
 import { getJobWithPipeline } from "@/lib/jobs";
+import StageSelect from "./StageSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -331,23 +332,31 @@ export default async function JobPipelinePage({
                       </div>
 
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        {app.cvUrl && (
-                          <a
-                            href={app.cvUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-[#172965] hover:bg-slate-100"
-                          >
-                            View CV
-                          </a>
-                        )}
+                        {/* 🔹 Inline stage selector (calls bulk endpoint with one applicationId) */}
+                        <StageSelect
+                          applicationId={app.id}
+                          currentStage={stage}
+                        />
 
-                        <Link
-                          href={`/ats/candidates/${app.candidateId}`}
-                          className="ml-auto inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:border-[#172965] hover:text-[#172965]"
-                        >
-                          Open profile
-                        </Link>
+                        <div className="ml-auto flex items-center gap-2">
+                          {app.cvUrl && (
+                            <a
+                              href={app.cvUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-[#172965] hover:bg-slate-100"
+                            >
+                              View CV
+                            </a>
+                          )}
+
+                          <Link
+                            href={`/ats/candidates/${app.candidateId}`}
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 hover:border-[#172965] hover:text-[#172965]"
+                          >
+                            Open profile
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   );
