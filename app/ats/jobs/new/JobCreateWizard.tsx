@@ -17,20 +17,40 @@ type ApiResponse = {
   error?: string;
 };
 
-// --- Reference data: industries, locations, functions, skills ---
+// --- Reference data: industries, locations, functions, skills, seniority ---
 
+// Broad, global-ish industry set + "Other"
 const INDUSTRY_OPTIONS: string[] = [
-  "Technology & Software",
-  "Financial Services & Fintech",
-  "Healthcare & Life Sciences",
-  "Energy & Utilities",
-  "Education & Edtech",
+  "Technology, Media & Telecommunications",
+  "Software & SaaS",
+  "Financial Services & Banking",
+  "Fintech & Payments",
+  "Insurance & Insurtech",
+  "Healthcare & Hospitals",
+  "Pharmaceuticals & Biotech",
+  "Life Sciences & MedTech",
+  "Energy, Oil & Gas",
+  "Power, Utilities & Renewables",
   "Manufacturing & Industrial",
+  "Automotive & Mobility",
+  "FMCG & Consumer Goods",
   "Retail & E-commerce",
-  "Logistics, Transport & Mobility",
-  "Telecoms & Infrastructure",
-  "Public Sector & Development",
+  "Food, Beverage & Hospitality",
+  "Travel, Aviation & Tourism",
+  "Logistics, Transport & Supply Chain",
+  "Real Estate & Property",
+  "Construction & Engineering",
+  "Agriculture & Agribusiness",
+  "Education & EdTech",
   "Professional Services & Consulting",
+  "Accounting & Audit",
+  "Legal Services",
+  "Media, Advertising & Communications",
+  "Telecommunications & Infrastructure",
+  "Public Sector & Government",
+  "Non-profit, NGO & Development",
+  "Mining, Metals & Natural Resources",
+  "Other / Not listed",
 ];
 
 const LOCATION_OPTIONS: string[] = [
@@ -40,95 +60,249 @@ const LOCATION_OPTIONS: string[] = [
   "Nairobi, Kenya",
   "Accra, Ghana",
   "Johannesburg, South Africa",
+  "Cape Town, South Africa",
   "Remote – Africa",
+  "Remote – EMEA",
   "Remote – Global",
 ];
 
+// Standard job families + "Other"
 const FUNCTION_OPTIONS: string[] = [
-  "Executive Leadership",
-  "Operations",
-  "Finance",
-  "Engineering & Technology",
+  "Executive Leadership (C-suite, Country Management)",
+  "General Management & Operations",
+  "Finance & Accounting",
+  "Engineering & Software Development",
   "Product Management",
-  "Sales & Business Development",
-  "Marketing & Growth",
+  "Data, Analytics & Business Intelligence",
+  "Sales, Business Development & Account Management",
+  "Marketing, Brand & Growth",
+  "Customer Success, Service & Support",
   "People, HR & Talent",
-  "Customer Success & Support",
-  "Data & Analytics",
+  "Legal, Risk & Compliance",
+  "Supply Chain, Procurement & Manufacturing",
+  "Project, Programme & PMO",
+  "Design, UX & Creative",
+  "IT, Infrastructure & Cybersecurity",
+  "Medical, Clinical & Healthcare",
+  "Research, Strategy & Innovation",
+  "Other / Not listed",
+];
+
+// Standard seniority ladder
+const SENIORITY_OPTIONS: string[] = [
+  "Internship / Student",
+  "Entry level / Graduate",
+  "Associate / Junior",
+  "Mid-level",
+  "Senior Individual Contributor",
+  "Lead / Principal",
+  "Manager",
+  "Senior Manager",
+  "Head of Function",
+  "Director",
+  "Senior Director",
+  "Vice President (VP)",
+  "Senior Vice President (SVP)",
+  "C-level / Executive",
+  "Founder / Co-founder",
 ];
 
 const SKILLS_BY_FUNCTION: Record<string, string[]> = {
-  "Executive Leadership": [
+  "Executive Leadership (C-suite, Country Management)": [
     "P&L ownership",
     "Strategy & execution",
     "Board & investor communication",
+    "Market entry & expansion",
+    "Organisational design",
     "Change management",
-    "Team leadership",
+    "Executive stakeholder management",
+    "Leadership & talent stewardship",
+    "Risk management & governance",
   ],
-  Operations: [
+  "General Management & Operations": [
+    "Operational excellence (Lean, Kaizen, Six Sigma)",
     "Process design & optimisation",
-    "SLAs & service quality",
-    "Capacity planning",
+    "Capacity & workforce planning",
+    "Service delivery & SLAs",
+    "Vendor & partner management",
+    "Budgeting & cost control",
     "Cross-functional coordination",
-    "Vendor management",
+    "Business continuity & resilience",
   ],
-  Finance: [
-    "Financial reporting",
+  "Finance & Accounting": [
+    "Financial reporting (IFRS / GAAP)",
     "Budgeting & forecasting",
-    "Treasury & liquidity",
-    "Regulatory & compliance",
-    "Investor reporting",
+    "Management accounting",
+    "Treasury & liquidity management",
+    "Financial modelling",
+    "Audit & controls",
+    "Tax planning & compliance",
+    "Investor & stakeholder reporting",
   ],
-  "Engineering & Technology": [
-    "Software architecture",
+  "Engineering & Software Development": [
+    "Software architecture & design",
     "Backend engineering",
     "Frontend engineering",
-    "Cloud & infrastructure",
-    "Security & reliability",
+    "API design & integration",
+    "Cloud platforms (AWS, GCP, Azure)",
+    "CI/CD & DevOps practices",
+    "Testing & quality engineering",
+    "Performance & scalability",
+    "Security-by-design",
   ],
   "Product Management": [
-    "Product discovery",
+    "Product discovery & validation",
     "Roadmapping & prioritisation",
-    "User research",
+    "User research & insight generation",
     "Stakeholder management",
     "Experimentation & A/B testing",
+    "Go-to-market collaboration",
+    "Metrics & product analytics",
+    "Product strategy & vision",
   ],
-  "Sales & Business Development": [
+  "Data, Analytics & Business Intelligence": [
+    "SQL & data modelling",
+    "Dashboarding & BI tools",
+    "Experiment & A/B test design",
+    "Forecasting & time-series analysis",
+    "Customer & growth analytics",
+    "Data storytelling & insight communication",
+    "Data governance & quality",
+    "Python / R for analytics",
+  ],
+  "Sales, Business Development & Account Management": [
     "Enterprise sales",
-    "Pipeline management",
-    "Account management",
+    "Solution & consultative selling",
+    "Prospecting & pipeline generation",
+    "Account management & expansion",
     "Partnerships & alliances",
     "Negotiation & closing",
+    "Territory & channel management",
+    "CRM hygiene & reporting",
   ],
-  "Marketing & Growth": [
-    "Brand strategy",
+  "Marketing, Brand & Growth": [
+    "Brand strategy & positioning",
     "Demand generation",
-    "Performance marketing",
+    "Performance & digital marketing",
     "Content & storytelling",
     "Product marketing",
+    "Campaign planning & execution",
+    "Marketing analytics & attribution",
+    "Community & ecosystem building",
   ],
-  "People, HR & Talent": [
-    "Talent acquisition",
-    "People operations",
-    "Performance management",
-    "Compensation & benefits",
-    "Culture & engagement",
-  ],
-  "Customer Success & Support": [
+  "Customer Success, Service & Support": [
     "Customer onboarding",
     "Account health monitoring",
-    "Renewals & expansion",
-    "Support operations",
     "NPS & CSAT management",
+    "Renewals & churn prevention",
+    "Upsell & expansion",
+    "Support operations & tooling",
+    "Incident management & escalation",
+    "Customer journey mapping",
   ],
-  "Data & Analytics": [
-    "Business intelligence",
-    "Data modelling",
-    "Experiment design",
-    "SQL & analytics",
-    "Dashboarding & reporting",
+  "People, HR & Talent": [
+    "Talent acquisition & sourcing",
+    "People operations & HRIS",
+    "Performance & feedback systems",
+    "Compensation & benefits",
+    "Organisational development",
+    "Employee relations & case management",
+    "Learning & leadership development",
+    "Culture, engagement & communications",
+  ],
+  "Legal, Risk & Compliance": [
+    "Commercial contracting",
+    "Regulatory compliance",
+    "Corporate governance",
+    "Data protection & privacy",
+    "Risk assessment & mitigation",
+    "Policy design & implementation",
+    "Dispute resolution & litigation management",
+    "Stakeholder & regulator engagement",
+  ],
+  "Supply Chain, Procurement & Manufacturing": [
+    "Demand & supply planning",
+    "Procurement & sourcing strategy",
+    "Inventory management",
+    "Manufacturing operations",
+    "Logistics & distribution",
+    "Supplier relationship management",
+    "Cost optimisation",
+    "Quality & safety standards",
+  ],
+  "Project, Programme & PMO": [
+    "Project scoping & planning",
+    "Programme governance",
+    "Stakeholder communications",
+    "Risk & issue management",
+    "Budget & resource management",
+    "Agile / Scrum / Kanban",
+    "Waterfall project management",
+    "Benefits realisation tracking",
+  ],
+  "Design, UX & Creative": [
+    "User research & discovery",
+    "UX design & prototyping",
+    "UI design & design systems",
+    "Information architecture",
+    "Interaction design",
+    "Brand & visual identity",
+    "Usability testing",
+    "Design ops & collaboration",
+  ],
+  "IT, Infrastructure & Cybersecurity": [
+    "IT operations & service management",
+    "Network & infrastructure design",
+    "Cloud infrastructure (AWS / Azure / GCP)",
+    "Information security",
+    "Identity & access management",
+    "Security monitoring & incident response",
+    "Business continuity & DR",
+    "Compliance (ISO 27001, SOC2, etc.)",
+  ],
+  "Medical, Clinical & Healthcare": [
+    "Clinical operations",
+    "Patient care & safety",
+    "Healthcare quality & standards",
+    "Clinical governance",
+    "Medical documentation & compliance",
+    "Care pathway optimisation",
+    "Multidisciplinary team leadership",
+    "Clinical research & trials",
+  ],
+  "Research, Strategy & Innovation": [
+    "Market & competitor research",
+    "Corporate & business strategy",
+    "Innovation & new ventures",
+    "Scenario & sensitivity analysis",
+    "Quantitative & qualitative research",
+    "Insight synthesis & storytelling",
+    "Strategic planning & OKRs",
+    "Experimentation & pilots",
+  ],
+  "Other / Not listed": [
+    "Stakeholder management",
+    "Problem solving & analysis",
+    "Communication & storytelling",
+    "Planning & prioritisation",
+    "Project delivery",
+    "Team collaboration",
+    "Adaptability & learning",
+    "Ownership & accountability",
   ],
 };
+
+const GENERIC_SKILLS: string[] = [
+  "Stakeholder management",
+  "Project management",
+  "Structured problem solving",
+  "Analytical thinking",
+  "Written communication",
+  "Verbal communication & presentations",
+  "Collaboration & cross-functional work",
+  "Planning & prioritisation",
+  "Coaching & people development",
+];
 
 const CURRENCY_OPTIONS = ["NGN", "USD", "KES", "GHS", "ZAR", "EUR", "GBP"];
 
@@ -142,12 +316,7 @@ function slugify(input: string) {
 
 // Simple step indicator with your brand colours
 function Stepper({ step }: { step: number }) {
-  const steps = [
-    "Basics",
-    "Role profile",
-    "Criteria",
-    "Process & publish",
-  ];
+  const steps = ["Basics", "Role profile", "Criteria", "Process & publish"];
 
   return (
     <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
@@ -163,7 +332,8 @@ function Stepper({ step }: { step: number }) {
             ? "bg-[#64C247]" // light green for completed
             : "bg-slate-200";
 
-          const textClass = isActive || isCompleted ? "text-white" : "text-slate-600";
+          const textClass =
+            isActive || isCompleted ? "text-white" : "text-slate-600";
 
           return (
             <li key={label} className="flex items-center gap-2">
@@ -248,18 +418,12 @@ export default function JobCreateWizard(props: any) {
   );
 
   const effectiveLocation = location === "CUSTOM" ? locationCustom : location;
+
   const skillOptions = useMemo(() => {
     if (jobFunction && SKILLS_BY_FUNCTION[jobFunction]) {
       return SKILLS_BY_FUNCTION[jobFunction];
     }
-    // generic fallback
-    return [
-      "Stakeholder management",
-      "Project management",
-      "Communication & storytelling",
-      "Problem solving",
-      "Team leadership",
-    ];
+    return GENERIC_SKILLS;
   }, [jobFunction]);
 
   function toggleSkill(skill: string) {
@@ -570,13 +734,18 @@ export default function JobCreateWizard(props: any) {
               <label className="block text-xs font-medium text-slate-700">
                 Seniority
               </label>
-              <input
-                type="text"
-                placeholder="e.g. Senior, Director, VP"
+              <select
                 value={seniority}
                 onChange={(e) => setSeniority(e.target.value)}
-                className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
-              />
+                className="block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Select…</option>
+                {SENIORITY_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -626,13 +795,15 @@ export default function JobCreateWizard(props: any) {
           </div>
           <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-start gap-2">
-              {selectedClient && selectedClient.logoUrl && confidentiality === "public" && (
-                <img
-                  src={selectedClient.logoUrl}
-                  alt={selectedClient.name}
-                  className="mt-0.5 h-8 w-8 rounded border border-slate-200 bg-white object-contain"
-                />
-              )}
+              {selectedClient &&
+                selectedClient.logoUrl &&
+                confidentiality === "public" && (
+                  <img
+                    src={selectedClient.logoUrl}
+                    alt={selectedClient.name}
+                    className="mt-0.5 h-8 w-8 rounded border border-slate-200 bg-white object-contain"
+                  />
+                )}
               <div>
                 <div className="text-xs font-semibold text-[#172965]">
                   {title || "Job title"}
@@ -980,9 +1151,7 @@ export default function JobCreateWizard(props: any) {
                 </li>
               )}
               {keySkills.length > 0 && (
-                <li>
-                  Key skills: {keySkills.join(", ")}
-                </li>
+                <li>Key skills: {keySkills.join(", ")}</li>
               )}
             </ul>
           </div>
@@ -1122,12 +1291,11 @@ export default function JobCreateWizard(props: any) {
               )}
               {effectiveLocation && <li>Location: {effectiveLocation}</li>}
               {employmentType && (
-                <li>
-                  Employment: {employmentType.replace("_", " ")}
-                </li>
+                <li>Employment: {employmentType.replace("_", " ")}</li>
               )}
               {industry && <li>Industry: {industry}</li>}
               {jobFunction && <li>Function: {jobFunction}</li>}
+              {seniority && <li>Seniority: {seniority}</li>}
               <li>Status: {status === "open" ? "Open" : "Draft"}</li>
               <li>
                 Visibility:{" "}
