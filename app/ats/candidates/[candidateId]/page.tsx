@@ -36,14 +36,48 @@ function formatDateTime(date: Date | null | undefined) {
   });
 }
 
+// ✅ Only treat the param as a UUID if it actually looks like one
+function looksLikeUuid(value: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value,
+  );
+}
+
 // Simple stage config to mirror the rest of ThinkATS
 const STAGES = [
-  { key: "APPLIED", label: "Applied", badgeClass: "bg-slate-50 text-slate-700 border-slate-200" },
-  { key: "SCREENING", label: "Screening", badgeClass: "bg-[#FFC000]/10 text-[#8a6000] border-[#FFC000]/30" },
-  { key: "INTERVIEW", label: "Interviewing", badgeClass: "bg-[#172965]/10 text-[#172965] border-[#172965]/30" },
-  { key: "OFFER", label: "Offer", badgeClass: "bg-[#64C247]/10 text-[#306B34] border-[#64C247]/40" },
-  { key: "HIRED", label: "Hired", badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-  { key: "REJECTED", label: "Rejected", badgeClass: "bg-red-50 text-red-700 border-red-100" },
+  {
+    key: "APPLIED",
+    label: "Applied",
+    badgeClass: "bg-slate-50 text-slate-700 border-slate-200",
+  },
+  {
+    key: "SCREENING",
+    label: "Screening",
+    badgeClass:
+      "bg-[#FFC000]/10 text-[#8a6000] border-[#FFC000]/30",
+  },
+  {
+    key: "INTERVIEW",
+    label: "Interviewing",
+    badgeClass:
+      "bg-[#172965]/10 text-[#172965] border-[#172965]/30",
+  },
+  {
+    key: "OFFER",
+    label: "Offer",
+    badgeClass:
+      "bg-[#64C247]/10 text-[#306B34] border-[#64C247]/40",
+  },
+  {
+    key: "HIRED",
+    label: "Hired",
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-100",
+  },
+  {
+    key: "REJECTED",
+    label: "Rejected",
+    badgeClass: "bg-red-50 text-red-700 border-red-100",
+  },
 ];
 
 const STAGE_MAP = new Map<string, (typeof STAGES)[number]>(
@@ -58,17 +92,25 @@ export default async function AtsCandidateDetailPage({
   const { candidateId } = params;
 
   // -----------------------------
-  // 1. Load candidate (all fields) by ID
+  // 1. Load candidate by ID (UUID) or fallback
   // -----------------------------
-  const candidate = await prisma.candidate.findUnique({
-    where: { id: candidateId },
-  });
+  let candidate =
+    looksLikeUuid(candidateId)
+      ? await prisma.candidate.findUnique({
+          where: { id: candidateId },
+        })
+      : await prisma.candidate.findFirst({
+          where: {
+            // Fallback: let non-UUID URLs resolve via email (or other string fields later)
+            email: candidateId,
+          },
+        });
 
   if (!candidate) {
     notFound();
   }
 
-  // Use `any` locally so we can gracefully read optional fields
+  // Use `any` locally so we can gracefully read optional / non-typed fields
   const c = candidate as any;
 
   const primaryLabel: string =
@@ -94,13 +136,9 @@ export default async function AtsCandidateDetailPage({
     (c.currentCompany as string | undefined) || null;
 
   const createdAt: Date | null =
-    candidate && (candidate as any).createdAt instanceof Date
-      ? (candidate as any).createdAt
-      : null;
+    (c.createdAt as Date | undefined) ?? null;
   const updatedAt: Date | null =
-    candidate && (candidate as any).updatedAt instanceof Date
-      ? (candidate as any).updatedAt
-      : null;
+    (c.updatedAt as Date | undefined) ?? null;
 
   // -----------------------------
   // 2. Load all applications for this candidate
@@ -154,7 +192,7 @@ export default async function AtsCandidateDetailPage({
       ? applications[applications.length - 1].createdAt
       : createdAt;
 
-  // Collect a concise list of sources for sidebar
+  // Concise list of sources for sidebar
   const uniqueSources = Array.from(
     new Set(
       applications
