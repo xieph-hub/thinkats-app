@@ -2,24 +2,30 @@
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
-const RESOURCIN_TENANT_SLUG = process.env.RESOURCIN_TENANT_SLUG;
+const RESOURCIN_TENANT_SLUG = process.env.RESOURCIN_TENANT_SLUG || "resourcin";
 
 if (!RESOURCIN_TENANT_SLUG) {
   throw new Error("RESOURCIN_TENANT_SLUG is not set in environment variables");
 }
 
 export const getTenantBySlug = cache(async (slug: string) => {
-  const tenant = await prisma.tenant.findUnique({
+  let tenant = await prisma.tenant.findUnique({
     where: { slug },
   });
 
   if (!tenant) {
-    throw new Error(`Tenant not found for slug: ${slug}`);
+    // Auto-provision the Resourcin tenant if it's missing
+    tenant = await prisma.tenant.create({
+      data: {
+        slug,
+        name: "Resourcin", // you can later make this env-driven
+      },
+    });
   }
 
   return tenant;
 });
 
 export const getResourcinTenant = cache(async () => {
-  return getTenantBySlug(RESOURCIN_TENANT_SLUG!);
+  return getTenantBySlug(RESOURCIN_TENANT_SLUG);
 });
