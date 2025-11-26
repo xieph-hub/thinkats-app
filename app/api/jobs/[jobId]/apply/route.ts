@@ -4,8 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
 type RouteContext = {
-  params: {
-    jobId: string;
+  params?: {
+    jobId?: string;
   };
 };
 
@@ -14,9 +14,9 @@ type RouteContext = {
  * Accepts either JSON or multipart/form-data.
  * Creates/updates Candidate + creates JobApplication.
  */
-export async function POST(req: Request, { params }: RouteContext) {
+export async function POST(req: Request, context: RouteContext = {}) {
   try {
-    const { jobId } = params;
+    const jobId = context.params?.jobId;
 
     if (!jobId) {
       return NextResponse.json(
