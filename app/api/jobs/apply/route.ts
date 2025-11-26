@@ -3,87 +3,47 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
-/**
- * Public job application endpoint (non-dynamic).
- * Expects a jobId field in JSON body or multipart/form-data.
- */
 export async function POST(req: Request) {
   try {
-    const tenant = await getResourcinTenant();
     const contentType = req.headers.get("content-type") || "";
-
     let jobId: string | null = null;
 
-    // Common fields
-    let fullName = "";
-    let email = "";
-    let phone: string | null = null;
-    let location: string | null = null;
-    let linkedinUrl: string | null = null;
-    let portfolioUrl: string | null = null;
-    let githubUrl: string | null = null;
-    let coverLetter: string | null = null;
-    let cvUrl: string | null = null;
-    let source: string | null = null;
-    let howHeard: string | null = null;
-    let noticePeriod: string | null = null;
-    let currentGrossAnnual: string | null = null;
-    let grossAnnualExpectation: string | null = null;
+    // We'll collect everything into this payload object
+    let payload: any = {};
 
     if (contentType.includes("application/json")) {
-      const body = await req.json();
-
+      payload = await req.json();
       jobId =
-        typeof body.jobId === "string" && body.jobId.trim().length > 0
-          ? body.jobId.trim()
+        typeof payload.jobId === "string" && payload.jobId.trim().length > 0
+          ? payload.jobId.trim()
           : null;
-
-      fullName = (body.fullName ?? "").trim();
-      email = (body.email ?? "").trim().toLowerCase();
-      phone = body.phone ?? null;
-      location = body.location ?? null;
-      linkedinUrl = body.linkedinUrl ?? null;
-      portfolioUrl = body.portfolioUrl ?? null;
-      githubUrl = body.githubUrl ?? null;
-      coverLetter = body.coverLetter ?? null;
-      cvUrl = body.cvUrl ?? null;
-      source = body.source ?? null;
-      howHeard = body.howHeard ?? null;
-      noticePeriod = body.noticePeriod ?? null;
-      currentGrossAnnual = body.currentGrossAnnual ?? null;
-      grossAnnualExpectation = body.grossAnnualExpectation ?? null;
     } else {
       const formData = await req.formData();
-
       const getStr = (key: string): string | null => {
         const v = formData.get(key);
         if (v == null) return null;
-        return String(v).trim() || null;
+        const s = String(v).trim();
+        return s || null;
       };
 
       jobId = getStr("jobId");
 
-      fullName = getStr("fullName") || "";
-      email = (getStr("email") || "").toLowerCase();
-      phone = getStr("phone");
-      location = getStr("location");
-      linkedinUrl = getStr("linkedinUrl") || getStr("linkedin");
-      portfolioUrl = getStr("portfolioUrl");
-      githubUrl = getStr("githubUrl");
-      coverLetter = getStr("coverLetter");
-      source = getStr("source");
-      howHeard = getStr("howHeard");
-      noticePeriod = getStr("noticePeriod");
-      currentGrossAnnual = getStr("currentGrossAnnual");
-      grossAnnualExpectation = getStr("grossAnnualExpectation");
-      cvUrl = getStr("cvUrl");
-
-      // If a file is sent under "cv", plug in Supabase / S3 upload here later.
-      const cvFile = formData.get("cv") as File | null;
-      if (cvFile) {
-        // TODO: upload and set cvUrl to public URL.
-        // For now we ignore the raw file and rely on cvUrl if provided.
-      }
+      payload = {
+        fullName: getStr("fullName"),
+        email: getStr("email")?.toLowerCase(),
+        phone: getStr("phone"),
+        location: getStr("location"),
+        linkedinUrl: getStr("linkedinUrl") ?? getStr("linkedin"),
+        portfolioUrl: getStr("portfolioUrl"),
+        githubUrl: getStr("githubUrl"),
+        coverLetter: getStr("coverLetter"),
+        cvUrl: getStr("cvUrl"),
+        source: getStr("source"),
+        howHeard: getStr("howHeard"),
+        noticePeriod: getStr("noticePeriod"),
+        currentGrossAnnual: getStr("currentGrossAnnual"),
+        grossAnnualExpectation: getStr("grossAnnualExpectation"),
+      };
     }
 
     if (!jobId) {
@@ -93,15 +53,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!fullName || !email) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Name and email are required.",
-        },
-        { status: 400 },
-      );
-    }
+    const tenant = await getResourcinTenant();
 
     // Ensure job exists, is public, open, and not internal-only
     const job = await prisma.job.findFirst({
@@ -118,13 +70,29 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: "This role is not accepting applications or was not found.",
+          error:
+            "This role is not accepting applications or was not found.",
         },
         { status: 404 },
       );
     }
 
+    const fullName = (payload.fullName ?? "").trim();
+    const email = (payload.email ?? "").trim().toLowerCase();
+
+    if (!fullName || !email) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Name and email are required.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // ------------------------------------------------------------------
     // Candidate: find by (tenantId, email) or create
+    // ------------------------------------------------------------------
     const existingCandidate = await prisma.candidate.findFirst({
       where: {
         tenantId: job.tenantId,
@@ -139,59 +107,60 @@ export async function POST(req: Request) {
           tenantId: job.tenantId,
           fullName,
           email,
-          phone,
-          location,
-          linkedinUrl,
+          phone: payload.phone ?? null,
+          location: payload.location ?? null,
+          linkedinUrl: payload.linkedinUrl ?? null,
           currentTitle: null,
           currentCompany: null,
-          cvUrl,
-          source,
+          cvUrl: payload.cvUrl ?? null,
+          source: payload.source ?? null,
         },
       }));
 
-    // Optionally keep candidate profile fresh
     const shouldUpdateCandidate =
       !existingCandidate ||
       candidate.fullName !== fullName ||
-      candidate.phone !== phone ||
-      candidate.location !== location ||
-      candidate.linkedinUrl !== linkedinUrl ||
-      candidate.cvUrl !== cvUrl;
+      candidate.phone !== (payload.phone ?? null) ||
+      candidate.location !== (payload.location ?? null) ||
+      candidate.linkedinUrl !== (payload.linkedinUrl ?? null) ||
+      candidate.cvUrl !== (payload.cvUrl ?? null);
 
     if (shouldUpdateCandidate) {
       await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
           fullName,
-          phone,
-          location,
-          linkedinUrl,
-          cvUrl,
-          source,
+          phone: payload.phone ?? null,
+          location: payload.location ?? null,
+          linkedinUrl: payload.linkedinUrl ?? null,
+          cvUrl: payload.cvUrl ?? null,
+          source: payload.source ?? null,
         },
       });
     }
 
+    // ------------------------------------------------------------------
     // Create JobApplication
+    // ------------------------------------------------------------------
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
         candidateId: candidate.id,
         fullName,
         email,
-        phone,
-        location,
-        linkedinUrl,
-        portfolioUrl,
-        githubUrl,
-        cvUrl,
-        coverLetter,
-        source,
-        howHeard,
-        noticePeriod,
-        currentGrossAnnual,
-        grossAnnualExpectation,
-        // stage / status defaults from schema
+        phone: payload.phone ?? null,
+        location: payload.location ?? null,
+        linkedinUrl: payload.linkedinUrl ?? null,
+        portfolioUrl: payload.portfolioUrl ?? null,
+        githubUrl: payload.githubUrl ?? null,
+        cvUrl: payload.cvUrl ?? null,
+        coverLetter: payload.coverLetter ?? null,
+        source: payload.source ?? null,
+        howHeard: payload.howHeard ?? null,
+        noticePeriod: payload.noticePeriod ?? null,
+        currentGrossAnnual: payload.currentGrossAnnual ?? null,
+        grossAnnualExpectation: payload.grossAnnualExpectation ?? null,
+        // stage/status default from schema: APPLIED / PENDING
       },
     });
 
