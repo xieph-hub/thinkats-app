@@ -15,7 +15,8 @@ export default async function JobsPage() {
           Open roles
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Roles managed by Resourcin and our clients across Nigeria, Africa and beyond.
+          Roles managed by Resourcin and our clients across Nigeria, Africa and
+          beyond.
         </p>
       </header>
 
@@ -26,7 +27,7 @@ export default async function JobsPage() {
       ) : (
         <div className="space-y-3">
           {jobs.map((job) => {
-            const isConfidential = job.isConfidential;
+            const isConfidential = !!job.confidential;
             const client = job.clientCompany;
 
             const clientLabel = (() => {
