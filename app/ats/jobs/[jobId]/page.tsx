@@ -1,200 +1,253 @@
 // app/ats/jobs/[jobId]/page.tsx
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getResourcinTenant } from "@/lib/tenant";
-import { getJobWithPipeline } from "@/lib/jobs";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+
+const DEFAULT_TENANT_SLUG =
+  process.env.RESOURCIN_TENANT_SLUG || "resourcin";
+
+async function getDefaultTenant() {
+  // If you ever set RESOURCIN_TENANT_ID, we respect it
+  if (process.env.RESOURCIN_TENANT_ID) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: process.env.RESOURCIN_TENANT_ID },
+    });
+    return tenant;
+  }
+
+  return prisma.tenant.findFirst({
+    where: { slug: DEFAULT_TENANT_SLUG },
+  });
+}
 
 type PipelineColumn = {
   id: string;
   name: string;
+  applications: {
+    id: string;
+    fullName: string;
+    email: string;
+    stage: string;
+    status: string;
+  }[];
 };
 
-export default async function AtsJobDetailPage({
+async function getJobWithPipeline(jobId: string) {
+  const tenant = await getDefaultTenant();
+  if (!tenant) return null;
+
+  const job = await prisma.job.findFirst({
+    where: {
+      id: jobId,
+      tenantId: tenant.id,
+    },
+    include: {
+      clientCompany: true,
+      applications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          candidate: true,
+        },
+      },
+      stages: {
+        orderBy: { position: "asc" },
+      },
+    },
+  });
+
+  if (!job) return null;
+
+  // Build pipeline columns from stages + applications
+  const columns = new Map<string, PipelineColumn>();
+
+  // Base columns from JobStage definitions
+  for (const stage of job.stages) {
+    columns.set(stage.id, {
+      id: stage.id,
+      name: stage.name,
+      applications: [],
+    });
+  }
+
+  const UNASSIGNED_KEY = "unassigned";
+
+  // Fallback column for anything without a mapped stage
+  if (!columns.has(UNASSIGNED_KEY)) {
+    columns.set(UNASSIGNED_KEY, {
+      id: UNASSIGNED_KEY,
+      name: "New / Unassigned",
+      applications: [],
+    });
+  }
+
+  // Drop each application into a column based on its `stage` string
+  for (const app of job.applications) {
+    // Prefer a stage mapping by name → JobStage.id if possible
+    let targetKey = UNASSIGNED_KEY;
+
+    if (app.stage) {
+      const matchingStage = job.stages.find(
+        (s) => s.name.toLowerCase() === app.stage.toLowerCase(),
+      );
+
+      if (matchingStage) {
+        targetKey = matchingStage.id;
+      } else {
+        // Dynamic stage bucket for free-form stage names
+        const dynamicKey = `stage:${app.stage}`;
+        if (!columns.has(dynamicKey)) {
+          columns.set(dynamicKey, {
+            id: dynamicKey,
+            name: app.stage,
+            applications: [],
+          });
+        }
+        targetKey = dynamicKey;
+      }
+    }
+
+    const col = columns.get(targetKey)!;
+    col.applications.push({
+      id: app.id,
+      fullName: app.fullName,
+      email: app.email,
+      stage: app.stage,
+      status: app.status,
+    });
+  }
+
+  const pipelineColumns = Array.from(columns.values());
+
+  return { job, pipelineColumns };
+}
+
+export default async function AtsJobPage({
   params,
 }: {
   params: { jobId: string };
 }) {
-  const tenant = await getResourcinTenant();
-  const job = await getJobWithPipeline(params.jobId, tenant.id);
+  const { jobId } = params;
 
-  if (!job) {
+  const data = await getJobWithPipeline(jobId);
+
+  if (!data) {
     notFound();
   }
 
-  // Build stage columns from applications’ pipelineStage
-  const stageMap = new Map<string, PipelineColumn>();
-
-  for (const app of job.applications) {
-    const stageId = app.pipelineStage?.id ?? "unassigned";
-    const stageName = app.pipelineStage?.name ?? "New / Unassigned";
-
-    if (!stageMap.has(stageId)) {
-      stageMap.set(stageId, { id: stageId, name: stageName });
-    }
-  }
-
-  // Ensure at least one column exists
-  if (stageMap.size === 0) {
-    stageMap.set("unassigned", {
-      id: "unassigned",
-      name: "New / Unassigned",
-    });
-  }
-
-  const stages = Array.from(stageMap.values());
+  const { job, pipelineColumns } = data;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      {/* Header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-8">
+      {/* Header: job summary */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link
-            href="/ats/jobs"
-            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-900"
-          >
-            ← Back to ATS jobs
-          </Link>
-
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            ATS / Jobs / {job.id.slice(0, 8)}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
             {job.title}
           </h1>
 
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-600">
-            <span>
-              {job.clientCompany
-                ? job.clientCompany.name
-                : "Resourcin-branded"}
-            </span>
-
-            {job.location && (
-              <>
-                <span className="text-slate-300">•</span>
-                <span>{job.location}</span>
-              </>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+            {job.clientCompany && (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                {job.clientCompany.name}
+              </span>
             )}
-
-            <span className="text-slate-300">•</span>
-            <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+            {job.location && (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                {job.location}
+              </span>
+            )}
+            {job.employmentType && (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                {job.employmentType}
+              </span>
+            )}
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 capitalize">
               {job.status}
             </span>
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2 text-right text-xs text-slate-500">
-          <span>
-            Job ID: <span className="font-mono">{job.id}</span>
-          </span>
-          {job.slug && (
-            <span>
-              Slug: <span className="font-mono">{job.slug}</span>
-            </span>
-          )}
-          <span>
-            Applications:{" "}
-            <span className="font-semibold text-slate-800">
-              {job.applications.length}
-            </span>
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/jobs/${job.slug ?? job.id}`}
+            className="rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#111827]"
+          >
+            View public posting
+          </Link>
         </div>
       </div>
 
       {/* Pipeline board */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stages.map((stage) => {
-          const appsInStage = job.applications.filter((app) => {
-            const stageId = app.pipelineStage?.id ?? "unassigned";
-            return stageId === stage.id;
-          });
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">
+              Pipeline overview
+            </h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Candidates grouped by stage. (Drag & drop to move stages can come
+              later; this is a read-only snapshot for now.)
+            </p>
+          </div>
+          <p className="text-xs text-slate-500">
+            Total candidates:{" "}
+            <span className="font-semibold">
+              {job.applications.length}
+            </span>
+          </p>
+        </div>
 
-          return (
+        <div className="mt-4 grid auto-cols-[minmax(220px,1fr)] grid-flow-col gap-4 overflow-x-auto pb-2">
+          {pipelineColumns.map((column) => (
             <div
-              key={stage.id}
-              className="flex min-h-[260px] flex-col rounded-lg border border-slate-200 bg-slate-50"
+              key={column.id}
+              className="flex h-full min-h-[220px] flex-col rounded-lg border border-slate-200 bg-white"
             >
-              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  {stage.name}
-                </h2>
-                <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500">
-                  {appsInStage.length}
-                </span>
+              <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">
+                    {column.name}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {column.applications.length} candidate
+                    {column.applications.length === 1 ? "" : "s"}
+                  </p>
+                </div>
               </div>
 
-              {appsInStage.length === 0 ? (
-                <div className="flex flex-1 items-center justify-center px-3 py-4 text-center text-xs text-slate-400">
-                  No candidates in this stage yet.
-                </div>
-              ) : (
-                <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
-                  {appsInStage.map((app) => (
+              <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2">
+                {column.applications.length === 0 ? (
+                  <p className="text-[11px] italic text-slate-400">
+                    No candidates in this stage yet.
+                  </p>
+                ) : (
+                  column.applications.map((app) => (
                     <div
                       key={app.id}
-                      className="rounded-md bg-white p-3 text-xs shadow-sm ring-1 ring-slate-200"
+                      className="rounded-md border border-slate-200 bg-slate-50 p-2 text-xs"
                     >
-                      {/* Candidate basics */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {app.candidate.fullName}
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            {app.candidate.currentTitle || "Candidate"}
-                            {app.candidate.currentCompany
-                              ? ` • ${app.candidate.currentCompany}`
-                              : ""}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Details */}
-                      <div className="mt-2 space-y-1 text-[11px] text-slate-500">
-                        <div className="truncate">
-                          <span className="font-medium">Email: </span>
-                          <a
-                            href={`mailto:${app.candidate.email}`}
-                            className="text-resourcin-blue hover:underline"
-                          >
-                            {app.candidate.email}
-                          </a>
-                        </div>
-
-                        {app.candidate.location && (
-                          <div className="truncate">
-                            <span className="font-medium">Location: </span>
-                            {app.candidate.location}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Footer: submitted date + CV link */}
-                      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-                        <span>
-                          Submitted:{" "}
-                          {app.submittedAt
-                            ? new Date(app.submittedAt).toLocaleDateString()
-                            : "—"}
-                        </span>
-
-                        {app.cvUrl && (
-                          <a
-                            href={app.cvUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[11px] font-medium text-resourcin-blue hover:underline"
-                          >
-                            View CV
-                          </a>
-                        )}
-                      </div>
+                      <p className="font-medium text-slate-900">
+                        {app.fullName}
+                      </p>
+                      <p className="truncate text-[11px] text-slate-500">
+                        {app.email}
+                      </p>
+                      <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-400">
+                        {(app.stage || "APPLIED").toUpperCase()} ·{" "}
+                        {app.status.toUpperCase()}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
