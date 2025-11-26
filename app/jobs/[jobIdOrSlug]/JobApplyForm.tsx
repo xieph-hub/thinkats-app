@@ -54,7 +54,14 @@ export function JobApplyForm({ jobId }: Props) {
       setCurrentTitle("");
       setCurrentCompany("");
       setCvFile(null);
-      (document.getElementById("job-apply-cv-input") as HTMLInputElement | null)?.value = "";
+
+      // ✅ Fix: no optional chaining on the left-hand side of assignment
+      const input = document.getElementById(
+        "job-apply-cv-input"
+      ) as HTMLInputElement | null;
+      if (input) {
+        input.value = "";
+      }
     } catch (err: any) {
       setError(
         err?.message ||
