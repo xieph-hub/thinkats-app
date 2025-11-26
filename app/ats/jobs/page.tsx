@@ -35,13 +35,15 @@ function statusLabel(status: string | null | undefined): string {
 function statusBadgeClass(status: string | null | undefined): string {
   const s = normaliseStatus(status);
   if (s === "open") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-100";
+    // Light green for open roles
+    return "bg-[#E9F7EE] text-[#306B34] border-[#C5E7CF]";
   }
   if (s === "draft") {
     return "bg-slate-50 text-slate-600 border-slate-200";
   }
   if (s === "on_hold" || s === "on-hold") {
-    return "bg-amber-50 text-amber-700 border-amber-100";
+    // Yellow for on-hold
+    return "bg-[#FFF7DF] text-[#9A7300] border-[#FFE299]";
   }
   if (s === "closed") {
     return "bg-red-50 text-red-700 border-red-100";
@@ -106,7 +108,7 @@ export default async function AtsJobsPage({
   // -----------------------------
   const jobs = await listTenantJobs(selectedTenantId);
 
-  const filteredJobs = jobs.filter((job) => {
+  const filteredJobs = jobs.filter((job: any) => {
     let ok = true;
 
     if (statusFilter && statusFilter !== "all") {
@@ -134,13 +136,13 @@ export default async function AtsJobsPage({
 
   const totalJobs = jobs.length;
   const openJobs = jobs.filter(
-    (job) => normaliseStatus(job.status as any) === "open",
+    (job: any) => normaliseStatus(job.status as any) === "open",
   ).length;
   const draftJobs = jobs.filter(
-    (job) => normaliseStatus(job.status as any) === "draft",
+    (job: any) => normaliseStatus(job.status as any) === "draft",
   ).length;
   const totalApplications = jobs.reduce(
-    (sum, job: any) => sum + (job._count?.applications ?? 0),
+    (sum: number, job: any) => sum + (job._count?.applications ?? 0),
     0,
   );
   const activeJobsWithApps = jobs.filter(
@@ -165,7 +167,7 @@ export default async function AtsJobsPage({
       <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            ATS · Jobs
+            ThinkATS · Jobs
           </h1>
           <p className="mt-1 text-xs text-slate-600">
             All roles managed under{" "}
@@ -193,29 +195,33 @@ export default async function AtsJobsPage({
               />
             )}
 
-            <select
-              name="tenantId"
-              defaultValue={selectedTenantId}
-              className="hidden rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-700 outline-none ring-0 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900 sm:inline-flex"
-            >
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name ?? tenant.slug ?? tenant.id}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="submit"
-              className="hidden text-[11px] text-slate-500 hover:text-slate-800 sm:inline-flex"
-            >
-              Switch
-            </button>
+            <div className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 sm:flex">
+              <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                Tenant
+              </span>
+              <select
+                name="tenantId"
+                defaultValue={selectedTenantId}
+                className="border-none bg-transparent text-[11px] text-slate-900 outline-none focus:ring-0"
+              >
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name ?? tenant.slug ?? tenant.id}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="text-[11px] font-medium text-[#172965] hover:underline"
+              >
+                Switch
+              </button>
+            </div>
           </form>
 
           <Link
             href={`/ats/jobs/new?tenantId=${encodeURIComponent(selectedTenantId)}`}
-            className="inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[#111827]"
+            className="inline-flex items-center rounded-md bg-[#172965] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[#12204d]"
           >
             <span className="mr-1.5 text-sm">＋</span>
             New job
@@ -229,7 +235,7 @@ export default async function AtsJobsPage({
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Open jobs
           </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
+          <p className="mt-2 text-2xl font-semibold text-[#172965]">
             {openJobs}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
@@ -253,7 +259,7 @@ export default async function AtsJobsPage({
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Total applications
           </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
+          <p className="mt-2 text-2xl font-semibold text-[#306B34]">
             {totalApplications}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
@@ -265,7 +271,7 @@ export default async function AtsJobsPage({
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Active pipelines
           </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
+          <p className="mt-2 text-2xl font-semibold text-[#64C247]">
             {activeJobsWithApps}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
@@ -298,7 +304,7 @@ export default async function AtsJobsPage({
                 type="text"
                 defaultValue={q}
                 placeholder="Search by title, client, location..."
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
               <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[13px] text-slate-400">
                 ⌕
@@ -318,7 +324,7 @@ export default async function AtsJobsPage({
                 id="status"
                 name="status"
                 defaultValue={statusFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               >
                 <option value="all">All statuses</option>
                 <option value="open">Open</option>
@@ -330,7 +336,7 @@ export default async function AtsJobsPage({
 
             <button
               type="submit"
-              className="inline-flex items-center rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+              className="inline-flex items-center rounded-md bg-[#172965] px-3 py-2 text-xs font-medium text-white hover:bg-[#12204d]"
             >
               Apply
             </button>
@@ -368,12 +374,12 @@ export default async function AtsJobsPage({
         />
 
         {/* Bulk controls */}
-        <div className="mb-2 flex flex-col items-start justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:items-center">
+        <div className="mb-2 flex flex-col items-start justify-between gap-2 rounded-xl border border-slate-200 bg-[#F7F7FB] px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:items-center">
           <div className="flex flex-wrap items-center gap-2">
             <select
               name="bulkAction"
               defaultValue=""
-              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
             >
               <option value="">Bulk actions…</option>
               <option value="publish">
@@ -388,7 +394,7 @@ export default async function AtsJobsPage({
 
             <button
               type="submit"
-              className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-slate-800"
+              className="inline-flex items-center rounded-md bg-[#172965] px-3 py-1.5 text-[11px] font-medium text-white hover:bg-[#12204d]"
             >
               Run
             </button>
@@ -423,7 +429,7 @@ export default async function AtsJobsPage({
               return (
                 <div
                   key={job.id}
-                  className="flex items-stretch justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#0B1320]/70 hover:shadow-md"
+                  className="flex items-stretch justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
                 >
                   {/* Left: checkbox + job meta */}
                   <div className="flex min-w-0 flex-1 gap-3">
@@ -432,7 +438,7 @@ export default async function AtsJobsPage({
                         type="checkbox"
                         name="jobIds"
                         value={job.id}
-                        className="mt-1 h-3.5 w-3.5 rounded border-slate-300 text-[#0B1320] focus:ring-[#0B1320]"
+                        className="mt-1 h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
                         aria-label={`Select ${job.title}`}
                       />
                     </div>
@@ -441,7 +447,7 @@ export default async function AtsJobsPage({
                       <div className="flex items-center gap-2">
                         <Link
                           href={`/ats/jobs/${job.id}`}
-                          className="truncate text-sm font-semibold text-slate-900 hover:underline"
+                          className="truncate text-sm font-semibold text-slate-900 hover:text-[#172965] hover:underline"
                         >
                           {job.title}
                         </Link>
@@ -453,7 +459,7 @@ export default async function AtsJobsPage({
                           {statusText}
                         </span>
                         {isPublished && (
-                          <span className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                          <span className="inline-flex items-center rounded-full border border-[#C5E7CF] bg-[#E9F7EE] px-2 py-0.5 text-[10px] font-medium text-[#306B34]">
                             Published
                           </span>
                         )}
@@ -535,7 +541,7 @@ export default async function AtsJobsPage({
                       <span className="mx-1">·</span>
                       <Link
                         href={`/ats/jobs/${job.id}`}
-                        className="text-[#0B1320] hover:underline"
+                        className="text-[#172965] hover:underline"
                       >
                         Open board
                       </Link>
