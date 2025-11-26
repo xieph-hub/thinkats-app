@@ -66,7 +66,7 @@ export async function POST(req: Request) {
   try {
     const payload = await parseBulkBody(req);
 
-    // Resolve tenant
+    // Resolve tenant (still useful for auditing/logging later if you add tenantId to JobApplication)
     const fallbackTenant = await getResourcinTenant().catch(() => null);
     const tenantId = payload.tenantId || fallbackTenant?.id;
 
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       await prisma.jobApplication.updateMany({
         where: {
           id: { in: applicationIds },
-          tenantId,
+          // ❌ no tenantId here – JobApplication model doesn’t have it
         },
         data: { stage },
       });
@@ -134,7 +134,6 @@ export async function POST(req: Request) {
       await prisma.jobApplication.updateMany({
         where: {
           id: { in: applicationIds },
-          tenantId,
         },
         data: { stage },
       });
@@ -161,7 +160,6 @@ export async function POST(req: Request) {
       await prisma.jobApplication.updateMany({
         where: {
           id: { in: applicationIds },
-          tenantId,
         },
         data: { status },
       });
@@ -182,7 +180,8 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         updated: 0,
-        note: "Tag action acknowledged, but not yet implemented in the DB schema.",
+        note:
+          "Tag action acknowledged, but not yet implemented in the DB schema.",
         tag,
       });
     }
