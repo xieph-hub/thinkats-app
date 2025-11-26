@@ -11,6 +11,7 @@ export default async function AtsJobsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
+      {/* Header */}
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
@@ -29,6 +30,7 @@ export default async function AtsJobsPage() {
         </Link>
       </div>
 
+      {/* Table */}
       {jobs.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
           No jobs found for this tenant yet. Create one with the “New job” button.
@@ -50,6 +52,9 @@ export default async function AtsJobsPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Status
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Created
+                </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Actions
                 </th>
@@ -66,21 +71,29 @@ export default async function AtsJobsPage() {
                       </span>
                     </div>
                   </td>
+
                   <td className="px-4 py-3 text-sm text-slate-700">
                     {job.clientCompany
                       ? job.clientCompany.name
                       : "Resourcin-branded"}
                   </td>
+
                   <td className="px-4 py-3 text-sm text-slate-700">
                     {job.location ?? "—"}
                   </td>
+
                   <td className="px-4 py-3 text-sm">
-                    <span
-                      className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
-                    >
+                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
                       {job.status}
                     </span>
                   </td>
+
+                  <td className="px-4 py-3 text-sm text-slate-600">
+                    {job.createdAt
+                      ? new Date(job.createdAt).toLocaleDateString()
+                      : "—"}
+                  </td>
+
                   <td className="px-4 py-3 text-right text-sm">
                     <Link
                       href={`/ats/jobs/${job.id}`}
