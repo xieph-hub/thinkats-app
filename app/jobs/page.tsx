@@ -40,16 +40,19 @@ export default async function JobsPage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold text-slate-900">Open roles</h1>
+        <h1 className="text-3xl font-semibold text-slate-900">
+          Open roles
+        </h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Roles managed by Resourcin and our clients across Nigeria, Africa and
-          beyond.
+          Roles managed by Resourcin and our clients across Nigeria, Africa
+          and beyond.
         </p>
       </header>
 
       {jobs.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          No open roles right now. Check back soon or join our talent network.
+          No open roles right now. Check back soon or join our talent
+          network.
         </div>
       ) : (
         <div className="space-y-3">
