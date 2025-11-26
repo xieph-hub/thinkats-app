@@ -146,7 +146,7 @@ export async function POST(
     return NextResponse.json(
       {
         applicationId: data.id as string,
-        message: "Application received",
+        message: "Thank you — we’ve received your application. If there’s a strong match between your experience and this role, we’ll be in touch.",
       },
       { status: 201 }
     );
