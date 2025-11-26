@@ -10,8 +10,9 @@ export async function listTenantJobs(tenantId: string) {
   return prisma.job.findMany({
     where: {
       tenantId,
+      // With the new schema, status is a lowercase string ("open", "draft", "closed", etc.)
       status: {
-        not: "CLOSED",
+        not: "closed",
       },
     },
     orderBy: {
@@ -36,11 +37,15 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
     include: {
       clientCompany: true,
       applications: {
-        orderBy: { submittedAt: "desc" },
+        // In the new schema we have createdAt on JobApplication, not submittedAt
+        orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
-          pipelineStage: true,
         },
+      },
+      // From the new JobStage model
+      stages: {
+        orderBy: { position: "asc" },
       },
     },
   });
@@ -48,7 +53,7 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
 
 /**
  * Public jobs for Resourcin careers page.
- * Filters by tenant + isPublished + isPublic + status = OPEN.
+ * Filters by tenant + visibility + internalOnly + status = "open".
  * Used by /jobs
  */
 export async function listPublicJobsForResourcin() {
@@ -57,15 +62,21 @@ export async function listPublicJobsForResourcin() {
   return prisma.job.findMany({
     where: {
       tenantId: tenant.id,
-      isPublished: true,
-      isPublic: true,
-      status: "OPEN",
+      visibility: "public",   // new field instead of isPublic
+      status: "open",         // matches Job.status default
+      internalOnly: false,    // don’t show internal-only jobs on the public careers page
     },
     orderBy: {
-      publishedAt: "desc",
+      createdAt: "desc",      // we no longer rely on publishedAt
     },
     include: {
-      clientCompany: true,
+      clientCompany: {
+        select: {
+          id: true,
+          name: true,
+          logoUrl: true,
+        },
+      },
     },
   });
 }
@@ -81,16 +92,22 @@ export async function getPublicJobBySlugOrId(jobIdOrSlug: string) {
   return prisma.job.findFirst({
     where: {
       tenantId: tenant.id,
-      isPublished: true,
-      isPublic: true,
-      status: "OPEN",
+      visibility: "public",
+      status: "open",
+      internalOnly: false,
       OR: [
         { id: jobIdOrSlug },
         { slug: jobIdOrSlug },
       ],
     },
     include: {
-      clientCompany: true,
+      clientCompany: {
+        select: {
+          id: true,
+          name: true,
+          logoUrl: true,
+        },
+      },
     },
   });
 }
