@@ -421,7 +421,7 @@ export default async function CandidateDetailPage({
                             )}
                             <Link
                               href={`/ats/jobs/${app.jobId}`}
-                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"`
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
                             >
                               Open job pipeline
                             </Link>
