@@ -1,20 +1,34 @@
 // app/ats/jobs/new/page.tsx
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import JobCreateForm from "./JobCreateForm";
 
 export const dynamic = "force-dynamic";
 
+type ClientCompanyRow = {
+  id: string;
+  name: string;
+  slug: string | null;
+  logo_url: string | null;
+};
+
 export default async function NewJobPage() {
-  // TODO: later: filter by current tenant
-  const clientCompanies = await prisma.clientCompany.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      logoUrl: true, // ensure Prisma model has logoUrl @map("logo_url")
-    },
-  });
+  // Later we can scope by tenant_id if needed
+  const { data, error } = await supabaseAdmin
+    .from("client_companies")
+    .select("id, name, slug, logo_url")
+    .order("name", { ascending: true });
+
+  if (error) {
+    console.error("Failed to load client companies from Supabase", error);
+  }
+
+  const clientCompanies =
+    (data as ClientCompanyRow[] | null)?.map((c) => ({
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      logoUrl: c.logo_url,
+    })) ?? [];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
