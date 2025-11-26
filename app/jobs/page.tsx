@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenantId } from "@/lib/tenant";
-import { JobsExplorer } from "./JobsExplorer";
+import JobsExplorer from "./JobsExplorer";
 import type { JobCardData } from "@/components/jobs/JobCard";
 
 export const dynamic = "force-dynamic";
@@ -77,8 +77,7 @@ export default async function JobsPage() {
     const isPublic = visibility === "public";
     const isInternal = row.internal_only === true;
 
-    // For now, hide internal-only jobs from the public board.
-    // We can later add confidential behaviour ("Confidential search – via Resourcin").
+    // Hide internal-only jobs from the public board.
     return isOpen && isPublic && !isInternal;
   });
 
@@ -88,7 +87,6 @@ export default async function JobsPage() {
     const card: JobCardData = {
       id: row.id,
       title: row.title,
-      // Show full location string from DB
       location: row.location ?? "Location flexible",
       employmentType: row.employment_type ?? undefined,
       experienceLevel: row.experience_level ?? undefined,
@@ -97,9 +95,7 @@ export default async function JobsPage() {
       shortDescription: row.short_description ?? undefined,
       tags: row.tags ?? [],
       postedAt: row.created_at,
-      // This is what your JobCardGrid / JobsGridClient navigates to
       shareUrl: `/jobs/${slugOrId}`,
-      // Optional flags for card styling; your JobCard can ignore them if it doesn’t use them
       isConfidential: row.confidential === true,
     } as JobCardData;
 
@@ -109,14 +105,21 @@ export default async function JobsPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       <header className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: "#172965" }}>
+        <p
+          className="text-xs font-semibold uppercase tracking-[0.18em]"
+          style={{ color: "#172965" }} // Resourcin blue
+        >
           Open roles
         </p>
-        <h1 className="mt-2 text-3xl font-semibold" style={{ color: "#172965" }}>
+        <h1
+          className="mt-2 text-3xl font-semibold"
+          style={{ color: "#172965" }} // Resourcin blue
+        >
           Opportunities via Resourcin
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Roles managed through ThinkATS. Apply directly or share with someone who fits.
+          Roles managed through ThinkATS. Apply directly or share with someone
+          who fits.
         </p>
       </header>
 
