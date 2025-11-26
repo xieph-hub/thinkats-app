@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  // Resolve hiring managers
+  // Resolve hiring managers → only email (no name field in User model)
   const uniqueManagerIds = Array.from(
     new Set(
       jobs
@@ -122,7 +122,6 @@ export async function GET(req: NextRequest) {
           where: { id: { in: uniqueManagerIds } },
           select: {
             id: true,
-            name: true,
             email: true,
           },
         });
@@ -153,13 +152,16 @@ export async function GET(req: NextRequest) {
       ? userById.get(job.hiringManagerId)
       : null;
 
+    const managerLabel = user?.email ?? "";
+    const managerEmail = user?.email ?? "";
+
     const row = [
       app.id,
       app.jobId,
       job?.title ?? "",
       job?.status ?? "",
-      user?.name ?? "",
-      user?.email ?? "",
+      managerLabel,
+      managerEmail,
       app.stage ?? "",
       (app.source ?? "").replace(/,/g, " "), // avoid breaking CSV
       app.candidateId ?? "",
