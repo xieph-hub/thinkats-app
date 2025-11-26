@@ -3,6 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+type ClientCompanyOption = {
+  id: string;
+  name: string;
+  slug: string | null;
+};
+
+type JobCreateFormProps = {
+  clientCompanies: ClientCompanyOption[];
+};
+
 type CreateJobResponse = {
   id?: string;
   slug?: string | null;
@@ -17,7 +27,7 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export function JobCreateForm() {
+export function JobCreateForm({ clientCompanies }: JobCreateFormProps) {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
@@ -27,6 +37,9 @@ export function JobCreateForm() {
   const [employmentType, setEmploymentType] = useState("");
   const [seniority, setSeniority] = useState("");
   const [workMode, setWorkMode] = useState(""); // remote / hybrid / onsite
+
+  const [clientCompanyId, setClientCompanyId] = useState<string>("");
+
   const [visibility, setVisibility] = useState<"public" | "internal" | "confidential">(
     "public"
   );
@@ -45,7 +58,7 @@ export function JobCreateForm() {
     try {
       const finalSlug = slug || slugify(title);
 
-      const payload = {
+      const payload: any = {
         title,
         slug: finalSlug,
         location,
@@ -58,6 +71,10 @@ export function JobCreateForm() {
         shortDescription,
         description,
       };
+
+      if (clientCompanyId) {
+        payload.clientCompanyId = clientCompanyId;
+      }
 
       const res = await fetch("/api/ats/jobs", {
         method: "POST",
@@ -73,7 +90,6 @@ export function JobCreateForm() {
         throw new Error(data.error || "Failed to create job.");
       }
 
-      // If API returns id, go to job pipeline, otherwise back to list
       if (data.id) {
         router.push(`/ats/jobs/${data.id}`);
       } else {
@@ -118,6 +134,25 @@ export function JobCreateForm() {
           onChange={(e) => setSlug(e.target.value)}
           className="block w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
         />
+      </div>
+
+      {/* Client company selection */}
+      <div className="space-y-1">
+        <label className="block text-xs font-medium text-slate-700">
+          Client (optional)
+        </label>
+        <select
+          value={clientCompanyId}
+          onChange={(e) => setClientCompanyId(e.target.value)}
+          className="block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+        >
+          <option value="">No specific client (internal / generic)</option>
+          {clientCompanies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
