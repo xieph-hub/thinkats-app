@@ -88,8 +88,8 @@ function getCandidateLinkId(app: any): string | null {
     return app.candidateId;
   }
 
-  // As a last resort, you *can* link by email – candidate detail
-  // page is written to understand non-UUID identifiers too.
+  // As a last resort, link by email – candidate detail page
+  // is written to understand non-UUID identifiers too.
   if (app.candidate?.email) {
     return app.candidate.email;
   }
@@ -373,7 +373,7 @@ export default async function CandidatesInboxPage({
           <select
             name="jobId"
             defaultValue={filters.jobId}
-            className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+            className="mt-1 block w-full rounded-md border border-slate-200 bg:white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
           >
             <option value="all">All jobs</option>
             {jobs.map((job) => (
@@ -581,7 +581,7 @@ export default async function CandidatesInboxPage({
                           {candidateLinkId ? (
                             <Link
                               href={`/ats/candidates/${candidateLinkId}`}
-                              className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"`
+                              className="truncate text-sm font-medium text-slate-900 hover:text-[#172965]"
                             >
                               {candidateName}
                             </Link>
@@ -653,7 +653,7 @@ export default async function CandidatesInboxPage({
 
                     <Link
                       href={`/ats/jobs/${app.jobId}`}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"`
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
                     >
                       Open job pipeline
                     </Link>
