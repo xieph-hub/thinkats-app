@@ -10,7 +10,7 @@ export async function listTenantJobs(tenantId: string) {
   return prisma.job.findMany({
     where: {
       tenantId,
-      // keep CLOSED jobs out of the main ATS jobs list
+      // Show everything that is not explicitly closed
       status: {
         not: "closed",
       },
@@ -20,11 +20,6 @@ export async function listTenantJobs(tenantId: string) {
     },
     include: {
       clientCompany: true,
-      _count: {
-        select: {
-          applications: true,
-        },
-      },
     },
   });
 }
@@ -42,7 +37,8 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
     include: {
       clientCompany: true,
       applications: {
-        orderBy: { submittedAt: "desc" },
+        // ✅ Use createdAt (which exists on JobApplication) instead of submittedAt
+        orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
           pipelineStage: true,
@@ -54,7 +50,7 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
 
 /**
  * Public jobs for Resourcin careers page.
- * Filters by tenant + isPublished + isPublic + status = open.
+ * Filters by tenant + visibility + status + internalOnly=false.
  * Used by /jobs
  */
 export async function listPublicJobsForResourcin() {
@@ -63,12 +59,12 @@ export async function listPublicJobsForResourcin() {
   return prisma.job.findMany({
     where: {
       tenantId: tenant.id,
-      isPublished: true,
-      isPublic: true,
+      visibility: "public",
       status: "open",
+      internalOnly: false,
     },
     orderBy: {
-      publishedAt: "desc",
+      createdAt: "desc",
     },
     include: {
       clientCompany: true,
@@ -87,10 +83,13 @@ export async function getPublicJobBySlugOrId(jobIdOrSlug: string) {
   return prisma.job.findFirst({
     where: {
       tenantId: tenant.id,
-      isPublished: true,
-      isPublic: true,
+      visibility: "public",
       status: "open",
-      OR: [{ id: jobIdOrSlug }, { slug: jobIdOrSlug }],
+      internalOnly: false,
+      OR: [
+        { id: jobIdOrSlug },
+        { slug: jobIdOrSlug },
+      ],
     },
     include: {
       clientCompany: true,
