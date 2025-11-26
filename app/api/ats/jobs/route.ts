@@ -40,9 +40,17 @@ export async function POST(req: Request) {
     // ------------------------------------------------------------------
     // Minimal validation (no zod)
     // ------------------------------------------------------------------
-    if (!body || typeof body.title !== "string" || body.title.trim().length < 3) {
+    if (
+      !body ||
+      typeof body.title !== "string" ||
+      body.title.trim().length < 3
+    ) {
       return NextResponse.json(
-        { success: false, error: "Job title is required and must be at least 3 characters." },
+        {
+          success: false,
+          error:
+            "Job title is required and must be at least 3 characters.",
+        },
         { status: 400 },
       );
     }
@@ -112,10 +120,12 @@ export async function POST(req: Request) {
         const existing = await prisma.job.findFirst({
           where: { tenantId, slug: candidate },
         });
+
         if (!existing) {
           finalSlug = candidate;
           break;
         }
+
         suffix += 1;
         candidate = `${baseSlug}-${suffix}`;
       }
@@ -124,11 +134,15 @@ export async function POST(req: Request) {
     // ------------------------------------------------------------------
     // Map UI flags → actual DB fields
     // ------------------------------------------------------------------
-    const visibility: string =
-      typeof isPublic === "boolean" && isPublic === false ? "internal" : "public";
+    let visibility: "public" | "internal" =
+      typeof isPublic === "boolean" && isPublic === false
+        ? "internal"
+        : "public";
 
     const status: string =
-      typeof isPublished === "boolean" && isPublished === false ? "draft" : "open";
+      typeof isPublished === "boolean" && isPublished === false
+        ? "draft"
+        : "open";
 
     const internalOnlyValue: boolean =
       typeof internalOnly === "boolean"
@@ -140,14 +154,26 @@ export async function POST(req: Request) {
     const confidentialValue: boolean =
       typeof isConfidential === "boolean" ? isConfidential : false;
 
+    // If internalOnly is true, force visibility to internal
+    if (internalOnlyValue) {
+      visibility = "internal";
+    }
+
     // Prisma Decimal accepts string/number/Decimal
     const salaryMinValue =
       salaryMin !== undefined && salaryMin !== null && salaryMin !== ""
         ? (salaryMin as any)
         : null;
+
     const salaryMaxValue =
       salaryMax !== undefined && salaryMax !== null && salaryMax !== ""
         ? (salaryMax as any)
+        : null;
+
+    const safeClientCompanyId =
+      typeof clientCompanyId === "string" &&
+      clientCompanyId.trim().length > 0
+        ? clientCompanyId
         : null;
 
     const job = await prisma.job.create({
@@ -165,7 +191,7 @@ export async function POST(req: Request) {
         workMode: workMode ?? null,
 
         // Client
-        clientCompanyId: clientCompanyId ?? null,
+        clientCompanyId: safeClientCompanyId,
 
         // Narrative
         overview: overview ?? null,
@@ -180,7 +206,9 @@ export async function POST(req: Request) {
 
         // Arrays
         tags: Array.isArray(tags) ? tags : [],
-        requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : [],
+        requiredSkills: Array.isArray(requiredSkills)
+          ? requiredSkills
+          : [],
 
         // Compensation
         salaryMin: salaryMinValue,
