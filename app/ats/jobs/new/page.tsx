@@ -335,7 +335,7 @@ const CURRENCY_OPTIONS: SelectOption[] = [
 ];
 
 // -----------------------------
-// Location – detailed, but still a single text field in DB
+// Location – detailed suggestions + free text
 // -----------------------------
 const LOCATION_GROUPS: OptionGroup[] = [
   {
@@ -388,6 +388,32 @@ const LOCATION_GROUPS: OptionGroup[] = [
       },
     ],
   },
+];
+
+// -----------------------------
+// Country / Region – structured for reporting
+// (can later be mapped to ISO or regions in the DB)
+// -----------------------------
+const COUNTRY_REGION_OPTIONS: SelectOption[] = [
+  { value: "", label: "Select country / region" },
+  // Core current / likely markets
+  { value: "nigeria", label: "Nigeria" },
+  { value: "ghana", label: "Ghana" },
+  { value: "kenya", label: "Kenya" },
+  { value: "south_africa", label: "South Africa" },
+  { value: "egypt", label: "Egypt" },
+  // Wider regions
+  { value: "west_africa", label: "West Africa (multi-country)" },
+  { value: "east_africa", label: "East Africa (multi-country)" },
+  { value: "southern_africa", label: "Southern Africa (multi-country)" },
+  { value: "north_africa", label: "North Africa (multi-country)" },
+  { value: "uk", label: "United Kingdom" },
+  { value: "europe_other", label: "Europe – other" },
+  { value: "usa", label: "United States" },
+  { value: "canada", label: "Canada" },
+  { value: "middle_east", label: "Middle East" },
+  { value: "global_remote", label: "Global remote / distributed" },
+  { value: "other", label: "Other – specify in location" },
 ];
 
 // -----------------------------
@@ -568,34 +594,59 @@ export default async function NewJobPage() {
           </div>
 
           <div className="space-y-3">
-            {/* Location (detailed dropdown) */}
+            {/* Location: free text with smart suggestions */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
                 Location
               </label>
-              <select
+              <input
+                type="text"
                 name="location"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                <option value="">Select location</option>
-                {LOCATION_GROUPS.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+                list="location-suggestions"
+                placeholder="e.g. Lagos, Nigeria"
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+              <datalist id="location-suggestions">
+                {LOCATION_GROUPS.flatMap((group) =>
+                  group.options.map((opt) => (
+                    <option
+                      key={`${group.label}-${opt.value}`}
+                      value={opt.value}
+                    >
+                      {opt.label}
+                    </option>
+                  )),
+                )}
+              </datalist>
               <p className="mt-1 text-[10px] text-slate-400">
-                This is the primary hiring location shown on the public job
-                page.
+                Start typing a city/country. Suggestions cover common hubs, but
+                you can enter any location and we&apos;ll store it as-is.
               </p>
             </div>
 
-            {/* Work mode (stored as workMode + mirrored to locationType in API) */}
+            {/* Country / region – structured for reporting */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Country / region (for reporting)
+              </label>
+              <select
+                name="countryRegion"
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                defaultValue=""
+              >
+                {COUNTRY_REGION_OPTIONS.map((opt) => (
+                  <option key={opt.value || "empty"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-slate-400">
+                Used for dashboards and reporting. Location can stay very
+                specific; this keeps your analytics clean.
+              </p>
+            </div>
+
+            {/* Work mode (stored as workMode, can be mirrored in API if needed) */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
                 Work mode
