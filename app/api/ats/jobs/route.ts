@@ -20,15 +20,23 @@ function toStringOrNull(value: FormDataEntryValue | null): string | null {
   return s.length ? s : null;
 }
 
-function parseNumberValue(
-  value: FormDataEntryValue | null,
-): number | null {
+function parseNumberValue(value: FormDataEntryValue | null): number | null {
   if (!value) return null;
   const s = value.toString().replace(/,/g, "").trim();
   if (!s) return null;
   const n = Number(s);
   if (Number.isNaN(n)) return null;
   return n;
+}
+
+// Simple tags parser: accepts comma- or newline-separated entries
+function parseTags(value: FormDataEntryValue | null): string[] {
+  if (!value) return [];
+  const raw = value.toString();
+  return raw
+    .split(/[,;\n]/)
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
 }
 
 export async function POST(req: NextRequest) {
@@ -45,8 +53,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
 
     const titleRaw = formData.get("title");
-    const title =
-      typeof titleRaw === "string" ? titleRaw.trim() : "";
+    const title = typeof titleRaw === "string" ? titleRaw.trim() : "";
 
     if (!title) {
       return NextResponse.json(
@@ -55,21 +62,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const clientCompanyId = toStringOrNull(
-      formData.get("clientCompanyId"),
-    );
+    const clientCompanyId = toStringOrNull(formData.get("clientCompanyId"));
 
     const hiringManagerId = toStringOrNull(
       formData.get("hiringManagerId"),
     );
 
+    // Job function / discipline (from dropdown)
+    const jobFunction =
+      toStringOrNull(formData.get("function")) ??
+      toStringOrNull(formData.get("jobFunction"));
+
     const location = toStringOrNull(formData.get("location"));
-    const locationType = toStringOrNull(
-      formData.get("locationType"),
-    );
-    const employmentType = toStringOrNull(
-      formData.get("employmentType"),
-    );
+    const locationType = toStringOrNull(formData.get("locationType"));
+    const employmentType = toStringOrNull(formData.get("employmentType"));
     const experienceLevel = toStringOrNull(
       formData.get("experienceLevel"),
     );
@@ -78,21 +84,15 @@ export async function POST(req: NextRequest) {
       formData.get("shortDescription"),
     );
     const overview = toStringOrNull(formData.get("overview"));
-    const aboutClient = toStringOrNull(
-      formData.get("aboutClient"),
-    );
+    const aboutClient = toStringOrNull(formData.get("aboutClient"));
     const responsibilities = toStringOrNull(
       formData.get("responsibilities"),
     );
-    const requirements = toStringOrNull(
-      formData.get("requirements"),
-    );
+    const requirements = toStringOrNull(formData.get("requirements"));
     const benefits = toStringOrNull(formData.get("benefits"));
 
     const statusRaw = toStringOrNull(formData.get("status"));
-    const visibilityRaw = toStringOrNull(
-      formData.get("visibility"),
-    );
+    const visibilityRaw = toStringOrNull(formData.get("visibility"));
 
     const status =
       statusRaw && ["draft", "open", "closed"].includes(statusRaw)
@@ -104,21 +104,20 @@ export async function POST(req: NextRequest) {
         ? visibilityRaw
         : "public";
 
-    const internalOnly =
-      formData.get("internalOnly") === "on" ? true : false;
-    const confidential =
-      formData.get("confidential") === "on" ? true : false;
-    const salaryVisible =
-      formData.get("salaryVisible") === "on" ? true : false;
+    const internalOnly = formData.get("internalOnly") === "on";
+    const confidential = formData.get("confidential") === "on";
+    const salaryVisible = formData.get("salaryVisible") === "on";
 
     const salaryMin = parseNumberValue(formData.get("salaryMin"));
     const salaryMax = parseNumberValue(formData.get("salaryMax"));
     const salaryCurrency =
       toStringOrNull(formData.get("salaryCurrency")) ?? "NGN";
 
+    // Tags / skills
+    const tags = parseTags(formData.get("tags"));
+
     // Slug generation (per tenant)
-    const slugSource =
-      toStringOrNull(formData.get("slug")) ?? title;
+    const slugSource = toStringOrNull(formData.get("slug")) ?? title;
     const baseSlug = slugify(slugSource);
     let slug: string | null = baseSlug || null;
 
@@ -142,25 +141,34 @@ export async function POST(req: NextRequest) {
         clientCompanyId,
         title,
         slug,
+        // core meta
         location,
         locationType,
         employmentType,
         experienceLevel,
+        // discipline / function
+        function: jobFunction ?? undefined,
+        // narrative
         shortDescription,
         overview,
         aboutClient,
         responsibilities,
         requirements,
         benefits,
+        // status & visibility
         status,
         visibility,
         internalOnly,
+        confidential,
+        // salary
         salaryMin,
         salaryMax,
         salaryCurrency,
         salaryVisible,
-        confidential,
+        // ownership
         hiringManagerId,
+        // tags / skills
+        tags,
       },
     });
 
