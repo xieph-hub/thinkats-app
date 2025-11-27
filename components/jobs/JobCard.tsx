@@ -9,9 +9,9 @@ export interface JobCardData {
   location: string;
   company?: string;
   department?: string;
-  type?: string; // employment type (Full-time, Contract, etc.)
-  experienceLevel?: string;
-  workMode?: string;
+  type?: string; // employment type (full_time, full-time, etc.)
+  experienceLevel?: string; // e.g. "senior", "director_vp"
+  workMode?: string; // e.g. "onsite", "remote"
   salary?: string;
   shortDescription?: string;
   tags?: string[];
@@ -27,6 +27,189 @@ export interface JobCardProps {
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
+
+// -----------------------------------------------------
+// Helpers for human-friendly labels
+// -----------------------------------------------------
+
+/**
+ * Generic helper for snake_case / kebab-case → "Title Case".
+ */
+function humanizeEnum(value?: string | null): string {
+  if (!value) return "";
+  return value
+    .replace(/[_-]+/g, " ") // full_time / full-time -> full time
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      (part) =>
+        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    )
+    .join(" ");
+}
+
+// Normalised employment type labels
+const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  full_time: "Full Time",
+  "full-time": "Full Time",
+  part_time: "Part Time",
+  "part-time": "Part Time",
+  contract: "Contract",
+  temporary: "Temporary",
+  internship: "Internship",
+  consulting: "Consulting / Advisory",
+  consultant: "Consulting / Advisory",
+};
+
+// Normalised experience level labels
+const EXPERIENCE_LEVEL_LABELS: Record<string, string> = {
+  entry: "Entry level / Graduate",
+  junior: "Junior (1–3 years)",
+  mid: "Mid-level (3–7 years)",
+  senior: "Senior (7–12 years)",
+  lead_principal: "Lead / Principal",
+  "lead-principal": "Lead / Principal",
+  manager_head: "Manager / Head of",
+  "manager-head": "Manager / Head of",
+  director_vp: "Director / VP",
+  "director-vp": "Director / VP",
+  c_level_partner: "C-level / Partner",
+  "c-level-partner": "C-level / Partner",
+};
+
+// Normalised work mode labels
+const WORK_MODE_LABELS: Record<string, string> = {
+  onsite: "Onsite",
+  "on-site": "Onsite",
+  hybrid: "Hybrid",
+  remote: "Remote",
+  "remote-first": "Remote-first",
+  field_based: "Field-based",
+  "field-based": "Field-based",
+};
+
+// Mirrors the taxonomy used on /ats/jobs/new (stored in Job.department)
+const DEPARTMENT_LABELS: Record<string, string> = {
+  // Leadership & General Management
+  executive_leadership: "Executive Leadership (CEO, MD, Country Manager)",
+  general_management: "General Management / Business Unit Head",
+  strategy_corporate_dev: "Strategy & Corporate Development",
+  project_program_management: "Project / Program Management",
+  operations_management: "Operations Management",
+
+  // Sales, Commercial & Growth
+  sales_business_development: "Sales & Business Development",
+  account_management_cs: "Account Management & Customer Success",
+  partnerships_alliances: "Partnerships & Alliances",
+  revenue_operations: "Revenue Operations (RevOps)",
+  pre_sales_solutions: "Pre-sales & Solutions Consulting",
+
+  // Marketing, Brand & Communications
+  growth_marketing: "Growth / Performance Marketing",
+  brand_marketing: "Brand Marketing & Communications",
+  product_marketing: "Product Marketing",
+  content_social_media: "Content & Social Media",
+  pr_corporate_comms: "PR & Corporate Communications",
+
+  // Product, Design & User Experience
+  product_management: "Product Management",
+  product_ownership: "Product Owner / Business Analyst",
+  ux_ui_design: "UX / UI Design",
+  service_design: "Service Design",
+  research_insights: "User Research & Insights",
+
+  // Engineering, Data & Technology
+  software_engineering: "Software Engineering / Development",
+  data_science_ml: "Data Science & Machine Learning",
+  data_analytics: "Data Analytics / BI",
+  devops_platform: "DevOps / SRE / Platform Engineering",
+  cloud_infrastructure: "Cloud & Infrastructure Engineering",
+  it_support: "IT Support & Helpdesk",
+  cybersecurity: "Cybersecurity",
+  qa_testing: "QA & Test Engineering",
+
+  // People, HR & Talent
+  people_hr: "People / HR Generalist",
+  talent_acquisition: "Talent Acquisition / Recruitment",
+  people_operations: "People Operations",
+  learning_development: "Learning & Development / Talent Management",
+  compensation_benefits: "Compensation & Benefits",
+
+  // Finance, Risk & Legal
+  finance_accounting: "Finance & Accounting",
+  financial_planning_analysis: "Financial Planning & Analysis (FP&A)",
+  audit_control: "Audit, Controls & Reporting",
+  risk_compliance: "Risk & Compliance",
+  legal_corporate_secretariat: "Legal & Corporate Secretariat",
+  treasury_investments: "Treasury & Investments",
+
+  // Real Estate, Property & Facilities
+  real_estate_investments: "Real Estate Investments & Advisory",
+  real_estate_development: "Real Estate Development / Projects",
+  estate_agency_leasing: "Estate Agency, Sales & Leasing",
+  property_facilities_management: "Property & Facilities Management",
+  valuation_asset_management: "Valuation & Asset Management",
+
+  // Operations, Supply Chain & Logistics
+  business_operations: "Business / Process Operations",
+  supply_chain_procurement: "Supply Chain & Procurement",
+  logistics_fulfilment: "Logistics, Fulfilment & Fleet",
+  manufacturing_production: "Manufacturing & Production",
+  quality_assurance_ops: "Quality Assurance & Control (Operations)",
+
+  // Customer Support, Service & Experience
+  customer_support: "Customer Support / Service",
+  contact_centre_bpo: "Contact Centre / BPO Operations",
+  service_delivery: "Service Delivery & Implementation",
+
+  // Creative, Media & Content
+  creative_direction: "Creative Direction & Brand Studio",
+  graphic_motion_design: "Graphic & Motion Design",
+  video_photo_content: "Video, Photography & Multimedia",
+  copywriting_editing: "Copywriting & Editorial",
+
+  // Healthcare, Life Sciences & Social Impact
+  clinical_medical: "Clinical & Medical Practice",
+  nursing_allied_health: "Nursing & Allied Health",
+  public_health: "Public Health & Health Programs",
+  pharmaceutical_biotech: "Pharmaceutical & Biotech",
+  social_impact_nonprofit: "Social Impact & Non-profit Programs",
+
+  // Education, Training & Research
+  teaching_education: "Teaching & Education",
+  corporate_training: "Corporate Training & Facilitation",
+  academic_research: "Academic & Applied Research",
+  edtech_product_ops: "EdTech Product & Operations",
+
+  // Admin, Office & Support
+  executive_assistant: "Executive Assistant & EA Support",
+  office_admin: "Office Administration & Front Desk",
+  general_support_staff: "General Support Staff",
+
+  // Other / Multi-disciplinary
+  multi_disciplinary: "Multi-disciplinary / Hybrid Role",
+  other_specify_in_summary: "Other – described in role summary",
+};
+
+function formatEmploymentType(value?: string) {
+  if (!value) return "";
+  return EMPLOYMENT_TYPE_LABELS[value] ?? humanizeEnum(value);
+}
+
+function formatExperienceLevel(value?: string) {
+  if (!value) return "";
+  return EXPERIENCE_LEVEL_LABELS[value] ?? humanizeEnum(value);
+}
+
+function formatWorkMode(value?: string) {
+  if (!value) return "";
+  return WORK_MODE_LABELS[value] ?? humanizeEnum(value);
+}
+
+function formatDepartment(value?: string) {
+  if (!value) return "";
+  return DEPARTMENT_LABELS[value] ?? humanizeEnum(value);
+}
 
 function formatPostedAt(iso?: string) {
   if (!iso) return "";
@@ -211,6 +394,13 @@ export default function JobCard({ job }: JobCardProps) {
 
   const postedLabel = formatPostedAt(postedAt);
 
+  const displayEmploymentType = type ? formatEmploymentType(type) : undefined;
+  const displayExperienceLevel = experienceLevel
+    ? formatExperienceLevel(experienceLevel)
+    : undefined;
+  const displayWorkMode = workMode ? formatWorkMode(workMode) : undefined;
+  const displayDepartment = department ? formatDepartment(department) : undefined;
+
   const shareText = encodeURIComponent(
     `${title}${location ? ` – ${location}` : ""} (via Resourcin)`
   );
@@ -245,18 +435,22 @@ export default function JobCard({ job }: JobCardProps) {
         {/* Meta row */}
         <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-600">
           {location && <MetaItem icon={<IconLocation />} label={location} />}
-          {workMode && <MetaItem icon={<IconGlobe />} label={workMode} />}
-          {type && <MetaItem icon={<IconBriefcase />} label={type} />}
-          {experienceLevel && (
-            <MetaItem icon={<IconClock />} label={experienceLevel} />
+          {displayWorkMode && (
+            <MetaItem icon={<IconGlobe />} label={displayWorkMode} />
+          )}
+          {displayEmploymentType && (
+            <MetaItem icon={<IconBriefcase />} label={displayEmploymentType} />
+          )}
+          {displayExperienceLevel && (
+            <MetaItem icon={<IconClock />} label={displayExperienceLevel} />
           )}
         </div>
 
         {/* Department + salary + posted */}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
-          {department && (
+          {displayDepartment && (
             <span className="rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-700">
-              {department}
+              {displayDepartment}
             </span>
           )}
           {salary && (
