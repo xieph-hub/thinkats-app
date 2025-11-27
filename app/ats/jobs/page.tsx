@@ -17,6 +17,8 @@ interface JobsPageSearchParams {
   q?: string | string[];
   status?: string | string[];
   tenantId?: string | string[];
+  clientId?: string | string[];
+  visibility?: string | string[];
 }
 
 function normaliseStatus(status: string | null | undefined) {
@@ -35,14 +37,12 @@ function statusLabel(status: string | null | undefined): string {
 function statusBadgeClass(status: string | null | undefined): string {
   const s = normaliseStatus(status);
   if (s === "open") {
-    // Light green for open roles
     return "bg-[#E9F7EE] text-[#306B34] border-[#C5E7CF]";
   }
   if (s === "draft") {
     return "bg-slate-50 text-slate-600 border-slate-200";
   }
   if (s === "on_hold" || s === "on-hold") {
-    // Yellow for on-hold
     return "bg-[#FFF7DF] text-[#9A7300] border-[#FFE299]";
   }
   if (s === "closed") {
@@ -83,6 +83,22 @@ export default async function AtsJobsPage({
         ? rawTenant
         : "";
 
+  const rawClient = searchParams?.clientId ?? "all";
+  const clientFilter =
+    Array.isArray(rawClient) && rawClient.length > 0
+      ? rawClient[0]
+      : typeof rawClient === "string"
+        ? rawClient
+        : "all";
+
+  const rawVisibility = searchParams?.visibility ?? "all";
+  const visibilityFilter =
+    Array.isArray(rawVisibility) && rawVisibility.length > 0
+      ? rawVisibility[0]
+      : typeof rawVisibility === "string"
+        ? rawVisibility
+        : "all";
+
   // -----------------------------
   // Load tenants + resolve current tenant
   // -----------------------------
@@ -104,18 +120,40 @@ export default async function AtsJobsPage({
   const selectedTenantId = selectedTenant.id;
 
   // -----------------------------
-  // Load jobs for selected tenant
+  // Load jobs + client companies for this tenant
   // -----------------------------
-  const jobs = await listTenantJobs(selectedTenantId);
+  const [jobs, clientCompanies] = await Promise.all([
+    listTenantJobs(selectedTenantId),
+    prisma.clientCompany.findMany({
+      where: { tenantId: selectedTenantId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
+  // -----------------------------
+  // Filter jobs
+  // -----------------------------
   const filteredJobs = jobs.filter((job: any) => {
     let ok = true;
 
     if (statusFilter && statusFilter !== "all") {
       ok =
         ok &&
-        normaliseStatus(job.status as any) ===
-          statusFilter.toLowerCase();
+        normaliseStatus(job.status as any) === statusFilter.toLowerCase();
+    }
+
+    if (clientFilter && clientFilter !== "all") {
+      ok = ok && job.clientCompanyId === clientFilter;
+    }
+
+    if (visibilityFilter && visibilityFilter !== "all") {
+      const v = ((job.visibility as string | null) || "internal").toLowerCase();
+      if (visibilityFilter === "public") {
+        ok = ok && v === "public";
+      } else if (visibilityFilter === "internal") {
+        ok = ok && v === "internal";
+      }
     }
 
     if (q) {
@@ -150,7 +188,10 @@ export default async function AtsJobsPage({
   ).length;
 
   const hasFilters =
-    !!q || (statusFilter && statusFilter !== "all");
+    !!q ||
+    (statusFilter && statusFilter !== "all") ||
+    (clientFilter && clientFilter !== "all") ||
+    (visibilityFilter && visibilityFilter !== "all");
 
   const clearFiltersHref = (() => {
     const url = new URL("/ats/jobs", "http://dummy");
@@ -183,15 +224,27 @@ export default async function AtsJobsPage({
         <div className="flex items-center gap-2">
           {/* Multi-tenant selector */}
           <form method="GET" className="flex items-center gap-2">
-            {/* preserve search + status when switching tenant */}
-            {q && (
-              <input type="hidden" name="q" value={q} />
-            )}
+            {/* preserve search + filters when switching tenant */}
+            {q && <input type="hidden" name="q" value={q} />}
             {statusFilter && statusFilter !== "all" && (
               <input
                 type="hidden"
                 name="status"
                 value={statusFilter}
+              />
+            )}
+            {clientFilter && clientFilter !== "all" && (
+              <input
+                type="hidden"
+                name="clientId"
+                value={clientFilter}
+              />
+            )}
+            {visibilityFilter && visibilityFilter !== "all" && (
+              <input
+                type="hidden"
+                name="visibility"
+                value={visibilityFilter}
               />
             )}
 
@@ -312,25 +365,60 @@ export default async function AtsJobsPage({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 sm:w-auto">
+            {/* Status filter */}
             <div>
-              <label
-                htmlFor="status"
-                className="sr-only"
-              >
+              <label htmlFor="status" className="sr-only">
                 Status filter
               </label>
               <select
                 id="status"
                 name="status"
                 defaultValue={statusFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg:white focus:ring-1 focus:ring-[#172965]"
               >
                 <option value="all">All statuses</option>
                 <option value="open">Open</option>
                 <option value="draft">Draft</option>
                 <option value="on_hold">On hold</option>
                 <option value="closed">Closed</option>
+              </select>
+            </div>
+
+            {/* Client filter */}
+            <div>
+              <label htmlFor="clientId" className="sr-only">
+                Client filter
+              </label>
+              <select
+                id="clientId"
+                name="clientId"
+                defaultValue={clientFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All clients</option>
+                {clientCompanies.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Visibility filter */}
+            <div>
+              <label htmlFor="visibility" className="sr-only">
+                Visibility filter
+              </label>
+              <select
+                id="visibility"
+                name="visibility"
+                defaultValue={visibilityFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All visibilities</option>
+                <option value="public">Public only</option>
+                <option value="internal">Internal only</option>
               </select>
             </div>
 
@@ -372,6 +460,16 @@ export default async function AtsJobsPage({
           name="status"
           value={statusFilter}
         />
+        <input
+          type="hidden"
+          name="clientId"
+          value={clientFilter}
+        />
+        <input
+          type="hidden"
+          name="visibility"
+          value={visibilityFilter}
+        />
 
         {/* Bulk controls */}
         <div className="mb-2 flex flex-col items-start justify-between gap-2 rounded-xl border border-slate-200 bg-[#F7F7FB] px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:items-center">
@@ -390,7 +488,6 @@ export default async function AtsJobsPage({
               </option>
               <option value="close">Close roles</option>
               <option value="duplicate">Duplicate roles</option>
-              {/* NEW: bulk delete */}
               <option value="delete">Delete roles</option>
             </select>
 
@@ -624,7 +721,6 @@ export default async function AtsJobsPage({
                           Duplicate
                         </button>
 
-                        {/* NEW: delete single role */}
                         <button
                           type="submit"
                           name="singleAction"
