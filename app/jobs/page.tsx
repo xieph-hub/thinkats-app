@@ -27,7 +27,7 @@ type JobRow = {
   employment_type: string | null;
   tags: string[] | null;
   created_at: string | null;
-  // relationship comes back as an array
+  // Supabase relationship comes back as an array
   client_company: ClientCompanyRow[] | null;
 };
 
@@ -54,7 +54,6 @@ export default async function JobsPage() {
       )
     `
     )
-    .eq("is_published", true)
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
@@ -80,7 +79,7 @@ export default async function JobsPage() {
   const jobs: JobCardData[] = rows.map((job) => {
     const anyJob = job as any;
 
-    // Supabase returns an array of related client_companies; take first if present
+    // Take first related client company (if any)
     const firstCompany =
       job.client_company && job.client_company.length > 0
         ? job.client_company[0]
@@ -94,10 +93,12 @@ export default async function JobsPage() {
       company: firstCompany?.name ?? undefined,
       department: job.department ?? undefined,
       type: job.employment_type ?? undefined,
-      // these are optional – only populated if such columns exist in your table
+
+      // Optional extras if you later add these columns
       experienceLevel: anyJob.seniority ?? undefined,
       workMode: job.location_type ?? undefined,
       salary: anyJob.salary_range ?? anyJob.salary ?? undefined,
+
       shortDescription: job.short_description ?? undefined,
       tags: job.tags ?? [],
       postedAt: job.created_at ?? undefined,
