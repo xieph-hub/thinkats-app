@@ -13,9 +13,7 @@ export const metadata: Metadata = {
 };
 
 type ClientCompanyRow = {
-  name: string;
-  logo_url: string | null;
-  slug: string | null;
+  name: string | null;
 };
 
 type JobRow = {
@@ -27,7 +25,11 @@ type JobRow = {
   location: string | null;
   location_type: string | null;
   employment_type: string | null;
+  seniority: string | null;
+  salary_range: string | null;
+  tags: string[] | null;
   created_at: string | null;
+  is_confidential: boolean | null;
   client_company: ClientCompanyRow | null;
 };
 
@@ -47,11 +49,13 @@ export default async function JobsPage() {
       location,
       location_type,
       employment_type,
+      seniority,
+      salary_range,
+      tags,
       created_at,
+      is_confidential,
       client_company:client_companies(
-        name,
-        logo_url,
-        slug
+        name
       )
     `
     )
@@ -62,12 +66,12 @@ export default async function JobsPage() {
   if (error) {
     console.error("Error loading jobs:", error);
     return (
-      <main className="min-h-screen bg-slate-950 text-slate-50">
+      <main className="min-h-screen bg-slate-50 text-slate-900">
         <div className="mx-auto max-w-4xl px-4 py-20">
           <h1 className="text-2xl font-semibold tracking-tight">
             We couldn&apos;t load roles right now
           </h1>
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-slate-600">
             Please refresh the page in a moment. If this persists, let us know
             and we&apos;ll take a look.
           </p>
@@ -76,21 +80,25 @@ export default async function JobsPage() {
     );
   }
 
-  const jobs: JobCardData[] =
-    (data as JobRow[] | null)?.map((job) => ({
-      id: job.id,
-      slug: job.slug,
-      title: job.title,
-      shortDescription: job.short_description,
-      location: job.location,
-      locationType: job.location_type,
-      employmentType: job.employment_type,
-      department: job.department,
-      clientName: job.client_company?.name ?? null,
-      clientLogoUrl: job.client_company?.logo_url ?? null,
-      clientSlug: job.client_company?.slug ?? null,
-      createdAt: job.created_at,
-    })) ?? [];
+  const rows = (data ?? []) as JobRow[];
+
+  const jobs: JobCardData[] = rows.map((job) => ({
+    id: job.slug ?? job.id, // use slug in URLs where possible
+    title: job.title,
+    location: job.location ?? "",
+    company: job.client_company?.name ?? undefined,
+    department: job.department ?? undefined,
+    type: job.employment_type ?? undefined,
+    experienceLevel: job.seniority ?? undefined,
+    workMode: job.location_type ?? undefined,
+    salary: job.salary_range ?? undefined,
+    shortDescription: job.short_description ?? undefined,
+    tags: job.tags ?? [],
+    postedAt: job.created_at ?? undefined,
+    shareUrl: `/jobs/${encodeURIComponent(job.slug ?? job.id)}`,
+    isConfidential: job.is_confidential ?? undefined,
+    // applicants is intentionally left undefined for now
+  }));
 
   return <JobsPageClient jobs={jobs} />;
 }
