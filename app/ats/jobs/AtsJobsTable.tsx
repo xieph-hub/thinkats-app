@@ -3,7 +3,21 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { AtsJobRow } from "./page";
+
+// Shape of the jobs passed from the server page
+export type AtsJobRow = {
+  id: string;
+  title: string;
+  clientName: string;
+  location: string | null;
+  workMode: string | null;
+  employmentType: string | null;
+  experienceLevel: string | null;
+  status: string;
+  visibility: string;
+  applicationsCount: number;
+  createdAt: string; // ISO string
+};
 
 type Props = {
   initialJobs: AtsJobRow[];
@@ -11,14 +25,15 @@ type Props = {
 
 type BulkAction = "publish" | "unpublish" | "close" | "delete";
 
-function titleCaseFromEnum(value: string) {
+function titleCaseFromEnum(value?: string | null) {
+  if (!value) return "";
   return value
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatEmploymentType(value: string) {
+function formatEmploymentType(value?: string | null) {
   if (!value) return "";
   const map: Record<string, string> = {
     full_time: "Full Time",
@@ -32,7 +47,7 @@ function formatEmploymentType(value: string) {
   return map[key] || titleCaseFromEnum(value);
 }
 
-function formatExperienceLevel(value: string) {
+function formatExperienceLevel(value?: string | null) {
   if (!value) return "";
   const map: Record<string, string> = {
     entry: "Entry level / Graduate",
@@ -48,7 +63,7 @@ function formatExperienceLevel(value: string) {
   return map[key] || titleCaseFromEnum(value);
 }
 
-function formatWorkMode(value: string) {
+function formatWorkMode(value?: string | null) {
   if (!value) return "";
   const map: Record<string, string> = {
     onsite: "Onsite",
@@ -60,7 +75,8 @@ function formatWorkMode(value: string) {
   return map[key] || titleCaseFromEnum(value);
 }
 
-function formatStatus(value: string) {
+function formatStatus(value?: string | null) {
+  if (!value) return "";
   const key = value.toLowerCase();
   if (key === "open") return "Open";
   if (key === "draft") return "Draft";
@@ -68,15 +84,16 @@ function formatStatus(value: string) {
   return titleCaseFromEnum(value);
 }
 
-function formatVisibility(value: string) {
+function formatVisibility(value?: string | null) {
+  if (!value) return "";
   const key = value.toLowerCase();
   if (key === "public") return "Public";
   if (key === "internal") return "Internal";
   return titleCaseFromEnum(value);
 }
 
-function formatDate(value: string) {
-  const d = new Date(value);
+function formatDate(value: string | Date) {
+  const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, {
     year: "numeric",
@@ -92,9 +109,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
 
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
@@ -109,14 +124,14 @@ export default function AtsJobsTable({ initialJobs }: Props) {
   };
 
   async function runBulkAction(action: BulkAction, ids?: string[]) {
-    const jobIds = (ids && ids.length > 0) ? ids : selectedIds;
+    const jobIds = ids && ids.length > 0 ? ids : selectedIds;
     if (jobIds.length === 0) return;
 
     if (action === "delete") {
       const ok = window.confirm(
         jobIds.length === 1
           ? "Delete this role and its associated applications? This cannot easily be undone."
-          : `Delete ${jobIds.length} roles and their associated applications?`
+          : `Delete ${jobIds.length} roles and their associated applications?`,
       );
       if (!ok) return;
     }
@@ -156,7 +171,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
               status: updated.status,
               visibility: updated.visibility,
             };
-          })
+          }),
         );
       }
     } catch (err) {
@@ -195,7 +210,9 @@ export default function AtsJobsTable({ initialJobs }: Props) {
               {selectedIds.length} selected
             </span>
           ) : (
-            <span>{jobs.length} role{jobs.length === 1 ? "" : "s"}</span>
+            <span>
+              {jobs.length} role{jobs.length === 1 ? "" : "s"}
+            </span>
           )}
         </div>
 
@@ -269,15 +286,9 @@ export default function AtsJobsTable({ initialJobs }: Props) {
             {jobs.map((job) => {
               const selected = selectedIds.includes(job.id);
 
-              const typeLabel = job.employmentType
-                ? formatEmploymentType(job.employmentType)
-                : "";
-              const levelLabel = job.experienceLevel
-                ? formatExperienceLevel(job.experienceLevel)
-                : "";
-              const workModeLabel = job.workMode
-                ? formatWorkMode(job.workMode)
-                : "";
+              const typeLabel = formatEmploymentType(job.employmentType);
+              const levelLabel = formatExperienceLevel(job.experienceLevel);
+              const workModeLabel = formatWorkMode(job.workMode);
               const statusLabel = formatStatus(job.status);
               const visibilityLabel = formatVisibility(job.visibility);
 
