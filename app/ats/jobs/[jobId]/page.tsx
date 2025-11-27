@@ -211,11 +211,6 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
 
   const totalApplications = job.applications.length;
 
-  // Use stage names as options, but store/compare as UPPERCASE codes
-  const stageOptions = stagesForDisplay.map((stage) =>
-    stage.name.toUpperCase(),
-  );
-
   const workModeValue = job.workMode || job.locationType || null;
   const employmentTypeLabel = formatEmploymentType(job.employmentType);
   const experienceLevelLabel = formatExperienceLevel(job.experienceLevel);
@@ -224,8 +219,14 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
   const statusLabel = formatStatus(job.status);
   const visibilityLabel = formatVisibility(job.visibility);
 
-  const salaryMinLabel = formatMoney(job.salaryMin, job.salaryCurrency || "NGN");
-  const salaryMaxLabel = formatMoney(job.salaryMax, job.salaryCurrency || "NGN");
+  const salaryMinLabel = formatMoney(
+    job.salaryMin,
+    job.salaryCurrency || "NGN",
+  );
+  const salaryMaxLabel = formatMoney(
+    job.salaryMax,
+    job.salaryCurrency || "NGN",
+  );
   const hasSalary = salaryMinLabel || salaryMaxLabel;
 
   const publicJobUrl =
@@ -294,7 +295,9 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
       <div className="mb-6 grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] md:gap-6">
         {/* Job summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Role summary</h2>
+          <h2 className="text-sm font-semibold text-slate-900">
+            Role summary
+          </h2>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] text-slate-600">
             <div>
               <dt className="font-medium text-slate-500">Client</dt>
@@ -313,13 +316,17 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
               </dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-500">Employment type</dt>
+              <dt className="font-medium text-slate-500">
+                Employment type
+              </dt>
               <dd className="mt-0.5 text-slate-800">
                 {employmentTypeLabel || "Not specified"}
               </dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-500">Experience level</dt>
+              <dt className="font-medium text-slate-500">
+                Experience level
+              </dt>
               <dd className="mt-0.5 text-slate-800">
                 {experienceLevelLabel || "Not specified"}
               </dd>
@@ -332,7 +339,9 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
             </div>
             {hasSalary && (
               <div className="col-span-2">
-                <dt className="font-medium text-slate-500">Salary band</dt>
+                <dt className="font-medium text-slate-500">
+                  Salary band
+                </dt>
                 <dd className="mt-0.5 text-slate-800">
                   {salaryMinLabel && salaryMaxLabel
                     ? `${salaryMinLabel} – ${salaryMaxLabel}`
@@ -351,16 +360,21 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
         {/* Pipeline summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">Pipeline</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Pipeline
+            </h2>
             <p className="text-[11px] text-slate-500">
               {totalApplications}{" "}
-              {totalApplications === 1 ? "application" : "applications"}
+              {totalApplications === 1
+                ? "application"
+                : "applications"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {stagesForDisplay.map((stage) => {
               const key = stage.name.toUpperCase();
-              const count = applicationsByStage.get(key)?.length ?? 0;
+              const count =
+                applicationsByStage.get(key)?.length ?? 0;
               const isTerminal = !!stage.isTerminal;
               return (
                 <div
@@ -382,9 +396,8 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
             })}
           </div>
           <p className="mt-1 text-[10px] text-slate-500">
-            You can now move candidates between stages directly from the
-            applications table below. Later this page will host drag-and-drop
-            moves, email triggers and notes across stages.
+            Use the controls in the table below to move candidates
+            between stages as you screen them.
           </p>
         </section>
       </div>
@@ -454,23 +467,27 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
         </div>
       </section>
 
-      {/* Applications table with stage-change controls */}
+      {/* Applications table + stage-change controls */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">Applications</h2>
+          <h2 className="text-sm font-semibold text-slate-900">
+            Applications
+          </h2>
           <p className="text-[11px] text-slate-500">
             {totalApplications === 0
               ? "No applications yet."
               : `${totalApplications} ${
-                  totalApplications === 1 ? "application" : "applications"
+                  totalApplications === 1
+                    ? "application"
+                    : "applications"
                 }`}
           </p>
         </div>
 
         {totalApplications === 0 ? (
           <p className="text-[11px] text-slate-500">
-            Once candidates apply (or you add them manually), they’ll appear
-            here with stage, status and basic details.
+            Once candidates apply (or you add them manually), they’ll
+            appear here with stage, status and basic details.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -479,7 +496,6 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                 <tr>
                   <th className="px-3 py-2">Candidate</th>
                   <th className="px-3 py-2">Stage</th>
-                  <th className="px-3 py-2">Change stage</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2">Source</th>
@@ -493,16 +509,20 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                     app.candidate?.fullName ||
                     "Unnamed candidate";
                   const candidateEmail =
-                    (app as any).email || app.candidate?.email || "";
-                  const stageLabel = formatStageName(app.stage || "APPLIED");
+                    (app as any).email ||
+                    app.candidate?.email ||
+                    "";
+                  const stageLabel = formatStageName(
+                    app.stage || "APPLIED",
+                  );
                   const statusLabel = titleCaseFromEnum(
                     app.status || "PENDING",
                   );
 
                   const locationLabel =
-                    app.location || app.candidate?.location || "—";
-
-                  const currentStageCode = (app.stage || "APPLIED").toUpperCase();
+                    app.location ||
+                    app.candidate?.location ||
+                    "—";
 
                   return (
                     <tr
@@ -521,48 +541,49 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 align-top">
-                        <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                          {stageLabel}
-                        </span>
-                      </td>
+                      {/* Stage with change control */}
                       <td className="px-3 py-2 align-top">
                         <form
                           method="POST"
-                          action="/ats/applications"
-                          className="flex items-center gap-1"
+                          action="/ats/applications/actions"
+                          className="inline-flex items-center gap-1"
                         >
+                          <input
+                            type="hidden"
+                            name="jobId"
+                            value={job.id}
+                          />
                           <input
                             type="hidden"
                             name="applicationId"
                             value={app.id}
                           />
-                          <input type="hidden" name="jobId" value={job.id} />
-                          <input
-                            type="hidden"
-                            name="tenantId"
-                            value={job.tenantId}
-                          />
-
                           <select
                             name="newStage"
-                            defaultValue={currentStageCode}
-                            className="max-w-[150px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                            defaultValue={app.stage || "APPLIED"}
+                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                           >
-                            {stageOptions.map((code) => (
-                              <option key={code} value={code}>
-                                {formatStageName(code)}
+                            {stagesForDisplay.map((stage) => (
+                              <option
+                                key={stage.id}
+                                value={stage.name}
+                              >
+                                {formatStageName(stage.name)}
                               </option>
                             ))}
                           </select>
-
                           <button
                             type="submit"
-                            className="rounded-md bg-[#172965] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#0f1c45]"
+                            className="text-[10px] font-medium text-[#172965] hover:underline"
                           >
-                            Update
+                            Move
                           </button>
                         </form>
+                        <div className="mt-1">
+                          <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                            {stageLabel}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-3 py-2 align-top">
                         <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
