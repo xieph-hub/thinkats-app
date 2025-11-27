@@ -50,7 +50,10 @@ export default async function NewJobPage() {
     }),
   ]);
 
-  // Standardised taxonomies
+  // -------------------------
+  // Taxonomies
+  // -------------------------
+
   const locationOptions = [
     { value: "", label: "Select location…" },
     { value: "Lagos, Nigeria", label: "Lagos, Nigeria" },
@@ -61,43 +64,111 @@ export default async function NewJobPage() {
     { value: "Kenya (other)", label: "Kenya (other)" },
     { value: "Accra, Ghana", label: "Accra, Ghana" },
     { value: "Ghana (other)", label: "Ghana (other)" },
-    { value: "Johannesburg, South Africa", label: "Johannesburg, South Africa" },
+    {
+      value: "Johannesburg, South Africa",
+      label: "Johannesburg, South Africa",
+    },
     { value: "Cape Town, South Africa", label: "Cape Town, South Africa" },
     { value: "South Africa (other)", label: "South Africa (other)" },
+    { value: "Dubai, UAE", label: "Dubai, UAE" },
+    { value: "United Kingdom (London)", label: "United Kingdom (London)" },
+    { value: "United Kingdom (other)", label: "United Kingdom (other)" },
+    { value: "Europe (other)", label: "Europe (other)" },
+    { value: "United States (remote)", label: "United States (remote)" },
     { value: "Remote – Africa", label: "Remote – Africa" },
-    { value: "Remote – Europe", label: "Remote – Europe" },
     { value: "Remote – Global", label: "Remote – Global" },
     { value: "Other / mixed", label: "Other / mixed" },
   ];
 
+  // Much more exhaustive function taxonomy (enterprise-ish)
   const functionOptions = [
     { value: "", label: "Select function…" },
+    // Leadership / General management
     { value: "Executive Leadership", label: "Executive Leadership" },
-    { value: "Operations", label: "Operations" },
-    { value: "Sales & Business Development", label: "Sales & Business Development" },
-    { value: "Marketing & Growth", label: "Marketing & Growth" },
-    { value: "Finance", label: "Finance" },
-    { value: "Human Resources / People", label: "Human Resources / People" },
-    { value: "Product Management", label: "Product Management" },
-    { value: "Engineering & Technology", label: "Engineering & Technology" },
-    { value: "Data & Analytics", label: "Data & Analytics" },
-    { value: "Customer Success & Support", label: "Customer Success & Support" },
-    { value: "Design & UX", label: "Design & UX" },
-    { value: "Legal & Compliance", label: "Legal & Compliance" },
-    { value: "Supply Chain & Logistics", label: "Supply Chain & Logistics" },
-    { value: "Healthcare & Clinical", label: "Healthcare & Clinical" },
     { value: "General Management", label: "General Management" },
+    { value: "Strategy & Corporate Development", label: "Strategy & Corporate Development" },
+    { value: "Project & Program Management", label: "Project & Program Management" },
+
+    // Commercial
+    { value: "Sales & Business Development", label: "Sales & Business Development" },
+    { value: "Account Management / Client Success", label: "Account Management / Client Success" },
+    { value: "Customer Support / Contact Centre", label: "Customer Support / Contact Centre" },
+    { value: "Marketing & Growth", label: "Marketing & Growth" },
+    { value: "Brand / Communications / PR", label: "Brand / Communications / PR" },
+
+    // Product / Tech / Data / Design
+    { value: "Product Management", label: "Product Management" },
+    { value: "Design & UX", label: "Design & UX" },
+    { value: "Engineering – Software", label: "Engineering – Software" },
+    { value: "Engineering – Infrastructure / DevOps", label: "Engineering – Infrastructure / DevOps" },
+    { value: "Engineering – Hardware / Embedded", label: "Engineering – Hardware / Embedded" },
+    { value: "Data Science & Analytics", label: "Data Science & Analytics" },
+    { value: "IT & Systems Administration", label: "IT & Systems Administration" },
+
+    // People / HR
+    { value: "Human Resources / People", label: "Human Resources / People" },
+    { value: "Talent Acquisition / Recruitment", label: "Talent Acquisition / Recruitment" },
+    { value: "Learning & Development", label: "Learning & Development" },
+
+    // Finance / Risk / Legal
+    { value: "Finance & Accounting", label: "Finance & Accounting" },
+    { value: "Investment / Corporate Finance", label: "Investment / Corporate Finance" },
+    { value: "Risk & Audit", label: "Risk & Audit" },
+    { value: "Legal & Compliance", label: "Legal & Compliance" },
+
+    // Ops / Supply chain / Manufacturing
+    { value: "Operations", label: "Operations" },
+    { value: "Procurement", label: "Procurement" },
+    { value: "Supply Chain & Logistics", label: "Supply Chain & Logistics" },
+    { value: "Manufacturing & Production", label: "Manufacturing & Production" },
+    { value: "Quality Assurance / Quality Control", label: "Quality Assurance / Quality Control" },
+
+    // Real estate / Construction
+    { value: "Real Estate – Development & Investments", label: "Real Estate – Development & Investments" },
+    { value: "Real Estate – Sales & Brokerage", label: "Real Estate – Sales & Brokerage" },
+    {
+      value: "Real Estate – Property / Facilities Management",
+      label: "Real Estate – Property / Facilities Management",
+    },
+    { value: "Construction & Civil Engineering", label: "Construction & Civil Engineering" },
+
+    // Sector-specific
+    { value: "Healthcare & Clinical", label: "Healthcare & Clinical" },
+    { value: "Pharmaceutical & Life Sciences", label: "Pharmaceutical & Life Sciences" },
+    { value: "Agriculture & Agribusiness", label: "Agriculture & Agribusiness" },
+    { value: "Energy / Power / Utilities", label: "Energy / Power / Utilities" },
+    { value: "Oil & Gas", label: "Oil & Gas" },
+    { value: "Telecommunications", label: "Telecommunications" },
+    { value: "Financial Services / Banking", label: "Financial Services / Banking" },
+    { value: "Insurance", label: "Insurance" },
+    { value: "Public Sector / Development", label: "Public Sector / Development" },
+    { value: "Education & Training", label: "Education & Training" },
+    { value: "NGO / Social Impact", label: "NGO / Social Impact" },
+
+    // Enablers
+    { value: "Administration & Office Management", label: "Administration & Office Management" },
+    { value: "Facilities / Workplace", label: "Facilities / Workplace" },
+    { value: "Security / HSE", label: "Security / HSE" },
+    { value: "Research & Policy", label: "Research & Policy" },
+
+    // Catch-all
     { value: "Other / Generalist", label: "Other / Generalist" },
   ];
 
+  // Global-ish ladder for experience level
   const experienceOptions = [
     { value: "", label: "Not specified" },
-    { value: "junior", label: "Junior" },
-    { value: "mid", label: "Mid-level" },
-    { value: "senior", label: "Senior" },
-    { value: "lead", label: "Lead" },
-    { value: "director", label: "Director" },
-    { value: "executive", label: "Executive / C-level" },
+    { value: "intern", label: "Intern / Student" },
+    { value: "entry", label: "Entry level / Graduate" },
+    { value: "associate", label: "Associate / Early career" },
+    { value: "mid", label: "Mid-level Professional" },
+    { value: "senior", label: "Senior Professional / IC" },
+    { value: "lead", label: "Lead / Principal IC" },
+    { value: "manager", label: "Manager / People Manager" },
+    { value: "head", label: "Head of / Department Lead" },
+    { value: "director", label: "Director / Senior Director" },
+    { value: "vp", label: "VP / SVP" },
+    { value: "executive", label: "C-level / Executive" },
   ];
 
   const employmentTypeOptions = [
@@ -130,6 +201,27 @@ export default async function NewJobPage() {
       value: "confidential",
       label: "Confidential search (discreet listing)",
     },
+  ];
+
+  // Currency dropdown (ISO-ish codes, Africa + global)
+  const currencyOptions = [
+    { value: "NGN", label: "NGN – Nigerian Naira" },
+    { value: "USD", label: "USD – US Dollar" },
+    { value: "EUR", label: "EUR – Euro" },
+    { value: "GBP", label: "GBP – British Pound" },
+    { value: "KES", label: "KES – Kenyan Shilling" },
+    { value: "GHS", label: "GHS – Ghanaian Cedi" },
+    { value: "ZAR", label: "ZAR – South African Rand" },
+    { value: "XOF", label: "XOF – West African CFA" },
+    { value: "XAF", label: "XAF – Central African CFA" },
+    { value: "UGX", label: "UGX – Ugandan Shilling" },
+    { value: "TZS", label: "TZS – Tanzanian Shilling" },
+    { value: "RWF", label: "RWF – Rwandan Franc" },
+    { value: "AED", label: "AED – UAE Dirham" },
+    { value: "CAD", label: "CAD – Canadian Dollar" },
+    { value: "AUD", label: "AUD – Australian Dollar" },
+    { value: "INR", label: "INR – Indian Rupee" },
+    { value: "OTHER", label: "Other / mixed" },
   ];
 
   return (
@@ -306,7 +398,8 @@ export default async function NewJobPage() {
             </select>
             <p className="mt-1 text-[10px] text-slate-500">
               High-level job family / function. Mirrors common ATS and
-              LinkedIn taxonomies.
+              LinkedIn taxonomies (with Real Estate & sector-specific
+              tracks).
             </p>
           </div>
 
@@ -394,12 +487,21 @@ export default async function NewJobPage() {
             <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Currency
             </label>
-            <input
-              type="text"
+            <select
               name="salaryCurrency"
+              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               defaultValue="NGN"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
+            >
+              {currencyOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-500">
+              If you pick &ldquo;Other / mixed&rdquo;, you can clarify in
+              the description or offer notes.
+            </p>
           </div>
           <div className="flex flex-col justify-end gap-1">
             <label className="inline-flex items-center gap-2 text-[11px] text-slate-600">
