@@ -445,7 +445,7 @@ export default async function AtsJobsPage({
       <form
         id="jobs-actions-form"
         method="POST"
-        action="/ats/jobs"
+        action="/ats/jobs/actions"
         className="space-y-3"
       >
         {/* Preserve context on redirect */}
