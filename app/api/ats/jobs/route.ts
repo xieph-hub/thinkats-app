@@ -29,16 +29,6 @@ function parseNumberValue(value: FormDataEntryValue | null): number | null {
   return n;
 }
 
-// Simple tags parser: accepts comma- or newline-separated entries
-function parseTags(value: FormDataEntryValue | null): string[] {
-  if (!value) return [];
-  const raw = value.toString();
-  return raw
-    .split(/[,;\n]/)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0);
-}
-
 export async function POST(req: NextRequest) {
   try {
     const tenant = await getResourcinTenant();
@@ -52,6 +42,7 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
 
+    // Title
     const titleRaw = formData.get("title");
     const title = typeof titleRaw === "string" ? titleRaw.trim() : "";
 
@@ -62,35 +53,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // IDs / associations
     const clientCompanyId = toStringOrNull(formData.get("clientCompanyId"));
+    const hiringManagerId = toStringOrNull(formData.get("hiringManagerId"));
 
-    const hiringManagerId = toStringOrNull(
-      formData.get("hiringManagerId"),
-    );
-
-    // Job function / discipline (from dropdown)
-    const jobFunction =
-      toStringOrNull(formData.get("function")) ??
-      toStringOrNull(formData.get("jobFunction"));
-
+    // Meta
     const location = toStringOrNull(formData.get("location"));
     const locationType = toStringOrNull(formData.get("locationType"));
     const employmentType = toStringOrNull(formData.get("employmentType"));
-    const experienceLevel = toStringOrNull(
-      formData.get("experienceLevel"),
-    );
+    const experienceLevel = toStringOrNull(formData.get("experienceLevel"));
 
-    const shortDescription = toStringOrNull(
-      formData.get("shortDescription"),
-    );
+    // Narrative
+    const shortDescription = toStringOrNull(formData.get("shortDescription"));
     const overview = toStringOrNull(formData.get("overview"));
     const aboutClient = toStringOrNull(formData.get("aboutClient"));
-    const responsibilities = toStringOrNull(
-      formData.get("responsibilities"),
-    );
+    const responsibilities = toStringOrNull(formData.get("responsibilities"));
     const requirements = toStringOrNull(formData.get("requirements"));
     const benefits = toStringOrNull(formData.get("benefits"));
 
+    // Status / visibility
     const statusRaw = toStringOrNull(formData.get("status"));
     const visibilityRaw = toStringOrNull(formData.get("visibility"));
 
@@ -108,13 +89,11 @@ export async function POST(req: NextRequest) {
     const confidential = formData.get("confidential") === "on";
     const salaryVisible = formData.get("salaryVisible") === "on";
 
+    // Compensation
     const salaryMin = parseNumberValue(formData.get("salaryMin"));
     const salaryMax = parseNumberValue(formData.get("salaryMax"));
     const salaryCurrency =
       toStringOrNull(formData.get("salaryCurrency")) ?? "NGN";
-
-    // Tags / skills
-    const tags = parseTags(formData.get("tags"));
 
     // Slug generation (per tenant)
     const slugSource = toStringOrNull(formData.get("slug")) ?? title;
@@ -141,42 +120,33 @@ export async function POST(req: NextRequest) {
         clientCompanyId,
         title,
         slug,
-        // core meta
         location,
         locationType,
         employmentType,
         experienceLevel,
-        // discipline / function
-        function: jobFunction ?? undefined,
-        // narrative
         shortDescription,
         overview,
         aboutClient,
         responsibilities,
         requirements,
         benefits,
-        // status & visibility
         status,
         visibility,
         internalOnly,
-        confidential,
-        // salary
         salaryMin,
         salaryMax,
         salaryCurrency,
         salaryVisible,
-        // ownership
+        confidential,
         hiringManagerId,
-        // tags / skills
-        tags,
+        // NOTE: the "function" select on the form is currently NOT persisted
+        // because the Job model in Prisma does not yet have a `function` field.
+        // We can add this later via a schema migration if you want it stored.
       },
     });
 
     // Redirect to the ATS job pipeline view for this role
-    const redirectUrl = new URL(
-      `/ats/jobs/${job.id}`,
-      req.url,
-    ).toString();
+    const redirectUrl = new URL(`/ats/jobs/${job.id}`, req.url).toString();
 
     return NextResponse.redirect(redirectUrl, {
       status: 303,
