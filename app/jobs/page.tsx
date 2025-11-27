@@ -12,10 +12,6 @@ export const metadata: Metadata = {
     "Explore open mandates managed by Resourcin and its clients across Africa and beyond.",
 };
 
-type ClientCompanyRow = {
-  name: string | null;
-};
-
 type JobRow = {
   id: string;
   slug: string | null;
@@ -27,8 +23,6 @@ type JobRow = {
   employment_type: string | null;
   tags: string[] | null;
   created_at: string | null;
-  // Supabase relationship comes back as an array
-  client_company: ClientCompanyRow[] | null;
 };
 
 export default async function JobsPage() {
@@ -48,10 +42,7 @@ export default async function JobsPage() {
       location_type,
       employment_type,
       tags,
-      created_at,
-      client_company:client_companies(
-        name
-      )
+      created_at
     `
     )
     .eq("tenant_id", tenantId)
@@ -76,37 +67,21 @@ export default async function JobsPage() {
 
   const rows = (data ?? []) as JobRow[];
 
-  const jobs: JobCardData[] = rows.map((job) => {
-    const anyJob = job as any;
-
-    // Take first related client company (if any)
-    const firstCompany =
-      job.client_company && job.client_company.length > 0
-        ? job.client_company[0]
-        : null;
-
-    return {
-      // use slug in URLs where possible
-      id: job.slug ?? job.id,
-      title: job.title,
-      location: job.location ?? "",
-      company: firstCompany?.name ?? undefined,
-      department: job.department ?? undefined,
-      type: job.employment_type ?? undefined,
-
-      // Optional extras if you later add these columns
-      experienceLevel: anyJob.seniority ?? undefined,
-      workMode: job.location_type ?? undefined,
-      salary: anyJob.salary_range ?? anyJob.salary ?? undefined,
-
-      shortDescription: job.short_description ?? undefined,
-      tags: job.tags ?? [],
-      postedAt: job.created_at ?? undefined,
-      shareUrl: `/jobs/${encodeURIComponent(job.slug ?? job.id)}`,
-      isConfidential: anyJob.is_confidential ?? undefined,
-      // applicants left undefined for now
-    };
-  });
+  const jobs: JobCardData[] = rows.map((job) => ({
+    // use slug where possible, fall back to id
+    id: job.slug ?? job.id,
+    title: job.title,
+    location: job.location ?? "",
+    // optional fields your JobCard knows how to handle
+    department: job.department ?? undefined,
+    type: job.employment_type ?? undefined,
+    workMode: job.location_type ?? undefined,
+    shortDescription: job.short_description ?? undefined,
+    tags: job.tags ?? [],
+    postedAt: job.created_at ?? undefined,
+    shareUrl: `/jobs/${encodeURIComponent(job.slug ?? job.id)}`,
+    // company / experienceLevel / salary / isConfidential left undefined for now
+  }));
 
   return <JobsPageClient jobs={jobs} />;
 }
