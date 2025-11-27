@@ -1,219 +1,182 @@
 // app/api/ats/jobs/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
 
-const DEFAULT_TENANT_SLUG =
-  process.env.RESOURCIN_TENANT_SLUG || "resourcin";
-
-// Resolve the default tenant ID once per request
-async function getDefaultTenantId() {
-  if (process.env.RESOURCIN_TENANT_ID) {
-    return process.env.RESOURCIN_TENANT_ID;
-  }
-
-  const tenant = await prisma.tenant.findFirst({
-    where: { slug: DEFAULT_TENANT_SLUG },
-  });
-
-  if (!tenant) {
-    throw new Error(
-      `Default tenant not found for slug "${DEFAULT_TENANT_SLUG}". ` +
-        `Create a tenant row in Supabase (tenants table) or set RESOURCIN_TENANT_ID.`,
-    );
-  }
-
-  return tenant.id;
-}
-
-function slugify(raw: string): string {
-  return raw
-    .toLowerCase()
+function slugify(input: string): string {
+  return input
+    .toString()
     .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
-// 🚨 IMPORTANT: note there is NO `{ params }` here.
-// This route is /api/ats/jobs, not /api/ats/jobs/[jobId].
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
+function toStringOrNull(value: FormDataEntryValue | null): string | null {
+  if (!value) return null;
+  const s = value.toString().trim();
+  return s.length ? s : null;
+}
 
-    if (!body || typeof body.title !== "string" || body.title.trim().length < 3) {
+function parseNumberValue(
+  value: FormDataEntryValue | null,
+): number | null {
+  if (!value) return null;
+  const s = value.toString().replace(/,/g, "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  if (Number.isNaN(n)) return null;
+  return n;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const tenant = await getResourcinTenant();
+
+    if (!tenant) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Job title is required and must be at least 3 characters.",
-        },
+        { error: "No default tenant configured." },
+        { status: 500 },
+      );
+    }
+
+    const formData = await req.formData();
+
+    const titleRaw = formData.get("title");
+    const title =
+      typeof titleRaw === "string" ? titleRaw.trim() : "";
+
+    if (!title) {
+      return NextResponse.json(
+        { error: "Title is required." },
         { status: 400 },
       );
     }
 
-    const tenantId = await getDefaultTenantId();
+    const clientCompanyId = toStringOrNull(
+      formData.get("clientCompanyId"),
+    );
 
-    const {
-      // Core
-      title,
-      department,
-      location,
-      locationType,
-      employmentType,
-      experienceLevel,
-      seniority,
-      workMode,
+    const hiringManagerId = toStringOrNull(
+      formData.get("hiringManagerId"),
+    );
 
-      // Client
-      clientCompanyId,
+    const location = toStringOrNull(formData.get("location"));
+    const locationType = toStringOrNull(
+      formData.get("locationType"),
+    );
+    const employmentType = toStringOrNull(
+      formData.get("employmentType"),
+    );
+    const experienceLevel = toStringOrNull(
+      formData.get("experienceLevel"),
+    );
 
-      // Narrative
-      overview,
-      aboutClient,
-      responsibilities,
-      requirements,
-      benefits,
-      shortDescription,
+    const shortDescription = toStringOrNull(
+      formData.get("shortDescription"),
+    );
+    const overview = toStringOrNull(formData.get("overview"));
+    const aboutClient = toStringOrNull(
+      formData.get("aboutClient"),
+    );
+    const responsibilities = toStringOrNull(
+      formData.get("responsibilities"),
+    );
+    const requirements = toStringOrNull(
+      formData.get("requirements"),
+    );
+    const benefits = toStringOrNull(formData.get("benefits"));
 
-      // Meta
-      externalId,
+    const statusRaw = toStringOrNull(formData.get("status"));
+    const visibilityRaw = toStringOrNull(
+      formData.get("visibility"),
+    );
 
-      // Arrays
-      tags,
-      requiredSkills,
+    const status =
+      statusRaw && ["draft", "open", "closed"].includes(statusRaw)
+        ? statusRaw
+        : "draft";
 
-      // Compensation
-      salaryMin,
-      salaryMax,
-      salaryCurrency,
-      salaryVisible,
+    const visibility =
+      visibilityRaw && ["public", "internal"].includes(visibilityRaw)
+        ? visibilityRaw
+        : "public";
 
-      // Visibility flags from UI
-      isPublic,
-      isPublished,
-      isConfidential,
-      internalOnly,
+    const internalOnly =
+      formData.get("internalOnly") === "on" ? true : false;
+    const confidential =
+      formData.get("confidential") === "on" ? true : false;
+    const salaryVisible =
+      formData.get("salaryVisible") === "on" ? true : false;
 
-      // Optional slug override
-      slug,
-    } = body;
+    const salaryMin = parseNumberValue(formData.get("salaryMin"));
+    const salaryMax = parseNumberValue(formData.get("salaryMax"));
+    const salaryCurrency =
+      toStringOrNull(formData.get("salaryCurrency")) ?? "NGN";
 
-    // ------------------------------------------------------------------
-    // Slug generation & uniqueness per tenant
-    // ------------------------------------------------------------------
-    const baseSlug = slug ? slugify(slug) : slugify(title);
-    let finalSlug: string | null = null;
+    // Slug generation (per tenant)
+    const slugSource =
+      toStringOrNull(formData.get("slug")) ?? title;
+    const baseSlug = slugify(slugSource);
+    let slug: string | null = baseSlug || null;
 
-    if (baseSlug) {
-      let candidate = baseSlug;
-      let suffix = 1;
+    if (slug) {
+      const existing = await prisma.job.findFirst({
+        where: {
+          tenantId: tenant.id,
+          slug,
+        },
+        select: { id: true },
+      });
 
-      // Keep incrementing suffix until free
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const existing = await prisma.job.findFirst({
-          where: { tenantId, slug: candidate },
-        });
-        if (!existing) {
-          finalSlug = candidate;
-          break;
-        }
-        suffix += 1;
-        candidate = `${baseSlug}-${suffix}`;
+      if (existing) {
+        slug = `${baseSlug}-${Date.now().toString(36)}`;
       }
     }
 
-    // ------------------------------------------------------------------
-    // Map UI flags → actual DB fields
-    // ------------------------------------------------------------------
-    const visibility: string =
-      typeof isPublic === "boolean" && isPublic === false ? "internal" : "public";
-
-    const status: string =
-      typeof isPublished === "boolean" && isPublished === false ? "draft" : "open";
-
-    const internalOnlyValue: boolean =
-      typeof internalOnly === "boolean"
-        ? internalOnly
-        : typeof isPublic === "boolean" && isPublic === false
-        ? true
-        : false;
-
-    const confidentialValue: boolean =
-      typeof isConfidential === "boolean" ? isConfidential : false;
-
-    // Prisma Decimal accepts string/number/Decimal
-    const salaryMinValue =
-      salaryMin !== undefined && salaryMin !== null && salaryMin !== ""
-        ? (salaryMin as any)
-        : null;
-    const salaryMaxValue =
-      salaryMax !== undefined && salaryMax !== null && salaryMax !== ""
-        ? (salaryMax as any)
-        : null;
-
     const job = await prisma.job.create({
       data: {
-        tenantId,
-
-        // Core
+        tenantId: tenant.id,
+        clientCompanyId,
         title,
-        department: department ?? null,
-        location: location ?? null,
-        locationType: locationType ?? null,
-        employmentType: employmentType ?? null,
-        experienceLevel: experienceLevel ?? null,
-        seniority: seniority ?? null,
-        workMode: workMode ?? null,
-
-        // Client
-        clientCompanyId: clientCompanyId ?? null,
-
-        // Narrative
-        overview: overview ?? null,
-        aboutClient: aboutClient ?? null,
-        responsibilities: responsibilities ?? null,
-        requirements: requirements ?? null,
-        benefits: benefits ?? null,
-        shortDescription: shortDescription ?? null,
-
-        // Meta
-        externalId: externalId ?? null,
-
-        // Arrays
-        tags: Array.isArray(tags) ? tags : [],
-        requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : [],
-
-        // Compensation
-        salaryMin: salaryMinValue,
-        salaryMax: salaryMaxValue,
-        salaryCurrency: salaryCurrency ?? null,
-        salaryVisible:
-          typeof salaryVisible === "boolean" ? salaryVisible : false,
-
-        // Visibility / flags
-        visibility,
+        slug,
+        location,
+        locationType,
+        employmentType,
+        experienceLevel,
+        shortDescription,
+        overview,
+        aboutClient,
+        responsibilities,
+        requirements,
+        benefits,
         status,
-        internalOnly: internalOnlyValue,
-        confidential: confidentialValue,
-
-        // Slug
-        slug: finalSlug,
+        visibility,
+        internalOnly,
+        salaryMin,
+        salaryMax,
+        salaryCurrency,
+        salaryVisible,
+        confidential,
+        hiringManagerId,
       },
     });
 
+    // Redirect to the ATS job pipeline view for this role
+    const redirectUrl = new URL(
+      `/ats/jobs/${job.id}`,
+      req.url,
+    ).toString();
+
+    return NextResponse.redirect(redirectUrl, {
+      status: 303,
+    });
+  } catch (error) {
+    console.error("POST /api/ats/jobs error", error);
     return NextResponse.json(
-      {
-        success: true,
-        job,
-      },
-      { status: 201 },
-    );
-  } catch (err) {
-    console.error("POST /api/ats/jobs error", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to create job",
-      },
+      { error: "Failed to create job." },
       { status: 500 },
     );
   }
