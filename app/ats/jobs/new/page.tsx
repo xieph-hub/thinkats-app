@@ -80,73 +80,147 @@ export default async function NewJobPage() {
     { value: "Other / mixed", label: "Other / mixed" },
   ];
 
-  // Much more exhaustive function taxonomy (enterprise-ish)
   const functionOptions = [
     { value: "", label: "Select function…" },
     // Leadership / General management
     { value: "Executive Leadership", label: "Executive Leadership" },
     { value: "General Management", label: "General Management" },
-    { value: "Strategy & Corporate Development", label: "Strategy & Corporate Development" },
-    { value: "Project & Program Management", label: "Project & Program Management" },
+    {
+      value: "Strategy & Corporate Development",
+      label: "Strategy & Corporate Development",
+    },
+    {
+      value: "Project & Program Management",
+      label: "Project & Program Management",
+    },
 
     // Commercial
-    { value: "Sales & Business Development", label: "Sales & Business Development" },
-    { value: "Account Management / Client Success", label: "Account Management / Client Success" },
-    { value: "Customer Support / Contact Centre", label: "Customer Support / Contact Centre" },
+    {
+      value: "Sales & Business Development",
+      label: "Sales & Business Development",
+    },
+    {
+      value: "Account Management / Client Success",
+      label: "Account Management / Client Success",
+    },
+    {
+      value: "Customer Support / Contact Centre",
+      label: "Customer Support / Contact Centre",
+    },
     { value: "Marketing & Growth", label: "Marketing & Growth" },
-    { value: "Brand / Communications / PR", label: "Brand / Communications / PR" },
+    {
+      value: "Brand / Communications / PR",
+      label: "Brand / Communications / PR",
+    },
 
     // Product / Tech / Data / Design
     { value: "Product Management", label: "Product Management" },
     { value: "Design & UX", label: "Design & UX" },
     { value: "Engineering – Software", label: "Engineering – Software" },
-    { value: "Engineering – Infrastructure / DevOps", label: "Engineering – Infrastructure / DevOps" },
-    { value: "Engineering – Hardware / Embedded", label: "Engineering – Hardware / Embedded" },
-    { value: "Data Science & Analytics", label: "Data Science & Analytics" },
-    { value: "IT & Systems Administration", label: "IT & Systems Administration" },
+    {
+      value: "Engineering – Infrastructure / DevOps",
+      label: "Engineering – Infrastructure / DevOps",
+    },
+    {
+      value: "Engineering – Hardware / Embedded",
+      label: "Engineering – Hardware / Embedded",
+    },
+    {
+      value: "Data Science & Analytics",
+      label: "Data Science & Analytics",
+    },
+    {
+      value: "IT & Systems Administration",
+      label: "IT & Systems Administration",
+    },
 
     // People / HR
     { value: "Human Resources / People", label: "Human Resources / People" },
-    { value: "Talent Acquisition / Recruitment", label: "Talent Acquisition / Recruitment" },
+    {
+      value: "Talent Acquisition / Recruitment",
+      label: "Talent Acquisition / Recruitment",
+    },
     { value: "Learning & Development", label: "Learning & Development" },
 
     // Finance / Risk / Legal
     { value: "Finance & Accounting", label: "Finance & Accounting" },
-    { value: "Investment / Corporate Finance", label: "Investment / Corporate Finance" },
+    {
+      value: "Investment / Corporate Finance",
+      label: "Investment / Corporate Finance",
+    },
     { value: "Risk & Audit", label: "Risk & Audit" },
     { value: "Legal & Compliance", label: "Legal & Compliance" },
 
     // Ops / Supply chain / Manufacturing
     { value: "Operations", label: "Operations" },
     { value: "Procurement", label: "Procurement" },
-    { value: "Supply Chain & Logistics", label: "Supply Chain & Logistics" },
-    { value: "Manufacturing & Production", label: "Manufacturing & Production" },
-    { value: "Quality Assurance / Quality Control", label: "Quality Assurance / Quality Control" },
+    {
+      value: "Supply Chain & Logistics",
+      label: "Supply Chain & Logistics",
+    },
+    {
+      value: "Manufacturing & Production",
+      label: "Manufacturing & Production",
+    },
+    {
+      value: "Quality Assurance / Quality Control",
+      label: "Quality Assurance / Quality Control",
+    },
 
     // Real estate / Construction
-    { value: "Real Estate – Development & Investments", label: "Real Estate – Development & Investments" },
-    { value: "Real Estate – Sales & Brokerage", label: "Real Estate – Sales & Brokerage" },
+    {
+      value: "Real Estate – Development & Investments",
+      label: "Real Estate – Development & Investments",
+    },
+    {
+      value: "Real Estate – Sales & Brokerage",
+      label: "Real Estate – Sales & Brokerage",
+    },
     {
       value: "Real Estate – Property / Facilities Management",
       label: "Real Estate – Property / Facilities Management",
     },
-    { value: "Construction & Civil Engineering", label: "Construction & Civil Engineering" },
+    {
+      value: "Construction & Civil Engineering",
+      label: "Construction & Civil Engineering",
+    },
 
     // Sector-specific
-    { value: "Healthcare & Clinical", label: "Healthcare & Clinical" },
-    { value: "Pharmaceutical & Life Sciences", label: "Pharmaceutical & Life Sciences" },
-    { value: "Agriculture & Agribusiness", label: "Agriculture & Agribusiness" },
-    { value: "Energy / Power / Utilities", label: "Energy / Power / Utilities" },
+    {
+      value: "Healthcare & Clinical",
+      label: "Healthcare & Clinical",
+    },
+    {
+      value: "Pharmaceutical & Life Sciences",
+      label: "Pharmaceutical & Life Sciences",
+    },
+    {
+      value: "Agriculture & Agribusiness",
+      label: "Agriculture & Agribusiness",
+    },
+    {
+      value: "Energy / Power / Utilities",
+      label: "Energy / Power / Utilities",
+    },
     { value: "Oil & Gas", label: "Oil & Gas" },
     { value: "Telecommunications", label: "Telecommunications" },
-    { value: "Financial Services / Banking", label: "Financial Services / Banking" },
+    {
+      value: "Financial Services / Banking",
+      label: "Financial Services / Banking",
+    },
     { value: "Insurance", label: "Insurance" },
-    { value: "Public Sector / Development", label: "Public Sector / Development" },
+    {
+      value: "Public Sector / Development",
+      label: "Public Sector / Development",
+    },
     { value: "Education & Training", label: "Education & Training" },
     { value: "NGO / Social Impact", label: "NGO / Social Impact" },
 
     // Enablers
-    { value: "Administration & Office Management", label: "Administration & Office Management" },
+    {
+      value: "Administration & Office Management",
+      label: "Administration & Office Management",
+    },
     { value: "Facilities / Workplace", label: "Facilities / Workplace" },
     { value: "Security / HSE", label: "Security / HSE" },
     { value: "Research & Policy", label: "Research & Policy" },
@@ -155,7 +229,6 @@ export default async function NewJobPage() {
     { value: "Other / Generalist", label: "Other / Generalist" },
   ];
 
-  // Global-ish ladder for experience level
   const experienceOptions = [
     { value: "", label: "Not specified" },
     { value: "intern", label: "Intern / Student" },
@@ -203,7 +276,6 @@ export default async function NewJobPage() {
     },
   ];
 
-  // Currency dropdown (ISO-ish codes, Africa + global)
   const currencyOptions = [
     { value: "NGN", label: "NGN – Nigerian Naira" },
     { value: "USD", label: "USD – US Dollar" },
@@ -397,9 +469,8 @@ export default async function NewJobPage() {
               ))}
             </select>
             <p className="mt-1 text-[10px] text-slate-500">
-              High-level job family / function. Mirrors common ATS and
-              LinkedIn taxonomies (with Real Estate & sector-specific
-              tracks).
+              High-level job family / function. Includes Real Estate and
+              sector-specific tracks.
             </p>
           </div>
 
@@ -453,6 +524,23 @@ export default async function NewJobPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        {/* Skills / Tags */}
+        <div>
+          <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Skills / tags
+          </label>
+          <input
+            type="text"
+            name="tags"
+            placeholder="e.g. Real estate, Capital markets, Financial modelling, Stakeholder management"
+            className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+          />
+          <p className="mt-1 text-[10px] text-slate-500">
+            Separate with commas. Think skills, domains or keywords you
+            want to be searchable and visible as chips on the job page.
+          </p>
         </div>
 
         {/* Salary & flags */}
@@ -581,7 +669,7 @@ export default async function NewJobPage() {
               name="responsibilities"
               rows={8}
               placeholder="One bullet per line. These will render as a formatted list on the public job page."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
             />
           </div>
           <div>
@@ -592,7 +680,7 @@ export default async function NewJobPage() {
               name="requirements"
               rows={8}
               placeholder="One bullet per line for must-haves / nice-to-haves."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
             />
           </div>
           <div>
@@ -603,7 +691,7 @@ export default async function NewJobPage() {
               name="benefits"
               rows={8}
               placeholder="Comp, perks, extras – one item per line."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
             />
           </div>
         </div>
