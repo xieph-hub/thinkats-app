@@ -12,10 +12,6 @@ export const metadata: Metadata = {
     "Create a new mandate in ThinkATS, assign an owner and publish it to your careers page.",
 };
 
-function classNames(...values: (string | false | null | undefined)[]) {
-  return values.filter(Boolean).join(" ");
-}
-
 export default async function NewJobPage() {
   const tenant = await getResourcinTenant();
 
@@ -46,7 +42,6 @@ export default async function NewJobPage() {
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
-      // Your User model doesn't have `name`, so we sort by email
       orderBy: { email: "asc" },
       select: {
         id: true,
@@ -54,6 +49,88 @@ export default async function NewJobPage() {
       },
     }),
   ]);
+
+  // Standardised taxonomies
+  const locationOptions = [
+    { value: "", label: "Select location…" },
+    { value: "Lagos, Nigeria", label: "Lagos, Nigeria" },
+    { value: "Abuja, Nigeria", label: "Abuja, Nigeria" },
+    { value: "Port Harcourt, Nigeria", label: "Port Harcourt, Nigeria" },
+    { value: "Nigeria (other)", label: "Nigeria (other)" },
+    { value: "Nairobi, Kenya", label: "Nairobi, Kenya" },
+    { value: "Kenya (other)", label: "Kenya (other)" },
+    { value: "Accra, Ghana", label: "Accra, Ghana" },
+    { value: "Ghana (other)", label: "Ghana (other)" },
+    { value: "Johannesburg, South Africa", label: "Johannesburg, South Africa" },
+    { value: "Cape Town, South Africa", label: "Cape Town, South Africa" },
+    { value: "South Africa (other)", label: "South Africa (other)" },
+    { value: "Remote – Africa", label: "Remote – Africa" },
+    { value: "Remote – Europe", label: "Remote – Europe" },
+    { value: "Remote – Global", label: "Remote – Global" },
+    { value: "Other / mixed", label: "Other / mixed" },
+  ];
+
+  const functionOptions = [
+    { value: "", label: "Select function…" },
+    { value: "Executive Leadership", label: "Executive Leadership" },
+    { value: "Operations", label: "Operations" },
+    { value: "Sales & Business Development", label: "Sales & Business Development" },
+    { value: "Marketing & Growth", label: "Marketing & Growth" },
+    { value: "Finance", label: "Finance" },
+    { value: "Human Resources / People", label: "Human Resources / People" },
+    { value: "Product Management", label: "Product Management" },
+    { value: "Engineering & Technology", label: "Engineering & Technology" },
+    { value: "Data & Analytics", label: "Data & Analytics" },
+    { value: "Customer Success & Support", label: "Customer Success & Support" },
+    { value: "Design & UX", label: "Design & UX" },
+    { value: "Legal & Compliance", label: "Legal & Compliance" },
+    { value: "Supply Chain & Logistics", label: "Supply Chain & Logistics" },
+    { value: "Healthcare & Clinical", label: "Healthcare & Clinical" },
+    { value: "General Management", label: "General Management" },
+    { value: "Other / Generalist", label: "Other / Generalist" },
+  ];
+
+  const experienceOptions = [
+    { value: "", label: "Not specified" },
+    { value: "junior", label: "Junior" },
+    { value: "mid", label: "Mid-level" },
+    { value: "senior", label: "Senior" },
+    { value: "lead", label: "Lead" },
+    { value: "director", label: "Director" },
+    { value: "executive", label: "Executive / C-level" },
+  ];
+
+  const employmentTypeOptions = [
+    { value: "", label: "Not specified" },
+    { value: "Full time", label: "Full time" },
+    { value: "Part time", label: "Part time" },
+    { value: "Contract", label: "Contract" },
+    { value: "Consulting", label: "Consulting" },
+    { value: "Temporary", label: "Temporary" },
+    { value: "Internship", label: "Internship" },
+  ];
+
+  const statusOptions = [
+    { value: "draft", label: "Draft (not live)" },
+    { value: "open", label: "Open (actively hiring)" },
+    { value: "closed", label: "Closed" },
+    { value: "on_hold", label: "On hold" },
+  ];
+
+  const visibilityOptions = [
+    {
+      value: "public",
+      label: "Public (show on /jobs careers page)",
+    },
+    {
+      value: "internal",
+      label: "Internal only (ATS, no careers page)",
+    },
+    {
+      value: "confidential",
+      label: "Confidential search (discreet listing)",
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-0">
@@ -138,8 +215,7 @@ export default async function NewJobPage() {
             >
               <option value="">Unassigned</option>
               {users.map((user) => {
-                const label =
-                  user.email || `User ${user.id}`;
+                const label = user.email || `User ${user.id}`;
                 return (
                   <option key={user.id} value={user.id}>
                     {label}
@@ -153,18 +229,28 @@ export default async function NewJobPage() {
           </div>
         </div>
 
-        {/* Row: Location + Type + Level */}
+        {/* Row: Location + Location type + Employment type */}
         <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Location
             </label>
-            <input
-              type="text"
+            <select
               name="location"
-              placeholder="e.g. Lagos · Hybrid"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
+              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              defaultValue=""
+            >
+              {locationOptions.map((opt) => (
+                <option key={opt.value || "blank"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-500">
+              Global-ready, Africa-biased locations. For edge cases,
+              choose &ldquo;Other / mixed&rdquo; and clarify in the
+              description.
+            </p>
           </div>
 
           <div>
@@ -192,17 +278,38 @@ export default async function NewJobPage() {
               className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               defaultValue=""
             >
-              <option value="">Not specified</option>
-              <option value="Full time">Full time</option>
-              <option value="Part time">Part time</option>
-              <option value="Contract">Contract</option>
-              <option value="Consulting">Consulting</option>
+              {employmentTypeOptions.map((opt) => (
+                <option key={opt.value || "blank"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
 
-        {/* Row: Experience + Status + Visibility */}
-        <div className="grid gap-4 md:grid-cols-3">
+        {/* Row: Function + Experience level + Status + Visibility */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              Function
+            </label>
+            <select
+              name="function"
+              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              defaultValue=""
+            >
+              {functionOptions.map((opt) => (
+                <option key={opt.value || "blank"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-slate-500">
+              High-level job family / function. Mirrors common ATS and
+              LinkedIn taxonomies.
+            </p>
+          </div>
+
           <div>
             <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Experience level
@@ -212,13 +319,11 @@ export default async function NewJobPage() {
               className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               defaultValue=""
             >
-              <option value="">Not specified</option>
-              <option value="junior">Junior</option>
-              <option value="mid">Mid-level</option>
-              <option value="senior">Senior</option>
-              <option value="lead">Lead</option>
-              <option value="director">Director</option>
-              <option value="executive">Executive</option>
+              {experienceOptions.map((opt) => (
+                <option key={opt.value || "blank"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -231,9 +336,11 @@ export default async function NewJobPage() {
               className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               defaultValue="draft"
             >
-              <option value="draft">Draft (not live)</option>
-              <option value="open">Open (actively hiring)</option>
-              <option value="closed">Closed</option>
+              {statusOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -246,12 +353,11 @@ export default async function NewJobPage() {
               className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               defaultValue="public"
             >
-              <option value="public">
-                Public (show on /jobs careers page)
-              </option>
-              <option value="internal">
-                Internal only (ATS, no careers page)
-              </option>
+              {visibilityOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
