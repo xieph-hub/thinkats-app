@@ -390,6 +390,8 @@ export default async function AtsJobsPage({
               </option>
               <option value="close">Close roles</option>
               <option value="duplicate">Duplicate roles</option>
+              {/* NEW: bulk delete */}
+              <option value="delete">Delete roles</option>
             </select>
 
             <button
@@ -620,6 +622,16 @@ export default async function AtsJobsPage({
                           className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
                         >
                           Duplicate
+                        </button>
+
+                        {/* NEW: delete single role */}
+                        <button
+                          type="submit"
+                          name="singleAction"
+                          value={`delete:${job.id}`}
+                          className="w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-50"
+                        >
+                          Delete role
                         </button>
                       </div>
                     </div>
