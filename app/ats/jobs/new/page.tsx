@@ -1,721 +1,626 @@
 // app/ats/jobs/new/page.tsx
-import type { Metadata } from "next";
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Create role | ThinkATS | Resourcin",
-  description:
-    "Create a new mandate in ThinkATS, assign an owner and publish it to your careers page.",
+// --- Static taxonomies --- //
+
+const EXPERIENCE_LEVELS: { value: string; label: string }[] = [
+  { value: "entry", label: "Entry / Graduate" },
+  { value: "early-career", label: "Early career (1–3 yrs)" },
+  { value: "mid-level", label: "Mid-level (3–6 yrs)" },
+  { value: "senior", label: "Senior (6–10 yrs)" },
+  { value: "lead", label: "Lead / Principal" },
+  { value: "manager", label: "Manager / People Manager" },
+  { value: "head-of", label: "Head of Function" },
+  { value: "director", label: "Director" },
+  { value: "vp", label: "VP" },
+  { value: "c-suite", label: "C-suite" },
+];
+
+const LOCATION_TYPES: { value: string; label: string }[] = [
+  { value: "onsite", label: "On-site" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "remote", label: "Remote" },
+];
+
+const EMPLOYMENT_TYPES: { value: string; label: string }[] = [
+  { value: "full-time", label: "Full-time" },
+  { value: "part-time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "temporary", label: "Temporary" },
+  { value: "internship", label: "Internship" },
+  { value: "consultant", label: "Consultant" },
+];
+
+const CURRENCY_OPTIONS: { code: string; label: string }[] = [
+  { code: "NGN", label: "NGN – Nigerian Naira" },
+  { code: "USD", label: "USD – US Dollar" },
+  { code: "GBP", label: "GBP – British Pound" },
+  { code: "EUR", label: "EUR – Euro" },
+  { code: "KES", label: "KES – Kenyan Shilling" },
+  { code: "GHS", label: "GHS – Ghanaian Cedi" },
+  { code: "ZAR", label: "ZAR – South African Rand" },
+];
+
+type FunctionGroup = {
+  label: string;
+  options: { value: string; label: string }[];
 };
+
+const JOB_FUNCTION_GROUPS: FunctionGroup[] = [
+  {
+    label: "Leadership & Strategy",
+    options: [
+      { value: "general-management", label: "General Management / GM" },
+      { value: "strategy-corporate-dev", label: "Strategy & Corporate Development" },
+      { value: "founder-entrepreneur", label: "Founder / Entrepreneur in Residence" },
+      { value: "operations-leadership", label: "Operations Leadership" },
+    ],
+  },
+  {
+    label: "Finance, Legal & Risk",
+    options: [
+      { value: "finance-accounting", label: "Finance & Accounting" },
+      { value: "financial-planning-analysis", label: "Financial Planning & Analysis (FP&A)" },
+      { value: "treasury-corporate-finance", label: "Treasury & Corporate Finance" },
+      { value: "audit-tax", label: "Audit & Tax" },
+      { value: "risk-compliance", label: "Risk & Compliance" },
+      { value: "legal-corporate-secretariat", label: "Legal & Corporate Secretariat" },
+      { value: "investment-asset-management", label: "Investment & Asset Management" },
+      { value: "banking-financial-services", label: "Banking & Financial Services" },
+      { value: "insurance-actuarial", label: "Insurance & Actuarial" },
+    ],
+  },
+  {
+    label: "Sales, Marketing & Growth",
+    options: [
+      { value: "sales-business-development", label: "Sales & Business Development" },
+      { value: "account-management", label: "Account Management / Customer Success" },
+      { value: "growth-marketing", label: "Growth & Performance Marketing" },
+      { value: "brand-marketing-communications", label: "Brand, Marketing & Communications" },
+      { value: "partnerships-alliance", label: "Partnerships & Alliances" },
+    ],
+  },
+  {
+    label: "Product, Tech & Data",
+    options: [
+      { value: "product-management", label: "Product Management" },
+      { value: "project-program-management", label: "Project & Program Management" },
+      { value: "software-engineering", label: "Software Engineering" },
+      { value: "data-science-analytics", label: "Data Science & Analytics" },
+      { value: "machine-learning-ai", label: "Machine Learning & AI" },
+      { value: "devops-infrastructure", label: "DevOps & Infrastructure" },
+      { value: "cybersecurity", label: "Cybersecurity & Information Security" },
+      { value: "it-systems-support", label: "IT, Systems & Support" },
+      { value: "design-ux-ui", label: "Design, UX & UI" },
+    ],
+  },
+  {
+    label: "People, Ops & Support",
+    options: [
+      { value: "people-hr", label: "People & HR" },
+      { value: "talent-acquisition", label: "Talent Acquisition / Recruitment" },
+      { value: "operations-supply-chain", label: "Operations, Supply Chain & Fulfilment" },
+      { value: "customer-support-service", label: "Customer Support & Service" },
+      { value: "administration-office-ops", label: "Administration & Office Operations" },
+      { value: "procurement", label: "Procurement & Vendor Management" },
+      { value: "facilities-office-management", label: "Facilities & Office Management" },
+    ],
+  },
+  {
+    label: "Real Estate, Construction & Built Environment",
+    options: [
+      { value: "real-estate-development", label: "Real Estate Development & Investments" },
+      { value: "real-estate-sales-leasing", label: "Real Estate Sales & Leasing" },
+      { value: "property-estate-management", label: "Property / Estate Management" },
+      { value: "facilities-buildings-management", label: "Facilities & Buildings Management" },
+      { value: "construction-projects", label: "Construction & Project Delivery" },
+      { value: "architecture-urban-planning", label: "Architecture & Urban Planning" },
+    ],
+  },
+  {
+    label: "Sector-specific",
+    options: [
+      { value: "healthcare-clinical", label: "Healthcare & Clinical" },
+      { value: "pharma-biotech", label: "Pharma & Biotech" },
+      { value: "education-training", label: "Education & Training" },
+      { value: "logistics-transport", label: "Logistics, Transport & Fleet" },
+      { value: "hospitality-travel", label: "Hospitality & Travel" },
+      { value: "manufacturing-production", label: "Manufacturing & Production" },
+      { value: "agriculture-agribusiness", label: "Agriculture & Agribusiness" },
+      { value: "energy-utilities", label: "Energy, Power & Utilities" },
+      { value: "media-content", label: "Media, Content & Communications" },
+      { value: "public-sector-ngo", label: "Public Sector, Non-profit & NGO" },
+    ],
+  },
+];
 
 export default async function NewJobPage() {
   const tenant = await getResourcinTenant();
 
-  if (!tenant) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-10">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Create role
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No default tenant configured. Please ensure{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_ID
-          </code>{" "}
-          or{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_SLUG
-          </code>{" "}
-          are set.
-        </p>
-      </div>
-    );
-  }
-
-  const [clientCompanies, users] = await Promise.all([
+  const [clientCompanies, owners] = await Promise.all([
     prisma.clientCompany.findMany({
-      where: { tenantId: tenant.id },
       orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
     prisma.user.findMany({
       orderBy: { email: "asc" },
-      select: {
-        id: true,
-        email: true,
-      },
+      select: { id: true, email: true },
     }),
   ]);
-
-  // -------------------------
-  // Taxonomies
-  // -------------------------
-
-  const locationOptions = [
-    { value: "", label: "Select location…" },
-    { value: "Lagos, Nigeria", label: "Lagos, Nigeria" },
-    { value: "Abuja, Nigeria", label: "Abuja, Nigeria" },
-    { value: "Port Harcourt, Nigeria", label: "Port Harcourt, Nigeria" },
-    { value: "Nigeria (other)", label: "Nigeria (other)" },
-    { value: "Nairobi, Kenya", label: "Nairobi, Kenya" },
-    { value: "Kenya (other)", label: "Kenya (other)" },
-    { value: "Accra, Ghana", label: "Accra, Ghana" },
-    { value: "Ghana (other)", label: "Ghana (other)" },
-    {
-      value: "Johannesburg, South Africa",
-      label: "Johannesburg, South Africa",
-    },
-    { value: "Cape Town, South Africa", label: "Cape Town, South Africa" },
-    { value: "South Africa (other)", label: "South Africa (other)" },
-    { value: "Dubai, UAE", label: "Dubai, UAE" },
-    { value: "United Kingdom (London)", label: "United Kingdom (London)" },
-    { value: "United Kingdom (other)", label: "United Kingdom (other)" },
-    { value: "Europe (other)", label: "Europe (other)" },
-    { value: "United States (remote)", label: "United States (remote)" },
-    { value: "Remote – Africa", label: "Remote – Africa" },
-    { value: "Remote – Global", label: "Remote – Global" },
-    { value: "Other / mixed", label: "Other / mixed" },
-  ];
-
-  const functionOptions = [
-    { value: "", label: "Select function…" },
-    // Leadership / General management
-    { value: "Executive Leadership", label: "Executive Leadership" },
-    { value: "General Management", label: "General Management" },
-    {
-      value: "Strategy & Corporate Development",
-      label: "Strategy & Corporate Development",
-    },
-    {
-      value: "Project & Program Management",
-      label: "Project & Program Management",
-    },
-
-    // Commercial
-    {
-      value: "Sales & Business Development",
-      label: "Sales & Business Development",
-    },
-    {
-      value: "Account Management / Client Success",
-      label: "Account Management / Client Success",
-    },
-    {
-      value: "Customer Support / Contact Centre",
-      label: "Customer Support / Contact Centre",
-    },
-    { value: "Marketing & Growth", label: "Marketing & Growth" },
-    {
-      value: "Brand / Communications / PR",
-      label: "Brand / Communications / PR",
-    },
-
-    // Product / Tech / Data / Design
-    { value: "Product Management", label: "Product Management" },
-    { value: "Design & UX", label: "Design & UX" },
-    { value: "Engineering – Software", label: "Engineering – Software" },
-    {
-      value: "Engineering – Infrastructure / DevOps",
-      label: "Engineering – Infrastructure / DevOps",
-    },
-    {
-      value: "Engineering – Hardware / Embedded",
-      label: "Engineering – Hardware / Embedded",
-    },
-    {
-      value: "Data Science & Analytics",
-      label: "Data Science & Analytics",
-    },
-    {
-      value: "IT & Systems Administration",
-      label: "IT & Systems Administration",
-    },
-
-    // People / HR
-    { value: "Human Resources / People", label: "Human Resources / People" },
-    {
-      value: "Talent Acquisition / Recruitment",
-      label: "Talent Acquisition / Recruitment",
-    },
-    { value: "Learning & Development", label: "Learning & Development" },
-
-    // Finance / Risk / Legal
-    { value: "Finance & Accounting", label: "Finance & Accounting" },
-    {
-      value: "Investment / Corporate Finance",
-      label: "Investment / Corporate Finance",
-    },
-    { value: "Risk & Audit", label: "Risk & Audit" },
-    { value: "Legal & Compliance", label: "Legal & Compliance" },
-
-    // Ops / Supply chain / Manufacturing
-    { value: "Operations", label: "Operations" },
-    { value: "Procurement", label: "Procurement" },
-    {
-      value: "Supply Chain & Logistics",
-      label: "Supply Chain & Logistics",
-    },
-    {
-      value: "Manufacturing & Production",
-      label: "Manufacturing & Production",
-    },
-    {
-      value: "Quality Assurance / Quality Control",
-      label: "Quality Assurance / Quality Control",
-    },
-
-    // Real estate / Construction
-    {
-      value: "Real Estate – Development & Investments",
-      label: "Real Estate – Development & Investments",
-    },
-    {
-      value: "Real Estate – Sales & Brokerage",
-      label: "Real Estate – Sales & Brokerage",
-    },
-    {
-      value: "Real Estate – Property / Facilities Management",
-      label: "Real Estate – Property / Facilities Management",
-    },
-    {
-      value: "Construction & Civil Engineering",
-      label: "Construction & Civil Engineering",
-    },
-
-    // Sector-specific
-    {
-      value: "Healthcare & Clinical",
-      label: "Healthcare & Clinical",
-    },
-    {
-      value: "Pharmaceutical & Life Sciences",
-      label: "Pharmaceutical & Life Sciences",
-    },
-    {
-      value: "Agriculture & Agribusiness",
-      label: "Agriculture & Agribusiness",
-    },
-    {
-      value: "Energy / Power / Utilities",
-      label: "Energy / Power / Utilities",
-    },
-    { value: "Oil & Gas", label: "Oil & Gas" },
-    { value: "Telecommunications", label: "Telecommunications" },
-    {
-      value: "Financial Services / Banking",
-      label: "Financial Services / Banking",
-    },
-    { value: "Insurance", label: "Insurance" },
-    {
-      value: "Public Sector / Development",
-      label: "Public Sector / Development",
-    },
-    { value: "Education & Training", label: "Education & Training" },
-    { value: "NGO / Social Impact", label: "NGO / Social Impact" },
-
-    // Enablers
-    {
-      value: "Administration & Office Management",
-      label: "Administration & Office Management",
-    },
-    { value: "Facilities / Workplace", label: "Facilities / Workplace" },
-    { value: "Security / HSE", label: "Security / HSE" },
-    { value: "Research & Policy", label: "Research & Policy" },
-
-    // Catch-all
-    { value: "Other / Generalist", label: "Other / Generalist" },
-  ];
-
-  const experienceOptions = [
-    { value: "", label: "Not specified" },
-    { value: "intern", label: "Intern / Student" },
-    { value: "entry", label: "Entry level / Graduate" },
-    { value: "associate", label: "Associate / Early career" },
-    { value: "mid", label: "Mid-level Professional" },
-    { value: "senior", label: "Senior Professional / IC" },
-    { value: "lead", label: "Lead / Principal IC" },
-    { value: "manager", label: "Manager / People Manager" },
-    { value: "head", label: "Head of / Department Lead" },
-    { value: "director", label: "Director / Senior Director" },
-    { value: "vp", label: "VP / SVP" },
-    { value: "executive", label: "C-level / Executive" },
-  ];
-
-  const employmentTypeOptions = [
-    { value: "", label: "Not specified" },
-    { value: "Full time", label: "Full time" },
-    { value: "Part time", label: "Part time" },
-    { value: "Contract", label: "Contract" },
-    { value: "Consulting", label: "Consulting" },
-    { value: "Temporary", label: "Temporary" },
-    { value: "Internship", label: "Internship" },
-  ];
-
-  const statusOptions = [
-    { value: "draft", label: "Draft (not live)" },
-    { value: "open", label: "Open (actively hiring)" },
-    { value: "closed", label: "Closed" },
-    { value: "on_hold", label: "On hold" },
-  ];
-
-  const visibilityOptions = [
-    {
-      value: "public",
-      label: "Public (show on /jobs careers page)",
-    },
-    {
-      value: "internal",
-      label: "Internal only (ATS, no careers page)",
-    },
-    {
-      value: "confidential",
-      label: "Confidential search (discreet listing)",
-    },
-  ];
-
-  const currencyOptions = [
-    { value: "NGN", label: "NGN – Nigerian Naira" },
-    { value: "USD", label: "USD – US Dollar" },
-    { value: "EUR", label: "EUR – Euro" },
-    { value: "GBP", label: "GBP – British Pound" },
-    { value: "KES", label: "KES – Kenyan Shilling" },
-    { value: "GHS", label: "GHS – Ghanaian Cedi" },
-    { value: "ZAR", label: "ZAR – South African Rand" },
-    { value: "XOF", label: "XOF – West African CFA" },
-    { value: "XAF", label: "XAF – Central African CFA" },
-    { value: "UGX", label: "UGX – Ugandan Shilling" },
-    { value: "TZS", label: "TZS – Tanzanian Shilling" },
-    { value: "RWF", label: "RWF – Rwandan Franc" },
-    { value: "AED", label: "AED – UAE Dirham" },
-    { value: "CAD", label: "CAD – Canadian Dollar" },
-    { value: "AUD", label: "AUD – Australian Dollar" },
-    { value: "INR", label: "INR – Indian Rupee" },
-    { value: "OTHER", label: "Other / mixed" },
-  ];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 lg:px-0">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <div className="mb-1">
-            <Link
-              href="/ats/jobs"
-              className="inline-flex items-center text-[11px] font-medium text-slate-500 hover:text-slate-800"
-            >
-              <span className="mr-1.5">←</span>
-              Back to roles
-            </Link>
-          </div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            Create new role
+            Post a new role
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Capture the basics, assign an owner and optionally publish to
-            your careers page.
+            Create a role that flows into ThinkATS pipelines, public careers
+            pages and analytics for{" "}
+            <span className="font-medium text-slate-900">
+              {tenant?.name || tenant?.slug || "Resourcin"}
+            </span>
+            .
           </p>
         </div>
-
         <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-700">
-          Tenant:{" "}
-          <span className="font-medium">
-            {tenant.name ?? tenant.slug ?? "Resourcin"}
-          </span>
+          Status defaults to{" "}
+          <span className="font-semibold text-slate-900">
+            Draft
+          </span>{" "}
+          until you mark as open.
         </div>
       </div>
 
-      {/* Form */}
       <form
+        className="space-y-6"
         method="POST"
         action="/api/ats/jobs"
-        className="space-y-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
       >
-        {/* Row: Title + Client + Owner */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="md:col-span-1">
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Job title<span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="title"
-              required
-              placeholder="e.g. Deputy Medical Director"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
+        {/* Card 1: Basics & context */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Role basics
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Title, client, owner and key meta that power search,
+                analytics and the careers page.
+              </p>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Client company
-            </label>
-            <select
-              name="clientCompanyId"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              <option value="">
-                Direct mandate (Resourcin / in-house)
-              </option>
-              {clientCompanies.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Title */}
+            <div className="md:col-span-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Job title<span className="text-red-500">*</span>
+              </label>
+              <input
+                name="title"
+                type="text"
+                required
+                placeholder="e.g. General Manager, Real Estate Operations"
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
 
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Owner / Recruiter
-            </label>
-            <select
-              name="hiringManagerId"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              <option value="">Unassigned</option>
-              {users.map((user) => {
-                const label = user.email || `User ${user.id}`;
-                return (
-                  <option key={user.id} value={user.id}>
-                    {label}
+            {/* Client company */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Client company
+              </label>
+              <select
+                name="clientCompanyId"
+                defaultValue=""
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Resourcin (no external client)</option>
+                {clientCompanies.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
                   </option>
-                );
-              })}
-            </select>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-slate-400">
+                If this is a mandate for a specific client, select them here.
+              </p>
+            </div>
+
+            {/* Owner / recruiter */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Owner / recruiter
+              </label>
+              <select
+                name="hiringManagerId"
+                defaultValue=""
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Unassigned</option>
+                {owners.map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.email}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-slate-400">
+                Used in ThinkATS analytics and recruiter performance
+                dashboards.
+              </p>
+            </div>
+
+            {/* Function / discipline */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Function / discipline
+              </label>
+              <select
+                name="function"
+                defaultValue=""
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Select function</option>
+                {JOB_FUNCTION_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-slate-400">
+                This feeds function filters and salary / benchmarking later.
+              </p>
+            </div>
+
+            {/* Experience level */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Experience level
+              </label>
+              <select
+                name="experienceLevel"
+                defaultValue=""
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Not specified</option>
+                {EXPERIENCE_LEVELS.map((lvl) => (
+                  <option key={lvl.value} value={lvl.value}>
+                    {lvl.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Location */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Location
+              </label>
+              <input
+                name="location"
+                type="text"
+                placeholder="e.g. Lagos, Nigeria"
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
+
+            {/* Location type */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Location type
+              </label>
+              <select
+                name="locationType"
+                defaultValue=""
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Not specified</option>
+                {LOCATION_TYPES.map((lt) => (
+                  <option key={lt.value} value={lt.value}>
+                    {lt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Employment type */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Employment type
+              </label>
+              <select
+                name="employmentType"
+                defaultValue=""
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="">Not specified</option>
+                {EMPLOYMENT_TYPES.map((et) => (
+                  <option key={et.value} value={et.value}>
+                    {et.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Skill tags */}
+            <div className="md:col-span-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Skill tags / keywords
+              </label>
+              <textarea
+                name="tags"
+                rows={2}
+                placeholder="e.g. Real estate operations, Leasing, Facilities management, GM experience"
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+              <p className="mt-1 text-[10px] text-slate-400">
+                Separate tags with commas or new lines. These feed search,
+                matching and future analytics.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Card 2: Narrative / description */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Narrative & description
+            </h2>
             <p className="mt-1 text-[11px] text-slate-500">
-              Used for recruiter / owner analytics in ThinkATS.
-            </p>
-          </div>
-        </div>
-
-        {/* Row: Location + Location type + Employment type */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Location
-            </label>
-            <select
-              name="location"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              {locationOptions.map((opt) => (
-                <option key={opt.value || "blank"} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10px] text-slate-500">
-              Global-ready, Africa-biased locations. For edge cases,
-              choose &ldquo;Other / mixed&rdquo; and clarify in the
-              description.
+              These fields show on the public role page and help candidates
+              self-select in or out.
             </p>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Location type
-            </label>
-            <select
-              name="locationType"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              <option value="">Not specified</option>
-              <option value="On-site">On-site</option>
-              <option value="Hybrid">Hybrid</option>
-              <option value="Remote">Remote</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Employment type
-            </label>
-            <select
-              name="employmentType"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              {employmentTypeOptions.map((opt) => (
-                <option key={opt.value || "blank"} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Row: Function + Experience level + Status + Visibility */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Function
-            </label>
-            <select
-              name="function"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              {functionOptions.map((opt) => (
-                <option key={opt.value || "blank"} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10px] text-slate-500">
-              High-level job family / function. Includes Real Estate and
-              sector-specific tracks.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Experience level
-            </label>
-            <select
-              name="experienceLevel"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue=""
-            >
-              {experienceOptions.map((opt) => (
-                <option key={opt.value || "blank"} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Status
-            </label>
-            <select
-              name="status"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue="draft"
-            >
-              {statusOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Visibility
-            </label>
-            <select
-              name="visibility"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue="public"
-            >
-              {visibilityOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Skills / Tags */}
-        <div>
-          <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Skills / tags
-          </label>
-          <input
-            type="text"
-            name="tags"
-            placeholder="e.g. Real estate, Capital markets, Financial modelling, Stakeholder management"
-            className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-          />
-          <p className="mt-1 text-[10px] text-slate-500">
-            Separate with commas. Think skills, domains or keywords you
-            want to be searchable and visible as chips on the job page.
-          </p>
-        </div>
-
-        {/* Salary & flags */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Salary min
-            </label>
-            <input
-              type="number"
-              name="salaryMin"
-              min={0}
-              step={1000}
-              placeholder="e.g. 15000000"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Salary max
-            </label>
-            <input
-              type="number"
-              name="salaryMax"
-              min={0}
-              step={1000}
-              placeholder="e.g. 22000000"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Currency
-            </label>
-            <select
-              name="salaryCurrency"
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              defaultValue="NGN"
-            >
-              {currencyOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-[10px] text-slate-500">
-              If you pick &ldquo;Other / mixed&rdquo;, you can clarify in
-              the description or offer notes.
-            </p>
-          </div>
-          <div className="flex flex-col justify-end gap-1">
-            <label className="inline-flex items-center gap-2 text-[11px] text-slate-600">
-              <input
-                type="checkbox"
-                name="salaryVisible"
-                defaultChecked={false}
-                className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+          <div className="space-y-4">
+            {/* Short description */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Short pitch
+              </label>
+              <textarea
+                name="shortDescription"
+                rows={2}
+                placeholder="1–3 sentence overview that sells the role and context."
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
-              <span>Show salary range on careers page</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] text-slate-600">
-              <input
-                type="checkbox"
-                name="confidential"
-                className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+            </div>
+
+            {/* Overview */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Role overview
+              </label>
+              <textarea
+                name="overview"
+                rows={4}
+                placeholder={`What this role owns, how success will be measured, reporting lines, and a quick 12–18 month view.`}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
-              <span>Mark client as confidential</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] text-slate-600">
-              <input
-                type="checkbox"
-                name="internalOnly"
-                className="h-4 w-4 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+            </div>
+
+            {/* About client */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                About the client
+              </label>
+              <textarea
+                name="aboutClient"
+                rows={3}
+                placeholder="Sector, size, locations, culture and why this role matters in their strategy."
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
               />
-              <span>Internal mandate only</span>
-            </label>
-          </div>
-        </div>
+            </div>
 
-        {/* Short description */}
-        <div>
-          <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Short description
-          </label>
-          <textarea
-            name="shortDescription"
-            rows={2}
-            placeholder="2–3 lines that describe the role and why it matters."
-            className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-          />
-        </div>
+            {/* Responsibilities */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Responsibilities
+              </label>
+              <textarea
+                name="responsibilities"
+                rows={5}
+                placeholder={`Use bullet-style lines, e.g.:
+- Own day-to-day operations across X locations
+- Build and lead a team of Y direct reports
+- Manage relationships with key landlords, agents and vendors`}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
 
-        {/* Overview & About client */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Role overview
-            </label>
-            <textarea
-              name="overview"
-              rows={5}
-              placeholder="Context, mandate and what success looks like in 12–18 months."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              About the client
-            </label>
-            <textarea
-              name="aboutClient"
-              rows={5}
-              placeholder="Short profile on the client, team structure and culture."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
-          </div>
-        </div>
+            {/* Requirements */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Requirements
+              </label>
+              <textarea
+                name="requirements"
+                rows={5}
+                placeholder={`Bullet-style lines, e.g.:
+- 8+ years managing multi-site real estate / facilities operations
+- Experience in residential, commercial or mixed-use portfolios
+- Comfortable with KPIs, budgets and board-level reporting`}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
 
-        {/* Responsibilities / Requirements / Benefits */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Responsibilities
-            </label>
-            <textarea
-              name="responsibilities"
-              rows={8}
-              placeholder="One bullet per line. These will render as a formatted list on the public job page."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
+            {/* Benefits */}
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Benefits
+              </label>
+              <textarea
+                name="benefits"
+                rows={4}
+                placeholder={`Comp, bonuses, benefits, flexible work, development, etc.`}
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Requirements
-            </label>
-            <textarea
-              name="requirements"
-              rows={8}
-              placeholder="One bullet per line for must-haves / nice-to-haves."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Benefits
-            </label>
-            <textarea
-              name="benefits"
-              rows={8}
-              placeholder="Comp, perks, extras – one item per line."
-              className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            />
-          </div>
-        </div>
+        </section>
 
-        {/* Actions */}
-        <div className="flex flex-col items-start justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center">
-          <p className="text-[11px] text-slate-500">
-            You can always edit this role later from the ATS jobs list.
-          </p>
-          <div className="flex gap-2">
-            <Link
-              href="/ats/jobs"
-              className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:border-slate-300"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-md bg-[#172965] px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-[#0f1c45]"
-            >
-              Create role
-            </button>
+        {/* Card 3: Compensation & publishing */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Compensation & publishing
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Control what candidates see, where the role is visible, and
+                whether salary is revealed.
+              </p>
+            </div>
           </div>
-        </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Salary band */}
+            <div className="space-y-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Salary range
+              </label>
+              <div className="flex gap-2">
+                <input
+                  name="salaryMin"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Minimum"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                />
+                <input
+                  name="salaryMax"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Maximum"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400">
+                You can paste plain numbers (e.g. 8000000). We’ll format
+                for the public page.
+              </p>
+            </div>
+
+            {/* Currency + show/hide */}
+            <div className="space-y-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Currency & visibility
+              </label>
+              <div className="flex flex-col gap-2">
+                <select
+                  name="salaryCurrency"
+                  defaultValue="NGN"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                >
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="inline-flex items-center gap-2 text-[11px] text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="salaryVisible"
+                    className="h-3 w-3 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+                  />
+                  <span>Show salary band on public role page</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Visibility & status */}
+            <div className="space-y-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Visibility
+              </label>
+              <div className="space-y-2 text-[11px] text-slate-700">
+                <select
+                  name="visibility"
+                  defaultValue="public"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                >
+                  <option value="public">Public – show on careers site</option>
+                  <option value="internal">
+                    Internal – ATS only, hidden from public
+                  </option>
+                </select>
+
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="internalOnly"
+                    className="h-3 w-3 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+                  />
+                  <span>Internal hire only (useful for backfills / reshuffles)</span>
+                </label>
+
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="confidential"
+                    className="h-3 w-3 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+                  />
+                  <span>Mark client as confidential on public page</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Status + slug */}
+            <div className="space-y-2">
+              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                Status & URL
+              </label>
+              <div className="space-y-2">
+                <select
+                  name="status"
+                  defaultValue="draft"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                >
+                  <option value="draft">Draft (not live)</option>
+                  <option value="open">Open (live & accepting applicants)</option>
+                  <option value="closed">Closed (archived)</option>
+                </select>
+
+                <input
+                  name="slug"
+                  type="text"
+                  placeholder="Optional: custom URL slug, e.g. gm-real-estate-operations"
+                  className="block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Leave blank to auto-generate a slug from the title.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <p className="text-[11px] text-slate-500">
+              You can edit this role later from the ATS job pipeline.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="inline-flex items-center rounded-md bg-[#172965] px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-[#0f1c45]"
+              >
+                Save & go to pipeline
+              </button>
+            </div>
+          </div>
+        </section>
       </form>
     </div>
   );
