@@ -209,8 +209,8 @@ function formatPostedAt(iso?: string | null) {
   });
 }
 
-// Very small UUID guard so we don't send slugs like "assistant-head-of-sales"
-// into an id.eq(...) filter.
+// UUID guard: prevents slugs like "assistant-head-of-sales" from being used
+// in an id.eq(...) filter.
 function looksLikeUuid(value: string): boolean {
   return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
     value
@@ -223,7 +223,6 @@ export default async function JobDetailPage({ params }: PageProps) {
   const { jobIdOrSlug } = params;
   const isUuid = looksLikeUuid(jobIdOrSlug);
 
-  // Build base query
   let query = supabaseAdmin
     .from("jobs")
     .select(
@@ -251,7 +250,6 @@ export default async function JobDetailPage({ params }: PageProps) {
     .eq("visibility", "public")
     .eq("status", "open");
 
-  // Only hit id when it actually looks like a UUID.
   if (isUuid) {
     query = query.eq("id", jobIdOrSlug);
   } else {
@@ -525,23 +523,13 @@ export default async function JobDetailPage({ params }: PageProps) {
                   {postedLabel && <Row label="Posted" value={postedLabel} />}
                 </dl>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      const el = document.getElementById("apply");
-                      if (el) {
-                        el.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        });
-                      }
-                    }
-                  }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0f1c48]"
+                {/* changed from button with onClick to simple anchor */}
+                <a
+                  href="#apply"
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-center text-xs font-semibold text-white hover:bg-[#0f1c48]"
                 >
                   Apply now
-                </button>
+                </a>
                 <p className="mt-2 text-[10px] text-slate-500">
                   We review each application carefully. If your profile is a
                   close match, we&apos;ll be in touch to discuss next steps.
