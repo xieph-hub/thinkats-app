@@ -64,40 +64,40 @@ export default async function AtsJobsPage({
     Array.isArray(rawQ) && rawQ.length > 0
       ? rawQ[0]
       : typeof rawQ === "string"
-        ? rawQ
-        : "";
+      ? rawQ
+      : "";
 
   const rawStatus = searchParams?.status ?? "all";
   const statusFilter =
     Array.isArray(rawStatus) && rawStatus.length > 0
       ? rawStatus[0]
       : typeof rawStatus === "string"
-        ? rawStatus
-        : "all";
+      ? rawStatus
+      : "all";
 
   const rawTenant = searchParams?.tenantId ?? "";
   const tenantParam =
     Array.isArray(rawTenant) && rawTenant.length > 0
       ? rawTenant[0]
       : typeof rawTenant === "string"
-        ? rawTenant
-        : "";
+      ? rawTenant
+      : "";
 
   const rawClient = searchParams?.clientId ?? "all";
   const clientFilter =
     Array.isArray(rawClient) && rawClient.length > 0
       ? rawClient[0]
       : typeof rawClient === "string"
-        ? rawClient
-        : "all";
+      ? rawClient
+      : "all";
 
   const rawVisibility = searchParams?.visibility ?? "all";
   const visibilityFilter =
     Array.isArray(rawVisibility) && rawVisibility.length > 0
       ? rawVisibility[0]
       : typeof rawVisibility === "string"
-        ? rawVisibility
-        : "all";
+      ? rawVisibility
+      : "all";
 
   // -----------------------------
   // Load tenants + resolve current tenant
@@ -375,7 +375,7 @@ export default async function AtsJobsPage({
                 id="status"
                 name="status"
                 defaultValue={statusFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg:white focus:ring-1 focus:ring-[#172965]"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               >
                 <option value="all">All statuses</option>
                 <option value="open">Open</option>
@@ -522,8 +522,16 @@ export default async function AtsJobsPage({
               const statusText = statusLabel(job.status);
               const applicationsCount =
                 job._count?.applications ?? 0;
-              const isPublished = job.isPublished === true;
-              const isOpen = s === "open";
+
+              const statusValue =
+                (job.status as string | null)?.toLowerCase() || "";
+              const visibilityValue =
+                (job.visibility as string | null)?.toLowerCase() || "";
+
+              const isPublished =
+                visibilityValue === "public" &&
+                statusValue === "open";
+              const isOpen = statusValue === "open";
 
               return (
                 <div
