@@ -3,137 +3,128 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
-type SimpleAction = "publish" | "unpublish" | "close" | "duplicate";
+export async function POST(request: NextRequest) {
+  const formData = await request.formData();
 
-export async function POST(req: NextRequest) {
-  const formData = await req.formData();
+  const bulkActionRaw = formData.get("bulkAction");
+  const singleActionRaw = formData.get("singleAction");
+  const tenantIdRaw = formData.get("tenantId");
+  const qRaw = formData.get("q");
+  const statusRaw = formData.get("status");
 
-  const tenantIdFromForm = formData.get("tenantId")?.toString() || "";
-  const q = formData.get("q")?.toString() || "";
-  const status = formData.get("status")?.toString() || "";
+  let jobIds = formData.getAll("jobIds").map((v) => v.toString());
 
-  // Resolve tenant (prefer the one from the form, fall back to default)
-  let tenantId = tenantIdFromForm;
-  if (!tenantId) {
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
-      return redirectToJobs(req);
-    }
-    tenantId = tenant.id;
-  }
+  const bulkAction =
+    typeof bulkActionRaw === "string" ? bulkActionRaw : "";
+  const singleAction =
+    typeof singleActionRaw === "string" ? singleActionRaw : "";
+  const tenantId =
+    typeof tenantIdRaw === "string" ? tenantIdRaw : undefined;
+  const q = typeof qRaw === "string" ? qRaw : "";
+  const status =
+    typeof statusRaw === "string" ? statusRaw : "";
 
-  const singleActionRaw = formData.get("singleAction")?.toString() || "";
-  const bulkAction = (formData.get("bulkAction")?.toString() ||
-    "") as SimpleAction | "";
+  // Work out which action to run and which IDs it applies to
+  let actionName: string | null = null;
 
-  const jobIds = formData.getAll("jobIds").map((v) => v.toString());
-
-  if (singleActionRaw) {
-    // singleAction looks like "publish:jobId"
-    const [action, id] = singleActionRaw.split(":");
+  if (singleAction) {
+    const [name, id] = singleAction.split(":");
+    actionName = name || null;
     if (id) {
-      await applyAction(action as SimpleAction, tenantId, [id]);
+      jobIds = [id];
     }
-  } else if (bulkAction && jobIds.length > 0) {
-    await applyAction(bulkAction, tenantId, jobIds);
+  } else if (bulkAction) {
+    actionName = bulkAction;
   }
 
-  // Redirect back to /ats/jobs, preserving filters
-  const url = new URL(req.url);
-  const redirectUrl = new URL("/ats/jobs", url.origin);
-  redirectUrl.searchParams.set("tenantId", tenantId);
-  if (q) redirectUrl.searchParams.set("q", q);
-  if (status) redirectUrl.searchParams.set("status", status);
-
-  return NextResponse.redirect(redirectUrl);
-}
-
-async function applyAction(
-  action: SimpleAction,
-  tenantId: string,
-  jobIds: string[],
-) {
-  if (!action || jobIds.length === 0) return;
-
-  if (action === "publish") {
-    await prisma.job.updateMany({
-      where: {
-        id: { in: jobIds },
-        tenantId,
-      },
-      data: {
-        isPublished: true,
-        visibility: "public",
-        status: "open",
-      },
+  // If nothing to do, just bounce back to /ats/jobs with context
+  if (!actionName || jobIds.length === 0) {
+    const redirectUrl = buildRedirectUrl(request.url, {
+      tenantId,
+      q,
+      status,
     });
-    return;
+    return NextResponse.redirect(redirectUrl);
   }
 
-  if (action === "unpublish") {
-    await prisma.job.updateMany({
-      where: {
-        id: { in: jobIds },
-        tenantId,
-      },
-      data: {
-        isPublished: false,
-        visibility: "internal",
-      },
-    });
-    return;
+  const resolvedTenantId =
+    tenantId ||
+    (await getResourcinTenant()
+      .then((t) => t?.id)
+      .catch(() => undefined));
+
+  const where: any = {
+    id: { in: jobIds },
+  };
+
+  if (resolvedTenantId) {
+    where.tenantId = resolvedTenantId;
   }
 
-  if (action === "close") {
-    await prisma.job.updateMany({
-      where: {
-        id: { in: jobIds },
-        tenantId,
-      },
-      data: {
-        status: "closed",
-        isPublished: false,
-      },
-    });
-    return;
-  }
-
-  if (action === "duplicate") {
-    // Lightweight duplicate: copy fields and make a draft copy.
-    // Using "any" here so we don't fight prisma types for every column.
-    const jobs = (await prisma.job.findMany({
-      where: {
-        id: { in: jobIds },
-        tenantId,
-      },
-    })) as any[];
-
-    for (const job of jobs) {
-      const {
-        id,
-        createdAt,
-        updatedAt,
-        slug,
-        status,
-        isPublished,
-        ...rest
-      } = job;
-
-      await prisma.job.create({
+  switch (actionName) {
+    case "publish":
+      // Treat "published" as: visibility=public + status=open
+      await prisma.job.updateMany({
+        where,
         data: {
-          ...(rest as any),
-          title: `${job.title} (copy)`,
-          slug: slug ? `${slug}-copy-${Date.now()}` : undefined,
-          status: "draft",
-          isPublished: false,
-        } as any,
+          visibility: "public",
+          status: "open",
+        },
       });
-    }
+      break;
+
+    case "unpublish":
+      await prisma.job.updateMany({
+        where,
+        data: {
+          visibility: "internal",
+        },
+      });
+      break;
+
+    case "close":
+      await prisma.job.updateMany({
+        where,
+        data: {
+          status: "closed",
+        },
+      });
+      break;
+
+    case "delete":
+      await prisma.job.deleteMany({
+        where,
+      });
+      break;
+
+    case "duplicate":
+    default:
+      // You can implement real duplication later
+      break;
   }
+
+  const redirectUrl = buildRedirectUrl(request.url, {
+    tenantId,
+    q,
+    status,
+  });
+
+  return NextResponse.redirect(redirectUrl);
 }
 
-function redirectToJobs(req: NextRequest) {
-  const url = new URL(req.url);
-  const redirectUrl = new URL("/ats/jobs", url.origin);
-  return NextResponse.redirect(redirectUrl);
+function buildRedirectUrl(
+  requestUrl: string,
+  opts: { tenantId?: string; q?: string; status?: string },
+) {
+  const { tenantId, q, status } = opts;
+  const url = new URL(requestUrl);
+  url.pathname = "/ats/jobs";
+
+  if (tenantId) url.searchParams.set("tenantId", tenantId);
+  if (q) url.searchParams.set("q", q);
+  if (status && status !== "all") {
+    url.searchParams.set("status", status);
+  }
+
+  return url;
 }
