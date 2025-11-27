@@ -211,6 +211,11 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
 
   const totalApplications = job.applications.length;
 
+  // Use stage names as options, but store/compare as UPPERCASE codes
+  const stageOptions = stagesForDisplay.map((stage) =>
+    stage.name.toUpperCase(),
+  );
+
   const workModeValue = job.workMode || job.locationType || null;
   const employmentTypeLabel = formatEmploymentType(job.employmentType);
   const experienceLevelLabel = formatExperienceLevel(job.experienceLevel);
@@ -289,9 +294,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
       <div className="mb-6 grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] md:gap-6">
         {/* Job summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Role summary
-          </h2>
+          <h2 className="text-sm font-semibold text-slate-900">Role summary</h2>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] text-slate-600">
             <div>
               <dt className="font-medium text-slate-500">Client</dt>
@@ -348,9 +351,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
         {/* Pipeline summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Pipeline
-            </h2>
+            <h2 className="text-sm font-semibold text-slate-900">Pipeline</h2>
             <p className="text-[11px] text-slate-500">
               {totalApplications}{" "}
               {totalApplications === 1 ? "application" : "applications"}
@@ -381,9 +382,9 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
             })}
           </div>
           <p className="mt-1 text-[10px] text-slate-500">
-            This page will later host drag-and-drop moves, email triggers and
-            notes across stages. For now it gives you a clean snapshot per
-            mandate.
+            You can now move candidates between stages directly from the
+            applications table below. Later this page will host drag-and-drop
+            moves, email triggers and notes across stages.
           </p>
         </section>
       </div>
@@ -453,12 +454,10 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
         </div>
       </section>
 
-      {/* Applications table */}
+      {/* Applications table with stage-change controls */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Applications
-          </h2>
+          <h2 className="text-sm font-semibold text-slate-900">Applications</h2>
           <p className="text-[11px] text-slate-500">
             {totalApplications === 0
               ? "No applications yet."
@@ -480,6 +479,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                 <tr>
                   <th className="px-3 py-2">Candidate</th>
                   <th className="px-3 py-2">Stage</th>
+                  <th className="px-3 py-2">Change stage</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Location</th>
                   <th className="px-3 py-2">Source</th>
@@ -495,12 +495,14 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                   const candidateEmail =
                     (app as any).email || app.candidate?.email || "";
                   const stageLabel = formatStageName(app.stage || "APPLIED");
-                  const statusLabel = titleCaseFromEnum(app.status || "PENDING");
+                  const statusLabel = titleCaseFromEnum(
+                    app.status || "PENDING",
+                  );
 
                   const locationLabel =
-                    app.location ||
-                    app.candidate?.location ||
-                    "—";
+                    app.location || app.candidate?.location || "—";
+
+                  const currentStageCode = (app.stage || "APPLIED").toUpperCase();
 
                   return (
                     <tr
@@ -523,6 +525,44 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                         <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                           {stageLabel}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <form
+                          method="POST"
+                          action="/ats/applications"
+                          className="flex items-center gap-1"
+                        >
+                          <input
+                            type="hidden"
+                            name="applicationId"
+                            value={app.id}
+                          />
+                          <input type="hidden" name="jobId" value={job.id} />
+                          <input
+                            type="hidden"
+                            name="tenantId"
+                            value={job.tenantId}
+                          />
+
+                          <select
+                            name="newStage"
+                            defaultValue={currentStageCode}
+                            className="max-w-[150px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+                          >
+                            {stageOptions.map((code) => (
+                              <option key={code} value={code}>
+                                {formatStageName(code)}
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="submit"
+                            className="rounded-md bg-[#172965] px-2 py-1 text-[10px] font-medium text-white hover:bg-[#0f1c45]"
+                          >
+                            Update
+                          </button>
+                        </form>
                       </td>
                       <td className="px-3 py-2 align-top">
                         <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
