@@ -1,169 +1,96 @@
 // app/jobs/page.tsx
-import Link from "next/link";
-import Image from "next/image";
-import ApplicationSuccessBanner from "@/components/jobs/ApplicationSuccessBanner";
-import { listPublicJobsForResourcin } from "@/lib/jobs";
+import type { Metadata } from "next";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import JobsPageClient from "./JobsPageClient";
+import type { JobCardData } from "@/components/jobs/JobCard";
 
 export const dynamic = "force-dynamic";
 
-type JobsPageSearchParams = {
-  [key: string]: string | string[] | undefined;
+export const metadata: Metadata = {
+  title: "Open roles | Resourcin",
+  description:
+    "Explore open mandates managed by Resourcin and its clients across Africa and beyond.",
 };
 
-type PublicJob = {
-  id: string;
-  title: string;
-  location: string | null;
-  employmentType: string | null;
+type ClientCompanyRow = {
+  name: string;
+  logo_url: string | null;
   slug: string | null;
-  confidential: boolean;
-  client: {
-    name: string;
-    logoUrl: string | null;
-  } | null;
 };
 
-function titleCaseFromEnum(value?: string | null) {
-  if (!value) return "";
-  return value
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
+type JobRow = {
+  id: string;
+  slug: string | null;
+  title: string;
+  short_description: string | null;
+  department: string | null;
+  location: string | null;
+  location_type: string | null;
+  employment_type: string | null;
+  created_at: string | null;
+  client_company: ClientCompanyRow | null;
+};
 
-function formatEmploymentType(value?: string | null) {
-  if (!value) return "";
-  const key = value.toLowerCase();
-  const map: Record<string, string> = {
-    full_time: "Full Time",
-    "full-time": "Full Time",
-    "full time": "Full Time",
-    fulltime: "Full Time",
-    part_time: "Part Time",
-    "part-time": "Part Time",
-    "part time": "Part Time",
-    internship: "Internship",
-    contract: "Contract",
-    temporary: "Temporary",
-    consulting: "Consulting / Advisory",
-  };
-  return map[key] || titleCaseFromEnum(value);
-}
+export default async function JobsPage() {
+  const tenantId =
+    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ?? "tenant_resourcin_1";
 
-export default async function JobsPage({
-  searchParams,
-}: {
-  searchParams?: JobsPageSearchParams;
-}) {
-  // Check if we just came back from an application submit
-  const appliedParam = searchParams?.applied;
-  const applied =
-    (Array.isArray(appliedParam) ? appliedParam[0] : appliedParam) === "1";
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select(
+      `
+      id,
+      slug,
+      title,
+      short_description,
+      department,
+      location,
+      location_type,
+      employment_type,
+      created_at,
+      client_company:client_companies(
+        name,
+        logo_url,
+        slug
+      )
+    `
+    )
+    .eq("is_published", true)
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
 
-  const rawJobs = await listPublicJobsForResourcin();
-
-  // Map Prisma rows → clean view model
-  const jobs: PublicJob[] = rawJobs.map((job: any) => ({
-    id: job.id,
-    title: job.title,
-    location: job.location ?? null,
-    employmentType: job.employmentType ?? null,
-    slug: job.slug ?? null,
-    confidential: !!job.confidential,
-    client: job.clientCompany
-      ? {
-          name: job.clientCompany.name as string,
-          logoUrl: (job.clientCompany.logoUrl ?? null) as string | null,
-        }
-      : null,
-  }));
-
-  return (
-    <div className="mx-auto max-w-5xl px-4 py-10">
-      {/* World-class success banner after application */}
-      {applied && <ApplicationSuccessBanner />}
-
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold text-slate-900">
-          Open roles
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Roles managed by Resourcin and our clients across Nigeria, Africa
-          and beyond.
-        </p>
-      </header>
-
-      {jobs.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          No open roles right now. Check back soon or join our talent
-          network.
+  if (error) {
+    console.error("Error loading jobs:", error);
+    return (
+      <main className="min-h-screen bg-slate-950 text-slate-50">
+        <div className="mx-auto max-w-4xl px-4 py-20">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            We couldn&apos;t load roles right now
+          </h1>
+          <p className="mt-3 text-sm text-slate-400">
+            Please refresh the page in a moment. If this persists, let us know
+            and we&apos;ll take a look.
+          </p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => {
-            const isConfidential = job.confidential;
-            const client = job.client;
+      </main>
+    );
+  }
 
-            const clientLabel = (() => {
-              if (!client) return "Resourcin";
-              if (isConfidential) return "Confidential client";
-              return client.name;
-            })();
+  const jobs: JobCardData[] =
+    (data as JobRow[] | null)?.map((job) => ({
+      id: job.id,
+      slug: job.slug,
+      title: job.title,
+      shortDescription: job.short_description,
+      location: job.location,
+      locationType: job.location_type,
+      employmentType: job.employment_type,
+      department: job.department,
+      clientName: job.client_company?.name ?? null,
+      clientLogoUrl: job.client_company?.logo_url ?? null,
+      clientSlug: job.client_company?.slug ?? null,
+      createdAt: job.created_at,
+    })) ?? [];
 
-            const href = `/jobs/${job.slug || job.id}`;
-            const employmentTypeLabel = job.employmentType
-              ? formatEmploymentType(job.employmentType)
-              : "";
-
-            return (
-              <Link
-                key={job.id}
-                href={href}
-                className="block rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:border-resourcin-blue/70 hover:shadow-md"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-base font-semibold text-slate-900">
-                      {job.title}
-                    </h2>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                      <span>{clientLabel}</span>
-                      {job.location && (
-                        <>
-                          <span className="text-slate-300">•</span>
-                          <span className="inline-flex items-center gap-1">
-                            <span aria-hidden="true">📍</span>
-                            <span>{job.location}</span>
-                          </span>
-                        </>
-                      )}
-                      {employmentTypeLabel && (
-                        <>
-                          <span className="text-slate-300">•</span>
-                          <span>{employmentTypeLabel}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Logo (only if non-confidential and logo exists) */}
-                  {client && !isConfidential && client.logoUrl && (
-                    <div className="shrink-0">
-                      <Image
-                        src={client.logoUrl}
-                        alt={client.name}
-                        width={48}
-                        height={48}
-                        className="h-10 w-10 rounded-md object-contain"
-                      />
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+  return <JobsPageClient jobs={jobs} />;
 }
