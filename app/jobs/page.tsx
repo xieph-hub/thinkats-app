@@ -1,9 +1,14 @@
 // app/jobs/page.tsx
 import Link from "next/link";
 import Image from "next/image";
+import ApplicationSuccessBanner from "@/components/jobs/ApplicationSuccessBanner";
 import { listPublicJobsForResourcin } from "@/lib/jobs";
 
 export const dynamic = "force-dynamic";
+
+type JobsPageSearchParams = {
+  [key: string]: string | string[] | undefined;
+};
 
 type PublicJob = {
   id: string;
@@ -18,10 +23,46 @@ type PublicJob = {
   } | null;
 };
 
-export default async function JobsPage() {
+function titleCaseFromEnum(value?: string | null) {
+  if (!value) return "";
+  return value
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatEmploymentType(value?: string | null) {
+  if (!value) return "";
+  const key = value.toLowerCase();
+  const map: Record<string, string> = {
+    full_time: "Full Time",
+    "full-time": "Full Time",
+    "full time": "Full Time",
+    fulltime: "Full Time",
+    part_time: "Part Time",
+    "part-time": "Part Time",
+    "part time": "Part Time",
+    internship: "Internship",
+    contract: "Contract",
+    temporary: "Temporary",
+    consulting: "Consulting / Advisory",
+  };
+  return map[key] || titleCaseFromEnum(value);
+}
+
+export default async function JobsPage({
+  searchParams,
+}: {
+  searchParams?: JobsPageSearchParams;
+}) {
+  // Check if we just came back from an application submit
+  const appliedParam = searchParams?.applied;
+  const applied =
+    (Array.isArray(appliedParam) ? appliedParam[0] : appliedParam) === "1";
+
   const rawJobs = await listPublicJobsForResourcin();
 
-  // Map Prisma rows → clean view model so TS stops complaining
+  // Map Prisma rows → clean view model
   const jobs: PublicJob[] = rawJobs.map((job: any) => ({
     id: job.id,
     title: job.title,
@@ -39,6 +80,9 @@ export default async function JobsPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
+      {/* World-class success banner after application */}
+      {applied && <ApplicationSuccessBanner />}
+
       <header className="mb-8">
         <h1 className="text-3xl font-semibold text-slate-900">
           Open roles
@@ -67,6 +111,9 @@ export default async function JobsPage() {
             })();
 
             const href = `/jobs/${job.slug || job.id}`;
+            const employmentTypeLabel = job.employmentType
+              ? formatEmploymentType(job.employmentType)
+              : "";
 
             return (
               <Link
@@ -84,13 +131,16 @@ export default async function JobsPage() {
                       {job.location && (
                         <>
                           <span className="text-slate-300">•</span>
-                          <span>{job.location}</span>
+                          <span className="inline-flex items-center gap-1">
+                            <span aria-hidden="true">📍</span>
+                            <span>{job.location}</span>
+                          </span>
                         </>
                       )}
-                      {job.employmentType && (
+                      {employmentTypeLabel && (
                         <>
                           <span className="text-slate-300">•</span>
-                          <span>{job.employmentType}</span>
+                          <span>{employmentTypeLabel}</span>
                         </>
                       )}
                     </div>
