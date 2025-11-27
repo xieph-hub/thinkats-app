@@ -45,9 +45,211 @@ function formatLevelLabel(value: string): string {
   return map[value] ?? humanizeToken(value);
 }
 
+// ---------------------------------------------------------------------------
+// Global job family mapping for department enums
+// ---------------------------------------------------------------------------
+
+const leadershipDept = new Set([
+  "executive_leadership",
+  "general_management",
+  "strategy_corporate_dev",
+  "project_program_management",
+  "operations_management",
+]);
+
+const productTechDept = new Set([
+  "product_management",
+  "product_ownership",
+  "ux_ui_design",
+  "service_design",
+  "research_insights",
+  "software_engineering",
+  "data_science_ml",
+  "data_analytics",
+  "devops_platform",
+  "cloud_infrastructure",
+  "it_support",
+  "cybersecurity",
+  "qa_testing",
+  "edtech_product_ops",
+]);
+
+const salesMktGrowthDept = new Set([
+  "sales_business_development",
+  "account_management_cs",
+  "partnerships_alliances",
+  "revenue_operations",
+  "pre_sales_solutions",
+  "growth_marketing",
+  "brand_marketing",
+  "product_marketing",
+  "content_social_media",
+  "pr_corporate_comms",
+]);
+
+const peopleTalentDept = new Set([
+  "people_hr",
+  "talent_acquisition",
+  "people_operations",
+  "learning_development",
+  "compensation_benefits",
+]);
+
+const financeRiskLegalDept = new Set([
+  "finance_accounting",
+  "financial_planning_analysis",
+  "audit_control",
+  "risk_compliance",
+  "legal_corporate_secretariat",
+  "treasury_investments",
+]);
+
+const opsSupplyChainDept = new Set([
+  "business_operations",
+  "supply_chain_procurement",
+  "logistics_fulfilment",
+  "manufacturing_production",
+  "quality_assurance_ops",
+]);
+
+const realEstateDept = new Set([
+  "real_estate_investments",
+  "real_estate_development",
+  "estate_agency_leasing",
+  "property_facilities_management",
+  "valuation_asset_management",
+]);
+
+const customerSupportDept = new Set([
+  "customer_support",
+  "contact_centre_bpo",
+  "service_delivery",
+]);
+
+const creativeMediaDept = new Set([
+  "creative_direction",
+  "graphic_motion_design",
+  "video_photo_content",
+  "copywriting_editing",
+]);
+
+const healthcareDept = new Set([
+  "clinical_medical",
+  "nursing_allied_health",
+  "public_health",
+  "pharmaceutical_biotech",
+]);
+
+const educationDept = new Set([
+  "teaching_education",
+  "corporate_training",
+  "academic_research",
+  "edtech_product_ops",
+]);
+
+const adminOfficeDept = new Set([
+  "executive_assistant",
+  "office_admin",
+  "general_support_staff",
+]);
+
+const multiOtherDept = new Set([
+  "multi_disciplinary",
+  "other_specify_in_summary",
+]);
+
+type JobFamilyKey =
+  | "leadership_strategy"
+  | "product_technology"
+  | "sales_marketing_growth"
+  | "people_talent"
+  | "finance_risk_legal"
+  | "operations_supply_chain"
+  | "real_estate_facilities"
+  | "customer_support_service"
+  | "creative_media_comms"
+  | "healthcare_life_sciences"
+  | "education_research"
+  | "admin_office_support"
+  | "other";
+
+function mapDepartmentToFamily(
+  department?: string | null
+): { key: JobFamilyKey; label: string } {
+  if (!department) {
+    return { key: "other", label: "Other / Multi-disciplinary" };
+  }
+
+  const v = department.toLowerCase().trim();
+
+  if (leadershipDept.has(v)) {
+    return { key: "leadership_strategy", label: "Leadership & Strategy" };
+  }
+  if (productTechDept.has(v)) {
+    return { key: "product_technology", label: "Product & Technology" };
+  }
+  if (salesMktGrowthDept.has(v)) {
+    return {
+      key: "sales_marketing_growth",
+      label: "Sales, Marketing & Growth",
+    };
+  }
+  if (peopleTalentDept.has(v)) {
+    return { key: "people_talent", label: "People & Talent" };
+  }
+  if (financeRiskLegalDept.has(v)) {
+    return { key: "finance_risk_legal", label: "Finance, Risk & Legal" };
+  }
+  if (opsSupplyChainDept.has(v)) {
+    return {
+      key: "operations_supply_chain",
+      label: "Operations, Supply Chain & Logistics",
+    };
+  }
+  if (realEstateDept.has(v)) {
+    return {
+      key: "real_estate_facilities",
+      label: "Real Estate & Facilities",
+    };
+  }
+  if (customerSupportDept.has(v)) {
+    return {
+      key: "customer_support_service",
+      label: "Customer Support & Service Delivery",
+    };
+  }
+  if (creativeMediaDept.has(v)) {
+    return {
+      key: "creative_media_comms",
+      label: "Creative, Media & Communications",
+    };
+  }
+  if (healthcareDept.has(v)) {
+    return {
+      key: "healthcare_life_sciences",
+      label: "Healthcare & Life Sciences",
+    };
+  }
+  if (educationDept.has(v)) {
+    return { key: "education_research", label: "Education & Research" };
+  }
+  if (adminOfficeDept.has(v)) {
+    return {
+      key: "admin_office_support",
+      label: "Admin & Office Support",
+    };
+  }
+  if (multiOtherDept.has(v)) {
+    return { key: "other", label: "Other / Multi-disciplinary" };
+  }
+
+  // Fallback for anything not yet classified
+  return { key: "other", label: "Other / Multi-disciplinary" };
+}
+
 function buildFacetOptions(
   jobs: JobCardData[],
-  key: "location" | "department" | "workMode" | "type" | "experienceLevel",
+  key: "location" | "workMode" | "type" | "experienceLevel",
   labelFormatter?: (value: string) => string
 ): FacetOption[] {
   const counts = new Map<string, number>();
@@ -72,6 +274,32 @@ function buildFacetOptions(
     });
 }
 
+// Build facets from job families instead of raw department enums
+function buildDepartmentFamilyOptions(jobs: JobCardData[]): FacetOption[] {
+  const map = new Map<JobFamilyKey, { label: string; count: number }>();
+
+  for (const job of jobs) {
+    const { key, label } = mapDepartmentToFamily(job.department);
+    const existing = map.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      map.set(key, { label, count: 1 });
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([key, value]) => ({
+      value: key,
+      label: value.label,
+      count: value.count,
+    }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.label.localeCompare(b.label);
+    });
+}
+
 function toggleFilter(current: string[], value: string): string[] {
   if (current.includes(value)) {
     return current.filter((v) => v !== value);
@@ -79,11 +307,18 @@ function toggleFilter(current: string[], value: string): string[] {
   return [...current, value];
 }
 
-// --- Quick filter helpers ---------------------------------------------------
+// ---------------------------------------------------------------------------
+// Quick filter helpers (reuse job families where possible)
+// ---------------------------------------------------------------------------
 
 function isLeadershipExecutive(job: JobCardData): boolean {
   const level = (job.experienceLevel ?? "").toLowerCase();
   const title = (job.title ?? "").toLowerCase();
+  const family = mapDepartmentToFamily(job.department).key;
+
+  if (family === "leadership_strategy") {
+    return true;
+  }
 
   if (
     level.includes("senior") ||
@@ -110,22 +345,10 @@ function isLeadershipExecutive(job: JobCardData): boolean {
 }
 
 function isProductTechnology(job: JobCardData): boolean {
-  const dept = (job.department ?? "").toLowerCase();
-  const title = (job.title ?? "").toLowerCase();
+  const family = mapDepartmentToFamily(job.department).key;
+  if (family === "product_technology") return true;
 
-  if (
-    dept.includes("software") ||
-    dept.includes("engineering") ||
-    dept.includes("product") ||
-    dept.includes("data") ||
-    dept.includes("devops") ||
-    dept.includes("cloud") ||
-    dept.includes("qa") ||
-    dept.includes("it_support") ||
-    dept.includes("cybersecurity")
-  ) {
-    return true;
-  }
+  const title = (job.title ?? "").toLowerCase();
 
   return (
     title.includes("engineer") ||
@@ -140,19 +363,10 @@ function isProductTechnology(job: JobCardData): boolean {
 }
 
 function isSalesMarketingGrowth(job: JobCardData): boolean {
-  const dept = (job.department ?? "").toLowerCase();
-  const title = (job.title ?? "").toLowerCase();
+  const family = mapDepartmentToFamily(job.department).key;
+  if (family === "sales_marketing_growth") return true;
 
-  if (
-    dept.includes("sales_business_development") ||
-    dept.includes("account_management") ||
-    dept.includes("growth_marketing") ||
-    dept.includes("brand_marketing") ||
-    dept.includes("product_marketing") ||
-    dept.includes("partnerships")
-  ) {
-    return true;
-  }
+  const title = (job.title ?? "").toLowerCase();
 
   return (
     title.includes("sales") ||
@@ -171,7 +385,7 @@ type WorkModeQuick = "onsite" | "remote" | "hybrid" | null;
 export default function JobsPageClient({ jobs }: JobsPageClientProps) {
   const [search, setSearch] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
-  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [selectedJobFamilies, setSelectedJobFamilies] = useState<string[]>([]);
   const [selectedWorkModes, setSelectedWorkModes] = useState<string[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -189,8 +403,8 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     () => buildFacetOptions(jobs, "location"),
     [jobs]
   );
-  const departmentOptions = useMemo(
-    () => buildFacetOptions(jobs, "department", humanizeToken),
+  const departmentFamilyOptions = useMemo(
+    () => buildDepartmentFamilyOptions(jobs),
     [jobs]
   );
   const workModeOptions = useMemo(
@@ -220,7 +434,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
   const hasActiveFilters =
     search.trim().length > 0 ||
     selectedLocations.length > 0 ||
-    selectedDepartments.length > 0 ||
+    selectedJobFamilies.length > 0 ||
     selectedWorkModes.length > 0 ||
     selectedLevels.length > 0 ||
     selectedTypes.length > 0 ||
@@ -240,6 +454,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
 
     let result = [...jobs];
 
+    // Free-text search
     if (term) {
       result = result.filter((job) => {
         const fields = [
@@ -256,30 +471,36 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
       });
     }
 
+    // Location facet
     if (selectedLocations.length > 0) {
       result = result.filter((job) =>
         selectedLocations.includes((job.location ?? "").trim())
       );
     }
 
-    if (selectedDepartments.length > 0) {
-      result = result.filter((job) =>
-        selectedDepartments.includes((job.department ?? "").trim())
-      );
+    // Job family facet
+    if (selectedJobFamilies.length > 0) {
+      result = result.filter((job) => {
+        const familyKey = mapDepartmentToFamily(job.department).key;
+        return selectedJobFamilies.includes(familyKey);
+      });
     }
 
+    // Work mode facet
     if (selectedWorkModes.length > 0) {
       result = result.filter((job) =>
         selectedWorkModes.includes((job.workMode ?? "").trim())
       );
     }
 
+    // Role level facet
     if (selectedLevels.length > 0) {
       result = result.filter((job) =>
         selectedLevels.includes((job.experienceLevel ?? "").trim())
       );
     }
 
+    // Employment type facet
     if (selectedTypes.length > 0) {
       result = result.filter((job) =>
         selectedTypes.includes((job.type ?? "").trim())
@@ -299,6 +520,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
       result = result.filter((job) => isSalesMarketingGrowth(job));
     }
 
+    // Quick work pattern filters
     if (workModeQuick) {
       result = result.filter((job) => {
         const mode = (job.workMode ?? "").toLowerCase();
@@ -307,6 +529,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
       });
     }
 
+    // Sort by postedAt
     result.sort((a, b) => {
       const ta = getTime(a);
       const tb = getTime(b);
@@ -318,7 +541,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     jobs,
     search,
     selectedLocations,
-    selectedDepartments,
+    selectedJobFamilies,
     selectedWorkModes,
     selectedLevels,
     selectedTypes,
@@ -332,7 +555,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
   const clearAllFilters = () => {
     setSearch("");
     setSelectedLocations([]);
-    setSelectedDepartments([]);
+    setSelectedJobFamilies([]);
     setSelectedWorkModes([]);
     setSelectedLevels([]);
     setSelectedTypes([]);
@@ -371,7 +594,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
           </div>
 
           <div className="mt-8 max-w-3xl">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg:white/90 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#172965]/5 text-xs text-[#172965]">
                 🔍
               </div>
@@ -496,13 +719,13 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                 />
               )}
 
-              {departmentOptions.length > 1 && (
+              {departmentFamilyOptions.length > 1 && (
                 <FilterGroup
-                  label="Team / Function"
-                  options={departmentOptions}
-                  selected={selectedDepartments}
+                  label="Job family"
+                  options={departmentFamilyOptions}
+                  selected={selectedJobFamilies}
                   onToggle={(value) =>
-                    setSelectedDepartments((prev) => toggleFilter(prev, value))
+                    setSelectedJobFamilies((prev) => toggleFilter(prev, value))
                   }
                 />
               )}
@@ -576,4 +799,134 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                     <option value="newest">Newest first</option>
                     <option value="oldest">Oldest first</option>
                   </select>
-                </di
+                </div>
+              </div>
+
+              {/* Job list or empty state */}
+              {filteredJobs.length === 0 ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-700">
+                  <p>No roles match these filters yet.</p>
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="mt-3 text-xs font-medium text-[#172965] hover:underline"
+                  >
+                    Reset filters and show all roles
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredJobs.map((job) => (
+                    <JobCard key={job.id} job={job} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function StatChip({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-[90px] rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-[#FFC000]/10 px-3 py-2 text-left shadow-sm">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span className="text-sm font-semibold text-[#172965]">
+          {value}
+        </span>
+        <span className="h-0.5 flex-1 rounded-full bg-[#FFC000]/70" />
+      </div>
+    </div>
+  );
+}
+
+function QuickFilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-full border px-3 py-1.5 text-[11px] font-medium transition",
+        active
+          ? "border-[#306B34] bg-[#64C247]/15 text-[#306B34]"
+          : "border-slate-300 bg-slate-50 text-slate-700 hover:border-slate-400",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+
+function FilterGroup({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: FacetOption[];
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const maxVisible = 6;
+
+  if (options.length === 0) return null;
+
+  const visibleOptions = expanded ? options : options.slice(0, maxVisible);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+          {label}
+        </div>
+        {options.length > maxVisible && (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="text-[10px] font-medium text-slate-500 hover:text-slate-800"
+          >
+            {expanded ? "Show less" : "Show all"}
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {visibleOptions.map((opt) => {
+          const isActive = selected.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onToggle(opt.value)}
+              className={[
+                "rounded-full border px-3 py-1 text-[11px] transition",
+                isActive
+                  ? "border-[#172965] bg-[#172965]/6 text-[#172965]"
+                  : "border-slate-300 bg-slate-50 text-slate-700 hover:border-slate-400",
+              ].join(" ")}
+            >
+              <span>{opt.label}</span>
+              <span className="ml-1.5 text-[10px] text-slate-500">
+                · {opt.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
