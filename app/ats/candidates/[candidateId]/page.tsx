@@ -81,7 +81,8 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
 
   if (looksLikeUuid(rawKey)) {
     mode = "id";
-    // Try candidate by UUID
+
+    // Try candidate by UUID scoped to tenant
     candidate = await prisma.candidate.findFirst({
       where: {
         id: rawKey,
@@ -97,7 +98,9 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
     // Applications for this candidateId OR (if known) their email
     applications = await prisma.jobApplication.findMany({
       where: {
-        tenantId,
+        job: {
+          tenantId,
+        },
         OR: [
           { candidateId: rawKey },
           ...(emailKey ? [{ email: emailKey }] : []),
@@ -124,7 +127,9 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
 
     applications = await prisma.jobApplication.findMany({
       where: {
-        tenantId,
+        job: {
+          tenantId,
+        },
         email: emailKey,
       },
       include: {
@@ -253,7 +258,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Email
           </p>
-          <p className="mt-2 text-sm font-medium text-slate-900 break-all">
+          <p className="mt-2 break-all text-sm font-medium text-slate-900">
             {primaryEmail || "—"}
           </p>
         </div>
@@ -334,7 +339,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                   className="flex flex-col gap-2 py-3 text-xs text-slate-700 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium text-slate-900">
