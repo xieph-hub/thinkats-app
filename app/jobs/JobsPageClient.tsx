@@ -14,9 +14,41 @@ type FacetOption = {
   count: number;
 };
 
+function humanizeToken(value: string): string {
+  if (!value) return "";
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    )
+    .join(" ");
+}
+
+function formatLevelLabel(value: string): string {
+  const map: Record<string, string> = {
+    entry: "Entry level / Graduate",
+    junior: "Junior (1–3 years)",
+    mid: "Mid-level (3–7 years)",
+    senior: "Senior (7–12 years)",
+    lead_principal: "Lead / Principal",
+    "lead-principal": "Lead / Principal",
+    manager_head: "Manager / Head of",
+    "manager-head": "Manager / Head of",
+    director_vp: "Director / VP",
+    "director-vp": "Director / VP",
+    c_level_partner: "C-level / Partner",
+    "c-level-partner": "C-level / Partner",
+  };
+
+  return map[value] ?? humanizeToken(value);
+}
+
 function buildFacetOptions(
   jobs: JobCardData[],
-  key: "location" | "department" | "workMode" | "type" | "experienceLevel"
+  key: "location" | "department" | "workMode" | "type" | "experienceLevel",
+  labelFormatter?: (value: string) => string
 ): FacetOption[] {
   const counts = new Map<string, number>();
 
@@ -29,7 +61,11 @@ function buildFacetOptions(
   }
 
   return Array.from(counts.entries())
-    .map(([value, count]) => ({ value, label: value, count }))
+    .map(([value, count]) => ({
+      value,
+      label: labelFormatter ? labelFormatter(value) : value,
+      count,
+    }))
     .sort((a, b) => {
       if (b.count !== a.count) return b.count - a.count;
       return a.label.localeCompare(b.label);
@@ -43,23 +79,22 @@ function toggleFilter(current: string[], value: string): string[] {
   return [...current, value];
 }
 
-function isRemoteOrHybrid(job: JobCardData): boolean {
-  const mode = (job.workMode ?? "").toLowerCase();
-  return mode.includes("remote") || mode.includes("hybrid");
-}
+// --- Quick filter helpers ---------------------------------------------------
 
-function isLeadershipRole(job: JobCardData): boolean {
+function isLeadershipExecutive(job: JobCardData): boolean {
   const level = (job.experienceLevel ?? "").toLowerCase();
   const title = (job.title ?? "").toLowerCase();
 
   if (
+    level.includes("senior") ||
+    level.includes("lead") ||
+    level.includes("principal") ||
+    level.includes("manager_head") ||
+    level.includes("manager-head") ||
     level.includes("director") ||
     level.includes("vp") ||
     level.includes("c_level") ||
-    level.includes("c-level") ||
-    level.includes("lead") ||
-    level.includes("manager_head") ||
-    level.includes("manager-head")
+    level.includes("c-level")
   ) {
     return true;
   }
@@ -74,6 +109,65 @@ function isLeadershipRole(job: JobCardData): boolean {
   );
 }
 
+function isProductTechnology(job: JobCardData): boolean {
+  const dept = (job.department ?? "").toLowerCase();
+  const title = (job.title ?? "").toLowerCase();
+
+  if (
+    dept.includes("software") ||
+    dept.includes("engineering") ||
+    dept.includes("product") ||
+    dept.includes("data") ||
+    dept.includes("devops") ||
+    dept.includes("cloud") ||
+    dept.includes("qa") ||
+    dept.includes("it_support") ||
+    dept.includes("cybersecurity")
+  ) {
+    return true;
+  }
+
+  return (
+    title.includes("engineer") ||
+    title.includes("developer") ||
+    title.includes("product manager") ||
+    title.includes("data scientist") ||
+    title.includes("data analyst") ||
+    title.includes("devops") ||
+    title.includes("site reliability") ||
+    title.includes("sre")
+  );
+}
+
+function isSalesMarketingGrowth(job: JobCardData): boolean {
+  const dept = (job.department ?? "").toLowerCase();
+  const title = (job.title ?? "").toLowerCase();
+
+  if (
+    dept.includes("sales_business_development") ||
+    dept.includes("account_management") ||
+    dept.includes("growth_marketing") ||
+    dept.includes("brand_marketing") ||
+    dept.includes("product_marketing") ||
+    dept.includes("partnerships")
+  ) {
+    return true;
+  }
+
+  return (
+    title.includes("sales") ||
+    title.includes("business development") ||
+    title.includes("bd manager") ||
+    title.includes("growth") ||
+    title.includes("marketing") ||
+    title.includes("partnerships") ||
+    title.includes("account manager") ||
+    title.includes("relationship manager")
+  );
+}
+
+type WorkModeQuick = "onsite" | "remote" | "hybrid" | null;
+
 export default function JobsPageClient({ jobs }: JobsPageClientProps) {
   const [search, setSearch] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
@@ -83,31 +177,32 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
 
-  // Quick filter toggles
-  const [onlyRemoteHybrid, setOnlyRemoteHybrid] = useState(false);
-  const [onlyLeadership, setOnlyLeadership] = useState(false);
-  const [onlyConfidential, setOnlyConfidential] = useState(false);
-  const [onlyWithSalary, setOnlyWithSalary] = useState(false);
+  // Quick filters
+  const [onlyLeadershipExecutive, setOnlyLeadershipExecutive] = useState(false);
+  const [onlyProductTechnology, setOnlyProductTechnology] = useState(false);
+  const [onlySalesMarketingGrowth, setOnlySalesMarketingGrowth] =
+    useState(false);
+  const [workModeQuick, setWorkModeQuick] = useState<WorkModeQuick>(null);
 
-  // Facets (with counts), sorted by usage
+  // Facets with humanised labels
   const locationOptions = useMemo(
     () => buildFacetOptions(jobs, "location"),
     [jobs]
   );
   const departmentOptions = useMemo(
-    () => buildFacetOptions(jobs, "department"),
+    () => buildFacetOptions(jobs, "department", humanizeToken),
     [jobs]
   );
   const workModeOptions = useMemo(
-    () => buildFacetOptions(jobs, "workMode"),
+    () => buildFacetOptions(jobs, "workMode", humanizeToken),
     [jobs]
   );
   const levelOptions = useMemo(
-    () => buildFacetOptions(jobs, "experienceLevel"),
+    () => buildFacetOptions(jobs, "experienceLevel", formatLevelLabel),
     [jobs]
   );
   const typeOptions = useMemo(
-    () => buildFacetOptions(jobs, "type"),
+    () => buildFacetOptions(jobs, "type", humanizeToken),
     [jobs]
   );
 
@@ -129,10 +224,10 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     selectedWorkModes.length > 0 ||
     selectedLevels.length > 0 ||
     selectedTypes.length > 0 ||
-    onlyRemoteHybrid ||
-    onlyLeadership ||
-    onlyConfidential ||
-    onlyWithSalary;
+    onlyLeadershipExecutive ||
+    onlyProductTechnology ||
+    onlySalesMarketingGrowth ||
+    workModeQuick !== null;
 
   const filteredJobs = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -191,23 +286,25 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
       );
     }
 
-    // Quick filters
-    if (onlyRemoteHybrid) {
-      result = result.filter((job) => isRemoteOrHybrid(job));
+    // Quick filters – broad global families
+    if (onlyLeadershipExecutive) {
+      result = result.filter((job) => isLeadershipExecutive(job));
     }
 
-    if (onlyLeadership) {
-      result = result.filter((job) => isLeadershipRole(job));
+    if (onlyProductTechnology) {
+      result = result.filter((job) => isProductTechnology(job));
     }
 
-    if (onlyConfidential) {
-      result = result.filter((job) => job.isConfidential === true);
+    if (onlySalesMarketingGrowth) {
+      result = result.filter((job) => isSalesMarketingGrowth(job));
     }
 
-    if (onlyWithSalary) {
-      result = result.filter(
-        (job) => (job.salary ?? "").toString().trim().length > 0
-      );
+    if (workModeQuick) {
+      result = result.filter((job) => {
+        const mode = (job.workMode ?? "").toLowerCase();
+        if (!mode) return false;
+        return mode.includes(workModeQuick);
+      });
     }
 
     result.sort((a, b) => {
@@ -226,10 +323,10 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     selectedLevels,
     selectedTypes,
     sortOrder,
-    onlyRemoteHybrid,
-    onlyLeadership,
-    onlyConfidential,
-    onlyWithSalary,
+    onlyLeadershipExecutive,
+    onlyProductTechnology,
+    onlySalesMarketingGrowth,
+    workModeQuick,
   ]);
 
   const clearAllFilters = () => {
@@ -239,30 +336,31 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     setSelectedWorkModes([]);
     setSelectedLevels([]);
     setSelectedTypes([]);
-    setOnlyRemoteHybrid(false);
-    setOnlyLeadership(false);
-    setOnlyConfidential(false);
-    setOnlyWithSalary(false);
+    setOnlyLeadershipExecutive(false);
+    setOnlyProductTechnology(false);
+    setOnlySalesMarketingGrowth(false);
+    setWorkModeQuick(null);
     setSortOrder("newest");
   };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       {/* Hero + search */}
-      <section className="border-b border-slate-200 bg-white">
+      <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/3">
         <div className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
           <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#64C247]/10 px-3 py-1 text-[11px] font-medium text-[#306B34]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#64C247]" />
                 Roles managed by Resourcin
-              </p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              </span>
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#172965] sm:text-4xl">
                 Open roles
               </h1>
               <p className="mt-3 max-w-xl text-sm text-slate-600">
-                A curated pipeline of leadership, specialist and critical roles.
-                Apply directly, or share with someone who should be in the
-                conversation.
+                A global mix of leadership, specialist and critical roles across
+                sectors. Apply directly, or share with someone who should be in
+                the conversation.
               </p>
             </div>
             <div className="flex gap-4 text-xs text-slate-600">
@@ -273,8 +371,8 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
           </div>
 
           <div className="mt-8 max-w-3xl">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white px-3 py-2.5 shadow-sm">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs text-slate-500">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#172965]/5 text-xs text-[#172965]">
                 🔍
               </div>
               <input
@@ -287,15 +385,15 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="text-xs text-slate-500 hover:text-slate-800"
+                  className="text-[11px] font-medium text-slate-500 hover:text-slate-800"
                 >
                   Clear
                 </button>
               )}
             </div>
             <p className="mt-2 text-[11px] text-slate-500">
-              Tip: try &quot;Product Manager&quot;, &quot;Kenya&quot; or a
-              company name.
+              Try &quot;Country Manager&quot;, &quot;Nairobi&quot; or
+              &quot;Finance&quot;.
             </p>
           </div>
         </div>
@@ -311,7 +409,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
         ) : (
           <div className="grid gap-8 lg:grid-cols-[260px,1fr]">
             {/* Filter sidebar */}
-            <aside className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4">
+            <aside className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Filters
@@ -334,28 +432,54 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <QuickFilterChip
-                    label="Remote / hybrid only"
-                    active={onlyRemoteHybrid}
+                    label="Leadership & Executive"
+                    active={onlyLeadershipExecutive}
                     onClick={() =>
-                      setOnlyRemoteHybrid((prev) => !prev)
+                      setOnlyLeadershipExecutive((prev) => !prev)
                     }
                   />
                   <QuickFilterChip
-                    label="Leadership roles"
-                    active={onlyLeadership}
-                    onClick={() => setOnlyLeadership((prev) => !prev)}
-                  />
-                  <QuickFilterChip
-                    label="Confidential searches"
-                    active={onlyConfidential}
+                    label="Product & Technology"
+                    active={onlyProductTechnology}
                     onClick={() =>
-                      setOnlyConfidential((prev) => !prev)
+                      setOnlyProductTechnology((prev) => !prev)
                     }
                   />
                   <QuickFilterChip
-                    label="With salary range"
-                    active={onlyWithSalary}
-                    onClick={() => setOnlyWithSalary((prev) => !prev)}
+                    label="Sales, Marketing & Growth"
+                    active={onlySalesMarketingGrowth}
+                    onClick={() =>
+                      setOnlySalesMarketingGrowth((prev) => !prev)
+                    }
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <QuickFilterChip
+                    label="Onsite"
+                    active={workModeQuick === "onsite"}
+                    onClick={() =>
+                      setWorkModeQuick((prev) =>
+                        prev === "onsite" ? null : "onsite"
+                      )
+                    }
+                  />
+                  <QuickFilterChip
+                    label="Remote"
+                    active={workModeQuick === "remote"}
+                    onClick={() =>
+                      setWorkModeQuick((prev) =>
+                        prev === "remote" ? null : "remote"
+                      )
+                    }
+                  />
+                  <QuickFilterChip
+                    label="Hybrid"
+                    active={workModeQuick === "hybrid"}
+                    onClick={() =>
+                      setWorkModeQuick((prev) =>
+                        prev === "hybrid" ? null : "hybrid"
+                      )
+                    }
                   />
                 </div>
               </div>
@@ -385,7 +509,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
 
               {workModeOptions.length > 1 && (
                 <FilterGroup
-                  label="Work mode"
+                  label="Work pattern"
                   options={workModeOptions}
                   selected={selectedWorkModes}
                   onToggle={(value) =>
@@ -427,7 +551,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   ) : (
                     <>
                       Showing{" "}
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-semibold text-[#172965]">
                         {filteredJobs.length}
                       </span>{" "}
                       role{filteredJobs.length === 1 ? "" : "s"}
@@ -452,131 +576,4 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                     <option value="newest">Newest first</option>
                     <option value="oldest">Oldest first</option>
                   </select>
-                </div>
-              </div>
-
-              {/* Job list or empty state */}
-              {filteredJobs.length === 0 ? (
-                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-700">
-                  <p>No roles match these filters yet.</p>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="mt-3 text-xs font-medium text-[#172965] hover:underline"
-                  >
-                    Reset filters and show all roles
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredJobs.map((job) => (
-                    <JobCard key={job.id} job={job} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-    </main>
-  );
-}
-
-function StatChip({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-[90px] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm">
-      <div className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function QuickFilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "rounded-full border px-3 py-1.5 text-[11px] font-medium transition",
-        active
-          ? "border-[#172965] bg-[#172965]/5 text-[#172965]"
-          : "border-slate-300 bg-slate-50 text-slate-700 hover:border-slate-400",
-      ].join(" ")}
-    >
-      {label}
-    </button>
-  );
-}
-
-function FilterGroup({
-  label,
-  options,
-  selected,
-  onToggle,
-}: {
-  label: string;
-  options: FacetOption[];
-  selected: string[];
-  onToggle: (value: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const maxVisible = 6;
-
-  if (options.length === 0) return null;
-
-  const visibleOptions = expanded
-    ? options
-    : options.slice(0, maxVisible);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
-          {label}
-        </div>
-        {options.length > maxVisible && (
-          <button
-            type="button"
-            onClick={() => setExpanded((prev) => !prev)}
-            className="text-[10px] font-medium text-slate-500 hover:text-slate-800"
-          >
-            {expanded ? "Show less" : "Show all"}
-          </button>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {visibleOptions.map((opt) => {
-          const isActive = selected.includes(opt.value);
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onToggle(opt.value)}
-              className={[
-                "rounded-full border px-3 py-1 text-[11px] transition",
-                isActive
-                  ? "border-[#172965] bg-[#172965]/5 text-[#172965]"
-                  : "border-slate-300 bg-slate-50 text-slate-700 hover:border-slate-400",
-              ].join(" ")}
-            >
-              <span>{opt.label}</span>
-              <span className="ml-1.5 text-[10px] text-slate-500">
-                · {opt.count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+                </di
