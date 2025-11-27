@@ -25,12 +25,9 @@ type JobRow = {
   location: string | null;
   location_type: string | null;
   employment_type: string | null;
-  seniority: string | null;
-  salary_range: string | null;
   tags: string[] | null;
   created_at: string | null;
-  is_confidential: boolean | null;
-  // NOTE: Supabase returns an array for the relationship, even with the alias
+  // relationship comes back as an array
   client_company: ClientCompanyRow[] | null;
 };
 
@@ -50,11 +47,8 @@ export default async function JobsPage() {
       location,
       location_type,
       employment_type,
-      seniority,
-      salary_range,
       tags,
       created_at,
-      is_confidential,
       client_company:client_companies(
         name
       )
@@ -84,8 +78,9 @@ export default async function JobsPage() {
   const rows = (data ?? []) as JobRow[];
 
   const jobs: JobCardData[] = rows.map((job) => {
-    // Supabase returns an array of related client_companies;
-    // for your use case we just take the first one if present.
+    const anyJob = job as any;
+
+    // Supabase returns an array of related client_companies; take first if present
     const firstCompany =
       job.client_company && job.client_company.length > 0
         ? job.client_company[0]
@@ -99,14 +94,15 @@ export default async function JobsPage() {
       company: firstCompany?.name ?? undefined,
       department: job.department ?? undefined,
       type: job.employment_type ?? undefined,
-      experienceLevel: job.seniority ?? undefined,
+      // these are optional – only populated if such columns exist in your table
+      experienceLevel: anyJob.seniority ?? undefined,
       workMode: job.location_type ?? undefined,
-      salary: job.salary_range ?? undefined,
+      salary: anyJob.salary_range ?? anyJob.salary ?? undefined,
       shortDescription: job.short_description ?? undefined,
       tags: job.tags ?? [],
       postedAt: job.created_at ?? undefined,
       shareUrl: `/jobs/${encodeURIComponent(job.slug ?? job.id)}`,
-      isConfidential: job.is_confidential ?? undefined,
+      isConfidential: anyJob.is_confidential ?? undefined,
       // applicants left undefined for now
     };
   });
