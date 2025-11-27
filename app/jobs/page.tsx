@@ -1,6 +1,7 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getTenantId } from "@/lib/getTenantId";
 import JobsPageClient from "./JobsPageClient";
 import type { JobCardData } from "@/components/jobs/JobCard";
 
@@ -26,8 +27,29 @@ type JobRow = {
 };
 
 export default async function JobsPage() {
-  const tenantId =
-    process.env.NEXT_PUBLIC_DEFAULT_TENANT_ID ?? "tenant_resourcin_1";
+  let tenantId: string;
+
+  try {
+    // ✅ This gives us the real UUID that matches jobs.tenant_id
+    tenantId = await getTenantId();
+  } catch (e) {
+    console.error("Tenant resolution error:", e);
+    return (
+      <main className="min-h-screen bg-slate-50 text-slate-900">
+        <div className="mx-auto max-w-4xl px-4 py-20">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            We couldn&apos;t load roles right now
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Tenant configuration is incomplete. Please check{" "}
+            <code>RESOURCIN_TENANT_SLUG</code> (and optionally{" "}
+            <code>RESOURCIN_TENANT_ID</code>) in your environment and ensure
+            there is a matching record in your tenants table.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const { data, error } = await supabaseAdmin
     .from("jobs")
@@ -45,7 +67,7 @@ export default async function JobsPage() {
       created_at
     `
     )
-    .eq("tenant_id", tenantId)
+    .eq("tenant_id", tenantId) // ✅ proper UUID, no 22P02 error
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -57,8 +79,8 @@ export default async function JobsPage() {
             We couldn&apos;t load roles right now
           </h1>
           <p className="mt-3 text-sm text-slate-600">
-            Please refresh the page in a moment. If this persists, let us know
-            and we&apos;ll take a look.
+            Please refresh the page in a moment. If this persists, we&apos;ll
+            need to inspect the Supabase logs.
           </p>
         </div>
       </main>
@@ -72,7 +94,6 @@ export default async function JobsPage() {
     id: job.slug ?? job.id,
     title: job.title,
     location: job.location ?? "",
-    // optional fields your JobCard knows how to handle
     department: job.department ?? undefined,
     type: job.employment_type ?? undefined,
     workMode: job.location_type ?? undefined,
