@@ -20,13 +20,23 @@ function toStringOrNull(value: FormDataEntryValue | null): string | null {
   return s.length ? s : null;
 }
 
-function parseNumberValue(value: FormDataEntryValue | null): number | null {
+function parseNumberValue(
+  value: FormDataEntryValue | null,
+): number | null {
   if (!value) return null;
   const s = value.toString().replace(/,/g, "").trim();
   if (!s) return null;
   const n = Number(s);
   if (Number.isNaN(n)) return null;
   return n;
+}
+
+function parseStringList(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export async function POST(req: NextRequest) {
@@ -42,9 +52,10 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
 
-    // Title
+    // ----- Required: title -----
     const titleRaw = formData.get("title");
-    const title = typeof titleRaw === "string" ? titleRaw.trim() : "";
+    const title =
+      typeof titleRaw === "string" ? titleRaw.trim() : "";
 
     if (!title) {
       return NextResponse.json(
@@ -53,27 +64,77 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // IDs / associations
-    const clientCompanyId = toStringOrNull(formData.get("clientCompanyId"));
-    const hiringManagerId = toStringOrNull(formData.get("hiringManagerId"));
+    // ----- Core relations / ownership -----
+    const clientCompanyId = toStringOrNull(
+      formData.get("clientCompanyId"),
+    );
 
-    // Meta
+    const hiringManagerId = toStringOrNull(
+      formData.get("hiringManagerId"),
+    );
+
+    // ----- Basic classification -----
     const location = toStringOrNull(formData.get("location"));
-    const locationType = toStringOrNull(formData.get("locationType"));
-    const employmentType = toStringOrNull(formData.get("employmentType"));
-    const experienceLevel = toStringOrNull(formData.get("experienceLevel"));
 
-    // Narrative
-    const shortDescription = toStringOrNull(formData.get("shortDescription"));
+    // We label this as “Work mode” in the UI
+    const workMode = toStringOrNull(formData.get("workMode"));
+
+    const employmentType = toStringOrNull(
+      formData.get("employmentType"),
+    );
+
+    const experienceLevel = toStringOrNull(
+      formData.get("experienceLevel"),
+    );
+
+    const yearsExperienceMin = parseNumberValue(
+      formData.get("yearsExperienceMin"),
+    );
+    const yearsExperienceMax = parseNumberValue(
+      formData.get("yearsExperienceMax"),
+    );
+
+    // Function / discipline mapped to Job.department
+    const department = toStringOrNull(formData.get("department"));
+
+    // ----- Narrative fields -----
+    const shortDescription = toStringOrNull(
+      formData.get("shortDescription"),
+    );
     const overview = toStringOrNull(formData.get("overview"));
-    const aboutClient = toStringOrNull(formData.get("aboutClient"));
-    const responsibilities = toStringOrNull(formData.get("responsibilities"));
-    const requirements = toStringOrNull(formData.get("requirements"));
+    const aboutClient = toStringOrNull(
+      formData.get("aboutClient"),
+    );
+    const responsibilities = toStringOrNull(
+      formData.get("responsibilities"),
+    );
+    const requirements = toStringOrNull(
+      formData.get("requirements"),
+    );
     const benefits = toStringOrNull(formData.get("benefits"));
 
-    // Status / visibility
+    // ----- Education -----
+    const educationRequired = toStringOrNull(
+      formData.get("educationRequired"),
+    );
+    const educationField = toStringOrNull(
+      formData.get("educationField"),
+    );
+
+    // ----- Tags & skills (String[]) -----
+    const tagsRaw = toStringOrNull(formData.get("tags"));
+    const requiredSkillsRaw = toStringOrNull(
+      formData.get("requiredSkills"),
+    );
+
+    const tags = parseStringList(tagsRaw);
+    const requiredSkills = parseStringList(requiredSkillsRaw);
+
+    // ----- Status / visibility -----
     const statusRaw = toStringOrNull(formData.get("status"));
-    const visibilityRaw = toStringOrNull(formData.get("visibility"));
+    const visibilityRaw = toStringOrNull(
+      formData.get("visibility"),
+    );
 
     const status =
       statusRaw && ["draft", "open", "closed"].includes(statusRaw)
@@ -81,22 +142,27 @@ export async function POST(req: NextRequest) {
         : "draft";
 
     const visibility =
-      visibilityRaw && ["public", "internal"].includes(visibilityRaw)
+      visibilityRaw &&
+      ["public", "internal"].includes(visibilityRaw)
         ? visibilityRaw
         : "public";
 
-    const internalOnly = formData.get("internalOnly") === "on";
-    const confidential = formData.get("confidential") === "on";
-    const salaryVisible = formData.get("salaryVisible") === "on";
+    const internalOnly =
+      formData.get("internalOnly") === "on" ? true : false;
+    const confidential =
+      formData.get("confidential") === "on" ? true : false;
+    const salaryVisible =
+      formData.get("salaryVisible") === "on" ? true : false;
 
-    // Compensation
+    // ----- Compensation -----
     const salaryMin = parseNumberValue(formData.get("salaryMin"));
     const salaryMax = parseNumberValue(formData.get("salaryMax"));
     const salaryCurrency =
       toStringOrNull(formData.get("salaryCurrency")) ?? "NGN";
 
-    // Slug generation (per tenant)
-    const slugSource = toStringOrNull(formData.get("slug")) ?? title;
+    // ----- Slug generation (per tenant) -----
+    const slugSource =
+      toStringOrNull(formData.get("slug")) ?? title;
     const baseSlug = slugify(slugSource);
     let slug: string | null = baseSlug || null;
 
@@ -114,39 +180,63 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ----- Create job -----
     const job = await prisma.job.create({
       data: {
         tenantId: tenant.id,
         clientCompanyId,
         title,
         slug,
+
+        // Classification
+        department,
         location,
-        locationType,
+        workMode,
+        // Keep locationType in sync for now (backwards-compat chips, etc.)
+        locationType: workMode ?? null,
         employmentType,
         experienceLevel,
+        yearsExperienceMin: yearsExperienceMin ?? null,
+        yearsExperienceMax: yearsExperienceMax ?? null,
+
+        // Narrative
         shortDescription,
         overview,
         aboutClient,
         responsibilities,
         requirements,
         benefits,
+
+        // Education
+        educationRequired,
+        educationField,
+
+        // Arrays
+        tags,
+        requiredSkills,
+
+        // Status & flags
         status,
         visibility,
         internalOnly,
+        confidential,
+
+        // Compensation
         salaryMin,
         salaryMax,
         salaryCurrency,
         salaryVisible,
-        confidential,
+
+        // Owner / recruiter
         hiringManagerId,
-        // NOTE: the "function" select on the form is currently NOT persisted
-        // because the Job model in Prisma does not yet have a `function` field.
-        // We can add this later via a schema migration if you want it stored.
       },
     });
 
     // Redirect to the ATS job pipeline view for this role
-    const redirectUrl = new URL(`/ats/jobs/${job.id}`, req.url).toString();
+    const redirectUrl = new URL(
+      `/ats/jobs/${job.id}`,
+      req.url,
+    ).toString();
 
     return NextResponse.redirect(redirectUrl, {
       status: 303,
