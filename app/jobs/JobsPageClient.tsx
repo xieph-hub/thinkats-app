@@ -2,10 +2,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import JobCard, { JobCardData } from "@/components/jobs/JobCard";
 
 type JobsPageClientProps = {
   jobs: JobCardData[];
+  initialPage?: number;
 };
 
 type FacetOption = {
@@ -382,7 +384,18 @@ function isSalesMarketingGrowth(job: JobCardData): boolean {
 
 type WorkModeQuick = "onsite" | "remote" | "hybrid" | null;
 
-export default function JobsPageClient({ jobs }: JobsPageClientProps) {
+export default function JobsPageClient({
+  jobs,
+  initialPage = 1,
+}: JobsPageClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const safeInitialPage =
+    Number.isNaN(initialPage) || initialPage < 1 ? 1 : initialPage;
+  const [page, setPage] = useState<number>(safeInitialPage);
+
   const [search, setSearch] = useState("");
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [selectedJobFamilies, setSelectedJobFamilies] = useState<string[]>([]);
@@ -552,6 +565,50 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     workModeQuick,
   ]);
 
+  // -------------------------------------------------------------------------
+  // Pagination logic (client-side, with ?page= in the URL)
+  // -------------------------------------------------------------------------
+
+  const PAGE_SIZE = 15;
+  const totalFiltered = filteredJobs.length;
+  const totalPages =
+    totalFiltered === 0 ? 1 : Math.ceil(totalFiltered / PAGE_SIZE);
+  const currentPage = Math.min(page, totalPages);
+
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const pageJobs = filteredJobs.slice(startIndex, endIndex);
+
+  const startNumber = totalFiltered === 0 ? 0 : startIndex + 1;
+  const endNumber = Math.min(endIndex, totalFiltered);
+
+  function updatePageInUrl(newPage: number) {
+    if (!searchParams) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (newPage <= 1) {
+      params.delete("page");
+    } else {
+      params.set("page", String(newPage));
+    }
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  function handlePageChange(newPage: number) {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    setPage(newPage);
+    updatePageInUrl(newPage);
+
+    if (typeof window !== "undefined") {
+      const el = document.getElementById("job-results");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  }
+
   const clearAllFilters = () => {
     setSearch("");
     setSelectedLocations([]);
@@ -564,6 +621,8 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
     setOnlySalesMarketingGrowth(false);
     setWorkModeQuick(null);
     setSortOrder("newest");
+    setPage(1);
+    updatePageInUrl(1);
   };
 
   return (
@@ -594,20 +653,28 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
           </div>
 
           <div className="mt-8 max-w-3xl">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg:white/90 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white/90 px-3 py-2.5 shadow-sm backdrop-blur">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#172965]/5 text-xs text-[#172965]">
                 🔍
               </div>
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                  updatePageInUrl(1);
+                }}
                 placeholder="Search by title, company, location or keyword…"
                 className="flex-1 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
               />
               {search.trim().length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSearch("")}
+                  onClick={() => {
+                    setSearch("");
+                    setPage(1);
+                    updatePageInUrl(1);
+                  }}
                   className="text-[11px] font-medium text-slate-500 hover:text-slate-800"
                 >
                   Clear
@@ -657,52 +724,64 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   <QuickFilterChip
                     label="Leadership & Executive"
                     active={onlyLeadershipExecutive}
-                    onClick={() =>
-                      setOnlyLeadershipExecutive((prev) => !prev)
-                    }
+                    onClick={() => {
+                      setOnlyLeadershipExecutive((prev) => !prev);
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                   />
                   <QuickFilterChip
                     label="Product & Technology"
                     active={onlyProductTechnology}
-                    onClick={() =>
-                      setOnlyProductTechnology((prev) => !prev)
-                    }
+                    onClick={() => {
+                      setOnlyProductTechnology((prev) => !prev);
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                   />
                   <QuickFilterChip
                     label="Sales, Marketing & Growth"
                     active={onlySalesMarketingGrowth}
-                    onClick={() =>
-                      setOnlySalesMarketingGrowth((prev) => !prev)
-                    }
+                    onClick={() => {
+                      setOnlySalesMarketingGrowth((prev) => !prev);
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                   />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <QuickFilterChip
                     label="Onsite"
                     active={workModeQuick === "onsite"}
-                    onClick={() =>
+                    onClick={() => {
                       setWorkModeQuick((prev) =>
                         prev === "onsite" ? null : "onsite"
-                      )
-                    }
+                      );
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                   />
                   <QuickFilterChip
                     label="Remote"
                     active={workModeQuick === "remote"}
-                    onClick={() =>
+                    onClick={() => {
                       setWorkModeQuick((prev) =>
                         prev === "remote" ? null : "remote"
-                      )
-                    }
+                      );
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                   />
                   <QuickFilterChip
                     label="Hybrid"
                     active={workModeQuick === "hybrid"}
-                    onClick={() =>
+                    onClick={() => {
                       setWorkModeQuick((prev) =>
                         prev === "hybrid" ? null : "hybrid"
-                      )
-                    }
+                      );
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                   />
                 </div>
               </div>
@@ -713,9 +792,11 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   label="Location"
                   options={locationOptions}
                   selected={selectedLocations}
-                  onToggle={(value) =>
-                    setSelectedLocations((prev) => toggleFilter(prev, value))
-                  }
+                  onToggle={(value) => {
+                    setSelectedLocations((prev) => toggleFilter(prev, value));
+                    setPage(1);
+                    updatePageInUrl(1);
+                  }}
                 />
               )}
 
@@ -724,9 +805,11 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   label="Job family"
                   options={departmentFamilyOptions}
                   selected={selectedJobFamilies}
-                  onToggle={(value) =>
-                    setSelectedJobFamilies((prev) => toggleFilter(prev, value))
-                  }
+                  onToggle={(value) => {
+                    setSelectedJobFamilies((prev) => toggleFilter(prev, value));
+                    setPage(1);
+                    updatePageInUrl(1);
+                  }}
                 />
               )}
 
@@ -735,9 +818,11 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   label="Work pattern"
                   options={workModeOptions}
                   selected={selectedWorkModes}
-                  onToggle={(value) =>
-                    setSelectedWorkModes((prev) => toggleFilter(prev, value))
-                  }
+                  onToggle={(value) => {
+                    setSelectedWorkModes((prev) => toggleFilter(prev, value));
+                    setPage(1);
+                    updatePageInUrl(1);
+                  }}
                 />
               )}
 
@@ -746,9 +831,11 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   label="Role level"
                   options={levelOptions}
                   selected={selectedLevels}
-                  onToggle={(value) =>
-                    setSelectedLevels((prev) => toggleFilter(prev, value))
-                  }
+                  onToggle={(value) => {
+                    setSelectedLevels((prev) => toggleFilter(prev, value));
+                    setPage(1);
+                    updatePageInUrl(1);
+                  }}
                 />
               )}
 
@@ -757,9 +844,11 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   label="Employment type"
                   options={typeOptions}
                   selected={selectedTypes}
-                  onToggle={(value) =>
-                    setSelectedTypes((prev) => toggleFilter(prev, value))
-                  }
+                  onToggle={(value) => {
+                    setSelectedTypes((prev) => toggleFilter(prev, value));
+                    setPage(1);
+                    updatePageInUrl(1);
+                  }}
                 />
               )}
             </aside>
@@ -769,15 +858,19 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
               {/* Summary + sort + active filter hint */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-slate-600">
-                  {filteredJobs.length === 0 ? (
+                  {totalFiltered === 0 ? (
                     <>No roles match the current filters.</>
                   ) : (
                     <>
                       Showing{" "}
                       <span className="font-semibold text-[#172965]">
-                        {filteredJobs.length}
+                        {startNumber}–{endNumber}
                       </span>{" "}
-                      role{filteredJobs.length === 1 ? "" : "s"}
+                      of{" "}
+                      <span className="font-semibold text-[#172965]">
+                        {totalFiltered}
+                      </span>{" "}
+                      role{totalFiltered === 1 ? "" : "s"}
                       {hasActiveFilters && (
                         <span className="text-slate-500">
                           {" "}
@@ -791,9 +884,11 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   <span>Sort by</span>
                   <select
                     value={sortOrder}
-                    onChange={(e) =>
-                      setSortOrder(e.target.value as "newest" | "oldest")
-                    }
+                    onChange={(e) => {
+                      setSortOrder(e.target.value as "newest" | "oldest");
+                      setPage(1);
+                      updatePageInUrl(1);
+                    }}
                     className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#172965]"
                   >
                     <option value="newest">Newest first</option>
@@ -803,7 +898,7 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
               </div>
 
               {/* Job list or empty state */}
-              {filteredJobs.length === 0 ? (
+              {totalFiltered === 0 ? (
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-700">
                   <p>No roles match these filters yet.</p>
                   <button
@@ -815,11 +910,18 @@ export default function JobsPageClient({ jobs }: JobsPageClientProps) {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {filteredJobs.map((job) => (
-                    <JobCard key={job.id} job={job} />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-3" id="job-results">
+                    {pageJobs.map((job) => (
+                      <JobCard key={job.id} job={job} />
+                    ))}
+                  </div>
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -926,6 +1028,63 @@ function FilterGroup({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const canPrev = currentPage > 1;
+  const canNext = currentPage < totalPages;
+
+  const baseBtn =
+    "inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-medium transition";
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 text-xs text-slate-600">
+      <div>
+        Page{" "}
+        <span className="font-semibold text-[#172965]">{currentPage}</span>{" "}
+        of{" "}
+        <span className="font-semibold text-[#172965]">
+          {totalPages}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={!canPrev}
+          className={
+            canPrev
+              ? `${baseBtn} border-slate-300 bg-white text-slate-700 hover:border-[#172965] hover:text-[#172965]`
+              : `${baseBtn} cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400`
+          }
+        >
+          ← Previous
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={!canNext}
+          className={
+            canNext
+              ? `${baseBtn} border-[#172965] bg-[#172965]/90 text-white hover:bg-[#172965]`
+              : `${baseBtn} cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400`
+          }
+        >
+          Next →
+        </button>
       </div>
     </div>
   );
