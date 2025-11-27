@@ -46,10 +46,10 @@ export default async function NewJobPage() {
       orderBy: { name: "asc" },
     }),
     prisma.user.findMany({
-      orderBy: { name: "asc" },
+      // Your User model doesn't have `name`, so we sort by email
+      orderBy: { email: "asc" },
       select: {
         id: true,
-        name: true,
         email: true,
       },
     }),
@@ -138,16 +138,11 @@ export default async function NewJobPage() {
             >
               <option value="">Unassigned</option>
               {users.map((user) => {
-                const primary =
-                  user.name || user.email || `User ${user.id}`;
-                const secondary =
-                  user.email && user.email !== primary
-                    ? ` (${user.email})`
-                    : "";
+                const label =
+                  user.email || `User ${user.id}`;
                 return (
                   <option key={user.id} value={user.id}>
-                    {primary}
-                    {secondary}
+                    {label}
                   </option>
                 );
               })}
