@@ -2,27 +2,27 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Props = {
   jobId: string;
 };
 
 export default function JobApplyForm({ jobId }: Props) {
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrorMessage(null);
-    setSuccessMessage(null);
     setIsSubmitting(true);
 
     try {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
-      // pass jobId to API
+      // Ensure jobId is sent to the API
       formData.append("jobId", jobId);
 
       const res = await fetch("/api/jobs/apply", {
@@ -34,7 +34,7 @@ export default function JobApplyForm({ jobId }: Props) {
       try {
         data = await res.json();
       } catch {
-        // ignore JSON parse errors, we'll fall back to generic error
+        // If response isn't JSON, ignore – we'll fall back to generic error handling
       }
 
       if (!res.ok || data?.success === false) {
@@ -45,8 +45,15 @@ export default function JobApplyForm({ jobId }: Props) {
         return;
       }
 
-      setSuccessMessage("Thank you. Your application has been received.");
+      // Optional: clear the form before redirect
       form.reset();
+
+      // ✅ Navigate to jobs page with applied flag
+      // Your /jobs/page.tsx is already wired to:
+      //  - detect ?applied=1
+      //  - show the world-class success banner
+      //  - scroll to top
+      router.push("/jobs?applied=1");
     } catch (err) {
       console.error("JobApplyForm submit error", err);
       setErrorMessage(
@@ -160,7 +167,7 @@ export default function JobApplyForm({ jobId }: Props) {
             id="githubUrl"
             name="githubUrl"
             type="url"
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="https://github.com/... or portfolio link"
           />
         </div>
@@ -179,7 +186,7 @@ export default function JobApplyForm({ jobId }: Props) {
             id="currentGrossAnnual"
             name="currentGrossAnnual"
             type="text"
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="e.g. NGN 18,000,000"
           />
         </div>
@@ -195,7 +202,7 @@ export default function JobApplyForm({ jobId }: Props) {
             id="grossAnnualExpectation"
             name="grossAnnualExpectation"
             type="text"
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="e.g. NGN 22,000,000"
           />
         </div>
@@ -211,7 +218,7 @@ export default function JobApplyForm({ jobId }: Props) {
             id="noticePeriod"
             name="noticePeriod"
             type="text"
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="e.g. 4 weeks"
           />
         </div>
@@ -230,7 +237,7 @@ export default function JobApplyForm({ jobId }: Props) {
             id="howHeard"
             name="howHeard"
             type="text"
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="Resourcin site, LinkedIn, referral, etc."
           />
         </div>
@@ -246,13 +253,13 @@ export default function JobApplyForm({ jobId }: Props) {
             id="source"
             name="source"
             type="text"
-            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
             placeholder="(Your tracking, optional)"
           />
         </div>
       </div>
 
-      {/* CV upload (frontend only for now, API can later store it) */}
+      {/* CV upload */}
       <div className="space-y-1.5">
         <label
           htmlFor="cv"
@@ -285,7 +292,7 @@ export default function JobApplyForm({ jobId }: Props) {
           id="coverLetter"
           name="coverLetter"
           rows={4}
-          className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs leading-relaxed text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+          className="block w-full rounded-md border border-slate-300 bg:white px-3 py-2 text-xs leading-relaxed text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
           placeholder="A short context on why you might be a strong fit..."
         />
       </div>
@@ -295,12 +302,6 @@ export default function JobApplyForm({ jobId }: Props) {
         {errorMessage && (
           <div className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">
             {errorMessage}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="rounded-md bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
-            {successMessage}
           </div>
         )}
 
