@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
   const tenantIdFromForm = formData.get("tenantId")?.toString() || "";
   const q = formData.get("q")?.toString() || "";
   const status = formData.get("status")?.toString() || "";
+  const clientId = formData.get("clientId")?.toString() || "";
+  const visibility = formData.get("visibility")?.toString() || "";
 
   const singleActionRaw = formData.get("singleAction")?.toString() || "";
   const bulkActionRaw = formData.get("bulkAction")?.toString() || "";
@@ -25,18 +27,16 @@ export async function POST(req: NextRequest) {
   if (!tenantId) {
     const defaultTenant = await getResourcinTenant();
     if (!defaultTenant) {
-      // No tenant – just bounce back
-      return redirectBack(req, tenantIdFromForm, q, status);
+      return redirectBack(req, tenantIdFromForm, q, status, clientId, visibility);
     }
     tenantId = defaultTenant.id;
   } else {
-    // Make sure tenant exists
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true },
     });
     if (!tenant) {
-      return redirectBack(req, tenantIdFromForm, q, status);
+      return redirectBack(req, tenantIdFromForm, q, status, clientId, visibility);
     }
   }
 
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return redirectBack(req, tenantId, q, status);
+  return redirectBack(req, tenantId, q, status, clientId, visibility);
 }
 
 function redirectBack(
@@ -66,6 +66,8 @@ function redirectBack(
   tenantId: string | undefined,
   q: string,
   status: string,
+  clientId: string,
+  visibility: string,
 ) {
   const url = new URL(req.url);
   const search = new URLSearchParams();
@@ -73,6 +75,8 @@ function redirectBack(
   if (tenantId) search.set("tenantId", tenantId);
   if (q) search.set("q", q);
   if (status && status !== "all") search.set("status", status);
+  if (clientId && clientId !== "all") search.set("clientId", clientId);
+  if (visibility && visibility !== "all") search.set("visibility", visibility);
 
   const redirectPath =
     "/ats/jobs" + (search.toString() ? `?${search.toString()}` : "");
@@ -97,7 +101,6 @@ async function applyJobAction(args: {
       data: {
         status: "open",
         visibility: "public",
-        // If you keep a boolean flag:
         // isPublished: true,
       },
     });
@@ -126,8 +129,7 @@ async function applyJobAction(args: {
   }
 
   if (action === "delete") {
-    // If you have FK constraints that are not CASCADE,
-    // you may need to delete child records here first (e.g. job applications).
+    // If FK constraints are not CASCADE, delete children (applications, notes, etc.) first.
     await prisma.job.deleteMany({
       where: whereScoped,
     });
@@ -143,18 +145,17 @@ async function applyJobAction(args: {
       await prisma.job.create({
         data: {
           tenantId,
-          clientCompanyId: job.clientCompanyId,
+          clientCompanyId: (job as any).clientCompanyId,
           title: `${job.title} (copy)`,
-          slug: null, // let your slug logic recreate this when publishing
+          slug: null,
           location: job.location,
-          // If you have these fields in your schema, copy them:
-          // @ts-expect-error – ignore if you don't use workMode/locationType
+          // @ts-expect-error – adjust if needed
           locationType: (job as any).locationType ?? null,
           employmentType: job.employmentType,
           experienceLevel: job.experienceLevel,
           department: job.department,
-          // Narrative + comp fields (only if present in schema)
-          // @ts-expect-error – ignore if field not in your Prisma model
+          // Narrative + comp fields – adjust/remove if schema differs
+          // @ts-expect-error
           shortDescription: (job as any).shortDescription ?? null,
           // @ts-expect-error
           overview: (job as any).overview ?? null,
@@ -166,6 +167,7 @@ async function applyJobAction(args: {
           requirements: (job as any).requirements ?? null,
           // @ts-expect-error
           benefits: (job as any).benefits ?? null,
+          // @ts-expect-error
           salaryCurrency: (job as any).salaryCurrency ?? null,
           // @ts-expect-error
           salaryMin: (job as any).salaryMin ?? null,
@@ -175,9 +177,8 @@ async function applyJobAction(args: {
           salaryVisible: (job as any).salaryVisible ?? false,
           status: "draft",
           visibility: "internal",
-          internalOnly: job.internalOnly,
-          confidential: job.confidential,
-          // If you have isPublished flag:
+          internalOnly: (job as any).internalOnly,
+          confidential: (job as any).confidential,
           // isPublished: false,
         },
       });
