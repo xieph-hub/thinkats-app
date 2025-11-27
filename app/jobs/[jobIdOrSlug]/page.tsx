@@ -111,6 +111,50 @@ function formatSalary(
   return null;
 }
 
+/**
+ * Lightweight rich-text renderer:
+ * - Splits on newlines
+ * - If lines look like bullets ( - / * / • / 1. ), render as a list
+ * - Otherwise renders clean paragraphs
+ */
+function RichTextBlock({ value }: { value?: string | null }) {
+  if (!value || !value.trim()) return null;
+
+  const text = value.replace(/\r\n/g, "\n");
+  const rawLines = text.split("\n").map((line) => line.trim());
+  const lines = rawLines.filter((l) => l.length > 0);
+
+  if (lines.length === 0) return null;
+
+  const bulletPattern = /^([-*•]|\d+\.)\s*/;
+  const hasBullets = lines.some((line) => bulletPattern.test(line));
+
+  if (hasBullets) {
+    const items = lines
+      .map((line) => line.replace(bulletPattern, "").trim())
+      .filter(Boolean);
+
+    return (
+      <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+        {items.map((item, idx) => (
+          <li key={idx}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  // Fallback: normal paragraphs
+  return (
+    <div className="space-y-2">
+      {lines.map((line, idx) => (
+        <p key={idx} className="text-sm text-slate-700">
+          {line}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export default async function JobDetailPage({
   params,
 }: {
@@ -142,6 +186,11 @@ export default async function JobDetailPage({
       : null;
 
   const shareUrl = `${BASE_URL}/jobs/${job.slug ?? job.id}`;
+
+  const tags =
+    Array.isArray((job as any).tags) && (job as any).tags.length > 0
+      ? ((job as any).tags as string[])
+      : [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-10 px-4 py-8 sm:px-6 lg:px-0">
@@ -195,6 +244,20 @@ export default async function JobDetailPage({
               </span>
             )}
           </div>
+
+          {/* Tags / skills chips */}
+          {tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-0.5 text-[11px] font-medium text-[#172965]"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col items-end gap-2 text-right">
@@ -234,9 +297,7 @@ export default async function JobDetailPage({
               <h2 className="text-sm font-semibold text-slate-900">
                 Role overview
               </h2>
-              <p className="whitespace-pre-line text-sm text-slate-700">
-                {job.overview}
-              </p>
+              <RichTextBlock value={job.overview as any} />
             </section>
           )}
 
@@ -245,9 +306,7 @@ export default async function JobDetailPage({
               <h2 className="text-sm font-semibold text-slate-900">
                 About the client
               </h2>
-              <p className="whitespace-pre-line text-sm text-slate-700">
-                {job.aboutClient}
-              </p>
+              <RichTextBlock value={job.aboutClient as any} />
             </section>
           )}
 
@@ -256,11 +315,7 @@ export default async function JobDetailPage({
               <h2 className="text-sm font-semibold text-slate-900">
                 Responsibilities
               </h2>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
-                  {job.responsibilities}
-                </pre>
-              </div>
+              <RichTextBlock value={job.responsibilities as any} />
             </section>
           )}
 
@@ -269,11 +324,7 @@ export default async function JobDetailPage({
               <h2 className="text-sm font-semibold text-slate-900">
                 Requirements
               </h2>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
-                  {job.requirements}
-                </pre>
-              </div>
+              <RichTextBlock value={job.requirements as any} />
             </section>
           )}
 
@@ -282,11 +333,7 @@ export default async function JobDetailPage({
               <h2 className="text-sm font-semibold text-slate-900">
                 Benefits
               </h2>
-              <div className="prose prose-sm max-w-none text-slate-700">
-                <pre className="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs text-slate-800">
-                  {job.benefits}
-                </pre>
-              </div>
+              <RichTextBlock value={job.benefits as any} />
             </section>
           )}
         </div>
@@ -300,16 +347,17 @@ export default async function JobDetailPage({
             Apply for this role
           </h2>
           <p className="text-xs text-slate-600">
-            Share your details and CV. If you’re a good match, the Resourcin
-            team will be in touch to walk you through next steps.
+            Share your details and CV. If you’re a good match, the
+            Resourcin team will be in touch to walk you through next
+            steps.
           </p>
 
           <JobApplyForm jobId={job.id} />
 
           <p className="mt-2 text-[11px] text-slate-500">
-            By submitting an application, you agree that Resourcin may contact
-            you about this and similar roles. You can ask to be removed from our
-            talent network at any time.
+            By submitting an application, you agree that Resourcin may
+            contact you about this and similar roles. You can ask to be
+            removed from our talent network at any time.
           </p>
         </aside>
       </div>
