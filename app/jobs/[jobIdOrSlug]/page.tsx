@@ -1,8 +1,8 @@
 // app/jobs/[jobIdOrSlug]/page.tsx
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import JobApplyForm from "./JobApplyForm";
 
 export const dynamic = "force-dynamic";
@@ -13,354 +13,619 @@ export const metadata: Metadata = {
     "Detailed view of an open mandate managed by Resourcin and its clients.",
 };
 
+type PageProps = {
+  params: { jobIdOrSlug: string };
+};
+
+type JobRow = {
+  id: string;
+  slug: string | null;
+  title: string;
+  department: string | null;
+  location: string | null;
+  location_type: string | null;
+  employment_type: string | null;
+  experience_level: string | null;
+  work_mode: string | null;
+  created_at: string;
+  overview: string | null;
+  about_client: string | null;
+  responsibilities: string | null;
+  requirements: string | null;
+  benefits: string | null;
+  short_description: string | null;
+  tags: string[] | null;
+  confidential: boolean | null;
+};
+
 const BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
 
-const DEFAULT_TENANT_SLUG =
-  process.env.RESOURCIN_TENANT_SLUG || "resourcin";
+// ---------------------------------------------------------------------------
+// Formatting helpers (aligned with /jobs + JobCard)
+// ---------------------------------------------------------------------------
 
-async function getDefaultTenant() {
-  if (process.env.RESOURCIN_TENANT_ID) {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: process.env.RESOURCIN_TENANT_ID },
-    });
-    return tenant;
-  }
-
-  return prisma.tenant.findFirst({
-    where: { slug: DEFAULT_TENANT_SLUG },
-  });
+function humanizeToken(value?: string | null): string {
+  if (!value) return "";
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    )
+    .join(" ");
 }
 
-// ✅ Only treat the param as an ID if it actually looks like a UUID
-function looksLikeUuid(value: string) {
-  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-    value,
-  );
+const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  full_time: "Full Time",
+  "full-time": "Full Time",
+  part_time: "Part Time",
+  "part-time": "Part Time",
+  contract: "Contract",
+  temporary: "Temporary",
+  internship: "Internship",
+  consulting: "Consulting / Advisory",
+  consultant: "Consulting / Advisory",
+};
+
+const EXPERIENCE_LEVEL_LABELS: Record<string, string> = {
+  entry: "Entry level / Graduate",
+  junior: "Junior (1–3 years)",
+  mid: "Mid-level (3–7 years)",
+  senior: "Senior (7–12 years)",
+  lead_principal: "Lead / Principal",
+  "lead-principal": "Lead / Principal",
+  manager_head: "Manager / Head of",
+  "manager-head": "Manager / Head of",
+  director_vp: "Director / VP",
+  "director-vp": "Director / VP",
+  c_level_partner: "C-level / Partner",
+  "c-level-partner": "C-level / Partner",
+};
+
+const WORK_MODE_LABELS: Record<string, string> = {
+  onsite: "Onsite",
+  "on-site": "Onsite",
+  hybrid: "Hybrid",
+  remote: "Remote",
+  "remote-first": "Remote-first",
+  field_based: "Field-based",
+  "field-based": "Field-based",
+};
+
+const LOCATION_TYPE_LABELS: Record<string, string> = {
+  single_country: "Single-country role",
+  multi_country: "Multi-country / Regional",
+  global: "Global remit",
+};
+
+const DEPARTMENT_LABELS: Record<string, string> = {
+  executive_leadership: "Executive Leadership (CEO, MD, Country Manager)",
+  general_management: "General Management / Business Unit Head",
+  strategy_corporate_dev: "Strategy & Corporate Development",
+  project_program_management: "Project / Program Management",
+  operations_management: "Operations Management",
+  sales_business_development: "Sales & Business Development",
+  account_management_cs: "Account Management & Customer Success",
+  partnerships_alliances: "Partnerships & Alliances",
+  revenue_operations: "Revenue Operations (RevOps)",
+  pre_sales_solutions: "Pre-sales & Solutions Consulting",
+  growth_marketing: "Growth / Performance Marketing",
+  brand_marketing: "Brand Marketing & Communications",
+  product_marketing: "Product Marketing",
+  content_social_media: "Content & Social Media",
+  pr_corporate_comms: "PR & Corporate Communications",
+  product_management: "Product Management",
+  product_ownership: "Product Owner / Business Analyst",
+  ux_ui_design: "UX / UI Design",
+  service_design: "Service Design",
+  research_insights: "User Research & Insights",
+  software_engineering: "Software Engineering / Development",
+  data_science_ml: "Data Science & Machine Learning",
+  data_analytics: "Data Analytics / BI",
+  devops_platform: "DevOps / SRE / Platform Engineering",
+  cloud_infrastructure: "Cloud & Infrastructure Engineering",
+  it_support: "IT Support & Helpdesk",
+  cybersecurity: "Cybersecurity",
+  qa_testing: "QA & Test Engineering",
+  people_hr: "People / HR Generalist",
+  talent_acquisition: "Talent Acquisition / Recruitment",
+  people_operations: "People Operations",
+  learning_development: "Learning & Development / Talent Management",
+  compensation_benefits: "Compensation & Benefits",
+  finance_accounting: "Finance & Accounting",
+  financial_planning_analysis: "Financial Planning & Analysis (FP&A)",
+  audit_control: "Audit, Controls & Reporting",
+  risk_compliance: "Risk & Compliance",
+  legal_corporate_secretariat: "Legal & Corporate Secretariat",
+  treasury_investments: "Treasury & Investments",
+  business_operations: "Business / Process Operations",
+  supply_chain_procurement: "Supply Chain & Procurement",
+  logistics_fulfilment: "Logistics, Fulfilment & Fleet",
+  manufacturing_production: "Manufacturing & Production",
+  quality_assurance_ops: "Quality Assurance & Control (Operations)",
+  real_estate_investments: "Real Estate Investments & Advisory",
+  real_estate_development: "Real Estate Development / Projects",
+  estate_agency_leasing: "Estate Agency, Sales & Leasing",
+  property_facilities_management: "Property & Facilities Management",
+  valuation_asset_management: "Valuation & Asset Management",
+  customer_support: "Customer Support / Service",
+  contact_centre_bpo: "Contact Centre / BPO Operations",
+  service_delivery: "Service Delivery & Implementation",
+  creative_direction: "Creative Direction & Brand Studio",
+  graphic_motion_design: "Graphic & Motion Design",
+  video_photo_content: "Video, Photography & Multimedia",
+  copywriting_editing: "Copywriting & Editorial",
+  clinical_medical: "Clinical & Medical Practice",
+  nursing_allied_health: "Nursing & Allied Health",
+  public_health: "Public Health & Health Programs",
+  pharmaceutical_biotech: "Pharmaceutical & Biotech",
+  social_impact_nonprofit: "Social Impact & Non-profit Programs",
+  teaching_education: "Teaching & Education",
+  corporate_training: "Corporate Training & Facilitation",
+  academic_research: "Academic & Applied Research",
+  edtech_product_ops: "EdTech Product & Operations",
+  executive_assistant: "Executive Assistant & EA Support",
+  office_admin: "Office Administration & Front Desk",
+  general_support_staff: "General Support Staff",
+  multi_disciplinary: "Multi-disciplinary / Hybrid Role",
+  other_specify_in_summary: "Other – described in role summary",
+};
+
+function formatEmploymentType(value?: string | null) {
+  if (!value) return "";
+  return EMPLOYMENT_TYPE_LABELS[value] ?? humanizeToken(value);
 }
 
-async function getPublicJob(jobIdOrSlug: string) {
-  const tenant = await getDefaultTenant();
-  if (!tenant) return null;
-
-  const where: any = {
-    tenantId: tenant.id,
-    status: "open",
-    visibility: "public",
-    internalOnly: false,
-  };
-
-  if (looksLikeUuid(jobIdOrSlug)) {
-    // If it looks like a UUID, allow match by id OR slug
-    where.OR = [{ id: jobIdOrSlug }, { slug: jobIdOrSlug }];
-  } else {
-    // If it's clearly a slug, don't even touch the UUID column
-    where.slug = jobIdOrSlug;
-  }
-
-  const job = await prisma.job.findFirst({
-    where,
-    include: {
-      clientCompany: true,
-    },
-  });
-
-  if (!job) return null;
-
-  return { tenant, job };
+function formatExperienceLevel(value?: string | null) {
+  if (!value) return "";
+  return EXPERIENCE_LEVEL_LABELS[value] ?? humanizeToken(value);
 }
 
-function formatDate(date: Date | null | undefined) {
-  if (!date) return "";
-  return date.toLocaleDateString("en-GB", {
+function formatWorkMode(value?: string | null) {
+  if (!value) return "";
+  return WORK_MODE_LABELS[value] ?? humanizeToken(value);
+}
+
+function formatLocationType(value?: string | null) {
+  if (!value) return "";
+  return LOCATION_TYPE_LABELS[value] ?? humanizeToken(value);
+}
+
+function formatDepartment(value?: string | null) {
+  if (!value) return "";
+  return DEPARTMENT_LABELS[value] ?? humanizeToken(value);
+}
+
+function formatPostedAt(iso?: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
-    day: "numeric",
+    day: "2-digit",
   });
 }
 
-function formatSalary(
-  min: any,
-  max: any,
-  currency?: string | null,
-): string | null {
-  if (!min && !max) return null;
+// ---------------------------------------------------------------------------
 
-  const cur = currency || "NGN";
-
-  const asNumber = (v: any) =>
-    typeof v === "number" ? v : v ? Number(v) : NaN;
-
-  const minNum = asNumber(min);
-  const maxNum = asNumber(max);
-
-  const fmt = new Intl.NumberFormat("en-NG", {
-    maximumFractionDigits: 0,
-  });
-
-  if (!isNaN(minNum) && !isNaN(maxNum)) {
-    return `${cur} ${fmt.format(minNum)} – ${fmt.format(maxNum)}`;
-  }
-  if (!isNaN(minNum)) {
-    return `${cur} ${fmt.format(minNum)}+`;
-  }
-  if (!isNaN(maxNum)) {
-    return `Up to ${cur} ${fmt.format(maxNum)}`;
-  }
-
-  return null;
-}
-
-/**
- * Lightweight rich-text renderer:
- * - Splits on newlines
- * - If lines look like bullets ( - / * / • / 1. ), render as a list
- * - Otherwise renders clean paragraphs
- */
-function RichTextBlock({ value }: { value?: string | null }) {
-  if (!value || !value.trim()) return null;
-
-  const text = value.replace(/\r\n/g, "\n");
-  const rawLines = text.split("\n").map((line) => line.trim());
-  const lines = rawLines.filter((l) => l.length > 0);
-
-  if (lines.length === 0) return null;
-
-  const bulletPattern = /^([-*•]|\d+\.)\s*/;
-  const hasBullets = lines.some((line) => bulletPattern.test(line));
-
-  if (hasBullets) {
-    const items = lines
-      .map((line) => line.replace(bulletPattern, "").trim())
-      .filter(Boolean);
-
-    return (
-      <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
-        {items.map((item, idx) => (
-          <li key={idx}>{item}</li>
-        ))}
-      </ul>
-    );
-  }
-
-  // Fallback: normal paragraphs
-  return (
-    <div className="space-y-2">
-      {lines.map((line, idx) => (
-        <p key={idx} className="text-sm text-slate-700">
-          {line}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-export default async function JobDetailPage({
-  params,
-}: {
-  params: { jobIdOrSlug: string };
-}) {
+export default async function JobDetailPage({ params }: PageProps) {
   const { jobIdOrSlug } = params;
 
-  const data = await getPublicJob(jobIdOrSlug);
+  const { data, error } = await supabaseAdmin
+    .from("jobs")
+    .select(
+      `
+      id,
+      slug,
+      title,
+      department,
+      location,
+      location_type,
+      employment_type,
+      experience_level,
+      work_mode,
+      created_at,
+      overview,
+      about_client,
+      responsibilities,
+      requirements,
+      benefits,
+      short_description,
+      tags,
+      confidential
+    `
+    )
+    .eq("visibility", "public")
+    .eq("status", "open")
+    .or(`slug.eq.${jobIdOrSlug},id.eq.${jobIdOrSlug}`)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error loading job detail:", error);
+  }
 
   if (!data) {
     notFound();
   }
 
-  const { job } = data;
+  const job = data as JobRow;
 
-  const isConfidential = !!job.confidential;
-  const client = job.clientCompany;
+  const postedLabel = formatPostedAt(job.created_at);
+  const displayEmploymentType = formatEmploymentType(job.employment_type);
+  const displayExperienceLevel = formatExperienceLevel(job.experience_level);
+  const displayWorkMode = formatWorkMode(job.work_mode);
+  const displayLocationType = formatLocationType(job.location_type);
+  const displayDepartment = formatDepartment(job.department);
 
-  const clientLabel = (() => {
-    if (!client) return "Resourcin client";
-    if (isConfidential) return "Confidential client";
-    return client.name;
-  })();
+  const canonicalPath = job.slug
+    ? `/jobs/${encodeURIComponent(job.slug)}`
+    : `/jobs/${encodeURIComponent(job.id)}`;
+  const jobUrl = `${BASE_URL}${canonicalPath}`;
 
-  const postedDate = formatDate(job.createdAt);
-  const salaryLabel =
-    job.salaryVisible === true
-      ? formatSalary(job.salaryMin, job.salaryMax, job.salaryCurrency)
-      : null;
+  const shareText = encodeURIComponent(
+    `${job.title}${job.location ? ` – ${job.location}` : ""} (via Resourcin)`
+  );
+  const encodedUrl = encodeURIComponent(jobUrl);
+  const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+  const xUrl = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodedUrl}`;
+  const whatsappUrl = `https://api.whatsapp.com/send?text=${shareText}%20${encodedUrl}`;
 
-  const shareUrl = `${BASE_URL}/jobs/${job.slug ?? job.id}`;
-
-  const tags =
-    Array.isArray((job as any).tags) && (job as any).tags.length > 0
-      ? ((job as any).tags as string[])
-      : [];
+  const tags = job.tags ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10 px-4 py-8 sm:px-6 lg:px-0">
-      {/* Back link + meta */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link
-            href="/jobs"
-            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
-          >
-            <span className="mr-1.5">←</span>
-            Back to all jobs
-          </Link>
-
-          <h1 className="mt-3 text-2xl font-semibold text-slate-900 sm:text-3xl">
-            {job.title}
-          </h1>
-
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-              {clientLabel}
-            </span>
-
-            {job.location && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                {job.location}
-              </span>
-            )}
-
-            {job.locationType && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                {job.locationType}
-              </span>
-            )}
-
-            {job.employmentType && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                {job.employmentType}
-              </span>
-            )}
-
-            {job.experienceLevel && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 capitalize">
-                {job.experienceLevel}
-              </span>
-            )}
-
-            {postedDate && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-                Posted {postedDate}
-              </span>
-            )}
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Top breadcrumb + title */}
+      <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/4">
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
+          <div className="mb-4 flex items-center gap-2 text-xs text-slate-500">
+            <Link
+              href="/jobs"
+              className="inline-flex items-center gap-1 hover:text-[#172965]"
+            >
+              ← All roles
+            </Link>
+            <span className="h-0.5 w-0.5 rounded-full bg-slate-300" />
+            <span>Resourcin</span>
           </div>
 
-          {/* Tags / skills chips */}
-          {tags.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-0.5 text-[11px] font-medium text-[#172965]"
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#172965] sm:text-3xl">
+                {job.title}
+              </h1>
+              <p className="mt-2 text-sm font-medium text-slate-700">
+                {job.confidential
+                  ? "Confidential search · via Resourcin"
+                  : "Resourcin · Executive search & recruitment"}
+              </p>
+
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                {job.location && (
+                  <MetaPill icon="📍" label={job.location} tone="primary" />
+                )}
+                {displayWorkMode && (
+                  <MetaPill icon="🌐" label={displayWorkMode} />
+                )}
+                {displayEmploymentType && (
+                  <MetaPill icon="💼" label={displayEmploymentType} />
+                )}
+                {displayExperienceLevel && (
+                  <MetaPill icon="🎯" label={displayExperienceLevel} />
+                )}
+                {postedLabel && (
+                  <MetaPill icon="🕒" label={`Posted ${postedLabel}`} />
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <a
+                href="#apply"
+                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
+              >
+                Apply for this role
+              </a>
+              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm">
+                <span className="hidden sm:inline">Share</span>
+                <a
+                  href={linkedInUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-slate-100"
+                  aria-label="Share on LinkedIn"
                 >
-                  {tag}
-                </span>
-              ))}
+                  <span aria-hidden="true">in</span>
+                </a>
+                <a
+                  href={xUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-slate-100"
+                  aria-label="Share on X"
+                >
+                  <span aria-hidden="true">𝕏</span>
+                </a>
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-slate-100"
+                  aria-label="Share on WhatsApp"
+                >
+                  <span aria-hidden="true">WA</span>
+                </a>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="flex flex-col items-end gap-2 text-right">
-          {salaryLabel && (
-            <div className="rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800">
-              {salaryLabel}
-            </div>
-          )}
-          <Link
-            href="#apply"
-            className="mt-1 inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#111827]"
-          >
-            Apply for this role
-          </Link>
-          <a
-            href={shareUrl}
-            className="text-[11px] text-slate-500 hover:text-slate-700"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Copy/share link
-          </a>
-        </div>
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-        {/* Left: job narrative */}
-        <div className="space-y-6">
-          {job.shortDescription && (
-            <p className="text-sm text-slate-700">
-              {job.shortDescription}
+          {job.short_description && (
+            <p className="mt-4 max-w-3xl text-sm text-slate-700">
+              {job.short_description}
             </p>
           )}
 
-          {job.overview && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Role overview
-              </h2>
-              <RichTextBlock value={job.overview as any} />
-            </section>
-          )}
-
-          {job.aboutClient && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                About the client
-              </h2>
-              <RichTextBlock value={job.aboutClient as any} />
-            </section>
-          )}
-
-          {job.responsibilities && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Responsibilities
-              </h2>
-              <RichTextBlock value={job.responsibilities as any} />
-            </section>
-          )}
-
-          {job.requirements && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Requirements
-              </h2>
-              <RichTextBlock value={job.requirements as any} />
-            </section>
-          )}
-
-          {job.benefits && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Benefits
-              </h2>
-              <RichTextBlock value={job.benefits as any} />
-            </section>
+          {tags.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {tags.slice(0, 6).map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center rounded-full bg-[#64C247]/10 px-2.5 py-0.5 text-[10px] font-medium text-[#306B34]"
+                >
+                  #{tag}
+                </span>
+              ))}
+              {tags.length > 6 && (
+                <span className="text-[10px] text-slate-500">
+                  +{tags.length - 6} more
+                </span>
+              )}
+            </div>
           )}
         </div>
+      </section>
 
-        {/* Right: application box */}
-        <aside
-          id="apply"
-          className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-        >
-          <h2 className="text-sm font-semibold text-slate-900">
-            Apply for this role
-          </h2>
-          <p className="text-xs text-slate-600">
-            Share your details and CV. If you’re a good match, the
-            Resourcin team will be in touch to walk you through next
-            steps.
-          </p>
+      {/* Main content */}
+      <section className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr),minmax(260px,1fr)]">
+          {/* Left: description */}
+          <div className="space-y-8">
+            {/* Overview / role summary */}
+            {job.overview && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  Role overview
+                </h2>
+                <div className="prose prose-sm mt-3 max-w-none text-slate-700 prose-p:mb-2 prose-p:mt-0">
+                  {job.overview.split("\n").map((para, idx) => (
+                    <p key={idx}>{para}</p>
+                  ))}
+                </div>
+              </article>
+            )}
 
-          <JobApplyForm jobId={job.id} />
+            {/* About the client */}
+            {job.about_client && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  About the organisation
+                </h2>
+                <div className="prose prose-sm mt-3 max-w-none text-slate-700 prose-p:mb-2 prose-p:mt-0">
+                  {job.about_client.split("\n").map((para, idx) => (
+                    <p key={idx}>{para}</p>
+                  ))}
+                </div>
+              </article>
+            )}
 
-          <p className="mt-2 text-[11px] text-slate-500">
-            By submitting an application, you agree that Resourcin may
-            contact you about this and similar roles. You can ask to be
-            removed from our talent network at any time.
-          </p>
-        </aside>
-      </div>
+            {/* Responsibilities */}
+            {job.responsibilities && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  Key responsibilities
+                </h2>
+                <RichListBlock text={job.responsibilities} />
+              </article>
+            )}
+
+            {/* Requirements */}
+            {job.requirements && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  Experience & requirements
+                </h2>
+                <RichListBlock text={job.requirements} />
+              </article>
+            )}
+
+            {/* Benefits */}
+            {job.benefits && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  Compensation & benefits
+                </h2>
+                <RichListBlock text={job.benefits} />
+              </article>
+            )}
+
+            {/* Application section */}
+            <article
+              id="apply"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-[#172965]">
+                    Apply for this role
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Share a recent CV and a few details. We&apos;ll review and
+                    come back to you.
+                  </p>
+                </div>
+                <div className="hidden text-[11px] text-slate-500 sm:block">
+                  Powered by{" "}
+                  <span className="font-semibold text-[#172965]">
+                    ThinkATS
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <JobApplyForm jobId={job.id} />
+              </div>
+            </article>
+          </div>
+
+          {/* Right: key facts / sticky card */}
+          <aside className="space-y-4">
+            <div className="sticky top-20 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Role snapshot
+                </h2>
+                <dl className="mt-3 space-y-2 text-xs text-slate-700">
+                  {job.location && (
+                    <Row label="Location" value={job.location} />
+                  )}
+                  {displayWorkMode && (
+                    <Row label="Work pattern" value={displayWorkMode} />
+                  )}
+                  {displayLocationType && (
+                    <Row label="Remit" value={displayLocationType} />
+                  )}
+                  {displayEmploymentType && (
+                    <Row label="Employment type" value={displayEmploymentType} />
+                  )}
+                  {displayExperienceLevel && (
+                    <Row label="Role level" value={displayExperienceLevel} />
+                  )}
+                  {displayDepartment && (
+                    <Row label="Job family" value={displayDepartment} />
+                  )}
+                  {postedLabel && (
+                    <Row label="Posted" value={postedLabel} />
+                  )}
+                </dl>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      const el = document.getElementById("apply");
+                      if (el) {
+                        el.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }
+                    }
+                  }}
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0f1c48]"
+                >
+                  Apply now
+                </button>
+                <p className="mt-2 text-[10px] text-slate-500">
+                  We review each application carefully. If your profile is a
+                  close match, we&apos;ll be in touch to discuss next steps.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-[#64C247]/40 bg-[#64C247]/5 p-4 text-[11px] text-slate-700">
+                <div className="text-[11px] font-semibold text-[#306B34]">
+                  Referrals welcome
+                </div>
+                <p className="mt-1">
+                  Know someone who might be a fit? Share this role with them or
+                  send an introduction when you apply.
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Small presentational helpers
+// ---------------------------------------------------------------------------
+
+function MetaPill({
+  icon,
+  label,
+  tone = "default",
+}: {
+  icon: string;
+  label: string;
+  tone?: "default" | "primary";
+}) {
+  const base =
+    "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px]";
+  const palette =
+    tone === "primary"
+      ? "border border-[#172965]/15 bg-[#172965]/5 text-[#172965]"
+      : "border border-slate-200 bg-white/70 text-slate-700";
+  return (
+    <span className={`${base} ${palette}`}>
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <dt className="text-[11px] text-slate-500">{label}</dt>
+      <dd className="text-[11px] font-medium text-slate-800 text-right">
+        {value}
+      </dd>
     </div>
+  );
+}
+
+/**
+ * Renders responsibilities/requirements/benefits as a clean list.
+ * Accepts plain text with new lines or simple bullets.
+ */
+function RichListBlock({ text }: { text: string }) {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  // If it already looks like bullet points, render a list. Otherwise paragraphs.
+  const looksLikeBullets = lines.some(
+    (l) =>
+      l.startsWith("- ") ||
+      l.startsWith("* ") ||
+      l.startsWith("• ") ||
+      /^[0-9]+\./.test(l)
+  );
+
+  if (!looksLikeBullets) {
+    return (
+      <div className="prose prose-sm mt-3 max-w-none text-slate-700 prose-p:mb-2 prose-p:mt-0">
+        {lines.map((l, idx) => (
+          <p key={idx}>{l}</p>
+        ))}
+      </div>
+    );
+  }
+
+  const cleaned = lines.map((l) =>
+    l.replace(/^(-|\*|•)\s+/, "").replace(/^[0-9]+\.\s+/, "")
+  );
+
+  return (
+    <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-slate-700">
+      {cleaned.map((item, idx) => (
+        <li key={idx}>{item}</li>
+      ))}
+    </ul>
   );
 }
