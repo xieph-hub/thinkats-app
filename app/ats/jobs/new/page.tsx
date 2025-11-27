@@ -18,26 +18,57 @@ type OptionGroup = {
 // -----------------------------
 // Global-style job function taxonomy
 // (inspired by O*NET / ISCO-style clusters)
+// Stored in Job.department
 // -----------------------------
 const JOB_FUNCTION_GROUPS: OptionGroup[] = [
   {
     label: "Leadership & General Management",
     options: [
-      { value: "executive_leadership", label: "Executive Leadership (CEO, MD, Country Manager)" },
-      { value: "general_management", label: "General Management / Business Unit Head" },
-      { value: "strategy_corporate_dev", label: "Strategy & Corporate Development" },
-      { value: "project_program_management", label: "Project / Program Management" },
-      { value: "operations_management", label: "Operations Management" },
+      {
+        value: "executive_leadership",
+        label: "Executive Leadership (CEO, MD, Country Manager)",
+      },
+      {
+        value: "general_management",
+        label: "General Management / Business Unit Head",
+      },
+      {
+        value: "strategy_corporate_dev",
+        label: "Strategy & Corporate Development",
+      },
+      {
+        value: "project_program_management",
+        label: "Project / Program Management",
+      },
+      {
+        value: "operations_management",
+        label: "Operations Management",
+      },
     ],
   },
   {
     label: "Sales, Commercial & Growth",
     options: [
-      { value: "sales_business_development", label: "Sales & Business Development" },
-      { value: "account_management_cs", label: "Account Management & Customer Success" },
-      { value: "partnerships_alliances", label: "Partnerships & Alliances" },
-      { value: "revenue_operations", label: "Revenue Operations (RevOps)" },
-      { value: "pre_sales_solutions", label: "Pre-sales & Solutions Consulting" },
+      {
+        value: "sales_business_development",
+        label: "Sales & Business Development",
+      },
+      {
+        value: "account_management_cs",
+        label: "Account Management & Customer Success",
+      },
+      {
+        value: "partnerships_alliances",
+        label: "Partnerships & Alliances",
+      },
+      {
+        value: "revenue_operations",
+        label: "Revenue Operations (RevOps)",
+      },
+      {
+        value: "pre_sales_solutions",
+        label: "Pre-sales & Solutions Consulting",
+      },
     ],
   },
   {
@@ -63,11 +94,20 @@ const JOB_FUNCTION_GROUPS: OptionGroup[] = [
   {
     label: "Engineering, Data & Technology",
     options: [
-      { value: "software_engineering", label: "Software Engineering / Development" },
+      {
+        value: "software_engineering",
+        label: "Software Engineering / Development",
+      },
       { value: "data_science_ml", label: "Data Science & Machine Learning" },
       { value: "data_analytics", label: "Data Analytics / BI" },
-      { value: "devops_platform", label: "DevOps / SRE / Platform Engineering" },
-      { value: "cloud_infrastructure", label: "Cloud & Infrastructure Engineering" },
+      {
+        value: "devops_platform",
+        label: "DevOps / SRE / Platform Engineering",
+      },
+      {
+        value: "cloud_infrastructure",
+        label: "Cloud & Infrastructure Engineering",
+      },
       { value: "it_support", label: "IT Support & Helpdesk" },
       { value: "cybersecurity", label: "Cybersecurity" },
       { value: "qa_testing", label: "QA & Test Engineering" },
@@ -77,9 +117,15 @@ const JOB_FUNCTION_GROUPS: OptionGroup[] = [
     label: "People, HR & Talent",
     options: [
       { value: "people_hr", label: "People / HR Generalist" },
-      { value: "talent_acquisition", label: "Talent Acquisition / Recruitment" },
+      {
+        value: "talent_acquisition",
+        label: "Talent Acquisition / Recruitment",
+      },
       { value: "people_operations", label: "People Operations" },
-      { value: "learning_development", label: "Learning & Development / Talent Management" },
+      {
+        value: "learning_development",
+        label: "Learning & Development / Talent Management",
+      },
       { value: "compensation_benefits", label: "Compensation & Benefits" },
     ],
   },
@@ -87,65 +133,134 @@ const JOB_FUNCTION_GROUPS: OptionGroup[] = [
     label: "Finance, Risk & Legal",
     options: [
       { value: "finance_accounting", label: "Finance & Accounting" },
-      { value: "financial_planning_analysis", label: "Financial Planning & Analysis (FP&A)" },
+      {
+        value: "financial_planning_analysis",
+        label: "Financial Planning & Analysis (FP&A)",
+      },
       { value: "audit_control", label: "Audit, Controls & Reporting" },
       { value: "risk_compliance", label: "Risk & Compliance" },
-      { value: "legal_corporate_secretariat", label: "Legal & Corporate Secretariat" },
+      {
+        value: "legal_corporate_secretariat",
+        label: "Legal & Corporate Secretariat",
+      },
       { value: "treasury_investments", label: "Treasury & Investments" },
     ],
   },
   {
     label: "Real Estate, Property & Facilities",
     options: [
-      { value: "real_estate_investments", label: "Real Estate Investments & Advisory" },
-      { value: "real_estate_development", label: "Real Estate Development / Projects" },
-      { value: "estate_agency_leasing", label: "Estate Agency, Sales & Leasing" },
-      { value: "property_facilities_management", label: "Property & Facilities Management" },
-      { value: "valuation_asset_management", label: "Valuation & Asset Management" },
+      {
+        value: "real_estate_investments",
+        label: "Real Estate Investments & Advisory",
+      },
+      {
+        value: "real_estate_development",
+        label: "Real Estate Development / Projects",
+      },
+      {
+        value: "estate_agency_leasing",
+        label: "Estate Agency, Sales & Leasing",
+      },
+      {
+        value: "property_facilities_management",
+        label: "Property & Facilities Management",
+      },
+      {
+        value: "valuation_asset_management",
+        label: "Valuation & Asset Management",
+      },
     ],
   },
   {
     label: "Operations, Supply Chain & Logistics",
     options: [
-      { value: "business_operations", label: "Business / Process Operations" },
-      { value: "supply_chain_procurement", label: "Supply Chain & Procurement" },
-      { value: "logistics_fulfilment", label: "Logistics, Fulfilment & Fleet" },
-      { value: "manufacturing_production", label: "Manufacturing & Production" },
-      { value: "quality_assurance_ops", label: "Quality Assurance & Control (Operations)" },
+      {
+        value: "business_operations",
+        label: "Business / Process Operations",
+      },
+      {
+        value: "supply_chain_procurement",
+        label: "Supply Chain & Procurement",
+      },
+      {
+        value: "logistics_fulfilment",
+        label: "Logistics, Fulfilment & Fleet",
+      },
+      {
+        value: "manufacturing_production",
+        label: "Manufacturing & Production",
+      },
+      {
+        value: "quality_assurance_ops",
+        label: "Quality Assurance & Control (Operations)",
+      },
     ],
   },
   {
     label: "Customer Support, Service & Experience",
     options: [
-      { value: "customer_support", label: "Customer Support / Service" },
-      { value: "contact_centre_bpo", label: "Contact Centre / BPO Operations" },
-      { value: "service_delivery", label: "Service Delivery & Implementation" },
+      {
+        value: "customer_support",
+        label: "Customer Support / Service",
+      },
+      {
+        value: "contact_centre_bpo",
+        label: "Contact Centre / BPO Operations",
+      },
+      {
+        value: "service_delivery",
+        label: "Service Delivery & Implementation",
+      },
     ],
   },
   {
     label: "Creative, Media & Content",
     options: [
-      { value: "creative_direction", label: "Creative Direction & Brand Studio" },
-      { value: "graphic_motion_design", label: "Graphic & Motion Design" },
-      { value: "video_photo_content", label: "Video, Photography & Multimedia" },
-      { value: "copywriting_editing", label: "Copywriting & Editorial" },
+      {
+        value: "creative_direction",
+        label: "Creative Direction & Brand Studio",
+      },
+      {
+        value: "graphic_motion_design",
+        label: "Graphic & Motion Design",
+      },
+      {
+        value: "video_photo_content",
+        label: "Video, Photography & Multimedia",
+      },
+      {
+        value: "copywriting_editing",
+        label: "Copywriting & Editorial",
+      },
     ],
   },
   {
     label: "Healthcare, Life Sciences & Social Impact",
     options: [
       { value: "clinical_medical", label: "Clinical & Medical Practice" },
-      { value: "nursing_allied_health", label: "Nursing & Allied Health" },
+      {
+        value: "nursing_allied_health",
+        label: "Nursing & Allied Health",
+      },
       { value: "public_health", label: "Public Health & Health Programs" },
-      { value: "pharmaceutical_biotech", label: "Pharmaceutical & Biotech" },
-      { value: "social_impact_nonprofit", label: "Social Impact & Non-profit Programs" },
+      {
+        value: "pharmaceutical_biotech",
+        label: "Pharmaceutical & Biotech",
+      },
+      {
+        value: "social_impact_nonprofit",
+        label: "Social Impact & Non-profit Programs",
+      },
     ],
   },
   {
     label: "Education, Training & Research",
     options: [
       { value: "teaching_education", label: "Teaching & Education" },
-      { value: "corporate_training", label: "Corporate Training & Facilitation" },
+      {
+        value: "corporate_training",
+        label: "Corporate Training & Facilitation",
+      },
       { value: "academic_research", label: "Academic & Applied Research" },
       { value: "edtech_product_ops", label: "EdTech Product & Operations" },
     ],
@@ -153,7 +268,10 @@ const JOB_FUNCTION_GROUPS: OptionGroup[] = [
   {
     label: "Admin, Office & Support",
     options: [
-      { value: "executive_assistant", label: "Executive Assistant & EA Support" },
+      {
+        value: "executive_assistant",
+        label: "Executive Assistant & EA Support",
+      },
       { value: "office_admin", label: "Office Administration & Front Desk" },
       { value: "general_support_staff", label: "General Support Staff" },
     ],
@@ -161,8 +279,14 @@ const JOB_FUNCTION_GROUPS: OptionGroup[] = [
   {
     label: "Other / Multi-disciplinary",
     options: [
-      { value: "multi_disciplinary", label: "Multi-disciplinary / Hybrid Role" },
-      { value: "other_specify_in_summary", label: "Other – described in role summary" },
+      {
+        value: "multi_disciplinary",
+        label: "Multi-disciplinary / Hybrid Role",
+      },
+      {
+        value: "other_specify_in_summary",
+        label: "Other – described in role summary",
+      },
     ],
   },
 ];
@@ -221,7 +345,10 @@ const LOCATION_GROUPS: OptionGroup[] = [
       { value: "Abuja, Nigeria", label: "Abuja, Nigeria" },
       { value: "Port Harcourt, Nigeria", label: "Port Harcourt, Nigeria" },
       { value: "Nigeria – Remote", label: "Nigeria – Remote" },
-      { value: "Nigeria – Multiple locations", label: "Nigeria – Multiple locations" },
+      {
+        value: "Nigeria – Multiple locations",
+        label: "Nigeria – Multiple locations",
+      },
     ],
   },
   {
@@ -229,7 +356,10 @@ const LOCATION_GROUPS: OptionGroup[] = [
     options: [
       { value: "Nairobi, Kenya", label: "Nairobi, Kenya" },
       { value: "Accra, Ghana", label: "Accra, Ghana" },
-      { value: "Johannesburg, South Africa", label: "Johannesburg, South Africa" },
+      {
+        value: "Johannesburg, South Africa",
+        label: "Johannesburg, South Africa",
+      },
       { value: "Cape Town, South Africa", label: "Cape Town, South Africa" },
       { value: "Cairo, Egypt", label: "Cairo, Egypt" },
       { value: "Africa – Remote", label: "Africa – Remote" },
@@ -252,7 +382,10 @@ const LOCATION_GROUPS: OptionGroup[] = [
       { value: "Toronto, Canada", label: "Toronto, Canada" },
       { value: "São Paulo, Brazil", label: "São Paulo, Brazil" },
       { value: "Americas – Remote", label: "Americas – Remote" },
-      { value: "Global – Remote / Distributed", label: "Global – Remote / Distributed" },
+      {
+        value: "Global – Remote / Distributed",
+        label: "Global – Remote / Distributed",
+      },
     ],
   },
 ];
@@ -294,10 +427,15 @@ export default async function NewJobPage() {
       },
     }),
     prisma.user.findMany({
-      orderBy: [{ name: "asc" }],
+      where: {
+        userTenantRoles: {
+          some: { tenantId: tenant.id },
+        },
+      },
+      orderBy: [{ fullName: "asc" }, { email: "asc" }],
       select: {
         id: true,
-        name: true,
+        fullName: true,
         email: true,
       },
     }),
@@ -319,8 +457,8 @@ export default async function NewJobPage() {
             Create a new role
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Capture the essentials once. ThinkATS will reuse this across the
-            careers page, pipelines and client reporting.
+            Capture the essentials once. ThinkATS will reuse this across
+            the careers page, pipelines and client reporting.
           </p>
         </div>
 
@@ -412,12 +550,19 @@ export default async function NewJobPage() {
                 defaultValue=""
               >
                 <option value="">Unassigned</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name || user.email}{" "}
-                    {user.name && user.email ? `(${user.email})` : ""}
-                  </option>
-                ))}
+                {users.map((user) => {
+                  const label = user.fullName
+                    ? `${user.fullName}${
+                        user.email ? ` (${user.email})` : ""
+                      }`
+                    : user.email ?? "Unknown user";
+
+                  return (
+                    <option key={user.id} value={user.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -450,13 +595,13 @@ export default async function NewJobPage() {
               </p>
             </div>
 
-            {/* Work mode (was: Location type) */}
+            {/* Work mode (stored as workMode + mirrored to locationType in API) */}
             <div>
               <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
                 Work mode
               </label>
               <select
-                name="locationType"
+                name="workMode"
                 className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
                 defaultValue=""
               >
@@ -517,7 +662,7 @@ export default async function NewJobPage() {
                 Role function / discipline
               </label>
               <select
-                name="function"
+                name="department"
                 className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
                 defaultValue=""
               >
@@ -533,8 +678,11 @@ export default async function NewJobPage() {
                 ))}
               </select>
               <p className="mt-1 text-[10px] text-slate-400">
-                Used mainly for internal reporting and search. We’ll wire this
-                into analytics once the schema field is added.
+                Stored as{" "}
+                <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
+                  department
+                </code>{" "}
+                on the job record. Used for reporting and search.
               </p>
             </div>
           </div>
