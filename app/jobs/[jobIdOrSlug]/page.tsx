@@ -444,3 +444,202 @@ export default async function JobDetailPage({ params }: PageProps) {
                   Key responsibilities
                 </h2>
                 <RichListBlock text={job.responsibilities} />
+              </article>
+            )}
+
+            {/* Requirements */}
+            {job.requirements && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  Experience & requirements
+                </h2>
+                <RichListBlock text={job.requirements} />
+              </article>
+            )}
+
+            {/* Benefits */}
+            {job.benefits && (
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#172965]">
+                  Compensation & benefits
+                </h2>
+                <RichListBlock text={job.benefits} />
+              </article>
+            )}
+
+            {/* Application section */}
+            <article
+              id="apply"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-[#172965]">
+                    Apply for this role
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Share a recent CV and a few details. We&apos;ll review and
+                    come back to you.
+                  </p>
+                </div>
+                <div className="hidden text-[11px] text-slate-500 sm:block">
+                  Powered by{" "}
+                  <span className="font-semibold text-[#172965]">
+                    ThinkATS
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <JobApplyForm jobId={job.id} />
+              </div>
+            </article>
+          </div>
+
+          {/* Right: key facts / sticky card */}
+          <aside className="space-y-4">
+            <div className="sticky top-20 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Role snapshot
+                </h2>
+                <dl className="mt-3 space-y-2 text-xs text-slate-700">
+                  {job.location && (
+                    <Row label="Location" value={job.location} />
+                  )}
+                  {displayWorkMode && (
+                    <Row label="Work pattern" value={displayWorkMode} />
+                  )}
+                  {displayLocationType && (
+                    <Row label="Remit" value={displayLocationType} />
+                  )}
+                  {displayEmploymentType && (
+                    <Row label="Employment type" value={displayEmploymentType} />
+                  )}
+                  {displayExperienceLevel && (
+                    <Row label="Role level" value={displayExperienceLevel} />
+                  )}
+                  {displayDepartment && (
+                    <Row label="Job family" value={displayDepartment} />
+                  )}
+                  {postedLabel && <Row label="Posted" value={postedLabel} />}
+                </dl>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      const el = document.getElementById("apply");
+                      if (el) {
+                        el.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }
+                    }
+                  }}
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0f1c48]"
+                >
+                  Apply now
+                </button>
+                <p className="mt-2 text-[10px] text-slate-500">
+                  We review each application carefully. If your profile is a
+                  close match, we&apos;ll be in touch to discuss next steps.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-[#64C247]/40 bg-[#64C247]/5 p-4 text-[11px] text-slate-700">
+                <div className="text-[11px] font-semibold text-[#306B34]">
+                  Referrals welcome
+                </div>
+                <p className="mt-1">
+                  Know someone who might be a fit? Share this role with them or
+                  send an introduction when you apply.
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Small presentational helpers
+// ---------------------------------------------------------------------------
+
+function MetaPill({
+  icon,
+  label,
+  tone = "default",
+}: {
+  icon: string;
+  label: string;
+  tone?: "default" | "primary";
+}) {
+  const base =
+    "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px]";
+  const palette =
+    tone === "primary"
+      ? "border border-[#172965]/15 bg-[#172965]/5 text-[#172965]"
+      : "border border-slate-200 bg-white/70 text-slate-700";
+  return (
+    <span className={`${base} ${palette}`}>
+      <span aria-hidden="true">{icon}</span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-2">
+      <dt className="text-[11px] text-slate-500">{label}</dt>
+      <dd className="text-[11px] font-medium text-slate-800 text-right">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Renders responsibilities/requirements/benefits as a clean list.
+ * Accepts plain text with new lines or simple bullets.
+ */
+function RichListBlock({ text }: { text: string }) {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const looksLikeBullets = lines.some(
+    (l) =>
+      l.startsWith("- ") ||
+      l.startsWith("* ") ||
+      l.startsWith("• ") ||
+      /^[0-9]+\./.test(l)
+  );
+
+  if (!looksLikeBullets) {
+    return (
+      <div className="prose prose-sm mt-3 max-w-none text-slate-700 prose-p:mb-2 prose-p:mt-0">
+        {lines.map((l, idx) => (
+          <p key={idx}>{l}</p>
+        ))}
+      </div>
+    );
+  }
+
+  const cleaned = lines.map((l) =>
+    l.replace(/^(-|\*|•)\s+/, "").replace(/^[0-9]+\.\s+/, "")
+  );
+
+  return (
+    <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-slate-700">
+      {cleaned.map((item, idx) => (
+        <li key={idx}>{item}</li>
+      ))}
+    </ul>
+  );
+}
