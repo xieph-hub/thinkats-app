@@ -1,13 +1,18 @@
-// app/jobs/[jobIdOrSlug]/JobApplyForm.tsx
 "use client";
 
 import { useState } from "react";
 
 type Props = {
   jobId: string;
+  /**
+   * Internal tracking source for analytics / multi-tenant routing.
+   * e.g. "CAREERS_SITE", "LINKEDIN_JOBS", "CLIENT_X_CAREER_SITE"
+   * If not provided, defaults to "CAREERS_SITE".
+   */
+  source?: string;
 };
 
-export default function JobApplyForm({ jobId }: Props) {
+export default function JobApplyForm({ jobId, source }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -22,8 +27,14 @@ export default function JobApplyForm({ jobId }: Props) {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
-      // Ensure jobId is sent to the API
+      // Ensure jobId + internal source are sent to the API
       formData.set("jobId", jobId);
+
+      // Final internal source value (multi-tenant friendly)
+      const internalSource =
+        (source && source.trim()) || (formData.get("source") as string) || "CAREERS_SITE";
+
+      formData.set("source", internalSource);
 
       const res = await fetch("/api/jobs/apply", {
         method: "POST",
@@ -34,7 +45,7 @@ export default function JobApplyForm({ jobId }: Props) {
       try {
         data = await res.json();
       } catch {
-        // ignore if not JSON, we'll just use generic messaging
+        // ignore JSON parse errors – we'll just use generic messaging
       }
 
       if (!res.ok || data?.success === false || data?.error) {
@@ -46,15 +57,14 @@ export default function JobApplyForm({ jobId }: Props) {
         return;
       }
 
-      // ✅ Success – reset form
+      // ✅ Success – reset form + show confirmation
       form.reset();
-
-      // ✅ Show your exact acknowledgement text
       setSuccessMessage(
-        "This is to acknowledge receipt of your application. A member of our recruitment team will reach out to you if you are a good fit for the role.",
+        data?.message ||
+          "This is to acknowledge receipt of your application. A member of our recruitment team will reach out to you if you are a good fit for the role.",
       );
 
-      // ✅ Scroll to top so the message is clearly visible
+      // Scroll to top of form so the success message is visible
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -71,18 +81,12 @@ export default function JobApplyForm({ jobId }: Props) {
   return (
     <div className="space-y-3">
       <form onSubmit={handleSubmit} className="space-y-3">
-        {/* Messages at the top so they are immediately visible after scroll */}
-        {errorMessage && (
-          <div className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">
-            {errorMessage}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="rounded-md border border-[#64C247]/40 bg-[#64C247]/10 px-3 py-2 text-[11px] text-[#306B34]">
-            {successMessage}
-          </div>
-        )}
+        {/* Hidden internal source for tracking (multi-tenant friendly) */}
+        <input
+          type="hidden"
+          name="source"
+          value={source || "CAREERS_SITE"}
+        />
 
         {/* Name + Email */}
         <div className="grid gap-3 sm:grid-cols-2">
@@ -242,39 +246,21 @@ export default function JobApplyForm({ jobId }: Props) {
           </div>
         </div>
 
-        {/* How they heard + source */}
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label
-              htmlFor="howHeard"
-              className="block text-xs font-medium text-slate-700"
-            >
-              How did you hear about this role?
-            </label>
-            <input
-              id="howHeard"
-              name="howHeard"
-              type="text"
-              className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-              placeholder="Resourcin site, LinkedIn, referral, etc."
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label
-              htmlFor="source"
-              className="block text-xs font-medium text-slate-700"
-            >
-              Source (internal)
-            </label>
-            <input
-              id="source"
-              name="source"
-              type="text"
-              className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-              placeholder="(Your tracking, optional)"
-            />
-          </div>
+        {/* How they heard (candidate-facing only) */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="howHeard"
+            className="block text-xs font-medium text-slate-700"
+          >
+            How did you hear about this role?
+          </label>
+          <input
+            id="howHeard"
+            name="howHeard"
+            type="text"
+            className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            placeholder="Resourcin site, LinkedIn, referral, etc."
+          />
         </div>
 
         {/* CV upload */}
@@ -315,15 +301,29 @@ export default function JobApplyForm({ jobId }: Props) {
           />
         </div>
 
-        {/* Submit button */}
-        <div className="flex items-center justify-end pt-1">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {isSubmitting ? "Submitting..." : "Submit application"}
-          </button>
+        {/* Messages + submit button */}
+        <div className="flex flex-col gap-2 pt-1">
+          {errorMessage && (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">
+              {errorMessage}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="rounded-md bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+              {successMessage}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isSubmitting ? "Submitting..." : "Submit application"}
+            </button>
+          </div>
         </div>
       </form>
     </div>
