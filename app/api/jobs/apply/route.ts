@@ -1,174 +1,179 @@
 // app/api/jobs/apply/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function POST(req: Request) {
+/**
+ * Helper to normalise strings from FormData
+ */
+function getStr(formData: FormData, key: string): string {
+  const v = formData.get(key);
+  if (!v) return "";
+  return String(v).trim();
+}
+
+const CV_BUCKET =
+  process.env.NEXT_PUBLIC_SUPABASE_CV_BUCKET || "candidate-cvs";
+
+export async function POST(request: Request) {
   try {
-    const contentType = req.headers.get("content-type") || "";
-    let jobId: string | null = null;
+    const formData = await request.formData();
 
-    let payload: any = {};
+    const jobId = getStr(formData, "jobId");
+    const fullName = getStr(formData, "fullName");
+    const email = getStr(formData, "email").toLowerCase();
+    const phone = getStr(formData, "phone");
+    const location = getStr(formData, "location");
+    const linkedinUrl = getStr(formData, "linkedinUrl");
+    const currentGrossAnnual = getStr(formData, "currentGrossAnnual");
+    const grossAnnualExpectation = getStr(
+      formData,
+      "grossAnnualExpectation",
+    );
+    const noticePeriod = getStr(formData, "noticePeriod");
+    const source = getStr(formData, "source");
+    const coverLetter = getStr(formData, "coverLetter");
 
-    if (contentType.includes("application/json")) {
-      payload = await req.json();
-      jobId =
-        typeof payload.jobId === "string" && payload.jobId.trim().length > 0
-          ? payload.jobId.trim()
-          : null;
-    } else {
-      const formData = await req.formData();
-      const getStr = (key: string): string | null => {
-        const v = formData.get(key);
-        if (v == null) return null;
-        const s = String(v).trim();
-        return s || null;
-      };
-
-      jobId = getStr("jobId");
-
-      payload = {
-        fullName: getStr("fullName"),
-        email: getStr("email")?.toLowerCase(),
-        phone: getStr("phone"),
-        location: getStr("location"),
-        linkedinUrl: getStr("linkedinUrl") ?? getStr("linkedin"),
-        portfolioUrl: getStr("portfolioUrl"),
-        githubUrl: getStr("githubUrl"),
-        coverLetter: getStr("coverLetter"),
-        cvUrl: getStr("cvUrl"),
-        source: getStr("source"),
-        howHeard: getStr("howHeard"),
-        noticePeriod: getStr("noticePeriod"),
-        currentGrossAnnual: getStr("currentGrossAnnual"),
-        grossAnnualExpectation: getStr("grossAnnualExpectation"),
-      };
-    }
-
-    if (!jobId) {
+    if (!jobId || !fullName || !email) {
       return NextResponse.json(
-        { success: false, error: "Missing jobId." },
+        {
+          success: false,
+          error:
+            "Missing required fields (jobId, fullName, email). Please check the form and try again.",
+        },
         { status: 400 },
       );
     }
 
-    const tenant = await getResourcinTenant();
-
-    const job = await prisma.job.findFirst({
-      where: {
-        id: jobId,
-        tenantId: tenant.id,
-        visibility: "public",
-        status: "open",
-        internalOnly: false,
-      },
+    // 🔹 Confirm job exists & get tenant
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { id: true, tenantId: true },
     });
 
     if (!job) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "This role is not accepting applications or was not found.",
+          error: "Job not found or no longer accepting applications.",
         },
         { status: 404 },
       );
     }
 
-    const fullName = (payload.fullName ?? "").trim();
-    const email = (payload.email ?? "").trim().toLowerCase();
+    const tenantId = job.tenantId;
 
-    if (!fullName || !email) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Name and email are required.",
-        },
-        { status: 400 },
-      );
+    // 🔹 Upload CV to Supabase Storage (if provided)
+    let cvUrl: string | null = null;
+    const cvFile = formData.get("cv");
+
+    if (cvFile && cvFile instanceof File && cvFile.size > 0) {
+      try {
+        const originalName = cvFile.name || "cv.pdf";
+        const ext = originalName.split(".").pop() || "pdf";
+        const safeExt = ext.toLowerCase();
+        const filePath = `cv/${tenantId}/${jobId}/${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2)}.${safeExt}`;
+
+        const { data: uploadData, error: uploadError } =
+          await supabaseAdmin.storage.from(CV_BUCKET).upload(filePath, cvFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType:
+              cvFile.type ||
+              (safeExt === "pdf"
+                ? "application/pdf"
+                : "application/octet-stream"),
+          });
+
+        if (uploadError) {
+          console.error("Supabase CV upload error:", uploadError);
+        } else if (uploadData?.path) {
+          const { data: publicData } = supabaseAdmin.storage
+            .from(CV_BUCKET)
+            .getPublicUrl(uploadData.path);
+
+          cvUrl = publicData?.publicUrl ?? null;
+        }
+      } catch (err) {
+        console.error("Unexpected CV upload error:", err);
+      }
     }
 
-    const existingCandidate = await prisma.candidate.findFirst({
+    // 🔹 Find or create Candidate (by tenant + email)
+    let candidate = await prisma.candidate.findFirst({
       where: {
-        tenantId: job.tenantId,
+        tenantId,
         email,
       },
     });
 
-    const candidate =
-      existingCandidate ??
-      (await prisma.candidate.create({
+    if (!candidate) {
+      candidate = await prisma.candidate.create({
         data: {
-          tenantId: job.tenantId,
+          tenantId,
           fullName,
           email,
-          phone: payload.phone ?? null,
-          location: payload.location ?? null,
-          linkedinUrl: payload.linkedinUrl ?? null,
-          currentTitle: null,
-          currentCompany: null,
-          cvUrl: payload.cvUrl ?? null,
-          source: payload.source ?? null,
+          location,
+          linkedinUrl,
+          // Only set cvUrl if we actually uploaded
+          ...(cvUrl ? { cvUrl } : {}),
         },
-      }));
-
-    const shouldUpdateCandidate =
-      !existingCandidate ||
-      candidate.fullName !== fullName ||
-      candidate.phone !== (payload.phone ?? null) ||
-      candidate.location !== (payload.location ?? null) ||
-      candidate.linkedinUrl !== (payload.linkedinUrl ?? null) ||
-      candidate.cvUrl !== (payload.cvUrl ?? null);
-
-    if (shouldUpdateCandidate) {
-      await prisma.candidate.update({
+      });
+    } else {
+      // Soft-enrich candidate profile, but don't wipe existing info
+      candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
-          fullName,
-          phone: payload.phone ?? null,
-          location: payload.location ?? null,
-          linkedinUrl: payload.linkedinUrl ?? null,
-          cvUrl: payload.cvUrl ?? null,
-          source: payload.source ?? null,
+          fullName: fullName || candidate.fullName,
+          location: location || candidate.location,
+          linkedinUrl: linkedinUrl || candidate.linkedinUrl,
+          // If we got a fresh CV, overwrite
+          ...(cvUrl ? { cvUrl } : {}),
         },
       });
     }
 
-    const application = await prisma.jobApplication.create({
+    // 🔹 Create JobApplication row with stage + status + CV + source
+    await prisma.jobApplication.create({
       data: {
         jobId: job.id,
         candidateId: candidate.id,
+
         fullName,
         email,
-        phone: payload.phone ?? null,
-        location: payload.location ?? null,
-        linkedinUrl: payload.linkedinUrl ?? null,
-        portfolioUrl: payload.portfolioUrl ?? null,
-        githubUrl: payload.githubUrl ?? null,
-        cvUrl: payload.cvUrl ?? null,
-        coverLetter: payload.coverLetter ?? null,
-        source: payload.source ?? null,
-        howHeard: payload.howHeard ?? null,
-        noticePeriod: payload.noticePeriod ?? null,
-        currentGrossAnnual: payload.currentGrossAnnual ?? null,
-        grossAnnualExpectation: payload.grossAnnualExpectation ?? null,
+        phone,
+        location,
+
+        linkedinUrl,
+        currentGrossAnnual,
+        grossAnnualExpectation,
+        noticePeriod,
+
+        source,
+        coverLetter,
+
+        stage: "APPLIED",
+        status: "PENDING",
+
+        cvUrl,
       },
     });
 
-    return NextResponse.json(
-      {
-        success: true,
-        applicationId: application.id,
-        message: "Application received.",
-      },
-      { status: 201 },
-    );
+    // ✅ Response consumed by JobApplyForm.tsx
+    return NextResponse.json({
+      success: true,
+      message:
+        "This is to acknowledge receipt of your application. A member of our recruitment team will reach out to you if you are a good fit for the role.",
+    });
   } catch (err) {
-    console.error("POST /api/jobs/apply error", err);
+    console.error("Error in /api/jobs/apply:", err);
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to submit application.",
+        error:
+          "Something went wrong while submitting your application. Please try again in a moment.",
       },
       { status: 500 },
     );
