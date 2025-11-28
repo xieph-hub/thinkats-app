@@ -331,7 +331,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Top summary (now includes CV card) */}
+      {/* Top summary (includes CV card) */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -351,7 +351,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
           </p>
         </div>
 
-        {/* 🔹 CV / Resume card */}
+        {/* CV / Resume card */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             CV / Resume
@@ -466,9 +466,9 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                     </div>
                   </div>
 
-                  {/* Right: controls + badges + CV + job link */}
+                  {/* Right: badges + CV + job link + inline controls */}
                   <div className="flex flex-col items-stretch gap-1 sm:items-end">
-                    {/* Badges + CV + job pipeline */}
+                    {/* Badges + CV + job link */}
                     <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                       <span className={stageBadgeClass(stage)}>
                         {stageLabel}
@@ -496,9 +496,9 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                       </Link>
                     </div>
 
-                    {/* Inline controls for stage + status (same endpoints as /ats/jobs/[jobId]) */}
+                    {/* Inline controls for stage + status */}
                     <div className="mt-1 flex flex-wrap items-center gap-2 sm:justify-end">
-                      {/* Stage change form */}
+                      {/* Stage change form – uses /ats/applications/actions */}
                       <form
                         method="POST"
                         action="/ats/applications/actions"
@@ -536,7 +536,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                         </button>
                       </form>
 
-                      {/* Status change form */}
+                      {/* Status change form – uses /ats/applications/status */}
                       <form
                         method="POST"
                         action="/ats/applications/status"
