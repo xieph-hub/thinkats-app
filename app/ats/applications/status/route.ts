@@ -3,88 +3,49 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
-  const contentType = request.headers.get("content-type") || "";
+  const formData = await request.formData();
 
-  // 🔹 Path 1: JSON body (bulk update via fetch)
-  if (contentType.includes("application/json")) {
-    try {
-      const body = await request.json();
-      const { jobId, applicationIds, newStatus } = body ?? {};
+  const jobIdRaw = formData.get("jobId");
+  const applicationIdRaw = formData.get("applicationId");
+  const newStatusRaw = formData.get("newStatus");
+  const redirectToRaw = formData.get("redirectTo");
 
-      if (
-        !jobId ||
-        !newStatus ||
-        !Array.isArray(applicationIds) ||
-        applicationIds.length === 0
-      ) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Missing jobId, newStatus or applicationIds",
-          },
-          { status: 400 },
-        );
-      }
+  const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
+  const applicationId =
+    typeof applicationIdRaw === "string" ? applicationIdRaw : "";
+  const newStatus =
+    typeof newStatusRaw === "string" ? newStatusRaw : "";
 
-      const result = await prisma.jobApplication.updateMany({
-        where: {
-          jobId,
-          id: { in: applicationIds },
-        },
-        data: {
-          status: newStatus,
-        },
-      });
+  const redirectTo =
+    typeof redirectToRaw === "string" ? redirectToRaw : "";
 
-      return NextResponse.json({
-        success: true,
-        updated: result.count,
-        status: newStatus,
-      });
-    } catch (err) {
-      console.error("Bulk status update error:", err);
-      return NextResponse.json(
-        { success: false, error: "Failed to update status" },
-        { status: 500 },
-      );
-    }
-  }
-
-  // 🔹 Path 2: Form POST from inline controls on /ats/jobs/[jobId]
-  try {
-    const formData = await request.formData();
-    const jobId = formData.get("jobId");
-    const applicationId = formData.get("applicationId");
-    const newStatus = formData.get("newStatus");
-
-    if (
-      typeof jobId !== "string" ||
-      typeof applicationId !== "string" ||
-      typeof newStatus !== "string" ||
-      !jobId ||
-      !applicationId ||
-      !newStatus
-    ) {
-      const fallbackUrl = new URL(request.url);
-      fallbackUrl.pathname = "/ats/jobs";
-      fallbackUrl.search = "";
-      return NextResponse.redirect(fallbackUrl, { status: 303 });
-    }
-
-    await prisma.jobApplication.update({
-      where: { id: applicationId },
-      data: { status: newStatus },
-    });
-
-    const redirectUrl = new URL(request.url);
-    redirectUrl.pathname = `/ats/jobs/${jobId}`;
-    redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl, { status: 303 });
-  } catch (err) {
-    console.error("Inline status update error:", err);
+  if (!jobId || !applicationId || !newStatus) {
     const fallbackUrl = new URL(request.url);
     fallbackUrl.pathname = "/ats/jobs";
     fallbackUrl.search = "";
     return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
+
+  try {
+    await prisma.jobApplication.update({
+      where: { id: applicationId },
+      data: {
+        status: newStatus,
+      },
+    });
+  } catch (err) {
+    console.error("Error updating application status:", err);
+    // Still redirect; add error UI later if you want.
+  }
+
+  const redirectPath =
+    redirectTo && redirectTo.startsWith("/")
+      ? redirectTo
+      : `/ats/jobs/${jobId}`;
+
+  const url = new URL(request.url);
+  url.pathname = redirectPath;
+  url.search = "";
+
+  return NextResponse.redirect(url, { status: 303 });
 }
