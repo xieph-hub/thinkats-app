@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import JobApplyForm from "./JobApplyForm";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +14,7 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: { jobIdOrSlug: string };
+  searchParams?: { [key: string]: string | string[] | undefined };
 };
 
 type JobRow = {
@@ -52,7 +52,7 @@ function humanizeToken(value?: string | null): string {
     .split(" ")
     .filter(Boolean)
     .map(
-      (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+      (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
     )
     .join(" ");
 }
@@ -209,17 +209,16 @@ function formatPostedAt(iso?: string | null) {
   });
 }
 
-// UUID guard: prevents slugs like "assistant-head-of-sales" from being used
-// in an id.eq(...) filter.
+// UUID guard
 function looksLikeUuid(value: string): boolean {
   return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
-    value
+    value,
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export default async function JobDetailPage({ params }: PageProps) {
+export default async function JobDetailPage({ params, searchParams }: PageProps) {
   const { jobIdOrSlug } = params;
   const isUuid = looksLikeUuid(jobIdOrSlug);
 
@@ -245,7 +244,7 @@ export default async function JobDetailPage({ params }: PageProps) {
       short_description,
       tags,
       confidential
-    `
+    `,
     )
     .eq("visibility", "public")
     .eq("status", "open");
@@ -281,7 +280,7 @@ export default async function JobDetailPage({ params }: PageProps) {
   const jobUrl = `${BASE_URL}${canonicalPath}`;
 
   const shareText = encodeURIComponent(
-    `${job.title}${job.location ? ` – ${job.location}` : ""} (via Resourcin)`
+    `${job.title}${job.location ? ` – ${job.location}` : ""} (via Resourcin)`,
   );
   const encodedUrl = encodeURIComponent(jobUrl);
   const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
@@ -289,6 +288,26 @@ export default async function JobDetailPage({ params }: PageProps) {
   const whatsappUrl = `https://api.whatsapp.com/send?text=${shareText}%20${encodedUrl}`;
 
   const tags = job.tags ?? [];
+
+  // 🔹 Multi-tenant tracking: carry src through to /apply
+  const rawSrcParam =
+    typeof searchParams?.src === "string"
+      ? searchParams.src
+      : Array.isArray(searchParams?.src)
+      ? searchParams.src[0]
+      : undefined;
+
+  const trackingSourceParam =
+    rawSrcParam && rawSrcParam.trim().length > 0
+      ? rawSrcParam.trim().toUpperCase()
+      : undefined;
+
+  const applyHref =
+    trackingSourceParam != null
+      ? `${canonicalPath}/apply?src=${encodeURIComponent(
+          trackingSourceParam,
+        )}`
+      : `${canonicalPath}/apply`;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -337,12 +356,12 @@ export default async function JobDetailPage({ params }: PageProps) {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <a
-                href="#apply"
+              <Link
+                href={applyHref}
                 className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
               >
                 Apply for this role
-              </a>
+              </Link>
               <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm">
                 <span className="hidden sm:inline">Share</span>
                 <a
@@ -464,34 +483,6 @@ export default async function JobDetailPage({ params }: PageProps) {
                 <RichListBlock text={job.benefits} />
               </article>
             )}
-
-            {/* Application section */}
-            <article
-              id="apply"
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-[#172965]">
-                    Apply for this role
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Share a recent CV and a few details. We&apos;ll review and
-                    come back to you.
-                  </p>
-                </div>
-                <div className="hidden text-[11px] text-slate-500 sm:block">
-                  Powered by{" "}
-                  <span className="font-semibold text-[#172965]">
-                    ThinkATS
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <JobApplyForm jobId={job.id} />
-              </div>
-            </article>
           </div>
 
           {/* Right: key facts / sticky card */}
@@ -512,7 +503,10 @@ export default async function JobDetailPage({ params }: PageProps) {
                     <Row label="Remit" value={displayLocationType} />
                   )}
                   {displayEmploymentType && (
-                    <Row label="Employment type" value={displayEmploymentType} />
+                    <Row
+                      label="Employment type"
+                      value={displayEmploymentType}
+                    />
                   )}
                   {displayExperienceLevel && (
                     <Row label="Role level" value={displayExperienceLevel} />
@@ -523,13 +517,12 @@ export default async function JobDetailPage({ params }: PageProps) {
                   {postedLabel && <Row label="Posted" value={postedLabel} />}
                 </dl>
 
-                {/* changed from button with onClick to simple anchor */}
-                <a
-                  href="#apply"
+                <Link
+                  href={applyHref}
                   className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-center text-xs font-semibold text-white hover:bg-[#0f1c48]"
                 >
                   Apply now
-                </a>
+                </Link>
                 <p className="mt-2 text-[10px] text-slate-500">
                   We review each application carefully. If your profile is a
                   close match, we&apos;ll be in touch to discuss next steps.
@@ -584,7 +577,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-2">
       <dt className="text-[11px] text-slate-500">{label}</dt>
-      <dd className="text-[11px] font-medium text-slate-800 text-right">
+      <dd className="text-right text-[11px] font-medium text-slate-800">
         {value}
       </dd>
     </div>
@@ -606,7 +599,7 @@ function RichListBlock({ text }: { text: string }) {
       l.startsWith("- ") ||
       l.startsWith("* ") ||
       l.startsWith("• ") ||
-      /^[0-9]+\./.test(l)
+      /^[0-9]+\./.test(l),
   );
 
   if (!looksLikeBullets) {
@@ -620,7 +613,7 @@ function RichListBlock({ text }: { text: string }) {
   }
 
   const cleaned = lines.map((l) =>
-    l.replace(/^(-|\*|•)\s+/, "").replace(/^[0-9]+\.\s+/, "")
+    l.replace(/^(-|\*|•)\s+/, "").replace(/^[0-9]+\.\s+/, ""),
   );
 
   return (
