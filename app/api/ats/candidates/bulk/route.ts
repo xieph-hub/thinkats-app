@@ -1,209 +1,113 @@
 // app/api/ats/candidates/bulk/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
 
-type BulkPayload = {
-  tenantId?: string;
-  applicationIds?: string[];
-  action?: string; // e.g. "stage:INTERVIEW" or "stage"
-  stage?: string;
-  status?: string;
-  tag?: string;
-};
+/**
+ * Bulk candidate stage updates.
+ *
+ * - JSON requests (fetch) => return JSON { success, updated, stage }
+ * - Form POST from /ats/candidates => redirect back to /ats/candidates
+ */
+export async function POST(request: Request) {
+  const contentType = request.headers.get("content-type") || "";
 
-async function parseBulkBody(req: Request): Promise<BulkPayload> {
-  const contentType = req.headers.get("content-type") || "";
-
-  // ✅ JSON (used by inline stage changes on /ats/jobs/[jobId])
+  // 🔹 Path 1: JSON body (programmatic bulk call)
   if (contentType.includes("application/json")) {
-    return (await req.json()) as BulkPayload;
+    try {
+      const body = await request.json();
+      const { candidateIds, newStage } = body ?? {};
+
+      if (!Array.isArray(candidateIds) || !newStage) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Missing candidateIds or newStage",
+          },
+          { status: 400 },
+        );
+      }
+
+      const result = await prisma.jobApplication.updateMany({
+        where: {
+          candidateId: { in: candidateIds as string[] },
+        },
+        data: {
+          stage: newStage as string,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        updated: result.count,
+        stage: newStage,
+      });
+    } catch (err) {
+      console.error("Bulk candidate stage JSON error:", err);
+      return NextResponse.json(
+        { success: false, error: "Failed to update stage" },
+        { status: 500 },
+      );
+    }
   }
 
-  // ✅ HTML form / multipart (used by /ats/candidates inbox bulk form)
-  if (
-    contentType.includes("multipart/form-data") ||
-    contentType.includes("application/x-www-form-urlencoded")
-  ) {
-    const formData = await req.formData();
+  // 🔹 Path 2: form POST from /ats/candidates (your bulk UI)
+  try {
+    const formData = await request.formData();
 
-    const tenantId = formData.get("tenantId")?.toString();
-    const action =
-      formData.get("action")?.toString() ||
-      formData.get("bulkAction")?.toString() ||
+    // Try a few common field names for selected IDs
+    const ids: string[] = [];
+    const idKeys = [
+      "candidateIds",
+      "candidateId",
+      "selectedCandidateIds",
+      "selected",
+    ];
+
+    for (const key of idKeys) {
+      const all = formData.getAll(key);
+      for (const v of all) {
+        if (typeof v === "string" && v.trim()) {
+          ids.push(v.trim());
+        }
+      }
+    }
+
+    const uniqueCandidateIds = Array.from(new Set(ids));
+
+    const newStage =
+      (formData.get("newStage") as string | null) ||
+      (formData.get("stage") as string | null) ||
       "";
 
-    const stage = formData.get("stage")?.toString();
-    const status = formData.get("status")?.toString();
-    const tag = formData.get("tag")?.toString();
-
-    const applicationIdsRaw = formData.getAll("applicationIds");
-    const applicationIds = applicationIdsRaw
-      .map((v) => (typeof v === "string" ? v : String(v)))
-      .filter(Boolean);
-
-    return {
-      tenantId,
-      action,
-      stage,
-      status,
-      tag,
-      applicationIds,
-    };
-  }
-
-  // Fallback: try JSON anyway, but do NOT call req.formData() again
-  try {
-    return (await req.json()) as BulkPayload;
-  } catch {
-    throw new Error(
-      'Unsupported Content-Type. Expected "application/json" or form-data.',
-    );
-  }
-}
-
-export async function POST(req: Request) {
-  try {
-    const payload = await parseBulkBody(req);
-
-    // Resolve tenant (still useful for auditing/logging later if you add tenantId to JobApplication)
-    const fallbackTenant = await getResourcinTenant().catch(() => null);
-    const tenantId = payload.tenantId || fallbackTenant?.id;
-
-    if (!tenantId) {
-      return NextResponse.json(
-        { success: false, error: "Missing tenant context." },
-        { status: 400 },
-      );
+    if (uniqueCandidateIds.length === 0 || !newStage) {
+      const fallbackUrl = new URL(request.url);
+      fallbackUrl.pathname = "/ats/candidates";
+      fallbackUrl.search = "";
+      return NextResponse.redirect(fallbackUrl, { status: 303 });
     }
 
-    const applicationIds = payload.applicationIds ?? [];
-    if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No application IDs provided.",
-        },
-        { status: 400 },
-      );
-    }
-
-    const action = payload.action || "";
-
-    // --------------------------------------------------
-    // 1) Stage changes (supports:
-    //    - action="stage"
-    //    - action="stage:INTERVIEW"
-    //    - JSON body with { stage: "INTERVIEW" }
-    // --------------------------------------------------
-    if (action.startsWith("stage:")) {
-      const stageFromAction = action.slice("stage:".length);
-      const stage = stageFromAction || payload.stage;
-
-      if (!stage) {
-        return NextResponse.json(
-          { success: false, error: "Missing stage value." },
-          { status: 400 },
-        );
-      }
-
-      await prisma.jobApplication.updateMany({
-        where: {
-          id: { in: applicationIds },
-          // ❌ no tenantId here – JobApplication model doesn’t have it
-        },
-        data: { stage },
-      });
-
-      return NextResponse.json({
-        success: true,
-        updated: applicationIds.length,
-        stage,
-      });
-    }
-
-    if (action === "stage" || payload.stage) {
-      const stage = payload.stage;
-      if (!stage) {
-        return NextResponse.json(
-          { success: false, error: "Missing stage value." },
-          { status: 400 },
-        );
-      }
-
-      await prisma.jobApplication.updateMany({
-        where: {
-          id: { in: applicationIds },
-        },
-        data: { stage },
-      });
-
-      return NextResponse.json({
-        success: true,
-        updated: applicationIds.length,
-        stage,
-      });
-    }
-
-    // --------------------------------------------------
-    // 2) Status changes (if/when you wire them from UI)
-    // --------------------------------------------------
-    if (action === "status" || payload.status) {
-      const status = payload.status;
-      if (!status) {
-        return NextResponse.json(
-          { success: false, error: "Missing status value." },
-          { status: 400 },
-        );
-      }
-
-      await prisma.jobApplication.updateMany({
-        where: {
-          id: { in: applicationIds },
-        },
-        data: { status },
-      });
-
-      return NextResponse.json({
-        success: true,
-        updated: applicationIds.length,
-        status,
-      });
-    }
-
-    // --------------------------------------------------
-    // 3) Tagging hook (ready for future use)
-    // --------------------------------------------------
-    if (action === "tag" || payload.tag) {
-      const tag = payload.tag;
-      // You can extend this once you decide how tags are stored
-      return NextResponse.json({
-        success: true,
-        updated: 0,
-        note:
-          "Tag action acknowledged, but not yet implemented in the DB schema.",
-        tag,
-      });
-    }
-
-    // --------------------------------------------------
-    // Fallback: no recognised action
-    // --------------------------------------------------
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Unsupported or missing bulk action.",
+    const result = await prisma.jobApplication.updateMany({
+      where: {
+        candidateId: { in: uniqueCandidateIds },
       },
-      { status: 400 },
+      data: {
+        stage: newStage,
+      },
+    });
+
+    console.log(
+      `Bulk candidate stage update via form: stage=${newStage}, updated=${result.count}`,
     );
+
+    const redirectUrl = new URL(request.url);
+    redirectUrl.pathname = "/ats/candidates";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (err) {
-    console.error("POST /api/ats/candidates/bulk error", err);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to process bulk candidate update.",
-      },
-      { status: 500 },
-    );
+    console.error("Bulk candidate stage FORM error:", err);
+    const fallbackUrl = new URL(request.url);
+    fallbackUrl.pathname = "/ats/candidates";
+    fallbackUrl.search = "";
+    return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
 }
