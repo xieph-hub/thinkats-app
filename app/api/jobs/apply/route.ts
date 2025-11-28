@@ -2,14 +2,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { Resend } from "resend";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
+
+const PUBLIC_SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
+
+const RESEND_FROM_EMAIL =
+  process.env.RESEND_FROM_EMAIL || "Resourcin <no-reply@mail.resourcin.com>";
+
+// Internal notification email:
+// - Prefer ATS_NOTIFICATIONS_EMAIL if set (future per-tenant override)
+// - Fallback to RESOURCIN_ADMIN_EMAIL (hello@resourcin.com in your case)
+const ATS_NOTIFICATIONS_EMAIL =
+  process.env.ATS_NOTIFICATIONS_EMAIL ||
+  process.env.RESOURCIN_ADMIN_EMAIL ||
+  "";
+
+// ---------------------------------------------------------------------------
+// POST /api/jobs/apply
+// ---------------------------------------------------------------------------
 
 export async function POST(req: Request) {
   try {
@@ -25,7 +41,9 @@ export async function POST(req: Request) {
     const linkedinUrl = (formData.get("linkedinUrl") || "")
       .toString()
       .trim();
-    const githubUrl = (formData.get("githubUrl") || "").toString().trim();
+    const githubUrl = (formData.get("githubUrl") || "")
+      .toString()
+      .trim();
 
     const currentGrossAnnual = (
       formData.get("currentGrossAnnual") || ""
@@ -41,12 +59,12 @@ export async function POST(req: Request) {
       .toString()
       .trim();
 
-    const howHeard = (formData.get("howHeard") || "").toString().trim();
-
-    const rawSource = (formData.get("source") || "").toString().trim();
-    // 🔹 Final internal source used for tracking (multi-tenant friendly)
-    const internalSource =
-      rawSource && rawSource.length > 0 ? rawSource : "CAREERS_SITE";
+    const howHeard = (formData.get("howHeard") || "")
+      .toString()
+      .trim();
+    const source = (formData.get("source") || "")
+      .toString()
+      .trim(); // internal tracking source
 
     const coverLetter = (formData.get("coverLetter") || "")
       .toString()
@@ -65,22 +83,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job to get tenant id
+    // 1) Load job to get tenant id + title (+ slug for nice URLs)
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
         id: true,
+        slug: true,
         tenantId: true,
         title: true,
+        location: true,
       },
     });
 
     if (!job) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Job not found or no longer available.",
-        },
+        { success: false, error: "Job not found or no longer available." },
         { status: 404 },
       );
     }
@@ -93,7 +110,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // We'll keep / override CV URL on candidate if we successfully upload one
+    // We’ll keep / override CV URL on candidate if we successfully upload one
     let candidateCvUrl: string | null =
       (candidate?.cvUrl as string | null | undefined) || null;
 
@@ -168,7 +185,7 @@ export async function POST(req: Request) {
       candidateCvUrl = applicationCvUrl;
     }
 
-    // 4) Create the job application
+    // 4) Create the job application (this is where `source` + `cvUrl` get saved)
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -187,17 +204,160 @@ export async function POST(req: Request) {
         noticePeriod: noticePeriod || null,
 
         howHeard: howHeard || null,
-        source: internalSource || null,
+        source: source || null,
 
         cvUrl: applicationCvUrl || candidateCvUrl || null,
 
         coverLetter: coverLetter || null,
 
-        // defaults
+        // sensible defaults
         stage: "APPLIED",
         status: "PENDING",
       },
     });
+
+    // 5) Fire emails via Resend (candidate + internal), but never break the UX if this fails
+    if (process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+
+      const candidateSubject = `We've received your application – ${job.title}`;
+      const safeName = fullName || "there";
+
+      const canonicalPath = job.slug
+        ? `/jobs/${encodeURIComponent(job.slug)}`
+        : `/jobs/${encodeURIComponent(job.id)}`;
+      const publicJobUrl = `${PUBLIC_SITE_URL}${canonicalPath}`;
+
+      const candidateHtml = `
+        <p>Hi ${safeName},</p>
+        <p>Thank you for applying for the <strong>${job.title}</strong>${
+          job.location ? ` in <strong>${job.location}</strong>` : ""
+        } via Resourcin.</p>
+        <p>We’ve received your application and our recruitment team will review it carefully. If your profile is a close match for the role, we'll reach out to discuss next steps.</p>
+        <p style="margin-top: 16px; font-size: 13px; color: #4b5563;">
+          Job: <a href="${publicJobUrl}" style="color: #172965; text-decoration: none;">${job.title}</a><br />
+          Submitted with email: <strong>${email}</strong>${
+            source ? `<br />Application source: <strong>${source}</strong>` : ""
+          }
+        </p>
+        <p style="margin-top: 16px;">Best regards,<br/>Resourcin Recruitment Team<br/><span style="font-size: 12px; color: #6b7280;">Powered by ThinkATS</span></p>
+      `;
+
+      const candidateText = `
+Hi ${safeName},
+
+Thank you for applying for the "${job.title}" role${
+        job.location ? ` in ${job.location}` : ""
+      } via Resourcin.
+
+We’ve received your application and our recruitment team will review it carefully. If your profile is a close match for the role, we'll reach out to discuss next steps.
+
+Job: ${job.title}
+Link: ${publicJobUrl}
+Submitted with email: ${email}${
+        source ? `\nApplication source: ${source}` : ""
+      }
+
+Best regards,
+Resourcin Recruitment Team
+(Powered by ThinkATS)
+      `.trim();
+
+      const internalSubject = `New application: ${fullName} → ${job.title}`;
+      const internalHtml = `
+        <p>A new application has been submitted via ThinkATS.</p>
+        <p>
+          <strong>Candidate:</strong> ${fullName} (${email})<br/>
+          <strong>Location:</strong> ${location || "Not specified"}<br/>
+          <strong>Role:</strong> ${job.title}${
+            job.location ? ` – ${job.location}` : ""
+          }<br/>
+          <strong>Stage:</strong> APPLIED<br/>
+          <strong>Status:</strong> PENDING<br/>
+          ${source ? `<strong>Source:</strong> ${source}<br/>` : ""}
+          ${
+            howHeard
+              ? `<strong>How they heard:</strong> ${howHeard}<br/>`
+              : ""
+          }
+        </p>
+        <p>
+          <strong>ATS links:</strong><br/>
+          Job in ATS: <a href="${PUBLIC_SITE_URL}/ats/jobs/${
+            job.id
+          }" style="color:#172965;">Open job</a><br/>
+          Candidate profile: <a href="${PUBLIC_SITE_URL}/ats/candidates/${
+            candidate.id
+          }" style="color:#172965;">Open candidate</a>
+        </p>
+        ${
+          candidateCvUrl
+            ? `<p><strong>CV:</strong> <a href="${candidateCvUrl}" style="color:#172965;">View CV</a></p>`
+            : ""
+        }
+        <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">
+          This notification was generated automatically by ThinkATS.
+        </p>
+      `;
+
+      const internalText = `
+A new application has been submitted via ThinkATS.
+
+Candidate: ${fullName} (${email})
+Location: ${location || "Not specified"}
+
+Role: ${job.title}${job.location ? ` – ${job.location}` : ""}
+Stage: APPLIED
+Status: PENDING
+${source ? `Source: ${source}\n` : ""}${
+        howHeard ? `How they heard: ${howHeard}\n` : ""
+      }
+${candidateCvUrl ? `CV: ${candidateCvUrl}\n` : ""}
+
+ATS links:
+- Job: ${PUBLIC_SITE_URL}/ats/jobs/${job.id}
+- Candidate: ${PUBLIC_SITE_URL}/ats/candidates/${candidate.id}
+
+This notification was generated automatically by ThinkATS.
+      `.trim();
+
+      try {
+        const promises: Promise<unknown>[] = [];
+
+        // Candidate acknowledgement
+        promises.push(
+          resend.emails.send({
+            from: RESEND_FROM_EMAIL,
+            to: email,
+            subject: candidateSubject,
+            html: candidateHtml,
+            text: candidateText,
+          }),
+        );
+
+        // Internal notification (optional)
+        if (ATS_NOTIFICATIONS_EMAIL) {
+          promises.push(
+            resend.emails.send({
+              from: RESEND_FROM_EMAIL,
+              to: ATS_NOTIFICATIONS_EMAIL,
+              subject: internalSubject,
+              html: internalHtml,
+              text: internalText,
+            }),
+          );
+        }
+
+        await Promise.allSettled(promises);
+      } catch (emailError) {
+        console.error("Resend email error (job application):", emailError);
+        // Intentionally do not fail the response — email is best-effort
+      }
+    } else {
+      console.warn(
+        "RESEND_API_KEY not set; skipping candidate + internal emails for job application.",
+      );
+    }
 
     return NextResponse.json({
       success: true,
