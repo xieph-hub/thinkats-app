@@ -45,9 +45,7 @@ export async function POST(req: Request) {
       .toString()
       .trim();
 
-    const currentGrossAnnual = (
-      formData.get("currentGrossAnnual") || ""
-    )
+    const currentGrossAnnual = (formData.get("currentGrossAnnual") || "")
       .toString()
       .trim();
     const grossAnnualExpectation = (
@@ -228,21 +226,96 @@ export async function POST(req: Request) {
         : `/jobs/${encodeURIComponent(job.id)}`;
       const publicJobUrl = `${PUBLIC_SITE_URL}${canonicalPath}`;
 
+      // Branded candidate HTML
       const candidateHtml = `
-        <p>Hi ${safeName},</p>
-        <p>Thank you for applying for the <strong>${job.title}</strong>${
-          job.location ? ` in <strong>${job.location}</strong>` : ""
-        } via Resourcin.</p>
-        <p>We’ve received your application and our recruitment team will review it carefully. If your profile is a close match for the role, we'll reach out to discuss next steps.</p>
-        <p style="margin-top: 16px; font-size: 13px; color: #4b5563;">
-          Job: <a href="${publicJobUrl}" style="color: #172965; text-decoration: none;">${job.title}</a><br />
-          Submitted with email: <strong>${email}</strong>${
-            source ? `<br />Application source: <strong>${source}</strong>` : ""
+  <div style="background-color:#f3f4f6;padding:24px 0;">
+    <div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;">
+      <div style="background-color:#ffffff;border-radius:12px;border:1px solid #e5e7eb;padding:24px 24px 18px;">
+        <div style="margin-bottom:16px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#6b7280;">
+            Resourcin · ThinkATS
+          </div>
+          <div style="font-size:20px;line-height:1.3;font-weight:700;color:#111827;margin-top:4px;">
+            Application received
+          </div>
+        </div>
+
+        <div style="font-size:14px;line-height:1.6;color:#374151;">
+          <p style="margin:0 0 12px 0;">Hi ${safeName},</p>
+          <p style="margin:0 0 12px 0;">
+            Thank you for applying for the
+            <strong>${job.title}</strong>${
+              job.location
+                ? ` in <strong>${job.location}</strong>`
+                : ""
+            } via Resourcin.
+          </p>
+          <p style="margin:0 0 12px 0;">
+            We’ve received your application and our recruitment team will review it carefully.
+            If your profile is a close match for the role, we'll reach out to discuss next steps.
+          </p>
+        </div>
+
+        <div style="margin-top:16px;padding:12px 14px;border-radius:10px;background-color:#f9fafb;border:1px solid #e5e7eb;font-size:13px;color:#4b5563;">
+          <div style="margin-bottom:4px;">
+            <span style="font-weight:600;color:#111827;">Role:</span>
+            <a href="${publicJobUrl}" style="color:#172965;text-decoration:none;">
+              ${job.title}
+            </a>${
+              job.location ? ` · <span>${job.location}</span>` : ""
+            }
+          </div>
+          <div style="margin-bottom:4px;">
+            <span style="font-weight:600;color:#111827;">Submitted with:</span>
+            <span> ${email}</span>
+          </div>
+          ${
+            source
+              ? `<div style="margin-bottom:2px;">
+                  <span style="font-weight:600;color:#111827;">Application source:</span>
+                  <span> ${source}</span>
+                </div>`
+              : ""
           }
+        </div>
+
+        <p style="margin-top:18px;margin-bottom:0;font-size:13px;color:#4b5563;">
+          Best regards,<br/>
+          Resourcin Recruitment Team<br/>
+          <span style="font-size:12px;color:#6b7280;">Powered by ThinkATS</span>
         </p>
-        <p style="margin-top: 16px;">Best regards,<br/>Resourcin Recruitment Team<br/><span style="font-size: 12px; color: #6b7280;">Powered by ThinkATS</span></p>
+      </div>
+
+      <div style="text-align:center;margin-top:10px;font-size:12px;color:#6b7280;">
+        <div style="margin-bottom:4px;">
+          Resourcin · Executive search & recruitment
+        </div>
+        <div style="margin-bottom:4px;">
+          <a href="https://www.resourcin.com" style="color:#172965;text-decoration:none;">
+            resourcin.com
+          </a>
+        </div>
+        <div>
+          <span style="margin-right:4px;">Follow us:</span>
+          <a href="https://www.linkedin.com/company/resourcin"
+             style="color:#172965;text-decoration:none;margin-right:8px;">
+            LinkedIn
+          </a>
+          <a href="https://x.com/resourcinhq"
+             style="color:#172965;text-decoration:none;margin-right:8px;">
+            X
+          </a>
+          <a href="https://www.instagram.com/resourcinhq/"
+             style="color:#172965;text-decoration:none;">
+            Instagram
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
       `;
 
+      // Text fallback including links + socials
       const candidateText = `
 Hi ${safeName},
 
@@ -252,15 +325,21 @@ Thank you for applying for the "${job.title}" role${
 
 We’ve received your application and our recruitment team will review it carefully. If your profile is a close match for the role, we'll reach out to discuss next steps.
 
-Job: ${job.title}
+Role: ${job.title}${job.location ? ` (${job.location})` : ""}
 Link: ${publicJobUrl}
-Submitted with email: ${email}${
+Submitted with: ${email}${
         source ? `\nApplication source: ${source}` : ""
       }
 
-Best regards,
-Resourcin Recruitment Team
-(Powered by ThinkATS)
+——
+Resourcin · Executive search & recruitment
+Website: https://www.resourcin.com
+Follow us:
+- LinkedIn: https://www.linkedin.com/company/resourcin
+- X: https://x.com/resourcinhq
+- Instagram: https://www.instagram.com/resourcinhq/
+
+Powered by ThinkATS
       `.trim();
 
       const internalSubject = `New application: ${fullName} → ${job.title}`;
@@ -283,10 +362,12 @@ Resourcin Recruitment Team
         </p>
         <p>
           <strong>ATS links:</strong><br/>
-          Job in ATS: <a href="${PUBLIC_SITE_URL}/ats/jobs/${
+          Job in ATS:
+          <a href="${PUBLIC_SITE_URL}/ats/jobs/${
             job.id
           }" style="color:#172965;">Open job</a><br/>
-          Candidate profile: <a href="${PUBLIC_SITE_URL}/ats/candidates/${
+          Candidate profile:
+          <a href="${PUBLIC_SITE_URL}/ats/candidates/${
             candidate.id
           }" style="color:#172965;">Open candidate</a>
         </p>
@@ -296,7 +377,7 @@ Resourcin Recruitment Team
             : ""
         }
         <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">
-          This notification was generated automatically by ThinkATS.
+          This notification was generated automatically by ThinkATS (Resourcin).
         </p>
       `;
 
@@ -318,7 +399,7 @@ ATS links:
 - Job: ${PUBLIC_SITE_URL}/ats/jobs/${job.id}
 - Candidate: ${PUBLIC_SITE_URL}/ats/candidates/${candidate.id}
 
-This notification was generated automatically by ThinkATS.
+This notification was generated automatically by ThinkATS (Resourcin).
       `.trim();
 
       try {
