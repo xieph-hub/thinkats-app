@@ -150,6 +150,18 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
   };
 }
 
+// Helper to extract a CV URL from any candidate / application object
+function getCvFromRecord(record: any | null | undefined): string | null {
+  if (!record) return null;
+  return (
+    record.cvUrl ||
+    record.cv_url ||
+    record.resumeUrl ||
+    record.resume_url ||
+    null
+  );
+}
+
 export default async function CandidateDetailPage({ params }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) {
@@ -198,13 +210,16 @@ export default async function CandidateDetailPage({ params }: PageProps) {
     (applications[0]?.linkedinUrl as string | undefined) ||
     null;
 
-  // 🔹 Primary CV: candidate.cvUrl first, then latest application.cvUrl
-  const primaryCvUrl: string | null =
-    (candidate?.cvUrl as string | undefined) ||
-    (applications[0]?.cvUrl as string | undefined) ||
-    null;
-
   const latestApplication = applications[0];
+
+  // 🔹 Find a primary CV URL:
+  //    1) Candidate record (any cv*/resume* field)
+  //    2) First application that has a CV
+  let primaryCvUrl: string | null = getCvFromRecord(candidate);
+  if (!primaryCvUrl) {
+    const appWithCv = applications.find((app) => getCvFromRecord(app));
+    primaryCvUrl = getCvFromRecord(appWithCv);
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-0">
@@ -293,7 +308,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                 <span className="ml-1.5 text-[10px] opacity-80">↗</span>
               </a>
               <p className="mt-1 text-[11px] text-slate-500">
-                Pulled from candidate profile or most recent application.
+                Pulled from candidate profile or any linked application.
               </p>
             </>
           ) : (
@@ -356,10 +371,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
             {applications.map((app) => {
               const stage = (app as any).stage as string | null | undefined;
               const status = (app as any).status as string | null | undefined;
-              const appCvUrl = (app as any).cvUrl as
-                | string
-                | null
-                | undefined;
+              const appCvUrl = getCvFromRecord(app);
 
               return (
                 <div
