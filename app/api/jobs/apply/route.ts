@@ -5,7 +5,10 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
-  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 export async function POST(req: Request) {
@@ -19,21 +22,35 @@ export async function POST(req: Request) {
     const phone = (formData.get("phone") || "").toString().trim();
     const location = (formData.get("location") || "").toString().trim();
 
-    const linkedinUrl = (formData.get("linkedinUrl") || "").toString().trim();
+    const linkedinUrl = (formData.get("linkedinUrl") || "")
+      .toString()
+      .trim();
     const githubUrl = (formData.get("githubUrl") || "").toString().trim();
 
     const currentGrossAnnual = (
       formData.get("currentGrossAnnual") || ""
-    ).toString().trim();
+    )
+      .toString()
+      .trim();
     const grossAnnualExpectation = (
       formData.get("grossAnnualExpectation") || ""
-    ).toString().trim();
-    const noticePeriod = (formData.get("noticePeriod") || "").toString().trim();
+    )
+      .toString()
+      .trim();
+    const noticePeriod = (formData.get("noticePeriod") || "")
+      .toString()
+      .trim();
 
     const howHeard = (formData.get("howHeard") || "").toString().trim();
-    const source = (formData.get("source") || "").toString().trim();
 
-    const coverLetter = (formData.get("coverLetter") || "").toString().trim();
+    const rawSource = (formData.get("source") || "").toString().trim();
+    // 🔹 Final internal source used for tracking (multi-tenant friendly)
+    const internalSource =
+      rawSource && rawSource.length > 0 ? rawSource : "CAREERS_SITE";
+
+    const coverLetter = (formData.get("coverLetter") || "")
+      .toString()
+      .trim();
 
     const cvFile = formData.get("cv");
 
@@ -60,7 +77,10 @@ export async function POST(req: Request) {
 
     if (!job) {
       return NextResponse.json(
-        { success: false, error: "Job not found or no longer available." },
+        {
+          success: false,
+          error: "Job not found or no longer available.",
+        },
         { status: 404 },
       );
     }
@@ -73,7 +93,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // We’ll keep / override CV URL on candidate if we successfully upload one
+    // We'll keep / override CV URL on candidate if we successfully upload one
     let candidateCvUrl: string | null =
       (candidate?.cvUrl as string | null | undefined) || null;
 
@@ -105,7 +125,6 @@ export async function POST(req: Request) {
 
     if (cvFile instanceof File && cvFile.size > 0) {
       try {
-        // This is where we lock in your bucket name
         const bucket = "resourcin-uploads";
 
         const ext =
@@ -121,8 +140,7 @@ export async function POST(req: Request) {
           .upload(filePath, cvFile, {
             cacheControl: "3600",
             upsert: false,
-            contentType:
-              cvFile.type || "application/octet-stream",
+            contentType: cvFile.type || "application/octet-stream",
           });
 
         if (uploadError) {
@@ -150,7 +168,7 @@ export async function POST(req: Request) {
       candidateCvUrl = applicationCvUrl;
     }
 
-    // 4) Create the job application (this is where `source`+`cvUrl` get saved)
+    // 4) Create the job application
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -169,13 +187,13 @@ export async function POST(req: Request) {
         noticePeriod: noticePeriod || null,
 
         howHeard: howHeard || null,
-        source: source || null,
+        source: internalSource || null,
 
         cvUrl: applicationCvUrl || candidateCvUrl || null,
 
         coverLetter: coverLetter || null,
 
-        // sensible defaults
+        // defaults
         stage: "APPLIED",
         status: "PENDING",
       },
