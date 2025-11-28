@@ -221,11 +221,11 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
 
   const salaryMinLabel = formatMoney(
     job.salaryMin,
-    job.salaryCurrency || "NGN",
+    job.salaryCurrency || "NGN"
   );
   const salaryMaxLabel = formatMoney(
     job.salaryMax,
-    job.salaryCurrency || "NGN",
+    job.salaryCurrency || "NGN"
   );
   const hasSalary = salaryMinLabel || salaryMaxLabel;
 
@@ -365,16 +365,13 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
             </h2>
             <p className="text-[11px] text-slate-500">
               {totalApplications}{" "}
-              {totalApplications === 1
-                ? "application"
-                : "applications"}
+              {totalApplications === 1 ? "application" : "applications"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {stagesForDisplay.map((stage) => {
               const key = stage.name.toUpperCase();
-              const count =
-                applicationsByStage.get(key)?.length ?? 0;
+              const count = applicationsByStage.get(key)?.length ?? 0;
               const isTerminal = !!stage.isTerminal;
               return (
                 <div
@@ -477,9 +474,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
             {totalApplications === 0
               ? "No applications yet."
               : `${totalApplications} ${
-                  totalApplications === 1
-                    ? "application"
-                    : "applications"
+                  totalApplications === 1 ? "application" : "applications"
                 }`}
           </p>
         </div>
@@ -498,8 +493,13 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                   <th className="px-3 py-2">Stage</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Location</th>
+                  <th className="px-3 py-2">
+                    Comp (current / expected)
+                  </th>
+                  <th className="px-3 py-2">Notice</th>
                   <th className="px-3 py-2">Source</th>
                   <th className="px-3 py-2">Applied</th>
+                  <th className="px-3 py-2">CV</th>
                 </tr>
               </thead>
               <tbody>
@@ -509,20 +509,29 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                     app.candidate?.fullName ||
                     "Unnamed candidate";
                   const candidateEmail =
-                    (app as any).email ||
-                    app.candidate?.email ||
-                    "";
+                    (app as any).email || app.candidate?.email || "";
+
                   const stageLabel = formatStageName(
-                    app.stage || "APPLIED",
+                    app.stage || "APPLIED"
                   );
                   const statusLabel = titleCaseFromEnum(
-                    app.status || "PENDING",
+                    app.status || "PENDING"
                   );
 
                   const locationLabel =
-                    app.location ||
-                    app.candidate?.location ||
-                    "—";
+                    app.location || app.candidate?.location || "—";
+
+                  const compLabel =
+                    app.currentGrossAnnual && app.grossAnnualExpectation
+                      ? `${app.currentGrossAnnual} → ${app.grossAnnualExpectation}`
+                      : app.currentGrossAnnual ||
+                        app.grossAnnualExpectation ||
+                        "—";
+
+                  const noticeLabel = app.noticePeriod || "—";
+
+                  const cvUrl =
+                    app.cvUrl || app.candidate?.cvUrl || "";
 
                   return (
                     <tr
@@ -541,6 +550,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                           )}
                         </div>
                       </td>
+
                       {/* Stage with change control */}
                       <td className="px-3 py-2 align-top">
                         <form
@@ -585,25 +595,58 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                           </span>
                         </div>
                       </td>
+
                       <td className="px-3 py-2 align-top">
                         <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                           {statusLabel}
                         </span>
                       </td>
+
                       <td className="px-3 py-2 align-top">
                         <span className="text-[11px] text-slate-700">
                           {locationLabel}
                         </span>
                       </td>
+
+                      <td className="px-3 py-2 align-top">
+                        <span className="text-[11px] text-slate-700">
+                          {compLabel}
+                        </span>
+                      </td>
+
+                      <td className="px-3 py-2 align-top">
+                        <span className="text-[11px] text-slate-700">
+                          {noticeLabel}
+                        </span>
+                      </td>
+
                       <td className="px-3 py-2 align-top">
                         <span className="text-[11px] text-slate-700">
                           {app.source || "—"}
                         </span>
                       </td>
+
                       <td className="px-3 py-2 align-top">
                         <span className="text-[11px] text-slate-700">
                           {formatDate(app.createdAt)}
                         </span>
+                      </td>
+
+                      <td className="px-3 py-2 align-top">
+                        {cvUrl ? (
+                          <a
+                            href={cvUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-medium text-[#172965] hover:underline"
+                          >
+                            View CV
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            —
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
