@@ -61,7 +61,6 @@ function statusBadgeClass(status: string | null | undefined) {
 
 // Very loose UUID check – enough to avoid Prisma UUID parse errors
 function looksLikeUuid(value: string) {
-  // 36 chars / hex + dashes
   return /^[0-9a-fA-F-]{36}$/.test(value);
 }
 
@@ -71,7 +70,6 @@ function looksLikeUuid(value: string) {
  * - email key (when the param is an email)
  */
 async function loadCandidateView(paramsKey: string, tenantId: string) {
-  // Next already decodes `%40`, but this is safe either way
   const rawKey = decodeURIComponent(paramsKey);
 
   let candidate: any = null;
@@ -82,7 +80,6 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
   if (looksLikeUuid(rawKey)) {
     mode = "id";
 
-    // Try candidate by UUID scoped to tenant
     candidate = await prisma.candidate.findFirst({
       where: {
         id: rawKey,
@@ -90,12 +87,10 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
       },
     });
 
-    // If we have the candidate, prefer their email when loading apps
     if (candidate?.email) {
       emailKey = candidate.email as string;
     }
 
-    // Applications for this candidateId OR (if known) their email
     applications = await prisma.jobApplication.findMany({
       where: {
         job: {
@@ -107,14 +102,19 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
         ],
       },
       include: {
-        job: true,
+        job: {
+          include: {
+            stages: {
+              orderBy: { position: "asc" },
+            },
+          },
+        },
       },
       orderBy: {
         createdAt: "desc",
       },
     });
   } else {
-    // Treat as email key
     mode = "email";
     emailKey = rawKey;
 
@@ -133,7 +133,13 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
         email: emailKey,
       },
       include: {
-        job: true,
+        job: {
+          include: {
+            stages: {
+              orderBy: { position: "asc" },
+            },
+          },
+        },
       },
       orderBy: {
         createdAt: "desc",
@@ -150,17 +156,25 @@ async function loadCandidateView(paramsKey: string, tenantId: string) {
   };
 }
 
-// Helper to extract a CV URL from any candidate / application object
-function getCvFromRecord(record: any | null | undefined): string | null {
-  if (!record) return null;
-  return (
-    record.cvUrl ||
-    record.cv_url ||
-    record.resumeUrl ||
-    record.resume_url ||
-    null
-  );
-}
+// Default stage options when a job has no configured stages
+const DEFAULT_STAGE_OPTIONS = [
+  "APPLIED",
+  "SCREENING",
+  "SHORTLISTED",
+  "INTERVIEWING",
+  "OFFER",
+  "HIRED",
+  "REJECTED",
+];
+
+const STATUS_OPTIONS = [
+  "PENDING",
+  "IN_PROGRESS",
+  "ON_HOLD",
+  "HIRED",
+  "REJECTED",
+  "ARCHIVED",
+];
 
 export default async function CandidateDetailPage({ params }: PageProps) {
   const tenant = await getResourcinTenant();
@@ -210,16 +224,14 @@ export default async function CandidateDetailPage({ params }: PageProps) {
     (applications[0]?.linkedinUrl as string | undefined) ||
     null;
 
-  const latestApplication = applications[0];
+  // Primary CV: candidate.cvUrl first, then latest application.cvUrl
+  const primaryCvUrl: string | null =
+    (candidate?.cvUrl as string | undefined) ||
+    (applications[0]?.cvUrl as string | undefined) ||
+    null;
 
-  // 🔹 Find a primary CV URL:
-  //    1) Candidate record (any cv*/resume* field)
-  //    2) First application that has a CV
-  let primaryCvUrl: string | null = getCvFromRecord(candidate);
-  if (!primaryCvUrl) {
-    const appWithCv = applications.find((app) => getCvFromRecord(app));
-    primaryCvUrl = getCvFromRecord(appWithCv);
-  }
+  const latestApplication = applications[0];
+  const candidateDetailPath = `/ats/candidates/${encodeURIComponent(rawKey)}`;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-0">
@@ -271,7 +283,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Top summary (now includes CV card) */}
+      {/* Top summary (includes CV card) */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -291,7 +303,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
           </p>
         </div>
 
-        {/* 🔹 CV / Resume card */}
+        {/* CV / Resume card */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             CV / Resume
@@ -308,7 +320,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                 <span className="ml-1.5 text-[10px] opacity-80">↗</span>
               </a>
               <p className="mt-1 text-[11px] text-slate-500">
-                Pulled from candidate profile or any linked application.
+                Pulled from candidate profile or most recent application.
               </p>
             </>
           ) : (
@@ -369,9 +381,24 @@ export default async function CandidateDetailPage({ params }: PageProps) {
         ) : (
           <div className="divide-y divide-slate-100">
             {applications.map((app) => {
-              const stage = (app as any).stage as string | null | undefined;
-              const status = (app as any).status as string | null | undefined;
-              const appCvUrl = getCvFromRecord(app);
+              const stage = (app as any).stage as
+                | string
+                | null
+                | undefined;
+              const status = (app as any).status as
+                | string
+                | null
+                | undefined;
+              const appCvUrl = (app as any).cvUrl as
+                | string
+                | null
+                | undefined;
+
+              const jobStageOptions: string[] =
+                Array.isArray(app.job?.stages) &&
+                (app.job.stages as any[]).length > 0
+                  ? (app.job.stages as any[]).map((s) => s.name as string)
+                  : DEFAULT_STAGE_OPTIONS;
 
               return (
                 <div
@@ -399,32 +426,117 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <span className={stageBadgeClass(stage)}>
-                      {stage || "Applied"}
-                    </span>
-                    <span className={statusBadgeClass(status)}>
-                      {status || "Pending"}
-                    </span>
+                  <div className="flex flex-col gap-2 sm:items-end sm:justify-end">
+                    {/* Inline controls: Stage + Status */}
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      {/* Stage control */}
+                      <form
+                        method="POST"
+                        action="/ats/applications/actions"
+                        className="inline-flex items-center gap-1"
+                      >
+                        <input
+                          type="hidden"
+                          name="jobId"
+                          value={app.jobId}
+                        />
+                        <input
+                          type="hidden"
+                          name="applicationId"
+                          value={app.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="redirectTo"
+                          value={candidateDetailPath}
+                        />
+                        <select
+                          name="newStage"
+                          defaultValue={stage || "APPLIED"}
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                        >
+                          {jobStageOptions.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          className="text-[10px] font-medium text-[#172965] hover:underline"
+                        >
+                          Move
+                        </button>
+                      </form>
 
-                    {/* 🔹 Per-application CV link, if present */}
-                    {appCvUrl && (
-                      <a
-                        href={appCvUrl}
-                        target="_blank"
-                        rel="noreferrer"
+                      {/* Status control */}
+                      <form
+                        method="POST"
+                        action="/ats/applications/status"
+                        className="inline-flex items-center gap-1"
+                      >
+                        <input
+                          type="hidden"
+                          name="jobId"
+                          value={app.jobId}
+                        />
+                        <input
+                          type="hidden"
+                          name="applicationId"
+                          value={app.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="redirectTo"
+                          value={candidateDetailPath}
+                        />
+                        <select
+                          name="newStatus"
+                          defaultValue={status || "PENDING"}
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                        >
+                          {STATUS_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          className="text-[10px] font-medium text-[#172965] hover:underline"
+                        >
+                          Set
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Badges + CV + open pipeline */}
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                      <span className={stageBadgeClass(stage)}>
+                        {stage || "Applied"}
+                      </span>
+                      <span className={statusBadgeClass(status)}>
+                        {status || "Pending"}
+                      </span>
+
+                      {appCvUrl && (
+                        <a
+                          href={appCvUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
+                        >
+                          View CV
+                        </a>
+                      )}
+
+                      <Link
+                        href={`/ats/jobs/${app.jobId}`}
                         className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
                       >
-                        View CV
-                      </a>
-                    )}
-
-                    <Link
-                      href={`/ats/jobs/${app.jobId}`}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
-                    >
-                      Open job pipeline
-                    </Link>
+                        Open job pipeline
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );
