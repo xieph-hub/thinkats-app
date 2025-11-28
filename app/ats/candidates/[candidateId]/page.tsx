@@ -155,9 +155,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
   if (!tenant) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-10">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Candidate
-        </h1>
+        <h1 className="text-xl font-semibold text-slate-900">Candidate</h1>
         <p className="mt-2 text-sm text-slate-600">
           No default tenant configured. Please set{" "}
           <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
@@ -198,6 +196,12 @@ export default async function CandidateDetailPage({ params }: PageProps) {
   const linkedinUrl: string | null =
     (candidate?.linkedinUrl as string | undefined) ||
     (applications[0]?.linkedinUrl as string | undefined) ||
+    null;
+
+  // 🔹 Primary CV: candidate.cvUrl first, then latest application.cvUrl
+  const primaryCvUrl: string | null =
+    (candidate?.cvUrl as string | undefined) ||
+    (applications[0]?.cvUrl as string | undefined) ||
     null;
 
   const latestApplication = applications[0];
@@ -252,7 +256,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Top summary */}
+      {/* Top summary (now includes CV card) */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
@@ -272,6 +276,33 @@ export default async function CandidateDetailPage({ params }: PageProps) {
           </p>
         </div>
 
+        {/* 🔹 CV / Resume card */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            CV / Resume
+          </p>
+          {primaryCvUrl ? (
+            <>
+              <a
+                href={primaryCvUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-medium text-white shadow-sm hover:bg-[#0f1c45]"
+              >
+                View CV file
+                <span className="ml-1.5 text-[10px] opacity-80">↗</span>
+              </a>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Pulled from candidate profile or most recent application.
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm font-medium text-slate-900">
+              No CV file on record.
+            </p>
+          )}
+        </div>
+
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Applications
@@ -281,8 +312,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
             Across this tenant (by{" "}
-            {mode === "id" ? "candidate id / email" : "email"}
-            )
+            {mode === "id" ? "candidate id / email" : "email"})
           </p>
         </div>
 
@@ -324,11 +354,9 @@ export default async function CandidateDetailPage({ params }: PageProps) {
         ) : (
           <div className="divide-y divide-slate-100">
             {applications.map((app) => {
-              const stage = (app as any).stage as
-                | string
-                | null
-                | undefined;
-              const status = (app as any).status as
+              const stage = (app as any).stage as string | null | undefined;
+              const status = (app as any).status as string | null | undefined;
+              const appCvUrl = (app as any).cvUrl as
                 | string
                 | null
                 | undefined;
@@ -350,8 +378,7 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                           </span>
                         </div>
                         <p className="mt-1 text-[11px] text-slate-500">
-                          Applied on{" "}
-                          {formatDate(app.createdAt as any)} ·{" "}
+                          Applied on {formatDate(app.createdAt as any)} ·{" "}
                           {app.job?.location
                             ? app.job.location
                             : "Location n/a"}
@@ -367,6 +394,18 @@ export default async function CandidateDetailPage({ params }: PageProps) {
                     <span className={statusBadgeClass(status)}>
                       {status || "Pending"}
                     </span>
+
+                    {/* 🔹 Per-application CV link, if present */}
+                    {appCvUrl && (
+                      <a
+                        href={appCvUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] text-slate-600 hover:border-[#172965] hover:text-[#172965]"
+                      >
+                        View CV
+                      </a>
+                    )}
 
                     <Link
                       href={`/ats/jobs/${app.jobId}`}
