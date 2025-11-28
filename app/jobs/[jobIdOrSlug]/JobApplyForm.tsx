@@ -46,15 +46,22 @@ export default function JobApplyForm({ jobId }: Props) {
         return;
       }
 
-      // ✅ Success – reset form + show confirmation
+      // ✅ Success – reset form
       form.reset();
+
+      // ✅ Show your exact acknowledgement text
       setSuccessMessage(
-        data?.message || "Thank you. Your application has been received."
+        "This is to acknowledge receipt of your application. A member of our recruitment team will reach out to you if you are a good fit for the role.",
       );
+
+      // ✅ Scroll to top so the message is clearly visible
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } catch (err) {
       console.error("JobApplyForm submit error", err);
       setErrorMessage(
-        "Something went wrong while submitting. Please try again in a moment."
+        "Something went wrong while submitting. Please try again in a moment.",
       );
     } finally {
       setIsSubmitting(false);
@@ -64,6 +71,19 @@ export default function JobApplyForm({ jobId }: Props) {
   return (
     <div className="space-y-3">
       <form onSubmit={handleSubmit} className="space-y-3">
+        {/* Messages at the top so they are immediately visible after scroll */}
+        {errorMessage && (
+          <div className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">
+            {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="rounded-md border border-[#64C247]/40 bg-[#64C247]/10 px-3 py-2 text-[11px] text-[#306B34]">
+            {successMessage}
+          </div>
+        )}
+
         {/* Name + Email */}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -295,29 +315,15 @@ export default function JobApplyForm({ jobId }: Props) {
           />
         </div>
 
-        {/* Messages + submit button */}
-        <div className="flex flex-col gap-2 pt-1">
-          {errorMessage && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">
-              {errorMessage}
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="rounded-md bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
-              {successMessage}
-            </div>
-          )}
-
-          <div className="flex items-center justify-end">
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSubmitting ? "Submitting..." : "Submit application"}
-            </button>
-          </div>
+        {/* Submit button */}
+        <div className="flex items-center justify-end pt-1">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex items-center rounded-md bg-[#0B1320] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#111827] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isSubmitting ? "Submitting..." : "Submit application"}
+          </button>
         </div>
       </form>
     </div>
