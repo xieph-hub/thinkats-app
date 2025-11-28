@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   const jobIdRaw = formData.get("jobId");
   const applicationIdRaw = formData.get("applicationId");
   const newStageRaw = formData.get("newStage");
+  const redirectToRaw = formData.get("redirectTo");
 
   const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
   const applicationId =
@@ -15,15 +16,17 @@ export async function POST(request: Request) {
   const newStage =
     typeof newStageRaw === "string" ? newStageRaw : "";
 
+  const redirectTo =
+    typeof redirectToRaw === "string" ? redirectToRaw : "";
+
   if (!jobId || !applicationId || !newStage) {
-    // Nothing useful to do, bounce back to ATS jobs
     const fallbackUrl = new URL(request.url);
     fallbackUrl.pathname = "/ats/jobs";
+    fallbackUrl.search = "";
     return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
 
   try {
-    // Nested update via Job -> applications relation
     await prisma.job.update({
       where: { id: jobId },
       data: {
@@ -39,12 +42,17 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("Error updating application stage:", err);
-    // Still redirect back to job detail – later you can add flash messages
+    // We still redirect – you can add flash messaging later if needed.
   }
 
-  const redirectUrl = new URL(request.url);
-  redirectUrl.pathname = `/ats/jobs/${jobId}`;
-  redirectUrl.search = "";
+  const redirectPath =
+    redirectTo && redirectTo.startsWith("/")
+      ? redirectTo
+      : `/ats/jobs/${jobId}`;
 
-  return NextResponse.redirect(redirectUrl, { status: 303 });
+  const url = new URL(request.url);
+  url.pathname = redirectPath;
+  url.search = "";
+
+  return NextResponse.redirect(url, { status: 303 });
 }
