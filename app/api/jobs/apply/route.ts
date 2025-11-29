@@ -245,8 +245,7 @@ export async function POST(req: Request) {
             jobTitle,
             jobPublicUrl: publicJobUrl,
             candidateEmail,
-            // if your component supports it:
-            // source: trackingSource,
+            // source: trackingSource, // if your props support it, you can add this
           }),
         }),
       );
@@ -274,8 +273,7 @@ export async function POST(req: Request) {
         );
       }
 
-      // 5c) Client-facing notification (for now still to internal inbox).
-      // When you add a per-job client contact email, plug it in here.
+      // 5c) Client-facing notification (currently delivered to ATS_NOTIFICATIONS_EMAIL)
       if (ATS_NOTIFICATIONS_EMAIL) {
         sendPromises.push(
           resend.emails.send({
@@ -283,7 +281,7 @@ export async function POST(req: Request) {
             to: ATS_NOTIFICATIONS_EMAIL,
             subject: `New candidate for ${jobTitle}`,
             react: ClientNewApplicationNotificationEmail({
-              // clientName intentionally omitted for now, template should handle it
+              clientName: "Hiring team", // 🔹 required prop to satisfy ClientNewApplicationNotificationEmailProps
               jobTitle,
               jobLocation,
               candidateName,
