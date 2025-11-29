@@ -421,7 +421,11 @@ export default async function JobApplyPage({
             </div>
 
             <div className="mt-4 border-t border-slate-100 pt-4">
-              <JobApplyForm jobId={job.id} source={trackingSource} />
+              <JobApplyForm
+  jobId={job.id}
+  source={trackingSource}
+  successRedirectPath={`${canonicalPath}/applied`}
+/>
             </div>
           </article>
 
