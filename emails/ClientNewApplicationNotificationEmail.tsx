@@ -2,14 +2,14 @@
 import * as React from "react";
 import ResourcinEmailLayout from "./ResourcinEmailLayout";
 
-type ClientNewApplicationNotificationEmailProps = {
-  clientName?: string | null;
+export type ClientNewApplicationNotificationEmailProps = {
+  clientName: string | null;
   jobTitle: string;
-  jobLocation?: string | null;
+  jobLocation: string | null;
   candidateName: string;
   candidateEmail: string;
-  source?: string | null;
-  atsLink?: string | null;
+  source: string;
+  atsLink: string;
 };
 
 export default function ClientNewApplicationNotificationEmail({
@@ -21,71 +21,59 @@ export default function ClientNewApplicationNotificationEmail({
   source,
   atsLink,
 }: ClientNewApplicationNotificationEmailProps) {
-  const greetingName = clientName?.trim() || "there";
-  const displayLocation = jobLocation?.trim();
-  const displaySource = source?.trim();
-  const hasAtsLink = Boolean(atsLink);
-
-  const pStyle: React.CSSProperties = {
-    fontSize: "13px",
-    lineHeight: "1.6",
-    margin: "0 0 12px 0",
-    color: "#111827",
-  };
-
-  const listStyle: React.CSSProperties = {
-    fontSize: "13px",
-    lineHeight: "1.6",
-    margin: "0 0 12px 16px",
-    color: "#111827",
-    paddingLeft: "0",
-  };
+  const salutation = clientName ? `Hi ${clientName},` : "Hello,";
 
   return (
     <ResourcinEmailLayout
-      previewText={`A new candidate has applied for ${jobTitle} via Resourcin.`}
-      title={`New candidate for ${jobTitle}`}
-      intro={`Hi ${greetingName},`}
-      ctaLabel={hasAtsLink ? "View candidate in Resourcin ATS" : undefined}
-      ctaUrl={hasAtsLink ? atsLink || undefined : undefined}
-      footerNote="You’re receiving this email because you are listed as a contact for this search with Resourcin."
+      title="New candidate for your role"
+      previewText={`${candidateName} has applied for ${jobTitle}.`}
     >
-      <p style={pStyle}>
-        A new candidate has applied for{" "}
-        <strong>{jobTitle}</strong>
-        {displayLocation ? ` (${displayLocation})` : ""}.
+      <p style={{ margin: "0 0 12px 0" }}>{salutation}</p>
+
+      <p style={{ margin: "0 0 12px 0" }}>
+        You have a new candidate for the{" "}
+        <strong>
+          {jobTitle}
+          {jobLocation ? ` – ${jobLocation}` : ""}
+        </strong>{" "}
+        role being managed by Resourcin.
       </p>
 
-      <p style={pStyle}>Quick snapshot:</p>
+      <div
+        style={{
+          marginTop: "8px",
+          padding: "12px 14px",
+          borderRadius: "10px",
+          backgroundColor: "#f9fafb",
+          border: "1px solid #e5e7eb",
+          fontSize: "13px",
+          color: "#4b5563",
+        }}
+      >
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Candidate:</strong> {candidateName} ({candidateEmail})
+        </div>
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Role:</strong> {jobTitle}
+          {jobLocation ? ` – ${jobLocation}` : ""}
+        </div>
+        {source ? (
+          <div>
+            <strong>Source:</strong> {source}
+          </div>
+        ) : null}
+      </div>
 
-      <ul style={listStyle}>
-        <li>
-          <strong>Name:</strong> {candidateName}
-        </li>
-        <li>
-          <strong>Email:</strong> {candidateEmail}
-        </li>
-        {displaySource && (
-          <li>
-            <strong>Source:</strong> {displaySource}
-          </li>
-        )}
-      </ul>
-
-      <p style={pStyle}>
-        We will review their profile against the agreed requirements and share
-        our recommendation as part of your next shortlist update.
-      </p>
-
-      <p style={pStyle}>
-        If you have any immediate feedback or want us to adjust the profile
-        parameters, simply reply to this email.
-      </p>
-
-      <p style={pStyle}>
-        Best regards,
+      <p style={{ marginTop: "14px", marginBottom: 0, fontSize: "13px" }}>
+        You can review this candidate and others for the role via your Resourcin
+        ATS view:
         <br />
-        <strong>The Resourcin team</strong>
+        <a
+          href={atsLink}
+          style={{ color: "#172965", textDecoration: "none" }}
+        >
+          Open pipeline in ATS
+        </a>
       </p>
     </ResourcinEmailLayout>
   );
