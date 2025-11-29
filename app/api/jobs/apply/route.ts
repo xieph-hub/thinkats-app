@@ -226,14 +226,14 @@ export async function POST(req: Request) {
         : `/jobs/${encodeURIComponent(job.id)}`;
       const publicJobUrl = `${PUBLIC_SITE_URL}${canonicalPath}`;
 
-      // Branded candidate HTML
+      // ✅ Branded candidate HTML (Resourcin only – no ThinkATS)
       const candidateHtml = `
   <div style="background-color:#f3f4f6;padding:24px 0;">
     <div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;">
       <div style="background-color:#ffffff;border-radius:12px;border:1px solid #e5e7eb;padding:24px 24px 18px;">
         <div style="margin-bottom:16px;">
           <div style="font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#6b7280;">
-            Resourcin · ThinkATS
+            RESOURCIN
           </div>
           <div style="font-size:20px;line-height:1.3;font-weight:700;color:#111827;margin-top:4px;">
             Application received
@@ -282,7 +282,7 @@ export async function POST(req: Request) {
         <p style="margin-top:18px;margin-bottom:0;font-size:13px;color:#4b5563;">
           Best regards,<br/>
           Resourcin Recruitment Team<br/>
-          <span style="font-size:12px;color:#6b7280;">Powered by ThinkATS</span>
+          <span style="font-size:12px;color:#6b7280;">Executive search & recruitment</span>
         </p>
       </div>
 
@@ -315,7 +315,7 @@ export async function POST(req: Request) {
   </div>
       `;
 
-      // Text fallback including links + socials
+      // ✅ Text fallback – also Resourcin-only
       const candidateText = `
 Hi ${safeName},
 
@@ -338,13 +338,11 @@ Follow us:
 - LinkedIn: https://www.linkedin.com/company/resourcin
 - X: https://x.com/resourcinhq
 - Instagram: https://www.instagram.com/resourcinhq/
-
-Powered by ThinkATS
       `.trim();
 
       const internalSubject = `New application: ${fullName} → ${job.title}`;
       const internalHtml = `
-        <p>A new application has been submitted via ThinkATS.</p>
+        <p>A new application has been submitted via the Resourcin ATS.</p>
         <p>
           <strong>Candidate:</strong> ${fullName} (${email})<br/>
           <strong>Location:</strong> ${location || "Not specified"}<br/>
@@ -377,12 +375,12 @@ Powered by ThinkATS
             : ""
         }
         <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">
-          This notification was generated automatically by ThinkATS (Resourcin).
+          This notification was generated automatically by the Resourcin ATS.
         </p>
       `;
 
       const internalText = `
-A new application has been submitted via ThinkATS.
+A new application has been submitted via the Resourcin ATS.
 
 Candidate: ${fullName} (${email})
 Location: ${location || "Not specified"}
@@ -399,7 +397,7 @@ ATS links:
 - Job: ${PUBLIC_SITE_URL}/ats/jobs/${job.id}
 - Candidate: ${PUBLIC_SITE_URL}/ats/candidates/${candidate.id}
 
-This notification was generated automatically by ThinkATS (Resourcin).
+This notification was generated automatically by the Resourcin ATS.
       `.trim();
 
       try {
