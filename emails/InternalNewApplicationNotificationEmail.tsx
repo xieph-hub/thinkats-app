@@ -2,17 +2,18 @@
 import * as React from "react";
 import ResourcinEmailLayout from "./ResourcinEmailLayout";
 
-type InternalNewApplicationNotificationEmailProps = {
+export type InternalNewApplicationNotificationEmailProps = {
   jobTitle: string;
-  jobLocation?: string | null;
+  jobLocation: string | null;
   candidateName: string;
   candidateEmail: string;
-  source?: string | null;
-  atsLink?: string | null;
-  linkedinUrl?: string | null;
-  currentGrossAnnual?: string | null;
-  expectation?: string | null;
-  noticePeriod?: string | null;
+  source: string;
+  atsLink: string;
+  linkedinUrl?: string;
+  currentGrossAnnual?: string;
+  expectation?: string;
+  noticePeriod?: string;
+  cvUrl?: string;
 };
 
 export default function InternalNewApplicationNotificationEmail({
@@ -26,93 +27,88 @@ export default function InternalNewApplicationNotificationEmail({
   currentGrossAnnual,
   expectation,
   noticePeriod,
+  cvUrl,
 }: InternalNewApplicationNotificationEmailProps) {
-  const displayLocation = jobLocation?.trim();
-  const displaySource = source?.trim();
-  const hasAtsLink = Boolean(atsLink);
-
-  const pStyle: React.CSSProperties = {
-    fontSize: "13px",
-    lineHeight: "1.6",
-    margin: "0 0 12px 0",
-    color: "#111827",
-  };
-
-  const listStyle: React.CSSProperties = {
-    fontSize: "13px",
-    lineHeight: "1.6",
-    margin: "0 0 12px 16px",
-    color: "#111827",
-    paddingLeft: "0",
-  };
-
   return (
     <ResourcinEmailLayout
-      previewText={`New application for ${jobTitle} via Resourcin careers site.`}
-      title={`New application: ${jobTitle}`}
-      intro="Hi team,"
-      ctaLabel={hasAtsLink ? "Open in ATS" : undefined}
-      ctaUrl={hasAtsLink ? atsLink || undefined : undefined}
-      footerNote="Internal notification from ThinkATS / Resourcin. You can adjust recipients in configuration."
+      title="New application received"
+      previewText={`${candidateName} just applied for ${jobTitle}.`}
     >
-      <p style={pStyle}>
-        A new candidate just applied for{" "}
-        <strong>{jobTitle}</strong>
-        {displayLocation ? ` (${displayLocation})` : ""}.
+      <p style={{ margin: "0 0 10px 0" }}>
+        A new application has been submitted via the Resourcin ATS.
       </p>
 
-      <ul style={listStyle}>
-        <li>
-          <strong>Name:</strong> {candidateName}
-        </li>
-        <li>
-          <strong>Email:</strong> {candidateEmail}
-        </li>
-        {displaySource && (
-          <li>
-            <strong>Source:</strong> {displaySource}
-          </li>
-        )}
-        {linkedinUrl && (
-          <li>
+      <div
+        style={{
+          marginTop: "8px",
+          padding: "12px 14px",
+          borderRadius: "10px",
+          backgroundColor: "#f9fafb",
+          border: "1px solid #e5e7eb",
+          fontSize: "13px",
+          color: "#4b5563",
+        }}
+      >
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Candidate:</strong> {candidateName} ({candidateEmail})
+        </div>
+        {linkedinUrl ? (
+          <div style={{ marginBottom: "4px" }}>
             <strong>LinkedIn:</strong>{" "}
             <a
               href={linkedinUrl}
-              target="_blank"
-              rel="noreferrer"
+              style={{ color: "#172965", textDecoration: "none" }}
             >
               {linkedinUrl}
             </a>
-          </li>
-        )}
-        {currentGrossAnnual && (
-          <li>
+          </div>
+        ) : null}
+        <div style={{ marginBottom: "4px" }}>
+          <strong>Role:</strong> {jobTitle}
+          {jobLocation ? ` – ${jobLocation}` : ""}
+        </div>
+        {currentGrossAnnual ? (
+          <div style={{ marginBottom: "2px" }}>
             <strong>Current gross annual:</strong> {currentGrossAnnual}
-          </li>
-        )}
-        {expectation && (
-          <li>
+          </div>
+        ) : null}
+        {expectation ? (
+          <div style={{ marginBottom: "2px" }}>
             <strong>Expected gross annual:</strong> {expectation}
-          </li>
-        )}
-        {noticePeriod && (
-          <li>
+          </div>
+        ) : null}
+        {noticePeriod ? (
+          <div style={{ marginBottom: "2px" }}>
             <strong>Notice period:</strong> {noticePeriod}
-          </li>
-        )}
-      </ul>
+          </div>
+        ) : null}
+        {source ? (
+          <div style={{ marginBottom: "2px" }}>
+            <strong>Source:</strong> {source}
+          </div>
+        ) : null}
+        {cvUrl ? (
+          <div>
+            <strong>CV:</strong>{" "}
+            <a
+              href={cvUrl}
+              style={{ color: "#172965", textDecoration: "none" }}
+            >
+              View CV
+            </a>
+          </div>
+        ) : null}
+      </div>
 
-      <p style={pStyle}>
-        The full application, including CV upload and parsed profile, is
-        available in the ATS.
-      </p>
-
-      <p style={pStyle}>
-        Please review and route to the appropriate stage in the pipeline.
-      </p>
-
-      <p style={pStyle}>
-        – ThinkATS / Resourcin
+      <p style={{ marginTop: "14px", marginBottom: 0, fontSize: "13px" }}>
+        <strong>ATS links</strong>
+        <br />
+        <a
+          href={atsLink}
+          style={{ color: "#172965", textDecoration: "none" }}
+        >
+          Open job &amp; pipeline in ATS
+        </a>
       </p>
     </ResourcinEmailLayout>
   );
