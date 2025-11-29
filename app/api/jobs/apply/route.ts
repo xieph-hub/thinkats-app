@@ -236,7 +236,6 @@ export async function POST(req: Request) {
       const sendPromises: Promise<unknown>[] = [];
 
       // 5a) Candidate acknowledgement (branded React email)
-      //    ✅ Only pass props that exist in CandidateApplicationReceivedProps
       sendPromises.push(
         resend.emails.send({
           from: RESEND_FROM_EMAIL,
@@ -267,7 +266,7 @@ export async function POST(req: Request) {
               currentGrossAnnual: currentGrossAnnual || undefined,
               expectation: grossAnnualExpectation || undefined,
               noticePeriod: noticePeriod || undefined,
-              cvUrl: candidateCvUrl || undefined,
+              // 🔴 cvUrl removed here because it's not in InternalNewApplicationNotificationEmailProps
             }),
           }),
         );
