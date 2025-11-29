@@ -1,73 +1,260 @@
-// app/jobs/[jobIdOrSlug]/applied/page.tsx
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+// app/jobs/[jobIdOrSlug]/JobApplyForm.tsx
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Application received | Resourcin",
-  description: "Confirmation that your application has been received.",
+type Props = {
+  jobId: string;
+  source?: string;
+  jobPublicId: string; // slug or id for building /jobs/[jobPublicId]/applied
 };
 
-type PageProps = {
-  params: {
-    jobIdOrSlug: string;
-  };
-};
+export default function JobApplyForm({ jobId, source, jobPublicId }: Props) {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-export default async function JobAppliedPage({ params }: PageProps) {
-  const { jobIdOrSlug } = params;
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setErrorMessage(null);
+    setIsSubmitting(true);
 
-  const { data, error } = await supabaseAdmin
-    .from("jobs")
-    .select("id, slug, title")
-    .or(`id.eq.${jobIdOrSlug},slug.eq.${jobIdOrSlug}`)
-    .maybeSingle();
+    try {
+      const form = e.currentTarget;
+      const formData = new FormData(form);
 
-  if (error || !data) {
-    notFound();
+      // Ensure jobId goes to the API
+      formData.append("jobId", jobId);
+
+      // Ensure internal tracking source is sent (CAREERS_SITE, LINKEDIN, etc.)
+      if (source && !formData.get("source")) {
+        formData.append("source", source);
+      }
+
+      const res = await fetch("/api/jobs/apply", {
+        method: "POST",
+        body: formData,
+      });
+
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // ignore JSON parse errors, we'll just use a generic error
+      }
+
+      if (!res.ok || !data?.success) {
+        const message =
+          data?.error ||
+          "We couldn't submit your application. Please try again shortly.";
+        setErrorMessage(message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Clear the form so back/refresh doesn't keep old values
+      form.reset();
+
+      // ✅ Redirect to the dedicated "application received" page
+      router.push(`/jobs/${encodeURIComponent(jobPublicId)}/applied`);
+    } catch (err) {
+      console.error("Job application error:", err);
+      setErrorMessage(
+        "We couldn't submit your application. Please check your connection and try again.",
+      );
+      setIsSubmitting(false);
+    }
   }
 
-  const job: any = data;
-  const slugOrId: string = job.slug || job.id;
-
   return (
-    <div className="mx-auto max-w-xl px-4 py-12 lg:px-0">
-      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-6 text-center shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-          Application received
-        </p>
-        <h1 className="mt-2 text-xl font-semibold text-slate-900">
-          Thank you for applying for {job.title}
-        </h1>
-        <p className="mt-3 text-sm text-slate-700">
-          This is to acknowledge receipt of your application. A member of
-          our recruitment team will reach out to you if you are a good fit
-          for the role.
-        </p>
-        <p className="mt-3 text-xs text-slate-500">
-          You don&apos;t need to re-apply. If the brief changes or we have a
-          better fit for your profile, we will also consider you for those
-          opportunities.
-        </p>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4"
+      encType="multipart/form-data"
+    >
+      {errorMessage && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {errorMessage}
+        </div>
+      )}
 
-        <div className="mt-6 flex flex-col items-center gap-2 text-xs">
-          <Link
-            href={`/jobs/${encodeURIComponent(slugOrId)}`}
-            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 font-medium text-white hover:bg-[#0f1c45]"
-          >
-            Back to role details
-          </Link>
-          <Link
-            href="/jobs"
-            className="text-slate-600 hover:text-slate-900"
-          >
-            Browse other open roles
-          </Link>
+      {/* Basic details */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Full name <span className="text-red-500">*</span>
+          </label>
+          <input
+            name="fullName"
+            type="text"
+            required
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Email address <span className="text-red-500">*</span>
+          </label>
+          <input
+            name="email"
+            type="email"
+            required
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
         </div>
       </div>
-    </div>
+
+      {/* Phone + Location */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Phone number
+          </label>
+          <input
+            name="phone"
+            type="tel"
+            placeholder="+234..."
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Current location
+          </label>
+          <input
+            name="location"
+            type="text"
+            placeholder="City, Country"
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* LinkedIn + GitHub */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            LinkedIn profile
+          </label>
+          <input
+            name="linkedinUrl"
+            type="url"
+            placeholder="https://www.linkedin.com/in/..."
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            GitHub / portfolio (optional)
+          </label>
+          <input
+            name="githubUrl"
+            type="url"
+            placeholder="https://..."
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Comp + notice period */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Current gross (annual)
+          </label>
+          <input
+            name="currentGrossAnnual"
+            type="text"
+            placeholder="e.g. NGN 20,000,000"
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Expectation (annual)
+          </label>
+          <input
+            name="grossAnnualExpectation"
+            type="text"
+            placeholder="e.g. NGN 25,000,000"
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            Notice period
+          </label>
+          <input
+            name="noticePeriod"
+            type="text"
+            placeholder="e.g. 4 weeks"
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* How they heard */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-[11px] font-medium text-slate-700">
+            How did you hear about this role?
+          </label>
+          <input
+            name="howHeard"
+            type="text"
+            placeholder="LinkedIn / referral / Resourcin network..."
+            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+          />
+        </div>
+      </div>
+
+      {/* Cover letter / note */}
+      <div>
+        <label className="block text-[11px] font-medium text-slate-700">
+          Short note (optional)
+        </label>
+        <textarea
+          name="coverLetter"
+          rows={4}
+          placeholder="You can share brief context on your interest, relevant experience or notice period."
+          className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-900 shadow-sm focus:border-[#172965] focus:outline-none focus:ring-1 focus:ring-[#172965]"
+        />
+      </div>
+
+      {/* CV upload */}
+      <div>
+        <label className="block text-[11px] font-medium text-slate-700">
+          Upload CV <span className="text-red-500">*</span>
+        </label>
+        <input
+          name="cv"
+          type="file"
+          required
+          accept=".pdf,.doc,.docx,.rtf"
+          className="mt-1 block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-200"
+        />
+        <p className="mt-1 text-[10px] text-slate-500">
+          PDF or Word formats preferred.
+        </p>
+      </div>
+
+      {/* Hidden internal source, if any */}
+      {source && <input type="hidden" name="source" value={source} />}
+
+      <div className="flex items-center justify-between gap-3 pt-2">
+        <p className="text-[10px] text-slate-500">
+          By submitting, you agree that Resourcin may contact you about this
+          and related opportunities.
+        </p>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#0f1c48] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {isSubmitting ? "Submitting..." : "Submit application"}
+        </button>
+      </div>
+    </form>
   );
 }
