@@ -1,248 +1,382 @@
 // emails/ResourcinEmailLayout.tsx
 import * as React from "react";
 
-type ResourcinEmailLayoutProps = {
+export interface ResourcinEmailLayoutProps {
   title: string;
-  preheader?: string;
+  previewText?: string;
   children: React.ReactNode;
-};
+}
+
+const brandBlue = "#172965";
+const brandYellow = "#FFC000";
 
 export default function ResourcinEmailLayout({
   title,
-  preheader,
+  previewText,
   children,
 }: ResourcinEmailLayoutProps) {
   return (
-    <div
-      style={{
-        margin: 0,
-        padding: "24px 0",
-        backgroundColor: "#F3F4F6",
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
-      }}
-    >
-      {/* Hidden preheader for inbox preview */}
-      {preheader && (
-        <div
-          style={{
-            display: "none",
-            overflow: "hidden",
-            lineHeight: "1px",
-            maxHeight: "0px",
-            maxWidth: "0px",
-            opacity: 0,
-          }}
-        >
-          {preheader}
-        </div>
-      )}
-
-      <div
+    <html lang="en">
+      <head>
+        <meta charSet="UTF-8" />
+        <title>{title}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      </head>
+      <body
         style={{
-          maxWidth: 640,
-          margin: "0 auto",
-          padding: "0 16px",
+          margin: 0,
+          padding: 0,
+          backgroundColor: "#f3f4f6",
+          fontFamily:
+            "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+          color: "#111827",
         }}
       >
-        {/* Brand accent line */}
-        <div
-          style={{
-            height: 4,
-            borderRadius: 999,
-            marginBottom: 16,
-            backgroundImage:
-              "linear-gradient(90deg, #172965 0%, #172965 55%, #64C247 85%, #FFC000 100%)",
-          }}
-        />
-
-        {/* Main card */}
-        <div
-          style={{
-            backgroundColor: "#FFFFFF",
-            borderRadius: 18,
-            border: "1px solid #E5E7EB",
-            padding: 24,
-            boxShadow:
-              "0 20px 35px rgba(15, 23, 42, 0.10), 0 2px 4px rgba(15, 23, 42, 0.05)",
-          }}
-        >
-          {/* Header */}
-          <div style={{ marginBottom: 18 }}>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-                color: "#6B7280",
-              }}
-            >
-              RESOURCIN
-            </div>
-            <div
-              style={{
-                fontSize: 22,
-                lineHeight: 1.3,
-                fontWeight: 700,
-                color: "#111827",
-                marginTop: 6,
-              }}
-            >
-              {title}
-            </div>
-            <div
-              style={{
-                marginTop: 4,
-                fontSize: 12,
-                color: "#6B7280",
-              }}
-            >
-              Executive search &amp; recruitment for founders, leaders and
-              hiring managers.
-            </div>
-          </div>
-
-          {/* Email body content */}
-          {children}
-
-          {/* Footer banner (within the card) */}
+        {/* Inbox preview text (hidden in the email body) */}
+        {previewText && (
           <div
             style={{
-              marginTop: 24,
-              borderRadius: 14,
+              display: "none",
               overflow: "hidden",
-              backgroundColor: "#172965",
-              border: "1px solid rgba(15,23,42,0.7)",
+              lineHeight: "1px",
+              maxHeight: 0,
+              maxWidth: 0,
+              opacity: 0,
             }}
           >
-            {/* Thin yellow/green strip on top */}
-            <div
-              style={{
-                height: 3,
-                backgroundImage:
-                  "linear-gradient(90deg, #FFC000 0%, #64C247 40%, #172965 100%)",
-              }}
-            />
+            {previewText}
+          </div>
+        )}
 
-            <div
-              style={{
-                padding: "14px 16px 16px",
-                color: "#E5E7EB",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 12,
-                }}
-              >
-                {/* Left: brand + tagline */}
-                <div style={{ minWidth: 220 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      letterSpacing: "0.16em",
-                      textTransform: "uppercase",
-                      fontWeight: 700,
-                      color: "#F9FAFB",
-                    }}
-                  >
-                    RESOURCIN
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 4,
-                      fontSize: 12,
-                      color: "#E5E7EB",
-                    }}
-                  >
-                    Connecting Talent with Opportunity, Redefining Workplaces
-                    and Careers.
-                  </div>
-                </div>
-
-                {/* Right: contact + socials as text links */}
-                <div
+        <table
+          width="100%"
+          cellPadding={0}
+          cellSpacing={0}
+          role="presentation"
+          style={{ padding: "24px 0" }}
+        >
+          <tbody>
+            <tr>
+              <td align="center">
+                {/* Outer card */}
+                <table
+                  width="100%"
+                  cellPadding={0}
+                  cellSpacing={0}
+                  role="presentation"
                   style={{
-                    textAlign: "right",
-                    fontSize: 11,
-                    color: "#E5E7EB",
-                    flex: 1,
-                    minWidth: 200,
+                    maxWidth: "640px",
+                    width: "100%",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "16px",
+                    border: "1px solid #e5e7eb",
+                    overflow: "hidden",
+                    boxShadow:
+                      "0 10px 25px rgba(15, 23, 42, 0.04), 0 4px 8px rgba(15,23,42,0.04)",
                   }}
                 >
-                  <div style={{ marginBottom: 4 }}>
-                    Email:{" "}
-                    <a
-                      href="mailto:hello@resourcin.com"
-                      style={{
-                        color: "#F9FAFB",
-                        textDecoration: "none",
-                        fontWeight: 500,
-                      }}
-                    >
-                      hello@resourcin.com
-                    </a>
-                  </div>
-                  <div style={{ marginBottom: 4 }}>
-                    Website:{" "}
-                    <a
-                      href="https://www.resourcin.com"
-                      style={{
-                        color: "#F9FAFB",
-                        textDecoration: "none",
-                        fontWeight: 500,
-                      }}
-                    >
-                      resourcin.com
-                    </a>
-                  </div>
-                  <div>
-                    Follow us:{" "}
-                    <a
-                      href="https://www.linkedin.com/company/resourcin"
-                      style={{
-                        color: "#F9FAFB",
-                        textDecoration: "none",
-                        marginRight: 8,
-                      }}
-                    >
-                      LinkedIn
-                    </a>
-                    <span style={{ opacity: 0.7, marginRight: 4 }}>/</span>
-                    <a
-                      href="https://x.com/resourcinhq"
-                      style={{
-                        color: "#F9FAFB",
-                        textDecoration: "none",
-                      }}
-                    >
-                      X
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                  <tbody>
+                    {/* Top accent bar */}
+                    <tr>
+                      <td
+                        style={{
+                          height: "4px",
+                          background:
+                            "linear-gradient(90deg, #172965 0%, #306B34 55%, #FFC000 100%)",
+                        }}
+                      />
+                    </tr>
 
-        {/* Micro footer below card */}
-        <div
-          style={{
-            textAlign: "center",
-            marginTop: 10,
-            fontSize: 10,
-            color: "#9CA3AF",
-          }}
-        >
-          You&apos;re receiving this update from Resourcin in connection with a
-          hiring process.
-        </div>
-      </div>
-    </div>
+                    {/* Header */}
+                    <tr>
+                      <td style={{ padding: "20px 24px 8px 24px" }}>
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            letterSpacing: "0.16em",
+                            textTransform: "uppercase",
+                            fontWeight: 700,
+                            color: "#6b7280",
+                          }}
+                        >
+                          RESOURCIN
+                        </div>
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "20px",
+                            lineHeight: 1.3,
+                            fontWeight: 700,
+                            color: "#111827",
+                          }}
+                        >
+                          {title}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            fontSize: "12px",
+                            color: "#6b7280",
+                          }}
+                        >
+                          Executive search &amp; recruitment for founders,
+                          leaders and hiring managers.
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Body content */}
+                    <tr>
+                      <td style={{ padding: "4px 24px 20px 24px" }}>
+                        {children}
+                      </td>
+                    </tr>
+
+                    {/* Footer */}
+                    <tr>
+                      <td
+                        style={{
+                          padding: "14px 24px 18px 24px",
+                          borderTop: "1px solid #e5e7eb",
+                          backgroundColor: "#f9fafb",
+                        }}
+                      >
+                        {/* Tagline */}
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "#4b5563",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <strong style={{ color: brandBlue }}>
+                            Resourcin
+                          </strong>{" "}
+                          · Connecting Talent with Opportunity, Redefining
+                          Workplaces and Careers
+                        </div>
+
+                        {/* Website + email (clickable) */}
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "#4b5563",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          <a
+                            href="https://www.resourcin.com"
+                            style={{
+                              color: brandBlue,
+                              textDecoration: "none",
+                              fontWeight: 500,
+                              marginRight: "10px",
+                            }}
+                          >
+                            resourcin.com
+                          </a>
+                          <span style={{ marginRight: "8px", color: "#9ca3af" }}>
+                            ·
+                          </span>
+                          <a
+                            href="mailto:hello@resourcin.com"
+                            style={{
+                              color: brandBlue,
+                              textDecoration: "none",
+                              fontWeight: 500,
+                            }}
+                          >
+                            hello@resourcin.com
+                          </a>
+                        </div>
+
+                        {/* Icon row – styled to echo the share pill on /jobs */}
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              color: "#6b7280",
+                              marginRight: "4px",
+                            }}
+                          >
+                            Connect:
+                          </span>
+
+                          {/* LinkedIn */}
+                          <a
+                            href="https://www.linkedin.com/company/resourcin"
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "28px",
+                              height: "28px",
+                              borderRadius: "9999px",
+                              backgroundColor: "#ffffff",
+                              border: "1px solid #e5e7eb",
+                              textDecoration: "none",
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              aria-hidden="true"
+                              role="img"
+                            >
+                              <path
+                                fill="#0A66C2"
+                                d="M4.98 3.5C4.98 4.88 3.88 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM.22 8.25h4.56V24H.22zM8.34 8.25h4.37v2.13h.06c.61-1.16 2.1-2.38 4.32-2.38 4.62 0 5.47 3.04 5.47 6.99V24h-4.56v-7.22c0-1.72-.03-3.93-2.4-3.93-2.4 0-2.77 1.87-2.77 3.8V24H8.34z"
+                              />
+                            </svg>
+                          </a>
+
+                          {/* X */}
+                          <a
+                            href="https://x.com/resourcinhq"
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "28px",
+                              height: "28px",
+                              borderRadius: "9999px",
+                              backgroundColor: "#ffffff",
+                              border: "1px solid #e5e7eb",
+                              textDecoration: "none",
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              aria-hidden="true"
+                              role="img"
+                            >
+                              <path
+                                fill="#000000"
+                                d="M18.5 2h-3.1L12 7.2 8.8 2H2l6.7 10.1L2.4 22h3.1L12 14.7 16 22h6.8l-7-10.6L21.6 2h-3.1L14 8.4z"
+                              />
+                            </svg>
+                          </a>
+
+                          {/* Website (globe) */}
+                          <a
+                            href="https://www.resourcin.com"
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "28px",
+                              height: "28px",
+                              borderRadius: "9999px",
+                              backgroundColor: "#ffffff",
+                              border: "1px solid #e5e7eb",
+                              textDecoration: "none",
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 20 20"
+                              aria-hidden="true"
+                              role="img"
+                            >
+                              <circle
+                                cx="10"
+                                cy="10"
+                                r="6.2"
+                                stroke={brandBlue}
+                                strokeWidth="1.2"
+                                fill="none"
+                              />
+                              <path
+                                d="M10 3.8c-1.5 1.7-2.3 3.9-2.3 6.2 0 2.3.8 4.5 2.3 6.2m0-12.4c1.5 1.7 2.3 3.9 2.3 6.2 0 2.3-.8 4.5-2.3 6.2M4.2 10h11.6"
+                                stroke={brandBlue}
+                                strokeWidth="1.1"
+                                fill="none"
+                              />
+                            </svg>
+                          </a>
+
+                          {/* Email (envelope) */}
+                          <a
+                            href="mailto:hello@resourcin.com"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "28px",
+                              height: "28px",
+                              borderRadius: "9999px",
+                              backgroundColor: "#ffffff",
+                              border: "1px solid #e5e7eb",
+                              textDecoration: "none",
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              aria-hidden="true"
+                              role="img"
+                            >
+                              <rect
+                                x="3"
+                                y="5"
+                                width="18"
+                                height="14"
+                                rx="2"
+                                ry="2"
+                                fill="none"
+                                stroke={brandBlue}
+                                strokeWidth="1.4"
+                              />
+                              <path
+                                d="M4.5 7l7.5 5 7.5-5"
+                                fill="none"
+                                stroke={brandBlue}
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Tiny legal / system line */}
+                <div
+                  style={{
+                    marginTop: "10px",
+                    fontSize: "10px",
+                    color: "#9ca3af",
+                  }}
+                >
+                  You’re receiving this email because you interacted with a role
+                  managed by Resourcin.
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+    </html>
   );
 }
