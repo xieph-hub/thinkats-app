@@ -98,8 +98,8 @@ export default function ResourcinEmailLayout({
                 color: "#6B7280",
               }}
             >
-              Executive search &amp; recruitment for founders, leaders and hiring
-              managers.
+              Connecting Talent with Opportunity, Redefining Workplaces and
+              Careers.
             </div>
           </div>
 
@@ -116,7 +116,7 @@ export default function ResourcinEmailLayout({
               border: "1px solid rgba(15,23,42,0.7)",
             }}
           >
-            {/* Thin yellow strip on top */}
+            {/* Thin yellow/green strip on top */}
             <div
               style={{
                 height: 3,
@@ -160,65 +160,45 @@ export default function ResourcinEmailLayout({
                       color: "#E5E7EB",
                     }}
                   >
-                    Sharper, faster and more honest hiring decisions across
-                    Nigeria, Africa and beyond.
+                    Executive search &amp; recruitment for founders, leaders and
+                    hiring managers.
                   </div>
                 </div>
 
-                {/* Right: contact + socials */}
+                {/* Right: icon-only contact + socials */}
                 <div
                   style={{
                     display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-end",
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
                     gap: 8,
                     flex: 1,
                   }}
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      justifyContent: "flex-end",
-                      gap: 8,
-                    }}
-                  >
-                    <FooterPill
-                      href="mailto:hello@resourcin.com"
-                      label="hello@resourcin.com"
-                      icon="mail"
-                    />
-                    <FooterPill
-                      href="https://www.resourcin.com"
-                      label="resourcin.com"
-                      icon="globe"
-                    />
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      gap: 8,
-                      marginTop: 4,
-                    }}
-                  >
-                    <SocialIcon
-                      href="https://www.linkedin.com/company/resourcin"
-                      label="LinkedIn"
-                      type="linkedin"
-                    />
-                    <SocialIcon
-                      href="https://x.com/resourcinhq"
-                      label="X (Twitter)"
-                      type="x"
-                    />
-                    <SocialIcon
-                      href="https://api.whatsapp.com/send?text=Hello%20Resourcin"
-                      label="WhatsApp"
-                      type="whatsapp"
-                    />
-                  </div>
+                  {/* Email icon */}
+                  <FooterIconButton
+                    href="mailto:hello@resourcin.com"
+                    label="Email Resourcin"
+                    type="mail"
+                  />
+                  {/* Website icon */}
+                  <FooterIconButton
+                    href="https://www.resourcin.com"
+                    label="Visit resourcin.com"
+                    type="globe"
+                  />
+                  {/* LinkedIn (same path as JobCard) */}
+                  <FooterIconButton
+                    href="https://www.linkedin.com/company/resourcin"
+                    label="Resourcin on LinkedIn"
+                    type="linkedin"
+                  />
+                  {/* X (same path as JobCard) */}
+                  <FooterIconButton
+                    href="https://x.com/resourcinhq"
+                    label="Resourcin on X"
+                    type="x"
+                  />
                 </div>
               </div>
             </div>
@@ -243,34 +223,49 @@ export default function ResourcinEmailLayout({
 }
 
 // ---------------------------------------------------------------------------
-// Footer helper components
+// Footer icon button (email, site, LinkedIn, X) – all icon-only
 // ---------------------------------------------------------------------------
 
-type FooterPillProps = {
+type FooterIconType = "mail" | "globe" | "linkedin" | "x";
+
+type FooterIconButtonProps = {
   href: string;
   label: string;
-  icon: "mail" | "globe";
+  type: FooterIconType;
 };
 
-function FooterPill({ href, label, icon }: FooterPillProps) {
+function FooterIconButton({ href, label, type }: FooterIconButtonProps) {
+  // Colour logic: contact icons = subtle navy, socials = brand colours
+  const { bg, border } =
+    type === "linkedin"
+      ? { bg: "#0A66C2", border: "transparent" }
+      : type === "x"
+      ? { bg: "#111827", border: "transparent" }
+      : {
+          bg: "rgba(15,23,42,0.55)",
+          border: "1px solid rgba(248,250,252,0.45)",
+        };
+
   return (
     <a
       href={href}
+      aria-label={label}
       style={{
         display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "4px 10px",
+        width: 28,
+        height: 28,
         borderRadius: 999,
-        border: "1px solid rgba(243,244,246,0.8)",
-        backgroundColor: "rgba(15,23,42,0.35)",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: bg,
+        border,
         textDecoration: "none",
-        fontSize: 11,
-        color: "#F9FAFB",
       }}
     >
-      {icon === "mail" ? <MailIcon /> : <GlobeIcon />}
-      <span>{label}</span>
+      {type === "mail" && <MailIcon />}
+      {type === "globe" && <GlobeIcon />}
+      {type === "linkedin" && <LinkedInSvg />}
+      {type === "x" && <XSvg />}
     </a>
   );
 }
@@ -331,45 +326,10 @@ function GlobeIcon() {
   );
 }
 
-// Social icons – shapes mirror the JobCard icons but adapted for email
-type SocialType = "linkedin" | "x" | "whatsapp";
-
-type SocialIconProps = {
-  href: string;
-  label: string;
-  type: SocialType;
-};
-
-function SocialIcon({ href, label, type }: SocialIconProps) {
-  const bgColor =
-    type === "linkedin"
-      ? "#0A66C2"
-      : type === "x"
-      ? "#111827"
-      : "#25D366";
-
-  return (
-    <a
-      href={href}
-      aria-label={label}
-      style={{
-        display: "inline-flex",
-        width: 28,
-        height: 28,
-        borderRadius: 999,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: bgColor,
-        textDecoration: "none",
-      }}
-    >
-      {type === "linkedin" && <LinkedInSvg />}
-      {type === "x" && <XSvg />}
-      {type === "whatsapp" && <WhatsAppSvg />}
-    </a>
-  );
-}
-
+/**
+ * LinkedIn icon – same path as JobCard LinkedInIcon,
+ * just constrained for email (no Tailwind classes).
+ */
 function LinkedInSvg() {
   return (
     <svg
@@ -385,6 +345,9 @@ function LinkedInSvg() {
   );
 }
 
+/**
+ * X icon – same path as JobCard XIcon.
+ */
 function XSvg() {
   return (
     <svg
@@ -396,21 +359,6 @@ function XSvg() {
       style={{ display: "block" }}
     >
       <path d="M18.5 2h-3.1L12 7.2 8.8 2H2l6.7 10.1L2.4 22h3.1L12 14.7 16 22h6.8l-7-10.6L21.6 2h-3.1L14 8.4z" />
-    </svg>
-  );
-}
-
-function WhatsAppSvg() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 32 32"
-      aria-hidden="true"
-      fill="#FFFFFF"
-      style={{ display: "block" }}
-    >
-      <path d="M16.04 4C9.96 4 5 8.96 5 15.02c0 2.38.72 4.6 2.09 6.5L5 28l6.63-2.07c1.84 1 3.9 1.53 6.01 1.53h.01C22.1 27.46 27 22.5 27 16.44 27 10.38 22.12 4 16.04 4zm-.01 20.9c-1.8 0-3.56-.48-5.1-1.38l-.37-.22-3.93 1.23 1.28-3.84-.24-.39A8.7 8.7 0 0 1 7.3 15c0-4.84 3.93-8.78 8.77-8.78 4.77 0 8.66 3.94 8.66 8.78 0 4.83-3.9 8.9-8.66 8.9zm4.78-6.63c-.26-.13-1.53-.76-1.77-.84-.24-.09-.41-.13-.58.12-.17.26-.67.84-.82 1-.15.17-.3.19-.56.06-.26-.13-1.09-.4-2.08-1.28-.77-.69-1.29-1.54-1.44-1.8-.15-.26-.02-.4.11-.53.12-.12.26-.3.39-.45.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45-.06-.13-.58-1.39-.8-1.9-.21-.5-.42-.44-.58-.45l-.5-.01c-.17 0-.45.06-.69.32-.24.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.81 2.86 4.4 4.02.62.27 1.11.43 1.49.55.63.2 1.2.17 1.65.1.5-.08 1.53-.62 1.75-1.22.22-.6.22-1.11.15-1.22-.06-.11-.24-.17-.5-.3z" />
     </svg>
   );
 }
