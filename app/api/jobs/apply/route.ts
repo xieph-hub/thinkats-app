@@ -213,7 +213,6 @@ export async function POST(req: Request) {
 
     // -----------------------------------------------------------------------
     // 5) Fire emails via Resend (candidate + internal + optional client)
-    //    using the shared React email layout family.
     // -----------------------------------------------------------------------
 
     try {
@@ -244,9 +243,6 @@ export async function POST(req: Request) {
           react: CandidateApplicationReceived({
             candidateName,
             jobTitle,
-            jobPublicUrl: publicJobUrl,
-            candidateEmail,
-            source: trackingSource,
           }),
         }),
       );
@@ -269,7 +265,6 @@ export async function POST(req: Request) {
               currentGrossAnnual: currentGrossAnnual || undefined,
               expectation: grossAnnualExpectation || undefined,
               noticePeriod: noticePeriod || undefined,
-              // cvUrl intentionally not passed – not in props type
             }),
           }),
         );
