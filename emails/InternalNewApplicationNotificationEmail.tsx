@@ -48,7 +48,6 @@ export default function InternalNewApplicationNotificationEmail(
         </p>
       </div>
 
-      {/* Snapshot card */}
       <div
         style={{
           marginTop: 16,
@@ -56,6 +55,7 @@ export default function InternalNewApplicationNotificationEmail(
           borderRadius: 12,
           backgroundColor: "#F9FAFB",
           border: "1px solid #E5E7EB",
+          borderLeft: "4px solid #306B34",
           fontSize: 13,
           color: "#4B5563",
         }}
@@ -72,6 +72,7 @@ export default function InternalNewApplicationNotificationEmail(
             ({candidateEmail})
           </a>
         </div>
+
         <div style={{ marginBottom: 4 }}>
           <span style={{ fontWeight: 600, color: "#111827" }}>Role:</span>{" "}
           {roleLine}
@@ -124,7 +125,6 @@ export default function InternalNewApplicationNotificationEmail(
         )}
       </div>
 
-      {/* ATS link */}
       <p
         style={{
           marginTop: 16,
@@ -141,7 +141,7 @@ export default function InternalNewApplicationNotificationEmail(
           style={{
             display: "inline-block",
             marginTop: 6,
-            padding: "6px 12px",
+            padding: "7px 14px",
             borderRadius: 999,
             backgroundColor: "#172965",
             color: "#FFFFFF",
