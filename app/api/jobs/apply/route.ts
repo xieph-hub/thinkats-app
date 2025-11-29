@@ -5,8 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { resend } from "@/lib/resendClient";
 
-// 🔹 IMPORTANT: match your actual filenames
-// You said you have emails/CandidateApplicationReceived.tsx
 import CandidateApplicationReceivedEmail from "@/emails/CandidateApplicationReceived";
 import ClientNewApplicationNotificationEmail from "@/emails/ClientNewApplicationNotificationEmail";
 import InternalNewApplicationNotificationEmail from "@/emails/InternalNewApplicationNotificationEmail";
@@ -238,19 +236,15 @@ export async function POST(req: Request) {
       const sendPromises: Promise<unknown>[] = [];
 
       // 5a) Candidate acknowledgement (branded React email)
+      //    ✅ Only pass props that exist in CandidateApplicationReceivedProps
       sendPromises.push(
         resend.emails.send({
           from: RESEND_FROM_EMAIL,
           to: candidateEmail,
           subject: `We've received your application – ${jobTitle}`,
-          // Call the component function (no JSX in .ts file)
           react: CandidateApplicationReceivedEmail({
             candidateName,
             jobTitle,
-            jobLocation,
-            jobPublicUrl: publicJobUrl,
-            candidateEmail,
-            source: trackingSource,
           }),
         }),
       );
@@ -288,7 +282,7 @@ export async function POST(req: Request) {
             to: ATS_NOTIFICATIONS_EMAIL,
             subject: `New candidate for ${jobTitle}`,
             react: ClientNewApplicationNotificationEmail({
-              // clientName omitted for now; template should handle undefined gracefully
+              // clientName intentionally omitted for now, template should handle it
               jobTitle,
               jobLocation,
               candidateName,
