@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { resend } from "@/lib/resendClient";
 
-import CandidateApplicationReceivedEmail from "@/emails/CandidateApplicationReceivedEmail";
+// 🔹 IMPORTANT: match your actual filenames
+// You said you have emails/CandidateApplicationReceived.tsx
+import CandidateApplicationReceivedEmail from "@/emails/CandidateApplicationReceived";
 import ClientNewApplicationNotificationEmail from "@/emails/ClientNewApplicationNotificationEmail";
 import InternalNewApplicationNotificationEmail from "@/emails/InternalNewApplicationNotificationEmail";
 
@@ -218,7 +220,7 @@ export async function POST(req: Request) {
 
     try {
       const jobTitle = job.title;
-      const jobLocation = job.location ?? null;
+      const jobLocation: string | undefined = job.location || undefined;
       const candidateName = fullName;
       const candidateEmail = email;
 
@@ -241,6 +243,7 @@ export async function POST(req: Request) {
           from: RESEND_FROM_EMAIL,
           to: candidateEmail,
           subject: `We've received your application – ${jobTitle}`,
+          // Call the component function (no JSX in .ts file)
           react: CandidateApplicationReceivedEmail({
             candidateName,
             jobTitle,
@@ -285,7 +288,7 @@ export async function POST(req: Request) {
             to: ATS_NOTIFICATIONS_EMAIL,
             subject: `New candidate for ${jobTitle}`,
             react: ClientNewApplicationNotificationEmail({
-              clientName: null, // later: job.clientContactName
+              // clientName omitted for now; template should handle undefined gracefully
               jobTitle,
               jobLocation,
               candidateName,
