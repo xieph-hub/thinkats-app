@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 type Props = {
   jobId: string;
@@ -10,14 +12,25 @@ type Props = {
    * If not provided, defaults to "CAREERS_SITE".
    */
   source?: string;
+  /**
+   * Optional path to redirect to on successful application,
+   * e.g. `/jobs/some-role-slug/applied`.
+   * If not provided, we fall back to showing the inline success message.
+   */
+  successRedirectPath?: string;
 };
 
-export default function JobApplyForm({ jobId, source }: Props) {
+export default function JobApplyForm({
+  jobId,
+  source,
+  successRedirectPath,
+}: Props) {
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -32,7 +45,9 @@ export default function JobApplyForm({ jobId, source }: Props) {
 
       // Final internal source value (multi-tenant friendly)
       const internalSource =
-        (source && source.trim()) || (formData.get("source") as string) || "CAREERS_SITE";
+        (source && source.trim()) ||
+        (formData.get("source") as string) ||
+        "CAREERS_SITE";
 
       formData.set("source", internalSource);
 
@@ -57,7 +72,13 @@ export default function JobApplyForm({ jobId, source }: Props) {
         return;
       }
 
-      // ✅ Success – reset form + show confirmation
+      // ✅ If we have a successRedirectPath, go to dedicated "applied" page
+      if (successRedirectPath) {
+        router.push(successRedirectPath);
+        return;
+      }
+
+      // ✅ Fallback – reset form + show inline confirmation
       form.reset();
       setSuccessMessage(
         data?.message ||
@@ -82,11 +103,7 @@ export default function JobApplyForm({ jobId, source }: Props) {
     <div className="space-y-3">
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Hidden internal source for tracking (multi-tenant friendly) */}
-        <input
-          type="hidden"
-          name="source"
-          value={source || "CAREERS_SITE"}
-        />
+        <input type="hidden" name="source" value={source || "CAREERS_SITE"} />
 
         {/* Name + Email */}
         <div className="grid gap-3 sm:grid-cols-2">
