@@ -241,17 +241,14 @@ export async function POST(req: Request) {
           from: RESEND_FROM_EMAIL,
           to: candidateEmail,
           subject: `We've received your application – ${jobTitle}`,
-          react: (
-            <CandidateApplicationReceivedEmail
-              candidateName={candidateName}
-              jobTitle={jobTitle}
-              // If you've extended the component props, you can also pass:
-              // jobLocation={jobLocation}
-              // jobPublicUrl={publicJobUrl}
-              // candidateEmail={candidateEmail}
-              // source={trackingSource}
-            />
-          ),
+          react: CandidateApplicationReceivedEmail({
+            candidateName,
+            jobTitle,
+            jobLocation,
+            jobPublicUrl: publicJobUrl,
+            candidateEmail,
+            source: trackingSource,
+          }),
         }),
       );
 
@@ -262,20 +259,19 @@ export async function POST(req: Request) {
             from: RESEND_FROM_EMAIL,
             to: ATS_NOTIFICATIONS_EMAIL,
             subject: `New application: ${candidateName} → ${jobTitle}`,
-            react: (
-              <InternalNewApplicationNotificationEmail
-                jobTitle={jobTitle}
-                jobLocation={jobLocation}
-                candidateName={candidateName}
-                candidateEmail={candidateEmail}
-                source={trackingSource}
-                atsLink={atsJobLink}
-                linkedinUrl={linkedinUrl || undefined}
-                currentGrossAnnual={currentGrossAnnual || undefined}
-                expectation={grossAnnualExpectation || undefined}
-                noticePeriod={noticePeriod || undefined}
-              />
-            ),
+            react: InternalNewApplicationNotificationEmail({
+              jobTitle,
+              jobLocation,
+              candidateName,
+              candidateEmail,
+              source: trackingSource,
+              atsLink: atsJobLink,
+              linkedinUrl: linkedinUrl || undefined,
+              currentGrossAnnual: currentGrossAnnual || undefined,
+              expectation: grossAnnualExpectation || undefined,
+              noticePeriod: noticePeriod || undefined,
+              cvUrl: candidateCvUrl || undefined,
+            }),
           }),
         );
       }
@@ -288,17 +284,15 @@ export async function POST(req: Request) {
             from: RESEND_FROM_EMAIL,
             to: ATS_NOTIFICATIONS_EMAIL,
             subject: `New candidate for ${jobTitle}`,
-            react: (
-              <ClientNewApplicationNotificationEmail
-                clientName={null} // later: job.clientContactName
-                jobTitle={jobTitle}
-                jobLocation={jobLocation}
-                candidateName={candidateName}
-                candidateEmail={candidateEmail}
-                source={trackingSource}
-                atsLink={atsJobLink}
-              />
-            ),
+            react: ClientNewApplicationNotificationEmail({
+              clientName: null, // later: job.clientContactName
+              jobTitle,
+              jobLocation,
+              candidateName,
+              candidateEmail,
+              source: trackingSource,
+              atsLink: atsJobLink,
+            }),
           }),
         );
       }
