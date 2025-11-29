@@ -43,7 +43,6 @@ export default function ClientNewApplicationNotificationEmail(
         </p>
       </div>
 
-      {/* Snapshot card – mirrors internal email styling */}
       <div
         style={{
           marginTop: 16,
@@ -51,6 +50,7 @@ export default function ClientNewApplicationNotificationEmail(
           borderRadius: 12,
           backgroundColor: "#F9FAFB",
           border: "1px solid #E5E7EB",
+          borderLeft: "4px solid #64C247",
           fontSize: 13,
           color: "#4B5563",
         }}
@@ -95,7 +95,7 @@ export default function ClientNewApplicationNotificationEmail(
           style={{
             display: "inline-block",
             marginTop: 6,
-            padding: "6px 12px",
+            padding: "7px 14px",
             borderRadius: 999,
             backgroundColor: "#172965",
             color: "#FFFFFF",
