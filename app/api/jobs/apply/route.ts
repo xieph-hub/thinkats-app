@@ -243,6 +243,10 @@ export async function POST(req: Request) {
           react: CandidateApplicationReceived({
             candidateName,
             jobTitle,
+            jobPublicUrl: publicJobUrl,
+            candidateEmail,
+            // if your component supports it:
+            // source: trackingSource,
           }),
         }),
       );
