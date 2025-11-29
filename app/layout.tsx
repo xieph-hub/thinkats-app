@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
@@ -7,9 +8,9 @@ import Footer from "@/components/Footer";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Resourcin | Human Capital Advisors",
+  title: "ThinkATS by Resourcin | Applicant Tracking & Talent Pipelines",
   description:
-    "Resourcin is a boutique human capital advisory and recruitment partner for growth-focused businesses.",
+    "ThinkATS is Resourcin’s applicant tracking platform for growth-focused teams. Post jobs, manage pipelines and collaborate with hiring managers in one place.",
 };
 
 export default function RootLayout({
