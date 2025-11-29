@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Application received | Resourcin",
   description:
-    "Confirmation page for applications submitted to roles managed by Resourcin.",
+    "Confirmation that your application has been received by Resourcin.",
 };
 
 type PageProps = {
@@ -21,6 +21,8 @@ type JobRow = {
   slug: string | null;
   title: string;
   location: string | null;
+  short_description: string | null;
+  confidential: boolean | null;
 };
 
 function looksLikeUuid(value: string): boolean {
@@ -37,14 +39,15 @@ export default async function JobAppliedPage({ params }: PageProps) {
     .from("jobs")
     .select(
       `
-        id,
-        slug,
-        title,
-        location
-      `,
+      id,
+      slug,
+      title,
+      location,
+      short_description,
+      confidential
+    `,
     )
-    .eq("visibility", "public")
-    .eq("status", "open");
+    .eq("visibility", "public");
 
   if (isUuid) {
     query = query.eq("id", jobIdOrSlug);
@@ -55,7 +58,7 @@ export default async function JobAppliedPage({ params }: PageProps) {
   const { data, error } = await query.maybeSingle();
 
   if (error) {
-    console.error("Error loading job in applied page:", error);
+    console.error("Error loading job for applied page:", error);
   }
 
   if (!data) {
@@ -70,9 +73,8 @@ export default async function JobAppliedPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Top header + breadcrumbs */}
       <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/4">
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
+        <div className="mx-auto max-w-5xl px-4 py-10 sm:py-14">
           <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <Link
               href="/jobs"
@@ -85,62 +87,55 @@ export default async function JobAppliedPage({ params }: PageProps) {
               href={canonicalPath}
               className="inline-flex items-center gap-1 hover:text-[#172965]"
             >
-              Back to role page
+              {job.title}
             </Link>
           </div>
 
-          <h1 className="text-2xl font-semibold tracking-tight text-[#172965] sm:text-3xl">
-            Application received
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-700">
-            Thank you for applying for{" "}
-            <span className="font-semibold">{job.title}</span>
-            {job.location ? ` in ${job.location}` : ""}. This is to acknowledge
-            receipt of your application. A member of our recruitment team will
-            reach out to you if you are a good fit for the role.
-          </p>
-        </div>
-      </section>
-
-      {/* Centered confirmation card */}
-      <section className="mx-auto max-w-5xl px-4 py-10">
-        <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-              ✓
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-[#172965]">
-                Your application is in our system
-              </h2>
-              <p className="mt-2 text-sm text-slate-700">
-                We review each application carefully. If your experience aligns
-                with the requirements for this role, we&apos;ll contact you to
-                discuss next steps.
-              </p>
-
-              <div className="mt-4 flex flex-wrap gap-3 text-xs">
-                <Link
-                  href={canonicalPath}
-                  className="inline-flex items-center justify-center rounded-full border border-slate-200 px-4 py-1.5 text-xs font-semibold text-[#172965] hover:bg-slate-50"
-                >
-                  View full role again
-                </Link>
-                <Link
-                  href="/jobs"
-                  className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#0f1c48]"
-                >
-                  Browse all open roles
-                </Link>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100">
+                <span className="text-lg" aria-hidden="true">
+                  ✅
+                </span>
               </div>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-[#172965] sm:text-3xl">
+                  Application received
+                </h1>
+                <p className="mt-1 text-sm text-slate-700">
+                  This is to acknowledge receipt of your application. A member
+                  of our recruitment team will reach out to you if you are a
+                  good fit for the role.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  A confirmation email has also been sent to you.
+                </p>
+              </div>
+            </div>
 
-              <p className="mt-4 text-[11px] text-slate-500">
-                If you don&apos;t hear back immediately, it simply means we are
-                still reviewing applications, or you may be a stronger fit for a
-                future opportunity in our network.
-              </p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={canonicalPath}
+                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-[#172965] hover:bg-slate-50"
+              >
+                View role again
+              </Link>
+              <Link
+                href="/jobs"
+                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white hover:bg-[#0f1c48]"
+              >
+                Browse other roles
+              </Link>
             </div>
           </div>
+
+          {job.short_description && (
+            <p className="mt-6 max-w-2xl text-sm text-slate-700">
+              You just applied for:{" "}
+              <span className="font-semibold">{job.title}</span>
+              {job.location ? ` · ${job.location}` : ""}. {job.short_description}
+            </p>
+          )}
         </div>
       </section>
     </main>
