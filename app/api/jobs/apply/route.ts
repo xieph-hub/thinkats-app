@@ -1,8 +1,13 @@
 // app/api/jobs/apply/route.ts
+import * as React from "react";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { Resend } from "resend";
+import { resend } from "@/lib/resendClient";
+
+import CandidateApplicationReceivedEmail from "@/emails/CandidateApplicationReceivedEmail";
+import ClientNewApplicationNotificationEmail from "@/emails/ClientNewApplicationNotificationEmail";
+import InternalNewApplicationNotificationEmail from "@/emails/InternalNewApplicationNotificationEmail";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
@@ -38,12 +43,8 @@ export async function POST(req: Request) {
     const phone = (formData.get("phone") || "").toString().trim();
     const location = (formData.get("location") || "").toString().trim();
 
-    const linkedinUrl = (formData.get("linkedinUrl") || "")
-      .toString()
-      .trim();
-    const githubUrl = (formData.get("githubUrl") || "")
-      .toString()
-      .trim();
+    const linkedinUrl = (formData.get("linkedinUrl") || "").toString().trim();
+    const githubUrl = (formData.get("githubUrl") || "").toString().trim();
 
     const currentGrossAnnual = (formData.get("currentGrossAnnual") || "")
       .toString()
@@ -57,12 +58,8 @@ export async function POST(req: Request) {
       .toString()
       .trim();
 
-    const howHeard = (formData.get("howHeard") || "")
-      .toString()
-      .trim();
-    const source = (formData.get("source") || "")
-      .toString()
-      .trim(); // internal tracking source
+    const howHeard = (formData.get("howHeard") || "").toString().trim();
+    const source = (formData.get("source") || "").toString().trim(); // internal tracking source
 
     const coverLetter = (formData.get("coverLetter") || "")
       .toString()
@@ -214,228 +211,102 @@ export async function POST(req: Request) {
       },
     });
 
-    // 5) Fire emails via Resend (candidate + internal), but never break the UX if this fails
-    if (process.env.RESEND_API_KEY) {
-      const resend = new Resend(process.env.RESEND_API_KEY);
+    // -----------------------------------------------------------------------
+    // 5) Fire emails via Resend (candidate + internal + optional client)
+    //    using the shared React email layout family.
+    // -----------------------------------------------------------------------
 
-      const candidateSubject = `We've received your application – ${job.title}`;
-      const safeName = fullName || "there";
+    try {
+      const jobTitle = job.title;
+      const jobLocation = job.location ?? null;
+      const candidateName = fullName;
+      const candidateEmail = email;
+
+      const trackingSource = (source || "CAREERS_SITE")
+        .toString()
+        .toUpperCase();
 
       const canonicalPath = job.slug
         ? `/jobs/${encodeURIComponent(job.slug)}`
         : `/jobs/${encodeURIComponent(job.id)}`;
       const publicJobUrl = `${PUBLIC_SITE_URL}${canonicalPath}`;
 
-      // ✅ Branded candidate HTML (Resourcin only – no ThinkATS)
-      const candidateHtml = `
-  <div style="background-color:#f3f4f6;padding:24px 0;">
-    <div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;">
-      <div style="background-color:#ffffff;border-radius:12px;border:1px solid #e5e7eb;padding:24px 24px 18px;">
-        <div style="margin-bottom:16px;">
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#6b7280;">
-            RESOURCIN
-          </div>
-          <div style="font-size:20px;line-height:1.3;font-weight:700;color:#111827;margin-top:4px;">
-            Application received
-          </div>
-        </div>
+      const atsJobLink = `${PUBLIC_SITE_URL}/ats/jobs/${job.id}`;
 
-        <div style="font-size:14px;line-height:1.6;color:#374151;">
-          <p style="margin:0 0 12px 0;">Hi ${safeName},</p>
-          <p style="margin:0 0 12px 0;">
-            Thank you for applying for the
-            <strong>${job.title}</strong>${
-              job.location
-                ? ` in <strong>${job.location}</strong>`
-                : ""
-            } via Resourcin.
-          </p>
-          <p style="margin:0 0 12px 0;">
-            We’ve received your application and our recruitment team will review it carefully.
-            If your profile is a close match for the role, we'll reach out to discuss next steps.
-          </p>
-        </div>
+      const sendPromises: Promise<unknown>[] = [];
 
-        <div style="margin-top:16px;padding:12px 14px;border-radius:10px;background-color:#f9fafb;border:1px solid #e5e7eb;font-size:13px;color:#4b5563;">
-          <div style="margin-bottom:4px;">
-            <span style="font-weight:600;color:#111827;">Role:</span>
-            <a href="${publicJobUrl}" style="color:#172965;text-decoration:none;">
-              ${job.title}
-            </a>${
-              job.location ? ` · <span>${job.location}</span>` : ""
-            }
-          </div>
-          <div style="margin-bottom:4px;">
-            <span style="font-weight:600;color:#111827;">Submitted with:</span>
-            <span> ${email}</span>
-          </div>
-          ${
-            source
-              ? `<div style="margin-bottom:2px;">
-                  <span style="font-weight:600;color:#111827;">Application source:</span>
-                  <span> ${source}</span>
-                </div>`
-              : ""
-          }
-        </div>
+      // 5a) Candidate acknowledgement (branded React email)
+      sendPromises.push(
+        resend.emails.send({
+          from: RESEND_FROM_EMAIL,
+          to: candidateEmail,
+          subject: `We've received your application – ${jobTitle}`,
+          react: (
+            <CandidateApplicationReceivedEmail
+              candidateName={candidateName}
+              jobTitle={jobTitle}
+              // If you've extended the component props, you can also pass:
+              // jobLocation={jobLocation}
+              // jobPublicUrl={publicJobUrl}
+              // candidateEmail={candidateEmail}
+              // source={trackingSource}
+            />
+          ),
+        }),
+      );
 
-        <p style="margin-top:18px;margin-bottom:0;font-size:13px;color:#4b5563;">
-          Best regards,<br/>
-          Resourcin Recruitment Team<br/>
-          <span style="font-size:12px;color:#6b7280;">Executive search & recruitment</span>
-        </p>
-      </div>
-
-      <div style="text-align:center;margin-top:10px;font-size:12px;color:#6b7280;">
-        <div style="margin-bottom:4px;">
-          Resourcin · Executive search & recruitment
-        </div>
-        <div style="margin-bottom:4px;">
-          <a href="https://www.resourcin.com" style="color:#172965;text-decoration:none;">
-            resourcin.com
-          </a>
-        </div>
-        <div>
-          <span style="margin-right:4px;">Follow us:</span>
-          <a href="https://www.linkedin.com/company/resourcin"
-             style="color:#172965;text-decoration:none;margin-right:8px;">
-            LinkedIn
-          </a>
-          <a href="https://x.com/resourcinhq"
-             style="color:#172965;text-decoration:none;margin-right:8px;">
-            X
-          </a>
-          <a href="https://www.instagram.com/resourcinhq/"
-             style="color:#172965;text-decoration:none;">
-            Instagram
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-      `;
-
-      // ✅ Text fallback – also Resourcin-only
-      const candidateText = `
-Hi ${safeName},
-
-Thank you for applying for the "${job.title}" role${
-        job.location ? ` in ${job.location}` : ""
-      } via Resourcin.
-
-We’ve received your application and our recruitment team will review it carefully. If your profile is a close match for the role, we'll reach out to discuss next steps.
-
-Role: ${job.title}${job.location ? ` (${job.location})` : ""}
-Link: ${publicJobUrl}
-Submitted with: ${email}${
-        source ? `\nApplication source: ${source}` : ""
-      }
-
-——
-Resourcin · Executive search & recruitment
-Website: https://www.resourcin.com
-Follow us:
-- LinkedIn: https://www.linkedin.com/company/resourcin
-- X: https://x.com/resourcinhq
-- Instagram: https://www.instagram.com/resourcinhq/
-      `.trim();
-
-      const internalSubject = `New application: ${fullName} → ${job.title}`;
-      const internalHtml = `
-        <p>A new application has been submitted via the Resourcin ATS.</p>
-        <p>
-          <strong>Candidate:</strong> ${fullName} (${email})<br/>
-          <strong>Location:</strong> ${location || "Not specified"}<br/>
-          <strong>Role:</strong> ${job.title}${
-            job.location ? ` – ${job.location}` : ""
-          }<br/>
-          <strong>Stage:</strong> APPLIED<br/>
-          <strong>Status:</strong> PENDING<br/>
-          ${source ? `<strong>Source:</strong> ${source}<br/>` : ""}
-          ${
-            howHeard
-              ? `<strong>How they heard:</strong> ${howHeard}<br/>`
-              : ""
-          }
-        </p>
-        <p>
-          <strong>ATS links:</strong><br/>
-          Job in ATS:
-          <a href="${PUBLIC_SITE_URL}/ats/jobs/${
-            job.id
-          }" style="color:#172965;">Open job</a><br/>
-          Candidate profile:
-          <a href="${PUBLIC_SITE_URL}/ats/candidates/${
-            candidate.id
-          }" style="color:#172965;">Open candidate</a>
-        </p>
-        ${
-          candidateCvUrl
-            ? `<p><strong>CV:</strong> <a href="${candidateCvUrl}" style="color:#172965;">View CV</a></p>`
-            : ""
-        }
-        <p style="margin-top: 16px; font-size: 12px; color: #6b7280;">
-          This notification was generated automatically by the Resourcin ATS.
-        </p>
-      `;
-
-      const internalText = `
-A new application has been submitted via the Resourcin ATS.
-
-Candidate: ${fullName} (${email})
-Location: ${location || "Not specified"}
-
-Role: ${job.title}${job.location ? ` – ${job.location}` : ""}
-Stage: APPLIED
-Status: PENDING
-${source ? `Source: ${source}\n` : ""}${
-        howHeard ? `How they heard: ${howHeard}\n` : ""
-      }
-${candidateCvUrl ? `CV: ${candidateCvUrl}\n` : ""}
-
-ATS links:
-- Job: ${PUBLIC_SITE_URL}/ats/jobs/${job.id}
-- Candidate: ${PUBLIC_SITE_URL}/ats/candidates/${candidate.id}
-
-This notification was generated automatically by the Resourcin ATS.
-      `.trim();
-
-      try {
-        const promises: Promise<unknown>[] = [];
-
-        // Candidate acknowledgement
-        promises.push(
+      // 5b) Internal notification (Resourcin team)
+      if (ATS_NOTIFICATIONS_EMAIL) {
+        sendPromises.push(
           resend.emails.send({
             from: RESEND_FROM_EMAIL,
-            to: email,
-            subject: candidateSubject,
-            html: candidateHtml,
-            text: candidateText,
+            to: ATS_NOTIFICATIONS_EMAIL,
+            subject: `New application: ${candidateName} → ${jobTitle}`,
+            react: (
+              <InternalNewApplicationNotificationEmail
+                jobTitle={jobTitle}
+                jobLocation={jobLocation}
+                candidateName={candidateName}
+                candidateEmail={candidateEmail}
+                source={trackingSource}
+                atsLink={atsJobLink}
+                linkedinUrl={linkedinUrl || undefined}
+                currentGrossAnnual={currentGrossAnnual || undefined}
+                expectation={grossAnnualExpectation || undefined}
+                noticePeriod={noticePeriod || undefined}
+              />
+            ),
           }),
         );
-
-        // Internal notification (optional)
-        if (ATS_NOTIFICATIONS_EMAIL) {
-          promises.push(
-            resend.emails.send({
-              from: RESEND_FROM_EMAIL,
-              to: ATS_NOTIFICATIONS_EMAIL,
-              subject: internalSubject,
-              html: internalHtml,
-              text: internalText,
-            }),
-          );
-        }
-
-        await Promise.allSettled(promises);
-      } catch (emailError) {
-        console.error("Resend email error (job application):", emailError);
-        // Intentionally do not fail the response — email is best-effort
       }
-    } else {
-      console.warn(
-        "RESEND_API_KEY not set; skipping candidate + internal emails for job application.",
-      );
+
+      // 5c) Client-facing notification (for now still to internal inbox).
+      // When you add a per-job client contact email, plug it in here.
+      if (ATS_NOTIFICATIONS_EMAIL) {
+        sendPromises.push(
+          resend.emails.send({
+            from: RESEND_FROM_EMAIL,
+            to: ATS_NOTIFICATIONS_EMAIL,
+            subject: `New candidate for ${jobTitle}`,
+            react: (
+              <ClientNewApplicationNotificationEmail
+                clientName={null} // later: job.clientContactName
+                jobTitle={jobTitle}
+                jobLocation={jobLocation}
+                candidateName={candidateName}
+                candidateEmail={candidateEmail}
+                source={trackingSource}
+                atsLink={atsJobLink}
+              />
+            ),
+          }),
+        );
+      }
+
+      await Promise.allSettled(sendPromises);
+    } catch (emailError) {
+      console.error("Resend email error (job application):", emailError);
+      // Deliberately don't fail the request – DB save is the source of truth
     }
 
     return NextResponse.json({
