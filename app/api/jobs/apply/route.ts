@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { resend } from "@/lib/resendClient";
 
-import CandidateApplicationReceivedEmail from "@/emails/CandidateApplicationReceived";
+import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
 import ClientNewApplicationNotificationEmail from "@/emails/ClientNewApplicationNotificationEmail";
 import InternalNewApplicationNotificationEmail from "@/emails/InternalNewApplicationNotificationEmail";
 
@@ -241,9 +241,12 @@ export async function POST(req: Request) {
           from: RESEND_FROM_EMAIL,
           to: candidateEmail,
           subject: `We've received your application – ${jobTitle}`,
-          react: CandidateApplicationReceivedEmail({
+          react: CandidateApplicationReceived({
             candidateName,
             jobTitle,
+            jobPublicUrl: publicJobUrl,
+            candidateEmail,
+            source: trackingSource,
           }),
         }),
       );
@@ -266,7 +269,7 @@ export async function POST(req: Request) {
               currentGrossAnnual: currentGrossAnnual || undefined,
               expectation: grossAnnualExpectation || undefined,
               noticePeriod: noticePeriod || undefined,
-              // 🔴 cvUrl removed here because it's not in InternalNewApplicationNotificationEmailProps
+              // cvUrl intentionally not passed – not in props type
             }),
           }),
         );
