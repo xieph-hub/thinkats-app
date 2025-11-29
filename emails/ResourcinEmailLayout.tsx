@@ -1,34 +1,16 @@
 // emails/ResourcinEmailLayout.tsx
 import * as React from "react";
 
-type ResourcinEmailLayoutProps = {
-  /** Shown in inbox preview, mostly hidden in the body */
-  previewText?: string;
-  /** Main email title/heading */
+export type ResourcinEmailLayoutProps = {
   title: string;
-  /** Optional greeting / intro line, e.g. "Hi Victor," */
-  intro?: string;
-  /** Main body content (paragraphs, lists, etc.) */
-  children?: React.ReactNode;
-  /** Optional primary CTA button */
-  ctaLabel?: string;
-  ctaUrl?: string;
-  /** Small line above footer (e.g. "You’re receiving this because…") */
-  footerNote?: string;
+  previewText?: string;
+  children: React.ReactNode;
 };
 
-const brandBlue = "#172965";
-const brandDark = "#0B1320";
-const brandGreen = "#64C247";
-
 export default function ResourcinEmailLayout({
-  previewText,
   title,
-  intro,
+  previewText,
   children,
-  ctaLabel,
-  ctaUrl,
-  footerNote,
 }: ResourcinEmailLayoutProps) {
   return (
     <html lang="en">
@@ -36,254 +18,364 @@ export default function ResourcinEmailLayout({
         <meta charSet="UTF-8" />
         <title>{title}</title>
       </head>
-      <body style={bodyStyle}>
-        {/* Preheader (hidden in body, visible in inbox preview) */}
-        {previewText && (
-          <div style={preheaderStyle}>
+      <body
+        style={{
+          margin: 0,
+          padding: 0,
+          backgroundColor: "#f3f4f6",
+          fontFamily:
+            "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+        }}
+      >
+        {/* Hidden pre-header text for email clients */}
+        {previewText ? (
+          <div
+            style={{
+              display: "none",
+              overflow: "hidden",
+              lineHeight: "1px",
+              opacity: 0,
+              maxHeight: 0,
+              maxWidth: 0,
+            }}
+          >
             {previewText}
           </div>
-        )}
+        ) : null}
 
-        <table width="100%" cellPadding={0} cellSpacing={0} style={outerTable}>
-          <tbody>
-            <tr>
-              <td align="center" style={{ padding: "24px 16px" }}>
-                {/* Card wrapper */}
-                <table
-                  width="100%"
-                  cellPadding={0}
-                  cellSpacing={0}
-                  style={card}
+        <div style={{ padding: "24px 0" }}>
+          <div
+            style={{
+              maxWidth: "640px",
+              margin: "0 auto",
+              padding: "0 16px",
+              boxSizing: "border-box",
+            }}
+          >
+            {/* Accent strip */}
+            <div
+              style={{
+                height: "4px",
+                borderRadius: "999px",
+                background:
+                  "linear-gradient(90deg, #172965, #0B1320, #4B73C9)",
+                marginBottom: "12px",
+              }}
+            />
+
+            {/* Card */}
+            <div
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "16px",
+                border: "1px solid #e5e7eb",
+                padding: "24px 24px 20px",
+                boxSizing: "border-box",
+              }}
+            >
+              {/* Header */}
+              <div style={{ marginBottom: "16px" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
+                    color: "#6b7280",
+                  }}
                 >
-                  <tbody>
-                    {/* Header / brand bar */}
-                    <tr>
-                      <td style={header}>
-                        <div style={logoText}>
-                          Resourcin
-                        </div>
-                        <div style={tagline}>
-                          Search, selection & recruitment
-                        </div>
-                      </td>
-                    </tr>
+                  RESOURCIN
+                </div>
+                <h1
+                  style={{
+                    margin: "4px 0 0 0",
+                    fontSize: "20px",
+                    lineHeight: 1.3,
+                    fontWeight: 700,
+                    color: "#111827",
+                  }}
+                >
+                  {title}
+                </h1>
+                <p
+                  style={{
+                    margin: "6px 0 0 0",
+                    fontSize: "12px",
+                    color: "#6b7280",
+                  }}
+                >
+                  Executive search &amp; recruitment for founders, leaders and
+                  hiring managers.
+                </p>
+              </div>
 
-                    {/* Main content */}
-                    <tr>
-                      <td style={content}>
-                        <h1 style={h1}>{title}</h1>
-                        {intro && (
-                          <p style={p}>
-                            {intro}
-                          </p>
-                        )}
+              {/* Body content */}
+              <div
+                style={{
+                  marginTop: "8px",
+                  fontSize: "14px",
+                  lineHeight: 1.6,
+                  color: "#374151",
+                }}
+              >
+                {children}
+              </div>
+            </div>
 
-                        {children}
+            {/* FOOTER / SIGNATURE */}
+            <div
+              style={{
+                marginTop: "14px",
+                paddingTop: "10px",
+                borderTop: "1px solid #e5e7eb",
+                fontSize: "11px",
+                color: "#6b7280",
+              }}
+            >
+              {/* Top row: brand + contact */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  rowGap: "8px",
+                }}
+              >
+                {/* Brand block */}
+                <div style={{ minWidth: "200px" }}>
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: "#111827",
+                      fontSize: "12px",
+                    }}
+                  >
+                    Resourcin
+                  </div>
+                  <div style={{ marginTop: "2px" }}>
+                    Executive search &amp; recruitment
+                  </div>
+                  <div style={{ marginTop: "4px" }}>
+                    18b Engineer Muali Subair Street, Lekki, Lagos
+                  </div>
+                </div>
 
-                        {ctaLabel && ctaUrl && (
-                          <div style={{ marginTop: "24px" }}>
-                            <a
-                              href={ctaUrl}
-                              style={button}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {ctaLabel}
-                            </a>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+                {/* Contact + website */}
+                <div
+                  style={{
+                    minWidth: "200px",
+                    textAlign: "right",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 500 }}>Email:</span>{" "}
+                    <a
+                      href="mailto:hello@resourcin.com"
+                      style={{
+                        color: "#172965",
+                        textDecoration: "none",
+                      }}
+                    >
+                      hello@resourcin.com
+                    </a>
+                  </div>
+                  <div style={{ marginTop: "4px" }}>
+                    <a
+                      href="https://www.resourcin.com"
+                      style={{
+                        color: "#172965",
+                        textDecoration: "none",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <WebsiteIcon />
+                      <span>resourcin.com</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
 
-                    {/* Footer */}
-                    <tr>
-                      <td style={footer}>
-                        {footerNote && (
-                          <p style={footerNoteStyle}>
-                            {footerNote}
-                          </p>
-                        )}
+              {/* Social row */}
+              <div
+                style={{
+                  marginTop: "10px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  rowGap: "6px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <span>Follow us</span>
+                </div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <SocialIconLink
+                    href="https://www.linkedin.com/company/resourcin"
+                    label="LinkedIn"
+                  >
+                    <LinkedInIcon />
+                  </SocialIconLink>
 
-                        <p style={footerMain}>
-                          Resourcin · Talent advisory & recruitment
-                          <br />
-                          <a
-                            href="https://www.resourcin.com"
-                            style={footerLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            resourcin.com
-                          </a>
-                        </p>
+                  <SocialIconLink
+                    href="https://x.com/resourcinhq"
+                    label="X (Twitter)"
+                  >
+                    <XIcon />
+                  </SocialIconLink>
 
-                        <p style={footerSocial}>
-                          Follow us:
-                          {" "}
-                          <a
-                            href="https://www.linkedin.com/company/resourcin"
-                            style={footerLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            LinkedIn
-                          </a>
-                          {" · "}
-                          <a
-                            href="https://x.com/resourcinhq"
-                            style={footerLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            X
-                          </a>
-                          {" · "}
-                          <a
-                            href="https://www.instagram.com/resourcinhq/"
-                            style={footerLink}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Instagram
-                          </a>
-                        </p>
+                  <SocialIconLink
+                    href="https://www.instagram.com/resourcinhq/"
+                    label="Instagram"
+                  >
+                    <InstagramIcon />
+                  </SocialIconLink>
+                </div>
+              </div>
 
-                        <p style={footerSmall}>
-                          © {new Date().getFullYear()} Resourcin. All rights
-                          reserved.
-                        </p>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              {/* Tiny legal line */}
+              <div
+                style={{
+                  marginTop: "8px",
+                  fontSize: "10px",
+                  color: "#9ca3af",
+                }}
+              >
+                This email was sent from Resourcin&apos;s recruitment platform.
+                If you believe you received it in error, please disregard.
+              </div>
+            </div>
+          </div>
+        </div>
       </body>
     </html>
   );
 }
 
-// --------- STYLES (inline-friendly, email-safe) -------------------
+/**
+ * Small circular social icon wrapper
+ */
+function SocialIconLink(props: {
+  href: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={props.href}
+      aria-label={props.label}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "28px",
+        height: "28px",
+        borderRadius: "999px",
+        border: "1px solid #e5e7eb",
+        backgroundColor: "#ffffff",
+        textDecoration: "none",
+      }}
+    >
+      {props.children}
+    </a>
+  );
+}
 
-const bodyStyle: React.CSSProperties = {
-  margin: 0,
-  padding: 0,
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-  backgroundColor: "#F3F4F6",
-  color: "#0F172A",
-};
+/**
+ * Simple "link / website" icon
+ * (subtle, matches your /jobs icon aesthetic)
+ */
+function WebsiteIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="10" cy="10" r="6.5" stroke="#172965" strokeWidth="1.2" />
+      <path
+        d="M10 3.5c-2.2 2-3.3 4.1-3.3 6.5 0 2.4 1.1 4.6 3.3 6.5 2.2-1.9 3.3-4.1 3.3-6.5C13.3 7.6 12.2 5.5 10 3.5Z"
+        stroke="#172965"
+        strokeWidth="1.1"
+      />
+      <path
+        d="M4 10h12"
+        stroke="#172965"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
-const preheaderStyle: React.CSSProperties = {
-  display: "none",
-  fontSize: "1px",
-  color: "#F3F4F6",
-  lineHeight: "1px",
-  maxHeight: "0px",
-  maxWidth: "0px",
-  opacity: 0,
-  overflow: "hidden",
-};
+/**
+ * LinkedIn icon – same path as your /jobs page
+ */
+function LinkedInIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="#0A66C2"
+      aria-hidden="true"
+    >
+      <path d="M4.98 3.5C4.98 4.88 3.88 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM.22 8.25h4.56V24H.22zM8.34 8.25h4.37v2.13h.06c.61-1.16 2.1-2.38 4.32-2.38 4.62 0 5.47 3.04 5.47 6.99V24h-4.56v-7.22c0-1.72-.03-3.93-2.4-3.93-2.4 0-2.77 1.87-2.77 3.8V24H8.34z" />
+    </svg>
+  );
+}
 
-const outerTable: React.CSSProperties = {
-  maxWidth: "640px",
-  margin: "0 auto",
-};
+/**
+ * X (Twitter) icon – same shape as on /jobs
+ */
+function XIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="#000000"
+      aria-hidden="true"
+    >
+      <path d="M18.5 2h-3.1L12 7.2 8.8 2H2l6.7 10.1L2.4 22h3.1L12 14.7 16 22h6.8l-7-10.6L21.6 2h-3.1L14 8.4z" />
+    </svg>
+  );
+}
 
-const card: React.CSSProperties = {
-  width: "100%",
-  backgroundColor: "#FFFFFF",
-  borderRadius: "12px",
-  overflow: "hidden",
-  border: "1px solid #E5E7EB",
-};
-
-const header: React.CSSProperties = {
-  padding: "16px 24px",
-  borderBottom: "1px solid #E5E7EB",
-  background:
-    "linear-gradient(135deg, #0B1320 0%, #172965 55%, #64C247 100%)",
-};
-
-const logoText: React.CSSProperties = {
-  fontSize: "20px",
-  fontWeight: 700,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "#FFFFFF",
-};
-
-const tagline: React.CSSProperties = {
-  marginTop: "4px",
-  fontSize: "11px",
-  color: "rgba(255,255,255,0.85)",
-};
-
-const content: React.CSSProperties = {
-  padding: "24px",
-};
-
-const h1: React.CSSProperties = {
-  fontSize: "18px",
-  lineHeight: "1.4",
-  margin: "0 0 12px 0",
-  color: brandBlue,
-};
-
-const p: React.CSSProperties = {
-  fontSize: "13px",
-  lineHeight: "1.6",
-  margin: "0 0 12px 0",
-  color: "#111827",
-};
-
-const button: React.CSSProperties = {
-  display: "inline-block",
-  padding: "10px 18px",
-  borderRadius: "999px",
-  backgroundColor: brandDark,
-  color: "#FFFFFF",
-  fontSize: "13px",
-  fontWeight: 600,
-  textDecoration: "none",
-};
-
-const footer: React.CSSProperties = {
-  padding: "16px 24px 20px",
-  borderTop: "1px solid #E5E7EB",
-  backgroundColor: "#F9FAFB",
-};
-
-const footerNoteStyle: React.CSSProperties = {
-  margin: "0 0 8px 0",
-  fontSize: "11px",
-  lineHeight: "1.5",
-  color: "#6B7280",
-};
-
-const footerMain: React.CSSProperties = {
-  margin: "0 0 6px 0",
-  fontSize: "11px",
-  lineHeight: "1.5",
-  color: "#4B5563",
-};
-
-const footerSocial: React.CSSProperties = {
-  margin: "0 0 4px 0",
-  fontSize: "11px",
-  color: "#4B5563",
-};
-
-const footerSmall: React.CSSProperties = {
-  margin: 0,
-  fontSize: "10px",
-  color: "#9CA3AF",
-};
-
-const footerLink: React.CSSProperties = {
-  color: brandBlue,
-  textDecoration: "underline",
-};
+/**
+ * Simple Instagram-style glyph (rounded square + circle)
+ */
+function InstagramIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+    >
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="5"
+        stroke="#C13584"
+        strokeWidth="1.6"
+      />
+      <circle cx="12" cy="12" r="4.2" stroke="#C13584" strokeWidth="1.6" />
+      <circle cx="17.3" cy="6.7" r="1.1" fill="#C13584" />
+    </svg>
+  );
+}
