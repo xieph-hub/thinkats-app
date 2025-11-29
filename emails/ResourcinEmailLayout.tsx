@@ -22,7 +22,7 @@ export default function ResourcinEmailLayout({
           "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
       }}
     >
-      {/* Hidden preheader text for inbox preview */}
+      {/* Hidden preheader for inbox preview */}
       {preheader && (
         <div
           style={{
@@ -38,7 +38,13 @@ export default function ResourcinEmailLayout({
         </div>
       )}
 
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "0 16px" }}>
+      <div
+        style={{
+          maxWidth: 640,
+          margin: "0 auto",
+          padding: "0 16px",
+        }}
+      >
         {/* Brand accent line */}
         <div
           style={{
@@ -46,7 +52,7 @@ export default function ResourcinEmailLayout({
             borderRadius: 999,
             marginBottom: 16,
             backgroundImage:
-              "linear-gradient(90deg, #172965 0%, #172965 40%, #64C247 100%)",
+              "linear-gradient(90deg, #172965 0%, #172965 55%, #64C247 85%, #FFC000 100%)",
           }}
         />
 
@@ -54,20 +60,20 @@ export default function ResourcinEmailLayout({
         <div
           style={{
             backgroundColor: "#FFFFFF",
-            borderRadius: 16,
+            borderRadius: 18,
             border: "1px solid #E5E7EB",
             padding: 24,
             boxShadow:
-              "0 18px 30px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04)",
+              "0 20px 35px rgba(15, 23, 42, 0.10), 0 2px 4px rgba(15, 23, 42, 0.05)",
           }}
         >
-          {/* Header block */}
-          <div style={{ marginBottom: 16 }}>
+          {/* Header */}
+          <div style={{ marginBottom: 18 }}>
             <div
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                letterSpacing: "0.18em",
+                letterSpacing: "0.2em",
                 textTransform: "uppercase",
                 color: "#6B7280",
               }}
@@ -87,85 +93,158 @@ export default function ResourcinEmailLayout({
             </div>
             <div
               style={{
+                marginTop: 4,
                 fontSize: 12,
                 color: "#6B7280",
-                marginTop: 4,
               }}
             >
-              Executive search &amp; recruitment for founders, leaders and
-              hiring managers.
+              Executive search &amp; recruitment for founders, leaders and hiring
+              managers.
             </div>
           </div>
 
+          {/* Email body content */}
           {children}
+
+          {/* Footer banner (within the card) */}
+          <div
+            style={{
+              marginTop: 24,
+              borderRadius: 14,
+              overflow: "hidden",
+              backgroundColor: "#172965",
+              border: "1px solid rgba(15,23,42,0.7)",
+            }}
+          >
+            {/* Thin yellow strip on top */}
+            <div
+              style={{
+                height: 3,
+                backgroundImage:
+                  "linear-gradient(90deg, #FFC000 0%, #64C247 40%, #172965 100%)",
+              }}
+            />
+
+            <div
+              style={{
+                padding: "14px 16px 16px",
+                color: "#E5E7EB",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                {/* Left: brand + tagline */}
+                <div style={{ minWidth: 220 }}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      letterSpacing: "0.16em",
+                      textTransform: "uppercase",
+                      fontWeight: 700,
+                      color: "#F9FAFB",
+                    }}
+                  >
+                    RESOURCIN
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 12,
+                      color: "#E5E7EB",
+                    }}
+                  >
+                    Sharper, faster and more honest hiring decisions across
+                    Nigeria, Africa and beyond.
+                  </div>
+                </div>
+
+                {/* Right: contact + socials */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-end",
+                    gap: 8,
+                    flex: 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      justifyContent: "flex-end",
+                      gap: 8,
+                    }}
+                  >
+                    <FooterPill
+                      href="mailto:hello@resourcin.com"
+                      label="hello@resourcin.com"
+                      icon="mail"
+                    />
+                    <FooterPill
+                      href="https://www.resourcin.com"
+                      label="resourcin.com"
+                      icon="globe"
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      gap: 8,
+                      marginTop: 4,
+                    }}
+                  >
+                    <SocialIcon
+                      href="https://www.linkedin.com/company/resourcin"
+                      label="LinkedIn"
+                      type="linkedin"
+                    />
+                    <SocialIcon
+                      href="https://x.com/resourcinhq"
+                      label="X (Twitter)"
+                      type="x"
+                    />
+                    <SocialIcon
+                      href="https://api.whatsapp.com/send?text=Hello%20Resourcin"
+                      label="WhatsApp"
+                      type="whatsapp"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Footer / signature */}
+        {/* Micro footer below card */}
         <div
           style={{
             textAlign: "center",
-            fontSize: 12,
-            color: "#6B7280",
-            marginTop: 12,
-            paddingBottom: 4,
+            marginTop: 10,
+            fontSize: 10,
+            color: "#9CA3AF",
           }}
         >
-          <div style={{ marginBottom: 4 }}>
-            Resourcin · Executive search &amp; recruitment
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              flexWrap: "wrap",
-              gap: 8,
-              marginBottom: 8,
-            }}
-          >
-            <FooterPill
-              href="mailto:hello@resourcin.com"
-              label="hello@resourcin.com"
-              icon="mail"
-            />
-            <FooterPill
-              href="https://www.resourcin.com"
-              label="resourcin.com"
-              icon="globe"
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              gap: 8,
-              marginTop: 2,
-            }}
-          >
-            <SocialIcon
-              href="https://www.linkedin.com/company/resourcin"
-              label="LinkedIn"
-              type="linkedin"
-            />
-            <SocialIcon
-              href="https://x.com/resourcinhq"
-              label="X (Twitter)"
-              type="x"
-            />
-            <SocialIcon
-              href="https://www.instagram.com/resourcinhq/"
-              label="Instagram"
-              type="instagram"
-            />
-          </div>
+          You&apos;re receiving this update from Resourcin in connection with a
+          hiring process.
         </div>
       </div>
     </div>
   );
 }
 
-// -- footer pills (email / website) -----------------------------------------
+// ---------------------------------------------------------------------------
+// Footer helper components
+// ---------------------------------------------------------------------------
 
 type FooterPillProps = {
   href: string;
@@ -183,11 +262,11 @@ function FooterPill({ href, label, icon }: FooterPillProps) {
         gap: 6,
         padding: "4px 10px",
         borderRadius: 999,
-        border: "1px solid #E5E7EB",
-        backgroundColor: "#F9FAFB",
+        border: "1px solid rgba(243,244,246,0.8)",
+        backgroundColor: "rgba(15,23,42,0.35)",
         textDecoration: "none",
         fontSize: 11,
-        color: "#111827",
+        color: "#F9FAFB",
       }}
     >
       {icon === "mail" ? <MailIcon /> : <GlobeIcon />}
@@ -203,8 +282,8 @@ function MailIcon() {
       height="14"
       viewBox="0 0 20 20"
       aria-hidden="true"
-      style={{ display: "block" }}
       fill="none"
+      style={{ display: "block" }}
     >
       <rect
         x="3"
@@ -212,12 +291,12 @@ function MailIcon() {
         width="14"
         height="12"
         rx="2"
-        stroke="#4B5563"
+        stroke="#F9FAFB"
         strokeWidth="1.2"
       />
       <path
         d="M4 6.5 10 10l6-3.5"
-        stroke="#4B5563"
+        stroke="#F9FAFB"
         strokeWidth="1.2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -233,40 +312,41 @@ function GlobeIcon() {
       height="14"
       viewBox="0 0 20 20"
       aria-hidden="true"
-      style={{ display: "block" }}
       fill="none"
+      style={{ display: "block" }}
     >
       <circle
         cx="10"
         cy="10"
         r="6.2"
-        stroke="#4B5563"
+        stroke="#F9FAFB"
         strokeWidth="1.2"
       />
       <path
         d="M10 3.8c-1.5 1.7-2.3 3.9-2.3 6.2 0 2.3.8 4.5 2.3 6.2m0-12.4c1.5 1.7 2.3 3.9 2.3 6.2 0 2.3-.8 4.5-2.3 6.2M4.2 10h11.6"
-        stroke="#4B5563"
+        stroke="#F9FAFB"
         strokeWidth="1.1"
       />
     </svg>
   );
 }
 
-// -- social icons (styled similar to /jobs icons) ---------------------------
+// Social icons – shapes mirror the JobCard icons but adapted for email
+type SocialType = "linkedin" | "x" | "whatsapp";
 
 type SocialIconProps = {
   href: string;
   label: string;
-  type: "linkedin" | "x" | "instagram";
+  type: SocialType;
 };
 
 function SocialIcon({ href, label, type }: SocialIconProps) {
-  const bg =
+  const bgColor =
     type === "linkedin"
       ? "#0A66C2"
       : type === "x"
       ? "#111827"
-      : "#DB2777"; // instagram-ish accent
+      : "#25D366";
 
   return (
     <a
@@ -279,68 +359,58 @@ function SocialIcon({ href, label, type }: SocialIconProps) {
         borderRadius: 999,
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: bg,
+        backgroundColor: bgColor,
         textDecoration: "none",
       }}
     >
-      {type === "linkedin" && <LinkedInIcon />}
-      {type === "x" && <XIcon />}
-      {type === "instagram" && <InstagramIcon />}
+      {type === "linkedin" && <LinkedInSvg />}
+      {type === "x" && <XSvg />}
+      {type === "whatsapp" && <WhatsAppSvg />}
     </a>
   );
 }
 
-function LinkedInIcon() {
+function LinkedInSvg() {
   return (
     <svg
       width="14"
       height="14"
       viewBox="0 0 24 24"
       aria-hidden="true"
+      fill="#FFFFFF"
       style={{ display: "block" }}
-      fill="#ffffff"
     >
       <path d="M4.98 3.5C4.98 4.88 3.88 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM.22 8.25h4.56V24H.22zM8.34 8.25h4.37v2.13h.06c.61-1.16 2.1-2.38 4.32-2.38 4.62 0 5.47 3.04 5.47 6.99V24h-4.56v-7.22c0-1.72-.03-3.93-2.4-3.93-2.4 0-2.77 1.87-2.77 3.8V24H8.34z" />
     </svg>
   );
 }
 
-function XIcon() {
+function XSvg() {
   return (
     <svg
       width="14"
       height="14"
       viewBox="0 0 24 24"
       aria-hidden="true"
+      fill="#FFFFFF"
       style={{ display: "block" }}
-      fill="#ffffff"
     >
       <path d="M18.5 2h-3.1L12 7.2 8.8 2H2l6.7 10.1L2.4 22h3.1L12 14.7 16 22h6.8l-7-10.6L21.6 2h-3.1L14 8.4z" />
     </svg>
   );
 }
 
-function InstagramIcon() {
+function WhatsAppSvg() {
   return (
     <svg
       width="14"
       height="14"
-      viewBox="0 0 24 24"
+      viewBox="0 0 32 32"
       aria-hidden="true"
+      fill="#FFFFFF"
       style={{ display: "block" }}
-      fill="none"
     >
-      <rect
-        x="3"
-        y="3"
-        width="18"
-        height="18"
-        rx="5"
-        stroke="#ffffff"
-        strokeWidth="1.6"
-      />
-      <circle cx="12" cy="12" r="4.2" stroke="#ffffff" strokeWidth="1.6" />
-      <circle cx="17.2" cy="6.8" r="1.2" fill="#ffffff" />
+      <path d="M16.04 4C9.96 4 5 8.96 5 15.02c0 2.38.72 4.6 2.09 6.5L5 28l6.63-2.07c1.84 1 3.9 1.53 6.01 1.53h.01C22.1 27.46 27 22.5 27 16.44 27 10.38 22.12 4 16.04 4zm-.01 20.9c-1.8 0-3.56-.48-5.1-1.38l-.37-.22-3.93 1.23 1.28-3.84-.24-.39A8.7 8.7 0 0 1 7.3 15c0-4.84 3.93-8.78 8.77-8.78 4.77 0 8.66 3.94 8.66 8.78 0 4.83-3.9 8.9-8.66 8.9zm4.78-6.63c-.26-.13-1.53-.76-1.77-.84-.24-.09-.41-.13-.58.12-.17.26-.67.84-.82 1-.15.17-.3.19-.56.06-.26-.13-1.09-.4-2.08-1.28-.77-.69-1.29-1.54-1.44-1.8-.15-.26-.02-.4.11-.53.12-.12.26-.3.39-.45.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45-.06-.13-.58-1.39-.8-1.9-.21-.5-.42-.44-.58-.45l-.5-.01c-.17 0-.45.06-.69.32-.24.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.81 2.86 4.4 4.02.62.27 1.11.43 1.49.55.63.2 1.2.17 1.65.1.5-.08 1.53-.62 1.75-1.22.22-.6.22-1.11.15-1.22-.06-.11-.24-.17-.5-.3z" />
     </svg>
   );
 }
