@@ -1,4 +1,4 @@
-// emails/CandidateApplicationReceivedEmail.tsx
+// emails/CandidateApplicationReceived.tsx
 import * as React from "react";
 import ResourcinEmailLayout from "./ResourcinEmailLayout";
 
