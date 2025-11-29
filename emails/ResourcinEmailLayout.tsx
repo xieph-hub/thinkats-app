@@ -3,8 +3,11 @@ import * as React from "react";
 
 export interface ResourcinEmailLayoutProps {
   title: string;
-  previewText?: string;
   children: React.ReactNode;
+  /** New name */
+  previewText?: string;
+  /** Backwards-compatible alias used by existing templates */
+  preheader?: string;
 }
 
 const brandBlue = "#172965";
@@ -13,8 +16,12 @@ const brandYellow = "#FFC000";
 export default function ResourcinEmailLayout({
   title,
   previewText,
+  preheader,
   children,
 }: ResourcinEmailLayoutProps) {
+  // Use previewText if provided, otherwise fall back to preheader
+  const effectivePreview = previewText ?? preheader ?? "";
+
   return (
     <html lang="en">
       <head>
@@ -33,7 +40,7 @@ export default function ResourcinEmailLayout({
         }}
       >
         {/* Inbox preview text (hidden in the email body) */}
-        {previewText && (
+        {effectivePreview && (
           <div
             style={{
               display: "none",
@@ -44,7 +51,7 @@ export default function ResourcinEmailLayout({
               opacity: 0,
             }}
           >
-            {previewText}
+            {effectivePreview}
           </div>
         )}
 
@@ -156,7 +163,7 @@ export default function ResourcinEmailLayout({
                           Workplaces and Careers
                         </div>
 
-                        {/* Website + email (clickable) */}
+                        {/* Website + email (clickable text) */}
                         <div
                           style={{
                             fontSize: "12px",
@@ -190,7 +197,7 @@ export default function ResourcinEmailLayout({
                           </a>
                         </div>
 
-                        {/* Icon row – styled to echo the share pill on /jobs */}
+                        {/* Icon row – LinkedIn, X, Globe, Envelope */}
                         <div
                           style={{
                             display: "flex",
