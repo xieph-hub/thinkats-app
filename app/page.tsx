@@ -1,230 +1,360 @@
+// app/page.tsx
 import type { Metadata } from "next";
-import { SITE_URL } from "@/lib/site";
-import Container from "@/components/Container";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "ThinkATS | The modern ATS built for scale",
+  title: "ThinkATS — Modern ATS & Career Sites Engine for Agencies and In-House Teams",
   description:
-    "ThinkATS is a modern, multi-tenant applicant tracking system for recruitment agencies, HR teams and staffing firms. Launch branded career sites, manage pipelines and automate hiring from day one.",
-  alternates: { canonical: SITE_URL + "/" },
+    "ThinkATS is a multi-tenant ATS and white-label career sites engine for recruitment agencies and in-house HR teams. Power your hiring workflows and branded career pages from a single platform.",
 };
 
 export default function Page() {
   return (
-    <main>
+    <main className="bg-slate-50">
       {/* Hero */}
-      <section className="bg-white py-14 md:py-20">
-        <Container>
-          <div className="grid gap-10 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] md:items-center">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Applicant Tracking • Career Sites • Automation
-              </p>
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-12 sm:px-6 md:flex-row md:items-center md:py-20 lg:px-8">
+          {/* Left: copy */}
+          <div className="flex-1">
+            <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-100">
+              Built for agencies & growing businesses
+            </span>
 
-              <h1 className="mt-3 text-3xl font-bold leading-tight text-slate-900 md:text-5xl">
-                The modern ATS{" "}
-                <span className="text-[#1E40AF]">built for scale</span>.
-              </h1>
+            <h1 className="mt-4 text-3xl font-bold leading-tight text-slate-900 sm:text-4xl md:text-5xl">
+              The ATS that powers{" "}
+              <span className="text-indigo-700">your hiring</span> <br className="hidden sm:block" />
+              <span className="text-indigo-700">&amp; your career site.</span>
+            </h1>
 
-              <p className="mt-4 max-w-xl text-sm text-slate-600 md:text-base">
-                ThinkATS gives recruitment agencies and in-house HR teams a
-                multi-tenant platform to run every search: branded career sites,
-                structured pipelines, candidate CRM and automated workflows that
-                actually reflect how you hire.
-              </p>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link
-                  href="/signup"
-                  className="rounded-xl bg-[#1E40AF] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1D4ED8]"
-                >
-                  Start free trial
-                </Link>
-                <Link
-                  href="/contact"
-                  className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  Book a demo
-                </Link>
-              </div>
-
-              <p className="mt-3 text-xs text-slate-500">
-                No credit card required · Multi-tenant from day one · Built to
-                power firms like Resourcin and beyond
-              </p>
-
-              <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-semibold text-emerald-700">
-                  ●
-                </span>
-                <span>
-                  Already using ThinkATS as a client?{" "}
-                  <Link
-                    href="/ats/dashboard"
-                    className="font-semibold text-[#1E40AF] hover:underline"
-                  >
-                    Go to your ATS →
-                  </Link>
-                </span>
-              </div>
-            </div>
-
-            {/* Right: quick product preview cards */}
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Careers & Job Board
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">
-                  Branded career sites for every client
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Launch white-label career portals on{" "}
-                  <span className="font-medium text-[#1E40AF]">
-                    clientname.thinkats.com
-                  </span>{" "}
-                  or your clients&apos; domains, with filters, search and SEO-
-                  ready job pages.
-                </p>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Resourcin &amp; other firms already run searches here.</span>
-                  <Link
-                    href="/jobs"
-                    className="font-semibold text-[#1E40AF] hover:underline"
-                  >
-                    View live job board →
-                  </Link>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Pipelines
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    Drag-and-drop hiring stages
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Move candidates from Applied → Shortlist → Interview →
-                    Offer and keep a clean audit trail across every mandate.
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Automation
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
-                    Smart emails & notifications
-                  </p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    Acknowledge applications, nudge interview feedback and keep
-                    clients in the loop without copy-pasting templates all day.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
-
-      {/* Who ThinkATS is for */}
-      <section className="border-t bg-slate-50 py-12 md:py-16">
-        <Container>
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Built for modern hiring teams
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-900 md:text-2xl">
-                One ATS, multiple ways to run your search business.
-              </h2>
-            </div>
-            <p className="mt-2 max-w-md text-xs text-slate-600 md:text-sm">
-              Whether you&apos;re an agency, in-house HR team or staffing firm,
-              ThinkATS gives you the structure to scale: multi-tenant accounts,
-              reusable templates and clean reporting.
+            <p className="mt-4 max-w-xl text-sm text-slate-600 sm:text-base">
+              ThinkATS combines a modern applicant tracking system with white-label career sites,
+              so recruitment agencies and in-house HR teams can run end-to-end hiring and branded
+              career pages from one place.
             </p>
-          </div>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#1E40AF]">
-                Recruitment Agencies
-              </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
-                Run multiple clients from one ATS
-              </p>
-              <p className="mt-2 text-xs text-slate-600">
-                Keep each client&apos;s jobs, pipelines and reporting separated
-                while your team works from a single, powerful back-office.
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#1E40AF]">
-                Corporate HR & People teams
-              </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
-                Centralize hiring across locations
-              </p>
-              <p className="mt-2 text-xs text-slate-600">
-                Standardize hiring stages, keep stakeholders aligned and see
-                time-to-hire, source effectiveness and funnel health in one
-                place.
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/80">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#1E40AF]">
-                Staffing & BPO firms
-              </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">
-                Volume hiring without chaos
-              </p>
-              <p className="mt-2 text-xs text-slate-600">
-                Handle hundreds of applicants, recurring roles and multiple
-                contracts with structured pipelines and reusable job templates.
-              </p>
-            </div>
-          </div>
-        </Container>
-      </section>
-
-      {/* Simple CTA strip */}
-      <section className="border-t bg-white py-10">
-        <Container>
-          <div className="flex flex-col items-start justify-between gap-4 rounded-2xl bg-slate-900 px-6 py-8 text-white md:flex-row md:items-center md:px-8">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
-                Get started
-              </p>
-              <h3 className="mt-2 text-lg font-semibold md:text-xl">
-                Ready to power your recruitment with ThinkATS?
-              </h3>
-              <p className="mt-2 max-w-xl text-xs text-slate-300 md:text-sm">
-                Spin up your first tenant, invite your team and publish your
-                first role in under an hour. Resourcin is client #1 — your firm
-                can be next.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/signup"
-                className="rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-100"
+                className="inline-flex items-center justify-center rounded-full bg-indigo-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-800"
               >
                 Start free trial
               </Link>
               <Link
-                href="/pricing"
-                className="rounded-full border border-slate-500 px-5 py-2.5 text-sm font-semibold text-slate-100 hover:bg-slate-800"
+                href="/career-sites"
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-indigo-200 hover:bg-indigo-50"
               >
-                View pricing
+                Explore career sites
               </Link>
             </div>
+
+            <p className="mt-4 text-xs text-slate-500">
+              No credit card required · Built for multi-client agencies, staffing firms, and internal HR teams.
+            </p>
+
+            {/* Trust strip */}
+            <div className="mt-8 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-[11px] text-emerald-700">
+                  ✓
+                </span>
+                <span>White-label career sites for every client or business unit</span>
+              </div>
+              <div className="hidden h-4 w-px bg-slate-200 sm:block" />
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50 text-[11px] text-indigo-700">
+                  ◎
+                </span>
+                <span>Multi-tenant ATS, ready to scale from 1 → 1,000 clients</span>
+              </div>
+            </div>
           </div>
-        </Container>
+
+          {/* Right: product preview card */}
+          <div className="flex-1">
+            <div className="relative mx-auto max-w-md rounded-2xl border border-slate-200 bg-slate-900 p-4 text-xs text-slate-100 shadow-xl">
+              <div className="mb-3 flex items-center justify-between text-[11px] text-slate-300">
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                  Live: resourcin.thinkats.com
+                </span>
+                <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px]">
+                  Example client career site
+                </span>
+              </div>
+
+              <div className="rounded-xl bg-slate-950/60 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-medium text-slate-200">Resourcin Careers</p>
+                    <p className="text-[11px] text-slate-400">
+                      Powered by <span className="font-semibold text-indigo-300">ThinkATS</span>
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] text-emerald-300">
+                    12 open roles
+                  </span>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {[
+                    {
+                      title: "Head of Growth",
+                      meta: "Lagos · Full-time · Hybrid",
+                    },
+                    {
+                      title: "Senior Product Manager",
+                      meta: "Remote · Full-time",
+                    },
+                    {
+                      title: "People Operations Lead",
+                      meta: "Nairobi · Full-time",
+                    },
+                  ].map((job) => (
+                    <div
+                      key={job.title}
+                      className="flex items-center justify-between rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2"
+                    >
+                      <div>
+                        <p className="text-[11px] font-medium text-slate-50">{job.title}</p>
+                        <p className="text-[10px] text-slate-400">{job.meta}</p>
+                      </div>
+                      <button className="rounded-full bg-indigo-600 px-3 py-1 text-[10px] font-semibold text-white hover:bg-indigo-500">
+                        View job
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2 text-[10px]">
+                <div className="rounded-xl bg-slate-800/80 p-3">
+                  <p className="text-slate-300">Active jobs</p>
+                  <p className="mt-1 text-lg font-semibold text-white">28</p>
+                  <p className="mt-1 text-[10px] text-emerald-300">+6 this week</p>
+                </div>
+                <div className="rounded-xl bg-slate-800/80 p-3">
+                  <p className="text-slate-300">Candidates</p>
+                  <p className="mt-1 text-lg font-semibold text-white">4,120</p>
+                  <p className="mt-1 text-[10px] text-slate-400">Multi-client talent pool</p>
+                </div>
+                <div className="rounded-xl bg-slate-800/80 p-3">
+                  <p className="text-slate-300">Avg. time-to-hire</p>
+                  <p className="mt-1 text-lg font-semibold text-white">19 days</p>
+                  <p className="mt-1 text-[10px] text-emerald-300">−32% vs baseline</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section: Who ThinkATS is for */}
+      <section className="border-b border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+                Built for agencies, staffing firms & in-house HR teams
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Whether you’re running a recruitment services business like Resourcin or leading
+                internal hiring for a growing company, ThinkATS gives you an ATS, talent CRM and
+                career site engine in one platform.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                Recruitment agencies
+              </p>
+              <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                Multi-client ATS with white-label career sites
+              </h3>
+              <p className="mt-2 text-xs text-slate-600">
+                Onboard every client into its own workspace, launch a branded career site, and keep
+                all pipelines, scorecards and communication in one system.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <li>• Separate pipelines per client, shared talent pools across clients.</li>
+                <li>• Offer “powered by ThinkATS” career sites as a billable service.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                In-house HR & People teams
+              </p>
+              <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                One source of truth for jobs, candidates & hiring managers
+              </h3>
+              <p className="mt-2 text-xs text-slate-600">
+                Replace spreadsheets, forms and scattered inboxes with a single ATS powering your
+                public career page and internal approvals.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <li>• careers.yourcompany.com powered by ThinkATS.</li>
+                <li>• Hiring managers collaborate in structured pipelines & scorecards.</li>
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Talent & outsourcing businesses
+              </p>
+              <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                BPO, outsourcing & talent marketplace ops in one system
+              </h3>
+              <p className="mt-2 text-xs text-slate-600">
+                Run high-volume hiring, remote talent benches and continuous sourcing with
+                structured pipelines and branded job boards.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <li>• Keep a live bench of vetted talent per client or program.</li>
+                <li>• Launch niche career sites for each business line or geography.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section: Core pillars */}
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+                Three pillars: Career sites, ATS, and multi-tenant scale
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                Everything you need to run branded career pages and structured hiring workflows for
+                one company — or hundreds of clients.
+              </p>
+            </div>
+            <Link
+              href="/product"
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-800 hover:border-indigo-200 hover:bg-indigo-50"
+            >
+              View full product overview →
+            </Link>
+          </div>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            {/* Career Sites */}
+            <div className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                01 · Career sites engine
+              </p>
+              <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                Branded career sites for every business you support
+              </h3>
+              <p className="mt-2 text-xs text-slate-600">
+                Launch a full career site in minutes: logo, brand colors, job filters and SEO-ready
+                URLs. Use clientname.thinkats.com or map to careers.clientdomain.com.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <li>• Mobile-ready job board & job detail pages.</li>
+                <li>• Hosted by ThinkATS, branded as your client.</li>
+                <li>• “Powered by ThinkATS” footer (optional per plan).</li>
+              </ul>
+              <div className="mt-4 text-xs text-indigo-700">
+                <Link href="/career-sites" className="font-semibold hover:underline">
+                  Learn more about career sites →
+                </Link>
+              </div>
+            </div>
+
+            {/* ATS & pipelines */}
+            <div className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                02 · Modern ATS
+              </p>
+              <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                Structured pipelines, scorecards & communication in one place
+              </h3>
+              <p className="mt-2 text-xs text-slate-600">
+                Track every candidate from first touch to hire with configurable stages, email
+                templates, interview scheduling and scorecards.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <li>• Per-job pipelines and global talent pools.</li>
+                <li>• Centralised email threads, notes and activity.</li>
+                <li>• Pipeline and time-to-hire reporting out of the box.</li>
+              </ul>
+            </div>
+
+            {/* Multi-tenant scale */}
+            <div className="flex flex-col rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                03 · Multi-tenant by design
+              </p>
+              <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                From a single team to 1,000+ client workspaces
+              </h3>
+              <p className="mt-2 text-xs text-slate-600">
+                Each client or business unit gets its own workspace, jobs and pipelines — while your
+                team manages everything securely from one admin view.
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
+                <li>• Clear data boundaries per client.</li>
+                <li>• Shared recruiter logins across multiple workspaces.</li>
+                <li>• Pricing that scales with users and tenants, not chaos.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Simple “How it works” strip */}
+      <section className="bg-slate-900">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white sm:text-xl">
+                Get your first client or business live in a weekend.
+              </h2>
+              <p className="mt-2 max-w-xl text-xs text-slate-300">
+                Create a workspace, connect your domain, publish a career site and start tracking
+                applications — without writing a line of code.
+              </p>
+            </div>
+            <div className="mt-4 grid flex-1 grid-cols-1 gap-3 text-xs text-slate-100 md:mt-0 md:grid-cols-3">
+              <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
+                <p className="text-[11px] font-semibold text-emerald-300">Step 1</p>
+                <p className="mt-1 font-medium">Create your workspace</p>
+                <p className="mt-1 text-[11px] text-slate-300">
+                  Set up your company or agency, invite your team and choose default hiring stages.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
+                <p className="text-[11px] font-semibold text-amber-300">Step 2</p>
+                <p className="mt-1 font-medium">Launch a career site</p>
+                <p className="mt-1 text-[11px] text-slate-300">
+                  Configure brand colors, connect a subdomain or custom domain, and publish your
+                  first roles.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-800/60 p-3">
+                <p className="text-[11px] font-semibold text-indigo-300">Step 3</p>
+                <p className="mt-1 font-medium">Track, collaborate, hire</p>
+                <p className="mt-1 text-[11px] text-slate-300">
+                  Move candidates through stages, collect feedback and keep hiring managers aligned
+                  in one system.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-900 shadow-sm hover:bg-slate-100"
+            >
+              See pricing & plans →
+            </Link>
+          </div>
+        </div>
       </section>
     </main>
   );
