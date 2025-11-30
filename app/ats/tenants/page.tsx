@@ -1,5 +1,6 @@
 // app/ats/tenants/page.tsx
 import type { Metadata } from "next";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
@@ -71,7 +72,8 @@ export default async function AtsTenantsPage({
             </span>
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            Controlled by <code className="rounded bg-slate-100 px-1 py-0.5">
+            Controlled by{" "}
+            <code className="rounded bg-slate-100 px-1 py-0.5">
               RESOURCIN_TENANT_SLUG
             </code>{" "}
             in your environment.
@@ -151,6 +153,7 @@ export default async function AtsTenantsPage({
           <form
             method="POST"
             action="/ats/tenants/new"
+            encType="multipart/form-data"
             className="mt-4 space-y-3 text-[13px]"
           >
             <div className="space-y-1">
@@ -188,6 +191,25 @@ export default async function AtsTenantsPage({
               </p>
             </div>
 
+            <div className="space-y-1">
+              <label
+                htmlFor="tenant-logo"
+                className="text-xs font-medium text-slate-700"
+              >
+                Workspace logo (optional)
+              </label>
+              <input
+                id="tenant-logo"
+                name="logo"
+                type="file"
+                accept="image/*"
+                className="block w-full cursor-pointer rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 file:mr-2 file:rounded-md file:border-0 file:bg-[#172965] file:px-2.5 file:py-1 file:text-[11px] file:font-semibold file:text-white hover:border-slate-300"
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                PNG, JPG or SVG. A square logo works best in the list.
+              </p>
+            </div>
+
             <button
               type="submit"
               className="inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
@@ -219,7 +241,7 @@ export default async function AtsTenantsPage({
             <table className="min-w-full text-left text-[11px] text-slate-700">
               <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Workspace</th>
                   <th className="px-3 py-2">Slug</th>
                   <th className="px-3 py-2">ID</th>
                   <th className="px-3 py-2">Created</th>
@@ -227,55 +249,84 @@ export default async function AtsTenantsPage({
                 </tr>
               </thead>
               <tbody>
-                {tenants.map((tenant: any) => (
-                  <tr
-                    key={tenant.id}
-                    className="border-b border-slate-100 last:border-0"
-                  >
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium text-slate-900">
-                          {tenant.name || tenant.slug || tenant.id}
+                {tenants.map((tenant: any) => {
+                  const label =
+                    tenant.name || tenant.slug || (tenant.id as string);
+                  const initial =
+                    (label?.charAt?.(0)?.toUpperCase?.() as string) || "T";
+
+                  return (
+                    <tr
+                      key={tenant.id}
+                      className="border-b border-slate-100 last:border-0"
+                    >
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex items-center gap-2">
+                          {tenant.logoUrl ? (
+                            <div className="relative h-7 w-7 overflow-hidden rounded-md border border-slate-200 bg-white">
+                              <Image
+                                src={tenant.logoUrl}
+                                alt={`${label} logo`}
+                                width={28}
+                                height={28}
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">
+                              {initial}
+                            </div>
+                          )}
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-900">
+                              {label}
+                            </span>
+                            {tenant.slug && (
+                              <span className="text-[10px] text-slate-500">
+                                {tenant.slug}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                          {tenant.slug || "—"}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                        {tenant.slug || "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="font-mono text-[10px] text-slate-500">
-                        {String(tenant.id).slice(0, 8)}…
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="text-[11px] text-slate-600">
-                        {formatDate(tenant.createdAt || tenant.created_at)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex justify-end gap-2">
-                        <a
-                          href={`/ats/jobs?tenantId=${encodeURIComponent(
-                            tenant.id,
-                          )}`}
-                          className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                        >
-                          View jobs
-                        </a>
-                        <a
-                          href={`/ats/clients?tenantId=${encodeURIComponent(
-                            tenant.id,
-                          )}`}
-                          className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                        >
-                          View clients
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span className="font-mono text-[10px] text-slate-500">
+                          {String(tenant.id).slice(0, 8)}…
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span className="text-[11px] text-slate-600">
+                          {formatDate(tenant.createdAt || tenant.created_at)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex justify-end gap-2">
+                          <a
+                            href={`/ats/jobs?tenantId=${encodeURIComponent(
+                              tenant.id,
+                            )}`}
+                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            View jobs
+                          </a>
+                          <a
+                            href={`/ats/clients?tenantId=${encodeURIComponent(
+                              tenant.id,
+                            )}`}
+                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            View clients
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
