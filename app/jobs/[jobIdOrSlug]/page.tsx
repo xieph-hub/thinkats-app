@@ -1,4 +1,3 @@
-
 // app/jobs/[jobIdOrSlug]/page.tsx
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -312,33 +311,36 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
       : `${canonicalPath}/apply`;
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
+    <main className="min-h-screen bg-slate-50 text-slate-900 pb-10">
       {/* Top breadcrumb + title */}
       <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/4">
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
           <div className="mb-4 flex items-center gap-2 text-xs text-slate-500">
             <Link
               href="/jobs"
-              className="inline-flex items-center gap-1 hover:text-[#172965]"
+              className="inline-flex items-center gap-1 rounded-full px-2 py-1 transition hover:bg-slate-100 hover:text-[#172965]"
             >
-              ← All roles
+              <span className="text-sm">←</span>
+              <span>All roles</span>
             </Link>
             <span className="h-0.5 w-0.5 rounded-full bg-slate-300" />
-            <span>Resourcin</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+              Resourcin search
+            </span>
           </div>
 
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-[#172965] sm:text-3xl">
+            <div className="space-y-3">
+              <h1 className="text-2xl font-semibold tracking-tight text-[#172965] sm:text-3xl lg:text-4xl">
                 {job.title}
               </h1>
-              <p className="mt-2 text-sm font-medium text-slate-700">
+              <p className="text-sm font-medium text-slate-700">
                 {job.confidential
                   ? "Confidential search · via Resourcin"
                   : "Resourcin · Executive search & recruitment"}
               </p>
 
-              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600">
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-600">
                 {job.location && (
                   <MetaPill
                     icon={<IconLocation />}
@@ -370,15 +372,17 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
               <Link
                 href={applyHref}
-                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
+                className="inline-flex items-center justify-center rounded-full bg-[#172965] px-6 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
               >
                 Apply for this role
               </Link>
-              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm">
-                <span className="hidden sm:inline">Share</span>
+              <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-2 py-1 text-[11px] text-slate-600 shadow-sm">
+                <span className="hidden font-medium text-slate-600 sm:inline">
+                  Share
+                </span>
                 <a
                   href={linkedInUrl}
                   target="_blank"
@@ -411,7 +415,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
           </div>
 
           {job.short_description && (
-            <p className="mt-4 max-w-3xl text-sm text-slate-700">
+            <p className="mt-5 max-w-3xl text-sm leading-relaxed text-slate-700">
               {job.short_description}
             </p>
           )}
@@ -437,13 +441,13 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
       </section>
 
       {/* Main content */}
-      <section className="mx-auto max-w-5xl px-4 py-8 sm:py-10">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr),minmax(260px,1fr)]">
+      <section className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr),minmax(280px,1fr)] lg:gap-10">
           {/* Left: description */}
           <div className="space-y-8">
             {/* Overview / role summary */}
             {job.overview && (
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
                   Role overview
                 </h2>
@@ -457,7 +461,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
 
             {/* About the client */}
             {job.about_client && (
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
                   About the organisation
                 </h2>
@@ -471,7 +475,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
 
             {/* Responsibilities */}
             {job.responsibilities && (
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
                   Key responsibilities
                 </h2>
@@ -481,7 +485,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
 
             {/* Requirements */}
             {job.requirements && (
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
                   Experience & requirements
                 </h2>
@@ -491,7 +495,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
 
             {/* Benefits */}
             {job.benefits && (
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
                   Compensation & benefits
                 </h2>
@@ -501,9 +505,9 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
           </div>
 
           {/* Right: key facts / sticky card */}
-          <aside className="space-y-4">
-            <div className="sticky top-20 space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <aside className="space-y-4 lg:pl-2">
+            <div className="sticky top-24 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
                 <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                   Role snapshot
                 </h2>
@@ -534,11 +538,11 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
 
                 <Link
                   href={applyHref}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-center text-xs font-semibold text-white hover:bg-[#0f1c48]"
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-center text-xs font-semibold text-white hover:bg-[#0f1c48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#172965] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                 >
                   Apply now
                 </Link>
-                <p className="mt-2 text-[10px] text-slate-500">
+                <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
                   We review each application carefully. If your profile is a
                   close match, we&apos;ll be in touch to discuss next steps.
                 </p>
@@ -548,7 +552,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
                 <div className="text-[11px] font-semibold text-[#306B34]">
                   Referrals welcome
                 </div>
-                <p className="mt-1">
+                <p className="mt-1 leading-relaxed">
                   Know someone who might be a fit? Share this role with them or
                   send an introduction when you apply.
                 </p>
@@ -634,7 +638,7 @@ function RichListBlock({ text }: { text: string }) {
   );
 
   return (
-    <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-slate-700">
+    <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-700">
       {cleaned.map((item, idx) => (
         <li key={idx}>{item}</li>
       ))}
