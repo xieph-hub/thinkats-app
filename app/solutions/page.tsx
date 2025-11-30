@@ -1,139 +1,109 @@
 // app/solutions/page.tsx
 import type { Metadata } from "next";
-import Container from "@/components/Container";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Solutions | ThinkATS",
   description:
-    "See how ThinkATS supports small agencies, mid-market teams and enterprise organisations across multiple hiring use cases.",
+    "See how ThinkATS supports in-house HR teams, recruitment agencies and founders running lean hiring.",
 };
-
-const sizeBlocks = [
-  {
-    title: "Small agencies (1–10 recruiters)",
-    body: "Get out of spreadsheets and shared inboxes. Publish roles in minutes, track every candidate and keep clients updated without extra admin.",
-    bullets: [
-      "Fast setup, minimal configuration",
-      "Job templates for repeat roles",
-      "Client-friendly reporting (roadmap)",
-    ],
-  },
-  {
-    title: "Mid-market teams (11–50 recruiters)",
-    body: "Standardise pipelines and collaboration as your team grows so hiring quality doesn’t depend on one or two star recruiters.",
-    bullets: [
-      "Custom stages per function",
-      "Role-based access & permissions",
-      "Shared templates and email copy",
-    ],
-  },
-  {
-    title: "Enterprise & multi-brand",
-    body: "Run multiple brands, regions or business units on one ATS while keeping access, data and branding cleanly separated.",
-    bullets: [
-      "Multi-tenant architecture from day one",
-      "Per-client or per-brand career sites",
-      "API access and SSO on higher plans",
-    ],
-  },
-];
-
-const useCaseBlocks = [
-  {
-    title: "White-label career sites",
-    body: "Offer branded career portals as part of your service, hosted on ThinkATS and controlled from your back-office.",
-  },
-  {
-    title: "Multi-client management",
-    body: "Keep each client’s roles, candidates and reporting separate while your team works from one place.",
-  },
-  {
-    title: "Candidate relationship management",
-    body: "Build reusable talent pools, track interactions and reuse candidates across future roles.",
-  },
-  {
-    title: "Recruitment marketing",
-    body: "Publish roles quickly, control the on-page story and track which sources and campaigns actually convert.",
-  },
-];
 
 export default function SolutionsPage() {
   return (
-    <main className="bg-white">
-      <section className="border-b bg-slate-50 py-12 md:py-16">
-        <Container>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+    <main className="bg-slate-50">
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#172965]">
             Solutions
           </p>
-          <h1 className="mt-3 text-3xl font-bold text-slate-900 md:text-4xl">
-            Solutions for agencies, in-house teams and staffing firms.
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+            Thoughtful workflows for different hiring teams.
           </h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600 md:text-base">
-            Whether you’re running a specialist search firm, a BPO operation or
-            a multi-country HR team, ThinkATS gives you the structure to keep
-            hiring predictable, visible and scalable.
+          <p className="mt-3 max-w-2xl text-sm text-slate-700">
+            Whether you&apos;re an in-house HR lead, a recruitment agency or a
+            founder wearing multiple hats, ThinkATS gives you just enough
+            structure without getting in your way.
           </p>
-        </Container>
+        </div>
       </section>
 
-      <section className="py-12 md:py-16">
-        <Container>
-          <div className="max-w-3xl">
-            <h2 className="text-lg font-semibold text-slate-900 md:text-xl">
-              By company size
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Start lean and grow without having to migrate tools when your team
-              or client list doubles.
-            </p>
-          </div>
+      <section
+        id="in-house"
+        className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-900">
+            In-house HR &amp; People teams
+          </h2>
+          <p className="mt-2 text-xs text-slate-600">
+            Centralise hiring across departments, keep managers aligned on
+            priorities and remove the friction from getting feedback.
+          </p>
+          <ul className="mt-3 grid gap-2 text-[11px] text-slate-600 sm:grid-cols-2">
+            <li>• Clear pipelines for leadership and specialist roles</li>
+            <li>• Visibility on where candidates are stuck</li>
+            <li>• Simple dashboards for HR leadership</li>
+            <li>• Candidate communication that feels human</li>
+          </ul>
+        </div>
+      </section>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {sizeBlocks.map((block) => (
-              <article
-                key={block.title}
-                className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <h3 className="text-sm font-semibold text-slate-900">
-                  {block.title}
-                </h3>
-                <p className="mt-2 text-xs text-slate-600">{block.body}</p>
-                <ul className="mt-3 space-y-1.5 text-xs text-slate-600">
-                  {block.bullets.map((b) => (
-                    <li key={b} className="flex gap-2">
-                      <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-[#1E40AF]" />
-                      <span>{b}</span>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
+      <section
+        id="agencies"
+        className="mx-auto max-w-6xl px-4 pb-8 sm:px-6 lg:px-8"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Recruitment &amp; search agencies
+          </h2>
+          <p className="mt-2 text-xs text-slate-600">
+            Run multiple client mandates from a single place, keep shortlists
+            clean and prepare client-ready reports without extra spreadsheets.
+          </p>
+          <ul className="mt-3 grid gap-2 text-[11px] text-slate-600 sm:grid-cols-2">
+            <li>• Multi-tenant structure by client</li>
+            <li>• Per-role pipelines with rich notes</li>
+            <li>• Clear view of who&apos;s in which process</li>
+            <li>• Easy export or screenshots for client updates</li>
+          </ul>
+        </div>
+      </section>
 
-          <div className="mt-12 max-w-3xl">
-            <h2 className="text-lg font-semibold text-slate-900 md:text-xl">
-              By use case
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              ThinkATS is opinionated enough to give you guardrails, but flexible
-              enough to support the kind of hiring work you actually do.
-            </p>
-          </div>
+      <section
+        id="founders"
+        className="mx-auto max-w-6xl px-4 pb-10 sm:px-6 lg:px-8"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Founders &amp; lean leadership teams
+          </h2>
+          <p className="mt-2 text-xs text-slate-600">
+            When you&apos;re still under 50 people, you don&apos;t need a huge
+            HR stack. You just need a clean place to put roles, candidates and
+            decisions.
+          </p>
+          <ul className="mt-3 grid gap-2 text-[11px] text-slate-600 sm:grid-cols-2">
+            <li>• Simple job creation flow</li>
+            <li>• No-login, CV-first applications</li>
+            <li>• Clear decisions per candidate</li>
+            <li>• Ready to grow into multi-tenant as you scale</li>
+          </ul>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {useCaseBlocks.map((block) => (
-              <article
-                key={block.title}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <h3 className="text-sm font-semibold text-slate-900">
-                  {block.title}
-                </h3>
-                <p className="mt-2 text-xs text-slate-600">{block.body}</p>
-              </article>
-            ))}
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Link
+              href="/signup"
+              className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
+            >
+              Try ThinkATS
+            </Link>
+            <Link
+              href="/product"
+              className="text-xs font-medium text-[#172965] hover:underline"
+            >
+              Explore the product →
+            </Link>
           </div>
-        </Container>
+        </div>
       </section>
     </main>
   );
