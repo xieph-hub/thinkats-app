@@ -8,6 +8,17 @@ type DashboardStats = {
   applicationsLast30Days: number;
 };
 
+type JobRow = {
+  id: string;
+  status: string | null;
+};
+
+type JobApplicationRow = {
+  id: string;
+  job_id: string;
+  created_at: string;
+};
+
 async function getDashboardStats(): Promise<DashboardStats> {
   const tenantId = await getCurrentTenantId();
 
@@ -18,25 +29,24 @@ async function getDashboardStats(): Promise<DashboardStats> {
   let totalCandidates = 0;
   let applicationsLast30Days = 0;
 
+  // 1) Load all jobs for this tenant (we use this for open jobs + app filtering)
+  let jobs: JobRow[] = [];
   try {
-    // OPEN JOBS
-    // Match the ATS meaning: "Jobs currently accepting applications"
-    // This is usually driven by a status like 'open'.
-    const { count: openJobsCount, error: jobsError } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("jobs")
-      .select("id", { head: true, count: "exact" })
-      .eq("tenant_id", tenantId)
-      .eq("status", "open"); // if your column is different, align this to it
+      .select<"id, status", JobRow>("id, status")
+      .eq("tenant_id", tenantId);
 
-    if (!jobsError) {
-      openJobs = openJobsCount ?? 0;
+    if (!error && data) {
+      jobs = data;
+      openJobs = data.filter((job) => job.status === "open").length;
     }
   } catch {
     openJobs = 0;
   }
 
+  // 2) Count candidates for this tenant (this was already correct)
   try {
-    // CANDIDATES (this was already correct, and matches legacy ATS)
     const { count: candidatesCount, error: candidatesError } =
       await supabaseAdmin
         .from("candidates")
@@ -50,19 +60,25 @@ async function getDashboardStats(): Promise<DashboardStats> {
     totalCandidates = 0;
   }
 
+  // 3) Applications (30 days) for this tenant, via job_ids
   try {
-    // APPLICATIONS (30 DAYS)
-    // Old ATS card: "Applications (30 days)" → mirror that.
-    // Very often this lives on an "applied_at" / "created_at" timestamp.
-    const { count: applicationsCount, error: appsError } =
-      await supabaseAdmin
-        .from("job_applications")
-        .select("id", { head: true, count: "exact" })
-        .eq("tenant_id", tenantId)
-        .gte("applied_at", thirtyDaysAgo.toISOString()); // if your column is created_at, change this field name
+    const jobIds = jobs.map((j) => j.id);
 
-    if (!appsError) {
-      applicationsLast30Days = applicationsCount ?? 0;
+    if (jobIds.length > 0) {
+      const { data: applications, error: appsError } =
+        await supabaseAdmin
+          .from("job_applications")
+          .select<"id, job_id, created_at", JobApplicationRow>(
+            "id, job_id, created_at"
+          )
+          .in("job_id", jobIds)
+          .gte("created_at", thirtyDaysAgo.toISOString());
+
+      if (!appsError && applications) {
+        applicationsLast30Days = applications.length;
+      }
+    } else {
+      applicationsLast30Days = 0;
     }
   } catch {
     applicationsLast30Days = 0;
