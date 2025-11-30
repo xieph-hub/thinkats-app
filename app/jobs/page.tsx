@@ -17,6 +17,7 @@ interface JobsPageSearchParams {
   location?: string | string[];
   department?: string | string[];
   workMode?: string | string[];
+  src?: string | string[]; // 👈 carry tracking source through
 }
 
 function formatWorkMode(value?: string | null) {
@@ -92,6 +93,19 @@ export default async function PublicJobsPage({
       : typeof rawWorkMode === "string"
       ? rawWorkMode
       : "all";
+
+  // 🔹 Tracking source (for multi-tenant / attribution)
+  const rawSrcParam =
+    typeof searchParams?.src === "string"
+      ? searchParams.src
+      : Array.isArray(searchParams?.src)
+      ? searchParams.src[0]
+      : undefined;
+
+  const trackingSourceParam =
+    rawSrcParam && rawSrcParam.trim().length > 0
+      ? rawSrcParam.trim().toUpperCase()
+      : undefined;
 
   // -----------------------------
   // Load all public + open jobs
@@ -180,12 +194,18 @@ export default async function PublicJobsPage({
   const totalJobs = jobs.length;
   const visibleJobs = filteredJobs.length;
 
-  // Helper for public URL (slug if present, else id)
+  // Helper for public URL (slug if present, else id) + carry src if set
   function jobPublicUrl(job: any) {
-    if (job.slug) {
-      return `/jobs/${encodeURIComponent(job.slug)}`;
-    }
-    return `/jobs/${job.id}`;
+    const basePath = job.slug
+      ? `/jobs/${encodeURIComponent(job.slug)}`
+      : `/jobs/${job.id}`;
+
+    if (!trackingSourceParam) return basePath;
+
+    const connector = basePath.includes("?") ? "&" : "?";
+    return `${basePath}${connector}src=${encodeURIComponent(
+      trackingSourceParam,
+    )}`;
   }
 
   return (
@@ -199,7 +219,7 @@ export default async function PublicJobsPage({
                 Careers
               </p>
               <h1 className="mt-2 text-2xl font-semibold text-[#172965] sm:text-3xl">
-                Roles curated by Resourcin & ThinkATS
+                Roles curated by Resourcin &amp; ThinkATS
               </h1>
               <p className="mt-3 text-sm text-slate-600">
                 Live mandates across Nigeria, Africa and beyond. These roles
@@ -479,7 +499,7 @@ export default async function PublicJobsPage({
                         href={jobPublicUrl(job)}
                         className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
                       >
-                        View & apply
+                        View &amp; apply
                         <span className="ml-1.5 text-[10px] opacity-80">
                           ↗
                         </span>
