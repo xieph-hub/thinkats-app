@@ -1,20 +1,7 @@
 // app/ats/jobs/[jobId]/StageSelect.tsx
-"use client";
+import React from "react";
 
-import { useTransition } from "react";
-import { moveApplicationStage } from "./actions";
-
-// Local type that matches JobApplication.stage values
-type ApplicationStageType =
-  | "APPLIED"
-  | "SCREENING"
-  | "SHORTLISTED"
-  | "INTERVIEW"
-  | "OFFER"
-  | "HIRED"
-  | "REJECTED";
-
-const STAGES: ApplicationStageType[] = [
+const STAGES = [
   "APPLIED",
   "SCREENING",
   "SHORTLISTED",
@@ -22,33 +9,33 @@ const STAGES: ApplicationStageType[] = [
   "OFFER",
   "HIRED",
   "REJECTED",
-];
+] as const;
+
+type StageSelectProps = {
+  jobId: string;
+  applicationId: string;
+  currentStage?: string | null;
+};
 
 export function StageSelect({
+  jobId,
   applicationId,
   currentStage,
-}: {
-  applicationId: string;
-  currentStage: ApplicationStageType;
-}) {
-  const [isPending, startTransition] = useTransition();
+}: StageSelectProps) {
+  const value = (currentStage || "APPLIED").toUpperCase();
 
   return (
     <form
-      onChange={(e) => {
-        const form = e.currentTarget as HTMLFormElement;
-        const fd = new FormData(form);
-        startTransition(async () => {
-          await moveApplicationStage(fd);
-        });
-      }}
+      method="POST"
+      action="/ats/applications/actions"
+      className="inline-flex items-center gap-1"
     >
+      <input type="hidden" name="jobId" value={jobId} />
       <input type="hidden" name="applicationId" value={applicationId} />
       <select
-        name="stage"
-        defaultValue={currentStage}
-        disabled={isPending}
-        className="rounded border bg-transparent px-1 py-0.5 text-[11px]"
+        name="newStage"
+        defaultValue={value}
+        className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
       >
         {STAGES.map((stage) => (
           <option key={stage} value={stage}>
@@ -56,6 +43,12 @@ export function StageSelect({
           </option>
         ))}
       </select>
+      <button
+        type="submit"
+        className="text-[10px] font-medium text-[#172965] hover:underline"
+      >
+        Move
+      </button>
     </form>
   );
 }
