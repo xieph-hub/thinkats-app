@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenantId } from "@/lib/tenant";
 
 type DashboardStats = {
   openJobs: number;
@@ -8,8 +9,7 @@ type DashboardStats = {
 };
 
 async function getDashboardStats(): Promise<DashboardStats> {
-  const tenantId =
-    process.env.NEXT_PUBLIC_RESOURCIN_TENANT_ID || "tenant_resourcin_1";
+  const tenantId = getCurrentTenantId();
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -20,38 +20,46 @@ async function getDashboardStats(): Promise<DashboardStats> {
 
   try {
     // Open published jobs for this tenant
-    const { count: openJobsCount } = await supabaseAdmin
+    const { count: openJobsCount, error: jobsError } = await supabaseAdmin
       .from("jobs")
       .select("id", { head: true, count: "exact" })
       .eq("tenant_id", tenantId)
       .eq("is_published", true);
 
-    openJobs = openJobsCount ?? 0;
+    if (!jobsError) {
+      openJobs = openJobsCount ?? 0;
+    }
   } catch {
     openJobs = 0;
   }
 
   try {
     // All candidates for this tenant
-    const { count: candidatesCount } = await supabaseAdmin
-      .from("candidates")
-      .select("id", { head: true, count: "exact" })
-      .eq("tenant_id", tenantId);
+    const { count: candidatesCount, error: candidatesError } =
+      await supabaseAdmin
+        .from("candidates")
+        .select("id", { head: true, count: "exact" })
+        .eq("tenant_id", tenantId);
 
-    totalCandidates = candidatesCount ?? 0;
+    if (!candidatesError) {
+      totalCandidates = candidatesCount ?? 0;
+    }
   } catch {
     totalCandidates = 0;
   }
 
   try {
-    // Applications created in the last 7 days for this tenant
-    const { count: applicationsCount } = await supabaseAdmin
-      .from("job_applications")
-      .select("id", { head: true, count: "exact" })
-      .eq("tenant_id", tenantId)
-      .gte("created_at", sevenDaysAgo.toISOString());
+    // Applications for this tenant in the last 7 days
+    const { count: applicationsCount, error: appsError } =
+      await supabaseAdmin
+        .from("job_applications")
+        .select("id", { head: true, count: "exact" })
+        .eq("tenant_id", tenantId)
+        .gte("created_at", sevenDaysAgo.toISOString());
 
-    applicationsLast7Days = applicationsCount ?? 0;
+    if (!appsError) {
+      applicationsLast7Days = applicationsCount ?? 0;
+    }
   } catch {
     applicationsLast7Days = 0;
   }
