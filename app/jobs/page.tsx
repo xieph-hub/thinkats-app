@@ -1,6 +1,7 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +17,6 @@ interface JobsPageSearchParams {
   location?: string | string[];
   department?: string | string[];
   workMode?: string | string[];
-}
-
-function normalise(value: string | null | undefined) {
-  return (value || "").toLowerCase();
 }
 
 function formatWorkMode(value?: string | null) {
@@ -109,6 +106,7 @@ export default async function PublicJobsPage({
     },
     include: {
       clientCompany: true,
+      tenant: true, // 👈 so we can show tenant logos & names
     },
   });
 
@@ -132,7 +130,10 @@ export default async function PublicJobsPage({
   const workModes = Array.from(
     new Set(
       jobs
-        .map((job: any) => (job.workMode as string | null) || job.locationType || "")
+        .map(
+          (job: any) =>
+            (job.workMode as string | null) || job.locationType || "",
+        )
         .filter((wm) => wm.trim().length > 0),
     ),
   ).sort((a, b) => a.localeCompare(b));
@@ -207,8 +208,8 @@ export default async function PublicJobsPage({
                 advisors.
               </p>
               <p className="mt-2 text-xs text-slate-500">
-                {visibleJobs} of {totalJobs} open roles currently visible
-                based on your filters.
+                {visibleJobs} of {totalJobs} open roles currently visible based
+                on your filters.
               </p>
             </div>
 
@@ -219,11 +220,16 @@ export default async function PublicJobsPage({
               <ul className="space-y-1.5">
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>No blanket “CV pools” – you&apos;re considered for real roles.</span>
+                  <span>
+                    No blanket “CV pools” – you&apos;re considered for real
+                    roles.
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>Structured interview processes with clear feedback paths.</span>
+                  <span>
+                    Structured interview processes with clear feedback paths.
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
@@ -369,8 +375,16 @@ export default async function PublicJobsPage({
         ) : (
           <section className="space-y-3">
             {filteredJobs.map((job: any) => {
+              const tenant = job.tenant;
+              const client = job.clientCompany;
+
+              const tenantName = tenant?.name ?? null;
+              const tenantLogoUrl = tenant?.logoUrl ?? null;
+              const clientName = client?.name ?? null;
+              const clientLogoUrl = client?.logoUrl ?? null;
+
               const companyName =
-                job.clientCompany?.name || "Confidential client";
+                clientName || tenantName || "Confidential client";
               const location = job.location || "Location flexible";
               const workModeValue =
                 (job.workMode as string | null) ||
@@ -392,8 +406,18 @@ export default async function PublicJobsPage({
                   key={job.id}
                   className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md sm:flex-row sm:items-stretch"
                 >
-                  {/* Left: role meta */}
+                  {/* Left: brand + meta */}
                   <div className="min-w-0 flex-1">
+                    {/* Brand logos (tenant + client) */}
+                    <div className="mb-2">
+                      <BrandCluster
+                        tenantName={tenantName}
+                        tenantLogoUrl={tenantLogoUrl}
+                        clientName={clientName}
+                        clientLogoUrl={clientLogoUrl}
+                      />
+                    </div>
+
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
                         {job.title}
@@ -468,6 +492,101 @@ export default async function PublicJobsPage({
           </section>
         )}
       </div>
+    </div>
+  );
+}
+
+type BrandClusterProps = {
+  tenantName: string | null;
+  tenantLogoUrl: string | null;
+  clientName: string | null;
+  clientLogoUrl: string | null;
+};
+
+function BrandCluster({
+  tenantName,
+  tenantLogoUrl,
+  clientName,
+  clientLogoUrl,
+}: BrandClusterProps) {
+  const primary = clientName || tenantName || "Confidential client";
+  const secondary =
+    clientName && tenantName ? `via ${tenantName}` : null;
+
+  const tenantInitial =
+    (tenantName?.charAt(0)?.toUpperCase?.() as string) || "T";
+  const clientInitial =
+    (clientName?.charAt(0)?.toUpperCase?.() as string) || "C";
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex -space-x-2">
+        <BrandAvatar
+          logoUrl={tenantLogoUrl}
+          fallback={tenantInitial}
+          tint="blue"
+          size="md"
+        />
+        {clientName && (
+          <BrandAvatar
+            logoUrl={clientLogoUrl}
+            fallback={clientInitial}
+            tint="green"
+            size="sm"
+          />
+        )}
+      </div>
+      <div className="flex flex-col">
+        <span className="text-[11px] font-semibold text-slate-900">
+          {primary}
+        </span>
+        {secondary && (
+          <span className="text-[10px] text-slate-500">{secondary}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BrandAvatar({
+  logoUrl,
+  fallback,
+  tint = "blue",
+  size = "md",
+}: {
+  logoUrl: string | null;
+  fallback: string;
+  tint?: "blue" | "green";
+  size?: "md" | "sm";
+}) {
+  const sizeClasses =
+    size === "md" ? "h-8 w-8 text-[11px]" : "h-6 w-6 text-[10px]";
+  const bgClass =
+    tint === "blue"
+      ? "bg-[#172965]/5 text-[#172965]"
+      : "bg-[#64C247]/10 text-[#306B34]";
+
+  if (logoUrl) {
+    return (
+      <div
+        className={`relative overflow-hidden rounded-md border border-slate-200 bg-white ${sizeClasses}`}
+      >
+        <Image
+          src={logoUrl}
+          alt="Logo"
+          fill
+          sizes={size === "md" ? "32px" : "24px"}
+          className="object-contain p-0.5"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center justify-center rounded-md border border-slate-200 ${bgClass} ${sizeClasses}`}
+    >
+      {fallback}
     </div>
   );
 }
