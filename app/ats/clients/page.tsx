@@ -1,5 +1,6 @@
 // app/ats/clients/page.tsx
 import type { Metadata } from "next";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
@@ -7,8 +8,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ATS | Clients | ThinkATS",
-  description:
-    "Manage client companies under each workspace in ThinkATS.",
+  description: "Manage client companies under each workspace in ThinkATS.",
 };
 
 interface ClientsPageSearchParams {
@@ -124,6 +124,8 @@ export default async function AtsClientsPage({
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
           {errorCode === "missing_name"
             ? "Client name is required."
+            : errorCode === "missing_tenant"
+            ? "A workspace (tenant) is required to create a client."
             : "Something went wrong while creating the client. Please try again."}
         </div>
       )}
@@ -155,7 +157,8 @@ export default async function AtsClientsPage({
                 {selectedTenant.name || selectedTenant.slug}
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
-                Matches <code className="rounded bg-slate-100 px-1 py-0.5">
+                Matches{" "}
+                <code className="rounded bg-slate-100 px-1 py-0.5">
                   tenantId
                 </code>{" "}
                 on jobs/applications.
@@ -187,6 +190,7 @@ export default async function AtsClientsPage({
           <form
             method="POST"
             action="/ats/clients/new"
+            encType="multipart/form-data"
             className="mt-4 space-y-3 text-[13px]"
           >
             {/* Keep tenant context */}
@@ -206,6 +210,26 @@ export default async function AtsClientsPage({
                 placeholder="Avitech Nigeria"
                 className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="client-logo"
+                className="text-xs font-medium text-slate-700"
+              >
+                Client logo (optional)
+              </label>
+              <input
+                id="client-logo"
+                name="logo"
+                type="file"
+                accept="image/*"
+                className="block w-full cursor-pointer rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 file:mr-2 file:rounded-md file:border-0 file:bg-[#172965] file:px-2.5 file:py-1 file:text-[11px] file:font-semibold file:text-white hover:border-slate-300"
+              />
+              <p className="mt-1 text-[10px] text-slate-500">
+                Square PNG, JPG or SVG recommended for best display in the
+                pipeline and job pages.
+              </p>
             </div>
 
             <button
@@ -230,11 +254,7 @@ export default async function AtsClientsPage({
         >
           <div className="flex-1">
             {/* preserve tenant when searching */}
-            <input
-              type="hidden"
-              name="tenantId"
-              value={selectedTenantId}
-            />
+            <input type="hidden" name="tenantId" value={selectedTenantId} />
             <div className="relative">
               <input
                 type="text"
@@ -266,43 +286,66 @@ export default async function AtsClientsPage({
                 </tr>
               </thead>
               <tbody>
-                {filteredClients.map((client: any) => (
-                  <tr
-                    key={client.id}
-                    className="border-b border-slate-100 last:border-0"
-                  >
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium text-slate-900">
-                          {client.name}
+                {filteredClients.map((client: any) => {
+                  const label = client.name as string;
+                  const initial =
+                    (label?.charAt?.(0)?.toUpperCase?.() as string) || "C";
+
+                  return (
+                    <tr
+                      key={client.id}
+                      className="border-b border-slate-100 last:border-0"
+                    >
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex items-center gap-2">
+                          {client.logoUrl ? (
+                            <div className="relative h-7 w-7 overflow-hidden rounded-md border border-slate-200 bg-white">
+                              <Image
+                                src={client.logoUrl}
+                                alt={`${label} logo`}
+                                width={28}
+                                height={28}
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">
+                              {initial}
+                            </div>
+                          )}
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-900">
+                              {label}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              ID:{" "}
+                              <span className="font-mono">
+                                {String(client.id).slice(0, 8)}…
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                          {selectedTenant.name || selectedTenant.slug}
                         </span>
-                        <span className="text-[10px] text-slate-500">
-                          ID:{" "}
-                          <span className="font-mono">
-                            {String(client.id).slice(0, 8)}…
-                          </span>
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                        {selectedTenant.name || selectedTenant.slug}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 align-top">
-                      <div className="flex justify-end gap-2">
-                        <a
-                          href={`/ats/jobs?tenantId=${encodeURIComponent(
-                            selectedTenantId,
-                          )}&clientId=${encodeURIComponent(client.id)}`}
-                          className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                        >
-                          View jobs
-                        </a>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <div className="flex justify-end gap-2">
+                          <a
+                            href={`/ats/jobs?tenantId=${encodeURIComponent(
+                              selectedTenantId,
+                            )}&clientId=${encodeURIComponent(client.id)}`}
+                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            View jobs
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
