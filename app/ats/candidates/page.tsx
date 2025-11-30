@@ -17,6 +17,7 @@ interface CandidatesPageSearchParams {
   status?: string | string[];
   location?: string | string[];
   source?: string | string[];
+  stage?: string | string[];
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -86,6 +87,7 @@ type CandidateView = {
   email: string;
   location: string;
   primaryStage: string;
+  primaryStageKey: string;
   primaryStatus: string;
   primaryStatusKey: string;
   primaryStageLabel: string;
@@ -138,6 +140,15 @@ export default async function AtsCandidatesPage({
       ? rawSource
       : "all";
 
+  const rawStage = searchParams?.stage ?? "all";
+  const stageFilter =
+    Array.isArray(rawStage) && rawStage.length > 0
+      ? rawStage[0]
+      : typeof rawStage === "string"
+      ? rawStage
+      : "all";
+  const stageFilterKey = (stageFilter || "all").toUpperCase();
+
   const tenant = await getResourcinTenant();
   if (!tenant) {
     throw new Error("No default tenant found.");
@@ -189,6 +200,7 @@ export default async function AtsCandidatesPage({
       candidate?.location || app.location || "Not specified";
 
     const stage = app.stage || "APPLIED";
+    const stageKey = stage.toUpperCase();
     const status = app.status || "PENDING";
     const statusKey = status.toUpperCase();
 
@@ -206,6 +218,7 @@ export default async function AtsCandidatesPage({
         email,
         location,
         primaryStage: stage,
+        primaryStageKey: stageKey,
         primaryStatus: status,
         primaryStatusKey: statusKey,
         primaryStageLabel: formatStageName(stage),
@@ -237,29 +250,29 @@ export default async function AtsCandidatesPage({
     }
   }
 
-  let candidates = Array.from(candidateMap.values());
+  const allCandidateViews = Array.from(candidateMap.values());
 
   const now = Date.now();
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-  const totalCandidates = candidates.length;
-  const inProcessCandidates = candidates.filter((c) =>
+  const totalCandidates = allCandidateViews.length;
+  const inProcessCandidates = allCandidateViews.filter((c) =>
     ["IN_PROGRESS", "ON_HOLD"].includes(c.primaryStatusKey),
   ).length;
-  const hiredCandidates = candidates.filter(
+  const hiredCandidates = allCandidateViews.filter(
     (c) => c.primaryStatusKey === "HIRED",
   ).length;
-  const rejectedCandidates = candidates.filter((c) =>
+  const rejectedCandidates = allCandidateViews.filter((c) =>
     ["REJECTED", "ARCHIVED"].includes(c.primaryStatusKey),
   ).length;
-  const newLast30Days = candidates.filter((c) => {
+  const newLast30Days = allCandidateViews.filter((c) => {
     return now - c.lastAppliedAt.getTime() <= THIRTY_DAYS;
   }).length;
 
-  // Distinct locations / sources for filters
+  // Distinct locations / sources / stages for filters
   const allLocations = Array.from(
     new Set(
-      candidates
+      allCandidateViews
         .map((c) => c.location)
         .filter((loc) => loc && loc !== "Not specified"),
     ),
@@ -267,18 +280,23 @@ export default async function AtsCandidatesPage({
 
   const allSources = Array.from(
     new Set(
-      candidates
+      allCandidateViews
         .flatMap((c) => c.sources)
         .filter((s) => s && s.trim().length > 0),
     ),
   ).sort((a, b) => a.localeCompare(b));
 
+  const allStages = Array.from(
+    new Set(allCandidateViews.map((c) => c.primaryStageKey)),
+  ).sort();
+
   // -----------------------------
   // Apply filters
   // -----------------------------
-  candidates = candidates.filter((c) => {
+  let candidates = allCandidateViews.filter((c) => {
     let ok = true;
 
+    // Status filter
     if (statusFilterKey !== "all") {
       if (statusFilterKey === "in_process") {
         ok =
@@ -295,14 +313,22 @@ export default async function AtsCandidatesPage({
       }
     }
 
+    // Stage filter
+    if (stageFilterKey !== "ALL" && stageFilterKey !== "ALL_STAGES") {
+      ok = ok && c.primaryStageKey === stageFilterKey;
+    }
+
+    // Location filter
     if (locationFilter !== "all") {
       ok = ok && c.location === locationFilter;
     }
 
+    // Source filter
     if (sourceFilter !== "all") {
       ok = ok && c.sources.includes(sourceFilter);
     }
 
+    // Search
     if (q) {
       const haystack = (
         c.name +
@@ -441,6 +467,26 @@ export default async function AtsCandidatesPage({
               </select>
             </div>
 
+            {/* Stage filter */}
+            <div>
+              <label htmlFor="stage" className="sr-only">
+                Stage filter
+              </label>
+              <select
+                id="stage"
+                name="stage"
+                defaultValue={stageFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All stages</option>
+                {allStages.map((stageKey) => (
+                  <option key={stageKey} value={stageKey}>
+                    {formatStageName(stageKey)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Location filter */}
             <div>
               <label htmlFor="location" className="sr-only">
@@ -491,6 +537,7 @@ export default async function AtsCandidatesPage({
         </div>
 
         {statusFilterKey !== "all" ||
+        stageFilterKey !== "ALL" ||
         locationFilter !== "all" ||
         sourceFilter !== "all" ||
         !!q ? (
