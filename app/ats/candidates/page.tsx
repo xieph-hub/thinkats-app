@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getCurrentTenantId } from "@/lib/tenant";
+import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +77,26 @@ function applicationStatusBadgeClass(value?: string | null) {
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
+type CandidateView = {
+  // key used for React list rendering (can be fallback)
+  id: string;
+  // actual DB candidate id if it exists (used for profile route)
+  candidateId: string | null;
+  name: string;
+  email: string;
+  location: string;
+  primaryStage: string;
+  primaryStatus: string;
+  primaryStatusKey: string;
+  primaryStageLabel: string;
+  primaryStatusLabel: string;
+  lastAppliedAt: Date;
+  lastAppliedJobId: string | null;
+  lastAppliedJobTitle: string | null;
+  rolesCount: number;
+  sources: string[];
+};
+
 export default async function AtsCandidatesPage({
   searchParams,
 }: {
@@ -118,7 +138,11 @@ export default async function AtsCandidatesPage({
       ? rawSource
       : "all";
 
-  const tenantId = await getCurrentTenantId();
+  const tenant = await getResourcinTenant();
+  if (!tenant) {
+    throw new Error("No default tenant found.");
+  }
+  const tenantId = tenant.id;
 
   // -----------------------------
   // Load applications scoped by tenant via job → tenantId
@@ -146,29 +170,14 @@ export default async function AtsCandidatesPage({
   // -----------------------------
   // Aggregate into candidate-level view
   // -----------------------------
-  type CandidateView = {
-    id: string;
-    name: string;
-    email: string;
-    location: string;
-    primaryStage: string;
-    primaryStatus: string;
-    primaryStatusKey: string;
-    primaryStageLabel: string;
-    primaryStatusLabel: string;
-    lastAppliedAt: Date;
-    lastAppliedJobId: string | null;
-    lastAppliedJobTitle: string | null;
-    rolesCount: number;
-    sources: string[];
-  };
-
   const candidateMap = new Map<string, CandidateView>();
 
   for (const app of applications) {
     const candidate = app.candidate;
+    const dbId = candidate?.id ?? null;
+
     const key =
-      candidate?.id ||
+      dbId ||
       `no-id:${(app as any).email || app.id || Math.random().toString(36)}`;
 
     const name =
@@ -191,7 +200,8 @@ export default async function AtsCandidatesPage({
     // Last applied = most recent application (we're already ordered desc)
     if (!existing) {
       candidateMap.set(key, {
-        id: candidate?.id || key,
+        id: key,
+        candidateId: dbId,
         name,
         email,
         location,
@@ -207,7 +217,7 @@ export default async function AtsCandidatesPage({
         sources: app.source ? [app.source] : [],
       });
     } else {
-      // Update roles count / sources
+      // Update roles count / sources, keep earliest summary fields
       const rolesSet = new Set<string>();
       if (existing.rolesCount > 0 && existing.lastAppliedJobId) {
         rolesSet.add(existing.lastAppliedJobId);
@@ -597,13 +607,14 @@ export default async function AtsCandidatesPage({
                       View pipeline
                     </Link>
                   )}
-                  {/* Future: /ats/candidates/[id] profile */}
-                  {/* <Link
-                    href={`/ats/candidates/${c.id}`}
-                    className="text-[11px] text-slate-500 hover:text-slate-800"
-                  >
-                    View candidate profile
-                  </Link> */}
+                  {c.candidateId && (
+                    <Link
+                      href={`/ats/candidates/${c.candidateId}`}
+                      className="text-[11px] text-slate-500 hover:text-slate-800"
+                    >
+                      View candidate profile
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
