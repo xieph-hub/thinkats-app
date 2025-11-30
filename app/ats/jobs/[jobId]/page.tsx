@@ -8,6 +8,9 @@ export const dynamic = "force-dynamic";
 
 interface JobPageProps {
   params: { jobId: string };
+  searchParams?: {
+    status?: string | string[];
+  };
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -127,13 +130,36 @@ function formatStageName(value: string) {
   return titleCaseFromEnum(value);
 }
 
+function applicationStatusBadgeClass(value?: string | null) {
+  const key = (value || "").toUpperCase();
+  if (key === "PENDING") {
+    return "bg-slate-50 text-slate-700 border-slate-200";
+  }
+  if (key === "IN_PROGRESS") {
+    return "bg-blue-50 text-blue-700 border-blue-100";
+  }
+  if (key === "ON_HOLD") {
+    return "bg-amber-50 text-amber-800 border-amber-100";
+  }
+  if (key === "HIRED") {
+    return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  }
+  if (key === "REJECTED" || key === "ARCHIVED") {
+    return "bg-rose-50 text-rose-700 border-rose-100";
+  }
+  return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
 type StageDisplay = {
   id: string;
   name: string;
   isTerminal?: boolean;
 };
 
-export default async function AtsJobDetailPage({ params }: JobPageProps) {
+export default async function AtsJobDetailPage({
+  params,
+  searchParams,
+}: JobPageProps) {
   const tenant = await getResourcinTenant();
 
   if (!tenant) {
@@ -216,7 +242,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
   const experienceLevelLabel = formatExperienceLevel(job.experienceLevel);
   const workModeLabel = formatWorkMode(workModeValue);
 
-  const statusLabel = formatStatus(job.status);
+  const statusLabelJob = formatStatus(job.status);
   const visibilityLabel = formatVisibility(job.visibility);
 
   const salaryMinLabel = formatMoney(
@@ -237,10 +263,48 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
   const clientLabel =
     job.clientCompany?.name ?? "Resourcin (internal role / no client set)";
 
+  // --------------------------------
+  // Status filter for applications
+  // --------------------------------
+  const rawStatusFilter = searchParams?.status ?? "all";
+  const statusFilter =
+    Array.isArray(rawStatusFilter) && rawStatusFilter.length > 0
+      ? rawStatusFilter[0]
+      : typeof rawStatusFilter === "string"
+      ? rawStatusFilter
+      : "all";
+
+  const statusFilterKey = (statusFilter || "all").toLowerCase();
+
+  function matchesStatusFilter(appStatus: string | null | undefined): boolean {
+    const key = (appStatus || "PENDING").toUpperCase();
+
+    if (statusFilterKey === "all") return true;
+
+    if (statusFilterKey === "in_process") {
+      return key === "IN_PROGRESS" || key === "ON_HOLD";
+    }
+
+    if (statusFilterKey === "hired") {
+      return key === "HIRED";
+    }
+
+    if (statusFilterKey === "rejected") {
+      return key === "REJECTED" || key === "ARCHIVED";
+    }
+
+    return true;
+  }
+
+  const filteredApplications = job.applications.filter((app) =>
+    matchesStatusFilter(app.status),
+  );
+  const visibleApplications = filteredApplications.length;
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-0">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link
             href="/ats/jobs"
@@ -262,7 +326,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
           {/* Current state badges */}
           <div className="flex flex-wrap justify-end gap-2">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-700">
-              {statusLabel}
+              {statusLabelJob}
             </span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-700">
               {visibilityLabel}
@@ -355,7 +419,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
       </div>
 
       {/* Summary + pipeline */}
-      <div className="mb-6 grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] md:gap-6">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] md:gap-6">
         {/* Job summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">
@@ -439,7 +503,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
               return (
                 <div
                   key={stage.id}
-                  className={`flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] ${
                     isTerminal
                       ? "border-slate-200 bg-slate-50 text-slate-700"
                       : "border-slate-200 bg-slate-50 text-slate-800"
@@ -456,14 +520,14 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
             })}
           </div>
           <p className="mt-1 text-[10px] text-slate-500">
-            Use the controls in the table below to move candidates
-            between stages as you screen them.
+            Use the controls in the table below to move candidates between
+            stages and update their statuses as you screen them.
           </p>
         </section>
       </div>
 
       {/* Narrative (overview, responsibilities, etc.) */}
-      <section className="mb-6 grid gap-4 md:grid-cols-2 md:gap-6">
+      <section className="grid gap-4 md:grid-cols-2 md:gap-6">
         <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">
             Role narrative
@@ -527,25 +591,75 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
         </div>
       </section>
 
-      {/* Applications table + stage/status-change controls */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Applications
-          </h2>
-          <p className="text-[11px] text-slate-500">
-            {totalApplications === 0
-              ? "No applications yet."
-              : `${totalApplications} ${
-                  totalApplications === 1 ? "application" : "applications"
+      {/* Applications table + filters */}
+      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">
+              Applications
+            </h2>
+            <p className="text-[11px] text-slate-500">
+              Showing {visibleApplications} of {totalApplications}{" "}
+              {totalApplications === 1 ? "application" : "applications"}
+            </p>
+          </div>
+
+          {/* Quick status filters */}
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="text-slate-500">Status:</span>
+            <div className="flex flex-wrap gap-1">
+              <Link
+                href={`?status=all`}
+                className={`rounded-full px-2.5 py-1 ${
+                  statusFilterKey === "all"
+                    ? "bg-[#172965] text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
-          </p>
+              >
+                All
+              </Link>
+              <Link
+                href={`?status=in_process`}
+                className={`rounded-full px-2.5 py-1 ${
+                  statusFilterKey === "in_process"
+                    ? "bg-[#172965] text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                In process
+              </Link>
+              <Link
+                href={`?status=hired`}
+                className={`rounded-full px-2.5 py-1 ${
+                  statusFilterKey === "hired"
+                    ? "bg-[#172965] text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                Hired
+              </Link>
+              <Link
+                href={`?status=rejected`}
+                className={`rounded-full px-2.5 py-1 ${
+                  statusFilterKey === "rejected"
+                    ? "bg-[#172965] text-white"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                Rejected
+              </Link>
+            </div>
+          </div>
         </div>
 
         {totalApplications === 0 ? (
           <p className="text-[11px] text-slate-500">
-            Once candidates apply (or you add them manually), they’ll
-            appear here with stage, status and basic details.
+            Once candidates apply (or you add them manually), they’ll appear
+            here with stage, status and basic details.
+          </p>
+        ) : filteredApplications.length === 0 ? (
+          <p className="text-[11px] text-slate-500">
+            No applications match the current status filter.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -566,7 +680,7 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                 </tr>
               </thead>
               <tbody>
-                {job.applications.map((app) => {
+                {filteredApplications.map((app) => {
                   const candidateName =
                     app.fullName ||
                     app.candidate?.fullName ||
@@ -698,7 +812,11 @@ export default async function AtsJobDetailPage({ params }: JobPageProps) {
                           </button>
                         </form>
                         <div className="mt-1">
-                          <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
+                              app.status,
+                            )}`}
+                          >
                             {statusLabelApp}
                           </span>
                         </div>
