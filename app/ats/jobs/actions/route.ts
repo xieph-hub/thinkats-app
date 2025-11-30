@@ -1,171 +1,144 @@
 // app/ats/jobs/actions/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
 
-type BulkAction = "publish" | "unpublish" | "close" | "duplicate" | "delete";
-
-function buildRedirectUrl(
-  requestUrl: string,
-  opts: {
-    tenantId?: string;
-    q?: string;
-    status?: string;
-    clientId?: string;
-    visibility?: string;
-  },
+async function applyActionToJobs(
+  jobIds: string[],
+  action: string,
+  tenantId: string,
 ) {
-  const { tenantId, q, status, clientId, visibility } = opts;
-  const url = new URL(requestUrl);
-  url.pathname = "/ats/jobs";
+  if (!jobIds.length) return;
 
-  if (tenantId) url.searchParams.set("tenantId", tenantId);
-  if (q) url.searchParams.set("q", q);
-  if (status && status !== "all") {
-    url.searchParams.set("status", status);
-  }
-  if (clientId && clientId !== "all") {
-    url.searchParams.set("clientId", clientId);
-  }
-  if (visibility && visibility !== "all") {
-    url.searchParams.set("visibility", visibility);
+  const key = action.toLowerCase();
+
+  if (key === "publish") {
+    await prisma.job.updateMany({
+      where: { id: { in: jobIds }, tenantId },
+      data: {
+        visibility: "public",
+        status: "open",
+      },
+    });
+    return;
   }
 
-  return url;
+  if (key === "unpublish") {
+    await prisma.job.updateMany({
+      where: { id: { in: jobIds }, tenantId },
+      data: {
+        visibility: "internal",
+      },
+    });
+    return;
+  }
+
+  if (key === "close") {
+    await prisma.job.updateMany({
+      where: { id: { in: jobIds }, tenantId },
+      data: {
+        status: "closed",
+      },
+    });
+    return;
+  }
+
+  if (key === "duplicate") {
+    const existing = await prisma.job.findMany({
+      where: { id: { in: jobIds }, tenantId },
+    });
+
+    for (const job of existing) {
+      await prisma.job.create({
+        data: {
+          tenantId,
+          clientCompanyId: job.clientCompanyId,
+          title: `${job.title} (copy)`,
+          slug: null, // avoid slug collisions – can be set later
+          location: job.location,
+          employmentType: job.employmentType,
+          experienceLevel: job.experienceLevel,
+          status: "draft",
+          visibility: "internal",
+          overview: job.overview,
+          aboutClient: job.aboutClient,
+          responsibilities: job.responsibilities,
+          requirements: job.requirements,
+          benefits: job.benefits,
+          workMode: job.workMode,
+          locationType: job.locationType,
+          salaryMin: job.salaryMin,
+          salaryMax: job.salaryMax,
+          salaryCurrency: job.salaryCurrency,
+          salaryVisible: job.salaryVisible,
+          internalOnly: job.internalOnly,
+          confidential: job.confidential,
+        },
+      });
+    }
+    return;
+  }
+
+  if (key === "delete") {
+    // Soft delete: mark closed + internal so we don't break FKs
+    await prisma.job.updateMany({
+      where: { id: { in: jobIds }, tenantId },
+      data: {
+        status: "closed",
+        visibility: "internal",
+      },
+    });
+    return;
+  }
 }
 
-export async function POST(request: Request) {
-  const formData = await request.formData();
+export async function POST(req: NextRequest) {
+  const tenant = await getResourcinTenant();
+  const tenantId = tenant.id;
 
-  const tenantIdRaw = formData.get("tenantId");
-  const qRaw = formData.get("q");
-  const statusRaw = formData.get("status");
-  const clientIdRaw = formData.get("clientId");
-  const visibilityRaw = formData.get("visibility");
-  const singleActionRaw = formData.get("singleAction");
-  const bulkActionRaw = formData.get("bulkAction");
+  const formData = await req.formData();
 
-  const tenantId = typeof tenantIdRaw === "string" ? tenantIdRaw : "";
-  const q = typeof qRaw === "string" ? qRaw : "";
-  const status = typeof statusRaw === "string" ? statusRaw : "";
-  const clientId = typeof clientIdRaw === "string" ? clientIdRaw : "";
-  const visibility =
-    typeof visibilityRaw === "string" ? visibilityRaw : "";
+  const jobIds = (formData.getAll("jobIds") as string[])
+    .map((id) => id.toString())
+    .filter(Boolean);
 
-  const jobIds = formData
-    .getAll("jobIds")
-    .filter((v): v is string => typeof v === "string");
+  const singleActionRaw = (formData.get("singleAction") ?? "").toString();
+  const bulkActionRaw = (formData.get("bulkAction") ?? "").toString();
 
-  let action: BulkAction | "" = "";
-  let targetIds: string[] = [];
+  const actions: { type: string; jobIds: string[] }[] = [];
 
-  // Single row actions from the 3-dot menu win over bulk
-  if (typeof singleActionRaw === "string" && singleActionRaw) {
-    const [actionName, id] = singleActionRaw.split(":");
-    if (id) {
-      action = actionName as BulkAction;
-      targetIds = [id];
+  if (singleActionRaw) {
+    const [type, jobId] = singleActionRaw.split(":");
+    if (type && jobId) {
+      actions.push({ type, jobIds: [jobId] });
     }
-  } else if (typeof bulkActionRaw === "string" && bulkActionRaw) {
-    action = bulkActionRaw as BulkAction;
-    targetIds = jobIds;
+  } else if (bulkActionRaw && jobIds.length > 0) {
+    actions.push({ type: bulkActionRaw, jobIds });
   }
 
-  const redirectUrl = buildRedirectUrl(request.url, {
-    tenantId,
-    q,
-    status,
-    clientId,
-    visibility,
-  });
-
-  // Nothing selected or no recognised action – just bounce back
-  if (!action || targetIds.length === 0) {
-    return NextResponse.redirect(redirectUrl, { status: 303 });
+  for (const a of actions) {
+    await applyActionToJobs(a.jobIds, a.type, tenantId);
   }
 
-  if (
-    !["publish", "unpublish", "close", "duplicate", "delete"].includes(
-      action,
-    )
-  ) {
-    return NextResponse.redirect(redirectUrl, { status: 303 });
-  }
+  // Preserve filters on redirect
+  const tenantIdParam = (formData.get("tenantId") ?? "").toString();
+  const q = (formData.get("q") ?? "").toString();
+  const status = (formData.get("status") ?? "").toString();
+  const clientId = (formData.get("clientId") ?? "").toString();
+  const visibility = (formData.get("visibility") ?? "").toString();
+  const location = (formData.get("location") ?? "").toString();
 
-  const whereClause: any = {
-    id: { in: targetIds },
-  };
-  if (tenantId) {
-    whereClause.tenantId = tenantId;
-  }
+  const search = new URLSearchParams();
+  if (tenantIdParam) search.set("tenantId", tenantIdParam);
+  if (q) search.set("q", q);
+  if (status) search.set("status", status);
+  if (clientId) search.set("clientId", clientId);
+  if (visibility) search.set("visibility", visibility);
+  if (location) search.set("location", location);
 
-  try {
-    if (action === "publish") {
-      await prisma.job.updateMany({
-        where: whereClause,
-        data: {
-          visibility: "public",
-          status: "open",
-        },
-      });
-    } else if (action === "unpublish") {
-      await prisma.job.updateMany({
-        where: whereClause,
-        data: {
-          visibility: "internal",
-        },
-      });
-    } else if (action === "close") {
-      await prisma.job.updateMany({
-        where: whereClause,
-        data: {
-          status: "closed",
-        },
-      });
-    } else if (action === "delete") {
-      await prisma.job.deleteMany({
-        where: whereClause,
-      });
-    } else if (action === "duplicate") {
-      // Simple duplication: copy basic fields into a new draft, internal role
-      const jobsToDuplicate = await prisma.job.findMany({
-        where: whereClause,
-      });
+  const redirectUrl = new URL(req.url);
+  redirectUrl.pathname = "/ats/jobs";
+  redirectUrl.search = search.toString();
 
-      for (const job of jobsToDuplicate) {
-        await prisma.job.create({
-          data: {
-            tenantId: job.tenantId,
-            clientCompanyId: job.clientCompanyId,
-            title: job.title + " (Copy)",
-            slug: job.slug
-              ? `${job.slug}-copy-${Date.now()}`
-              : undefined,
-            location: job.location,
-            department: job.department,
-            employmentType: job.employmentType,
-            experienceLevel: job.experienceLevel,
-            workMode: (job as any).workMode ?? (job as any).locationType,
-            overview: (job as any).overview,
-            aboutClient: (job as any).aboutClient,
-            responsibilities: (job as any).responsibilities,
-            requirements: (job as any).requirements,
-            benefits: (job as any).benefits,
-            visibility: "internal",
-            status: "draft",
-            salaryMin: (job as any).salaryMin,
-            salaryMax: (job as any).salaryMax,
-            salaryCurrency: (job as any).salaryCurrency,
-            salaryVisible: (job as any).salaryVisible,
-            internalOnly: (job as any).internalOnly,
-            confidential: (job as any).confidential,
-          } as any,
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Error applying ATS jobs action:", err);
-    // We still redirect back; later you can add flash messaging if needed.
-  }
-
-  return NextResponse.redirect(redirectUrl, { status: 303 });
+  return NextResponse.redirect(redirectUrl.toString(), { status: 303 });
 }
