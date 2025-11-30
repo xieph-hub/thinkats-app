@@ -95,6 +95,7 @@ export default async function CandidateProfilePage({
     );
   }
 
+  // Tenant-scoped candidate + applications
   const candidate = await prisma.candidate.findFirst({
     where: {
       id: params.candidateId,
@@ -108,6 +109,11 @@ export default async function CandidateProfilePage({
     },
     include: {
       applications: {
+        where: {
+          job: {
+            tenantId: tenant.id,
+          },
+        },
         orderBy: { createdAt: "desc" },
         include: {
           job: {
@@ -148,9 +154,7 @@ export default async function CandidateProfilePage({
   const lastAppliedAt = primaryApplication?.createdAt || null;
 
   const cvUrl =
-    (candidate as any).cvUrl ||
-    primaryApplication?.cvUrl ||
-    null;
+    (candidate as any).cvUrl || primaryApplication?.cvUrl || null;
 
   const sourcesSet = new Set<string>();
   for (const app of applications) {
@@ -183,9 +187,7 @@ export default async function CandidateProfilePage({
     (candidate as any).totalExperienceYears ||
     null;
   const summary =
-    (candidate as any).summary ||
-    (candidate as any).about ||
-    "";
+    (candidate as any).summary || (candidate as any).about || "";
 
   return (
     <div className="space-y-6">
@@ -262,7 +264,7 @@ export default async function CandidateProfilePage({
         </div>
       </div>
 
-      {/* Profile + notes */}
+      {/* Profile + history */}
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2fr)] md:gap-6">
         {/* Left column: profile */}
         <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -329,9 +331,7 @@ export default async function CandidateProfilePage({
                     )}
                   </span>
                 ) : (
-                  <span className="text-slate-400">
-                    Not specified
-                  </span>
+                  <span className="text-slate-400">Not specified</span>
                 )}
               </dd>
             </div>
@@ -344,9 +344,7 @@ export default async function CandidateProfilePage({
                 {yearsExperience != null ? (
                   <span>{yearsExperience} years</span>
                 ) : (
-                  <span className="text-slate-400">
-                    Not specified
-                  </span>
+                  <span className="text-slate-400">Not specified</span>
                 )}
               </dd>
             </div>
@@ -366,9 +364,7 @@ export default async function CandidateProfilePage({
                     View profile ↗
                   </a>
                 ) : (
-                  <span className="text-slate-400">
-                    Not provided
-                  </span>
+                  <span className="text-slate-400">Not provided</span>
                 )}
               </dd>
             </div>
@@ -455,8 +451,7 @@ export default async function CandidateProfilePage({
           {totalApplications === 0 ? (
             <p className="text-[11px] text-slate-500">
               Once this candidate applies or is added to roles, each
-              application will appear here with stage, status and
-              timestamps.
+              application will appear here with stage, status and timestamps.
             </p>
           ) : (
             <div className="space-y-3">
