@@ -8,9 +8,9 @@ import { getResourcinTenant } from "@/lib/tenant";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "ATS | Jobs | Resourcin",
+  title: "ThinkATS | ATS Jobs",
   description:
-    "Admin view of all open and draft roles managed by Resourcin and its clients.",
+    "Admin view of all open and draft roles managed under the current ThinkATS tenant.",
 };
 
 interface JobsPageSearchParams {
@@ -19,6 +19,7 @@ interface JobsPageSearchParams {
   tenantId?: string | string[];
   clientId?: string | string[];
   visibility?: string | string[];
+  location?: string | string[];
 }
 
 function normaliseStatus(status: string | null | undefined) {
@@ -99,6 +100,14 @@ export default async function AtsJobsPage({
       ? rawVisibility
       : "all";
 
+  const rawLocation = searchParams?.location ?? "all";
+  const locationFilter =
+    Array.isArray(rawLocation) && rawLocation.length > 0
+      ? rawLocation[0]
+      : typeof rawLocation === "string"
+      ? rawLocation
+      : "all";
+
   // -----------------------------
   // Load tenants + resolve current tenant
   // -----------------------------
@@ -131,6 +140,15 @@ export default async function AtsJobsPage({
     }),
   ]);
 
+  // Distinct locations for filter
+  const locations = Array.from(
+    new Set(
+      jobs
+        .map((job: any) => (job.location as string | null) || "")
+        .filter((loc) => loc.trim().length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
   // -----------------------------
   // Filter jobs
   // -----------------------------
@@ -154,6 +172,11 @@ export default async function AtsJobsPage({
       } else if (visibilityFilter === "internal") {
         ok = ok && v === "internal";
       }
+    }
+
+    if (locationFilter && locationFilter !== "all") {
+      const jobLocation = (job.location as string | null) || "";
+      ok = ok && jobLocation === locationFilter;
     }
 
     if (q) {
@@ -191,7 +214,8 @@ export default async function AtsJobsPage({
     !!q ||
     (statusFilter && statusFilter !== "all") ||
     (clientFilter && clientFilter !== "all") ||
-    (visibilityFilter && visibilityFilter !== "all");
+    (visibilityFilter && visibilityFilter !== "all") ||
+    (locationFilter && locationFilter !== "all");
 
   const clearFiltersHref = (() => {
     const url = new URL("/ats/jobs", "http://dummy");
@@ -203,19 +227,20 @@ export default async function AtsJobsPage({
   // Render
   // -----------------------------
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-0">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            ThinkATS · Jobs
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            ATS · Jobs
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+            Roles & pipelines
           </h1>
           <p className="mt-1 text-xs text-slate-600">
             All roles managed under{" "}
             <span className="font-medium text-slate-900">
-              {selectedTenant.name ??
-                selectedTenant.slug ??
-                "Resourcin"}
+              {selectedTenant.name ?? selectedTenant.slug ?? "Resourcin"}
             </span>
             . Create, publish and monitor pipelines from here.
           </p>
@@ -227,18 +252,10 @@ export default async function AtsJobsPage({
             {/* preserve search + filters when switching tenant */}
             {q && <input type="hidden" name="q" value={q} />}
             {statusFilter && statusFilter !== "all" && (
-              <input
-                type="hidden"
-                name="status"
-                value={statusFilter}
-              />
+              <input type="hidden" name="status" value={statusFilter} />
             )}
             {clientFilter && clientFilter !== "all" && (
-              <input
-                type="hidden"
-                name="clientId"
-                value={clientFilter}
-              />
+              <input type="hidden" name="clientId" value={clientFilter} />
             )}
             {visibilityFilter && visibilityFilter !== "all" && (
               <input
@@ -246,6 +263,9 @@ export default async function AtsJobsPage({
                 name="visibility"
                 value={visibilityFilter}
               />
+            )}
+            {locationFilter && locationFilter !== "all" && (
+              <input type="hidden" name="location" value={locationFilter} />
             )}
 
             <div className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 sm:flex">
@@ -273,8 +293,10 @@ export default async function AtsJobsPage({
           </form>
 
           <Link
-            href={`/ats/jobs/new?tenantId=${encodeURIComponent(selectedTenantId)}`}
-            className="inline-flex items-center rounded-md bg-[#172965] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[#12204d]"
+            href={`/ats/jobs/new?tenantId=${encodeURIComponent(
+              selectedTenantId,
+            )}`}
+            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
           >
             <span className="mr-1.5 text-sm">＋</span>
             New job
@@ -283,8 +305,8 @@ export default async function AtsJobsPage({
       </div>
 
       {/* Quick stats cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Open jobs
           </p>
@@ -296,7 +318,7 @@ export default async function AtsJobsPage({
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Draft roles
           </p>
@@ -308,7 +330,7 @@ export default async function AtsJobsPage({
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Total applications
           </p>
@@ -320,7 +342,7 @@ export default async function AtsJobsPage({
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
             Active pipelines
           </p>
@@ -336,14 +358,10 @@ export default async function AtsJobsPage({
       {/* Search + filters (GET) */}
       <form
         method="GET"
-        className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
       >
         {/* Keep tenantId in all filter submits */}
-        <input
-          type="hidden"
-          name="tenantId"
-          value={selectedTenantId}
-        />
+        <input type="hidden" name="tenantId" value={selectedTenantId} />
 
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex-1">
@@ -382,6 +400,26 @@ export default async function AtsJobsPage({
                 <option value="draft">Draft</option>
                 <option value="on_hold">On hold</option>
                 <option value="closed">Closed</option>
+              </select>
+            </div>
+
+            {/* Location filter */}
+            <div>
+              <label htmlFor="location" className="sr-only">
+                Location filter
+              </label>
+              <select
+                id="location"
+                name="location"
+                defaultValue={locationFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All locations</option>
+                {locations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -449,30 +487,15 @@ export default async function AtsJobsPage({
         className="space-y-3"
       >
         {/* Preserve context on redirect */}
-        <input
-          type="hidden"
-          name="tenantId"
-          value={selectedTenantId}
-        />
+        <input type="hidden" name="tenantId" value={selectedTenantId} />
         <input type="hidden" name="q" value={q} />
-        <input
-          type="hidden"
-          name="status"
-          value={statusFilter}
-        />
-        <input
-          type="hidden"
-          name="clientId"
-          value={clientFilter}
-        />
-        <input
-          type="hidden"
-          name="visibility"
-          value={visibilityFilter}
-        />
+        <input type="hidden" name="status" value={statusFilter} />
+        <input type="hidden" name="clientId" value={clientFilter} />
+        <input type="hidden" name="visibility" value={visibilityFilter} />
+        <input type="hidden" name="location" value={locationFilter} />
 
         {/* Bulk controls */}
-        <div className="mb-2 flex flex-col items-start justify-between gap-2 rounded-xl border border-slate-200 bg-[#F7F7FB] px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:items-center">
+        <div className="flex flex-col items-start justify-between gap-2 rounded-2xl border border-slate-200 bg-[#F7F7FB] px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:items-center">
           <div className="flex flex-wrap items-center gap-2">
             <select
               name="bulkAction"
@@ -480,12 +503,8 @@ export default async function AtsJobsPage({
               className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
             >
               <option value="">Bulk actions…</option>
-              <option value="publish">
-                Publish to careers site
-              </option>
-              <option value="unpublish">
-                Unpublish from careers site
-              </option>
+              <option value="publish">Publish to careers site</option>
+              <option value="unpublish">Unpublish from careers site</option>
               <option value="close">Close roles</option>
               <option value="duplicate">Duplicate roles</option>
               <option value="delete">Delete roles</option>
@@ -504,24 +523,21 @@ export default async function AtsJobsPage({
           </div>
 
           <span className="text-[11px] text-slate-500">
-            Tick the checkbox next to each role to include it in
-            bulk updates.
+            Tick the checkbox next to each role to include it in bulk updates.
           </span>
         </div>
 
         {/* Jobs list */}
         {filteredJobs.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-            No jobs match the current filters. Try adjusting your
-            search or status.
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            No jobs match the current filters. Try adjusting your search or
+            status.
           </div>
         ) : (
           <div className="space-y-3">
             {filteredJobs.map((job: any) => {
-              const s = normaliseStatus(job.status);
               const statusText = statusLabel(job.status);
-              const applicationsCount =
-                job._count?.applications ?? 0;
+              const applicationsCount = job._count?.applications ?? 0;
 
               const statusValue =
                 (job.status as string | null)?.toLowerCase() || "";
@@ -529,14 +545,13 @@ export default async function AtsJobsPage({
                 (job.visibility as string | null)?.toLowerCase() || "";
 
               const isPublished =
-                visibilityValue === "public" &&
-                statusValue === "open";
+                visibilityValue === "public" && statusValue === "open";
               const isOpen = statusValue === "open";
 
               return (
                 <div
                   key={job.id}
-                  className="flex items-stretch justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
+                  className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
                 >
                   {/* Left: checkbox + job meta */}
                   <div className="flex min-w-0 flex-1 gap-3">
@@ -551,7 +566,7 @@ export default async function AtsJobsPage({
                     </div>
 
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/ats/jobs/${job.id}`}
                           className="truncate text-sm font-semibold text-slate-900 hover:text-[#172965] hover:underline"
@@ -574,8 +589,7 @@ export default async function AtsJobsPage({
 
                       <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-600">
                         <span className="font-medium text-slate-800">
-                          {job.clientCompany?.name ??
-                            "Resourcin client"}
+                          {job.clientCompany?.name ?? "Resourcin client"}
                         </span>
 
                         {job.location && (
@@ -605,9 +619,7 @@ export default async function AtsJobsPage({
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                         <span>
                           Created{" "}
-                          {new Date(
-                            job.createdAt,
-                          ).toLocaleDateString("en-GB", {
+                          {new Date(job.createdAt).toLocaleDateString("en-GB", {
                             day: "2-digit",
                             month: "short",
                             year: "numeric",
@@ -639,9 +651,7 @@ export default async function AtsJobsPage({
                   <div className="hidden shrink-0 flex-col items-end justify-center text-right text-[11px] text-slate-600 sm:flex">
                     <div className="font-medium text-slate-900">
                       {applicationsCount}{" "}
-                      {applicationsCount === 1
-                        ? "candidate"
-                        : "candidates"}
+                      {applicationsCount === 1 ? "candidate" : "candidates"}
                     </div>
                     <div className="mt-0.5 text-[11px] text-slate-500">
                       Pipeline view
