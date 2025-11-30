@@ -1,26 +1,66 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenantId } from "@/lib/tenant";
+import { getResourcinTenant } from "@/lib/tenant";
 
 type DashboardStats = {
+  tenantName: string;
   openJobs: number;
   totalCandidates: number;
   applicationsLast30Days: number;
+  avgApplicationsPerOpenJob: number;
+  recentJobs: RecentJob[];
+  recentApplications: RecentApplication[];
 };
 
 type JobRow = {
   id: string;
+  title: string;
+  location: string | null;
   status: string | null;
+  created_at: string | null;
+};
+
+type RecentJob = {
+  id: string;
+  title: string;
+  location: string | null;
+  status: string | null;
+  createdAt: string | null;
 };
 
 type JobApplicationRow = {
   id: string;
   job_id: string;
-  created_at: string;
+  full_name: string;
+  location: string | null;
+  status: string | null;
+  created_at: string | null;
 };
 
+type RecentApplication = {
+  id: string;
+  fullName: string;
+  jobTitle: string;
+  location: string | null;
+  status: string | null;
+  createdAt: string | null;
+};
+
+function formatDate(dateString: string | null): string {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 async function getDashboardStats(): Promise<DashboardStats> {
-  const tenantId = await getCurrentTenantId();
+  const tenant = await getResourcinTenant();
+  const tenantId = tenant.id;
+  const tenantName = tenant.name;
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -28,24 +68,38 @@ async function getDashboardStats(): Promise<DashboardStats> {
   let openJobs = 0;
   let totalCandidates = 0;
   let applicationsLast30Days = 0;
+  let avgApplicationsPerOpenJob = 0;
 
-  // 1) Load all jobs for this tenant (we use this for open jobs + app filtering)
+  let recentJobs: RecentJob[] = [];
+  let recentApplications: RecentApplication[] = [];
+
+  // 1) Load all jobs for this tenant
   let jobs: JobRow[] = [];
   try {
     const { data, error } = await supabaseAdmin
       .from("jobs")
-      .select<"id, status", JobRow>("id, status")
-      .eq("tenant_id", tenantId);
+      .select("id, title, location, status, created_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
 
     if (!error && data) {
-      jobs = data;
-      openJobs = data.filter((job) => job.status === "open").length;
+      jobs = data as JobRow[];
+      openJobs = jobs.filter((job) => job.status === "open").length;
+
+      recentJobs = jobs.slice(0, 5).map((job) => ({
+        id: job.id,
+        title: job.title,
+        location: job.location,
+        status: job.status,
+        createdAt: job.created_at,
+      }));
     }
   } catch {
     openJobs = 0;
+    recentJobs = [];
   }
 
-  // 2) Count candidates for this tenant (this was already correct)
+  // 2) Count candidates for this tenant
   try {
     const { count: candidatesCount, error: candidatesError } =
       await supabaseAdmin
@@ -63,31 +117,51 @@ async function getDashboardStats(): Promise<DashboardStats> {
   // 3) Applications (30 days) for this tenant, via job_ids
   try {
     const jobIds = jobs.map((j) => j.id);
-
     if (jobIds.length > 0) {
-      const { data: applications, error: appsError } =
-        await supabaseAdmin
-          .from("job_applications")
-          .select<"id, job_id, created_at", JobApplicationRow>(
-            "id, job_id, created_at"
-          )
-          .in("job_id", jobIds)
-          .gte("created_at", thirtyDaysAgo.toISOString());
+      const { data: appsData, error: appsError } = await supabaseAdmin
+        .from("job_applications")
+        .select("id, job_id, full_name, location, status, created_at")
+        .in("job_id", jobIds)
+        .gte("created_at", thirtyDaysAgo.toISOString())
+        .order("created_at", { ascending: false });
 
-      if (!appsError && applications) {
-        applicationsLast30Days = applications.length;
+      if (!appsError && appsData) {
+        const apps = appsData as JobApplicationRow[];
+        applicationsLast30Days = apps.length;
+
+        const jobsById = new Map(jobs.map((j) => [j.id, j]));
+        recentApplications = apps.slice(0, 5).map((app) => {
+          const job = jobsById.get(app.job_id);
+          return {
+            id: app.id,
+            fullName: app.full_name,
+            jobTitle: job?.title ?? "Unknown role",
+            location: app.location,
+            status: app.status,
+            createdAt: app.created_at,
+          };
+        });
       }
-    } else {
-      applicationsLast30Days = 0;
     }
   } catch {
     applicationsLast30Days = 0;
+    recentApplications = [];
+  }
+
+  if (openJobs > 0) {
+    avgApplicationsPerOpenJob = applicationsLast30Days / openJobs;
+  } else {
+    avgApplicationsPerOpenJob = 0;
   }
 
   return {
+    tenantName,
     openJobs,
     totalCandidates,
     applicationsLast30Days,
+    avgApplicationsPerOpenJob,
+    recentJobs,
+    recentApplications,
   };
 }
 
@@ -95,90 +169,219 @@ export default async function AtsDashboardPage() {
   const stats = await getDashboardStats();
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             ATS
           </p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            Dashboard
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">
+            ThinkATS dashboard
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            A quick view of open roles, candidates and recent applications for
-            the current tenant.
+            Overview of jobs, candidates and activity for{" "}
+            <span className="font-medium text-slate-900">
+              {stats.tenantName}
+            </span>
+            .
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            Tenant: {stats.tenantName}
+          </span>
           <Link
             href="/ats/jobs/new"
-            className="rounded-full bg-[#1E40AF] px-4 py-1.5 font-semibold text-white shadow-sm hover:bg-[#1D3A9A]"
+            className="inline-flex items-center gap-1 rounded-full bg-[#1E40AF] px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1D3A9A]"
           >
-            Create job
+            <span className="text-base leading-none">＋</span>
+            New job
           </Link>
           <Link
             href="/ats/jobs"
-            className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            View jobs
+            View all jobs
           </Link>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Metric cards */}
+      <div className="grid gap-4 md:grid-cols-4">
         {/* Open jobs */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">Open jobs</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">
-            {stats.openJobs}
+        <div className="rounded-2xl bg-slate-900 px-5 py-4 text-white shadow-sm">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-200">
+            Open jobs
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Jobs currently accepting applications for this tenant.
+          <p className="mt-2 text-3xl font-semibold">{stats.openJobs}</p>
+          <p className="mt-1 text-xs text-slate-200/80">
+            Jobs currently accepting applications.
           </p>
-          <Link
-            href="/ats/jobs"
-            className="mt-3 inline-flex items-center text-xs font-medium text-[#1E40AF] hover:underline"
-          >
-            Go to jobs →
-          </Link>
-        </div>
-
-        {/* Candidates */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">Candidates</p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">
-            {stats.totalCandidates}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Unique profiles in your ATS for this tenant across all roles and
-            pipelines.
-          </p>
-          <Link
-            href="/ats/candidates"
-            className="mt-3 inline-flex items-center text-xs font-medium text-[#1E40AF] hover:underline"
-          >
-            Go to candidates →
-          </Link>
         </div>
 
         {/* Applications (30 days) */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">
+        <div className="rounded-2xl bg-amber-50 px-5 py-4 text-amber-900 shadow-sm">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800/80">
             Applications (30 days)
           </p>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">
+          <p className="mt-2 text-3xl font-semibold">
             {stats.applicationsLast30Days}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            New applications created in the last 30 days for this tenant.
+          <p className="mt-1 text-xs text-amber-800/80">
+            New applications received across all jobs.
           </p>
-          <Link
-            href="/jobs"
-            className="mt-3 inline-flex items-center text-xs font-medium text-[#1E40AF] hover:underline"
-          >
-            View public jobs →
-          </Link>
+        </div>
+
+        {/* Candidates */}
+        <div className="rounded-2xl bg-emerald-50 px-5 py-4 text-emerald-900 shadow-sm">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-800/80">
+            Candidates in talent pool
+          </p>
+          <p className="mt-2 text-3xl font-semibold">
+            {stats.totalCandidates}
+          </p>
+          <p className="mt-1 text-xs text-emerald-800/80">
+            Unique candidates under this tenant.
+          </p>
+        </div>
+
+        {/* Avg applications / open job */}
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-600">
+            Avg. applications / open job
+          </p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">
+            {stats.openJobs > 0
+              ? stats.avgApplicationsPerOpenJob.toFixed(1)
+              : "–"}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Based on the last 30 days of applications.
+          </p>
+        </div>
+      </div>
+
+      {/* Lower panels */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)]">
+        {/* Recent jobs */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Recent jobs
+              </h2>
+              <p className="text-xs text-slate-500">
+                Latest roles created for this tenant.
+              </p>
+            </div>
+            <Link
+              href="/ats/jobs"
+              className="text-xs font-medium text-[#1E40AF] hover:underline"
+            >
+              View all jobs →
+            </Link>
+          </div>
+
+          {stats.recentJobs.length === 0 ? (
+            <p className="py-4 text-xs text-slate-500">
+              No jobs yet for this tenant. Create a role to start receiving
+              applications.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {stats.recentJobs.map((job) => (
+                <li key={job.id} className="py-3 first:pt-1 last:pb-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        {job.title}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {job.location && (
+                          <>
+                            {job.location}
+                            <span className="mx-1.5 text-slate-300">•</span>
+                          </>
+                        )}
+                        {job.createdAt && formatDate(job.createdAt)}
+                      </p>
+                    </div>
+                    {job.status === "open" && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
+                        Open
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Candidate inbox */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Candidate inbox
+              </h2>
+              <p className="text-xs text-slate-500">
+                Most recent applications across all jobs.
+              </p>
+            </div>
+            <Link
+              href="/ats/candidates"
+              className="text-xs font-medium text-[#1E40AF] hover:underline"
+            >
+              View all →
+            </Link>
+          </div>
+
+          {stats.recentApplications.length === 0 ? (
+            <p className="py-4 text-xs text-slate-500">
+              No applications in the last 30 days for this tenant.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {stats.recentApplications.map((app) => (
+                <li
+                  key={app.id}
+                  className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        {app.fullName}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-600">
+                        Applied for{" "}
+                        <span className="font-medium">
+                          {app.jobTitle}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        {app.location && (
+                          <>
+                            {app.location}
+                            <span className="mx-1 text-slate-300">•</span>
+                          </>
+                        )}
+                        {app.createdAt && formatDate(app.createdAt)}
+                      </p>
+                    </div>
+                    {app.status && (
+                      <span className="inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        {app.status}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
