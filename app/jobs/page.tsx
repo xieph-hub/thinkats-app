@@ -1,473 +1,501 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Open roles | Resourcin & ThinkATS",
+  title: "Open roles | Resourcin",
   description:
-    "Explore open roles curated by Resourcin and its clients across Nigeria, Africa and beyond.",
+    "Current open mandates managed by Resourcin and its clients across Nigeria, Africa and beyond.",
 };
 
-interface JobsPageSearchParams {
-  q?: string | string[];
-  location?: string | string[];
-  department?: string | string[];
-  workMode?: string | string[];
+type SearchParams = {
+  [key: string]: string | string[] | undefined;
+};
+
+type JobRow = {
+  id: string;
+  slug: string | null;
+  title: string;
+  department: string | null;
+  location: string | null;
+  location_type: string | null;
+  employment_type: string | null;
+  experience_level: string | null;
+  work_mode: string | null;
+  created_at: string;
+  short_description: string | null;
+  tags: string[] | null;
+  confidential: boolean | null;
+};
+
+// -------------------- helpers --------------------
+
+function getParam(searchParams: SearchParams | undefined, key: string) {
+  const value = searchParams?.[key];
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value[0];
+  return "";
 }
 
-function normalise(value: string | null | undefined) {
-  return (value || "").toLowerCase();
+function humanizeToken(value?: string | null): string {
+  if (!value) return "";
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
+    )
+    .join(" ");
+}
+
+const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
+  full_time: "Full Time",
+  "full-time": "Full Time",
+  part_time: "Part Time",
+  "part-time": "Part Time",
+  contract: "Contract",
+  temporary: "Temporary",
+  internship: "Internship",
+  consulting: "Consulting / Advisory",
+  consultant: "Consulting / Advisory",
+};
+
+const EXPERIENCE_LEVEL_LABELS: Record<string, string> = {
+  entry: "Entry level / Graduate",
+  junior: "Junior (1–3 years)",
+  mid: "Mid-level (3–7 years)",
+  senior: "Senior (7–12 years)",
+  lead_principal: "Lead / Principal",
+  "lead-principal": "Lead / Principal",
+  manager_head: "Manager / Head of",
+  "manager-head": "Manager / Head of",
+  director_vp: "Director / VP",
+  "director-vp": "Director / VP",
+  c_level_partner: "C-level / Partner",
+  "c-level-partner": "C-level / Partner",
+};
+
+const WORK_MODE_LABELS: Record<string, string> = {
+  onsite: "Onsite",
+  "on-site": "Onsite",
+  hybrid: "Hybrid",
+  remote: "Remote",
+  "remote-first": "Remote-first",
+  field_based: "Field-based",
+  "field-based": "Field-based",
+};
+
+function formatEmploymentType(value?: string | null) {
+  if (!value) return "";
+  return EMPLOYMENT_TYPE_LABELS[value] ?? humanizeToken(value);
+}
+
+function formatExperienceLevel(value?: string | null) {
+  if (!value) return "";
+  return EXPERIENCE_LEVEL_LABELS[value] ?? humanizeToken(value);
 }
 
 function formatWorkMode(value?: string | null) {
   if (!value) return "";
-  const map: Record<string, string> = {
-    onsite: "Onsite",
-    hybrid: "Hybrid",
-    remote: "Remote",
-    field_based: "Field-based",
-  };
-  const key = value.toLowerCase();
-  return map[key] || value;
+  return WORK_MODE_LABELS[value] ?? humanizeToken(value);
 }
 
-function formatEmploymentType(value?: string | null) {
-  if (!value) return "";
-  const map: Record<string, string> = {
-    full_time: "Full Time",
-    part_time: "Part Time",
-    contract: "Contract",
-    temporary: "Temporary",
-    internship: "Internship",
-    consulting: "Consulting / Advisory",
-  };
-  const key = value.toLowerCase();
-  return map[key] || value;
-}
-
-function formatDate(value: string | Date | null | undefined) {
-  if (!value) return "";
-  const d = typeof value === "string" ? new Date(value) : value;
+function formatPostedAt(iso?: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
+  return d.toLocaleDateString(undefined, {
     year: "numeric",
+    month: "short",
+    day: "2-digit",
   });
 }
 
-export default async function PublicJobsPage({
+// -------------------- page --------------------
+
+export default async function JobsPage({
   searchParams,
 }: {
-  searchParams?: JobsPageSearchParams;
+  searchParams?: SearchParams;
 }) {
-  const rawQ = searchParams?.q ?? "";
-  const q =
-    Array.isArray(rawQ) && rawQ.length > 0
-      ? rawQ[0]
-      : typeof rawQ === "string"
-      ? rawQ
-      : "";
+  let query = supabaseAdmin
+    .from("jobs")
+    .select(
+      `
+      id,
+      slug,
+      title,
+      department,
+      location,
+      location_type,
+      employment_type,
+      experience_level,
+      work_mode,
+      created_at,
+      short_description,
+      tags,
+      confidential
+    `,
+    )
+    .eq("visibility", "public")
+    .eq("status", "open")
+    .order("created_at", { ascending: false });
 
-  const rawLocation = searchParams?.location ?? "all";
-  const locationFilter =
-    Array.isArray(rawLocation) && rawLocation.length > 0
-      ? rawLocation[0]
-      : typeof rawLocation === "string"
-      ? rawLocation
-      : "all";
+  const { data, error } = await query;
 
-  const rawDepartment = searchParams?.department ?? "all";
-  const departmentFilter =
-    Array.isArray(rawDepartment) && rawDepartment.length > 0
-      ? rawDepartment[0]
-      : typeof rawDepartment === "string"
-      ? rawDepartment
-      : "all";
-
-  const rawWorkMode = searchParams?.workMode ?? "all";
-  const workModeFilter =
-    Array.isArray(rawWorkMode) && rawWorkMode.length > 0
-      ? rawWorkMode[0]
-      : typeof rawWorkMode === "string"
-      ? rawWorkMode
-      : "all";
-
-  // -----------------------------
-  // Load all public + open jobs
-  // -----------------------------
-  const jobs = await prisma.job.findMany({
-    where: {
-      status: "open",
-      visibility: "public",
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    include: {
-      clientCompany: true,
-    },
-  });
-
-  // Build filter options
-  const locations = Array.from(
-    new Set(
-      jobs
-        .map((job) => job.location || "")
-        .filter((loc) => loc.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const departments = Array.from(
-    new Set(
-      jobs
-        .map((job: any) => (job.department as string | null) || "")
-        .filter((d) => d.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const workModes = Array.from(
-    new Set(
-      jobs
-        .map((job: any) => (job.workMode as string | null) || job.locationType || "")
-        .filter((wm) => wm.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  // -----------------------------
-  // Apply filters in-memory
-  // -----------------------------
-  const filteredJobs = jobs.filter((job: any) => {
-    let ok = true;
-
-    if (locationFilter !== "all") {
-      ok = ok && job.location === locationFilter;
-    }
-
-    if (departmentFilter !== "all") {
-      ok = ok && job.department === departmentFilter;
-    }
-
-    if (workModeFilter !== "all") {
-      const wm = (job.workMode as string | null) || job.locationType || "";
-      ok = ok && wm === workModeFilter;
-    }
-
-    if (q) {
-      const haystack = (
-        job.title +
-        " " +
-        (job.location || "") +
-        " " +
-        (job.department || "") +
-        " " +
-        (job.clientCompany?.name || "") +
-        " " +
-        (job.overview || "") +
-        " " +
-        (job.description || "")
-      ).toLowerCase();
-      ok = ok && haystack.includes(q.toLowerCase());
-    }
-
-    return ok;
-  });
-
-  const totalJobs = jobs.length;
-  const visibleJobs = filteredJobs.length;
-
-  // Helper for public URL (slug if present, else id)
-  function jobPublicUrl(job: any) {
-    if (job.slug) {
-      return `/jobs/${encodeURIComponent(job.slug)}`;
-    }
-    return `/jobs/${job.id}`;
+  if (error) {
+    console.error("Error loading jobs:", error);
   }
 
+  const jobs = ((data as JobRow[]) || []).filter(Boolean);
+
+  const q = getParam(searchParams, "q").trim();
+  const locationFilter = getParam(searchParams, "location").trim();
+  const workModeFilter = getParam(searchParams, "work_mode").trim();
+  const experienceFilter = getParam(searchParams, "experience_level").trim();
+
+  const filteredJobs = jobs.filter((job) => {
+    if (q) {
+      const haystack = [
+        job.title,
+        job.short_description,
+        job.location,
+        job.department,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q.toLowerCase())) return false;
+    }
+
+    if (locationFilter && job.location !== locationFilter) return false;
+    if (workModeFilter && job.work_mode !== workModeFilter) return false;
+    if (
+      experienceFilter &&
+      job.experience_level !== experienceFilter
+    )
+      return false;
+
+    return true;
+  });
+
+  const totalCount = jobs.length;
+  const visibleCount = filteredJobs.length;
+
+  const uniqueLocations = Array.from(
+    new Set(jobs.map((j) => j.location).filter(Boolean) as string[]),
+  );
+  const uniqueWorkModes = Array.from(
+    new Set(jobs.map((j) => j.work_mode).filter(Boolean) as string[]),
+  );
+  const uniqueExperienceLevels = Array.from(
+    new Set(
+      jobs.map((j) => j.experience_level).filter(Boolean) as string[],
+    ),
+  );
+
   return (
-    <div className="min-h-screen bg-[#F5F6FA]">
-      <div className="mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
-        {/* Hero */}
-        <section className="mb-8 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur sm:p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="max-w-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#FFC000]">
-                Careers
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold text-[#172965] sm:text-3xl">
-                Roles curated by Resourcin & ThinkATS
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Hero / intro */}
+      <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/5">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10 lg:py-12">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-3">
+              <h1 className="text-3xl font-semibold tracking-tight text-[#172965] sm:text-4xl">
+                Current roles via Resourcin
               </h1>
-              <p className="mt-3 text-sm text-slate-600">
-                Live mandates across Nigeria, Africa and beyond. These roles
-                have been vetted with hiring teams and come with clear
-                expectations, transparent processes and support from our talent
-                advisors.
-              </p>
-              <p className="mt-2 text-xs text-slate-500">
-                {visibleJobs} of {totalJobs} open roles currently visible
-                based on your filters.
+              <p className="max-w-xl text-sm leading-relaxed text-slate-700">
+                Executive searches, senior individual contributors and hard-to-fill
+                roles across Nigeria, Africa and select global markets. Every role
+                here is being actively managed by the Resourcin team.
               </p>
             </div>
-
-            <div className="space-y-3 rounded-2xl bg-[#172965] px-4 py-3 text-xs text-slate-100 sm:w-64">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
-                How we work with candidates
-              </p>
-              <ul className="space-y-1.5">
-                <li className="flex items-start gap-2">
-                  <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>No blanket “CV pools” – you&apos;re considered for real roles.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>Structured interview processes with clear feedback paths.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>We never share your details without your consent.</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Filters */}
-        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <form
-            method="GET"
-            className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
-          >
-            <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-              {/* Search */}
-              <div className="flex-1">
-                <label
-                  htmlFor="q"
-                  className="mb-1 block text-[11px] font-medium text-slate-600"
-                >
-                  Search roles
-                </label>
-                <div className="relative">
-                  <input
-                    id="q"
-                    name="q"
-                    type="text"
-                    defaultValue={q}
-                    placeholder="Search by title, company, location or keywords..."
-                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                  />
-                  <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[13px] text-slate-400">
-                    ⌕
-                  </span>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700 shadow-sm">
+              <div className="font-semibold text-[#172965]">
+                {visibleCount} open role{visibleCount === 1 ? "" : "s"}
+              </div>
+              {visibleCount !== totalCount && (
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Showing a filtered view from {totalCount} total open roles.
                 </div>
-              </div>
-
-              {/* Location */}
-              <div className="sm:w-40">
-                <label
-                  htmlFor="location"
-                  className="mb-1 block text-[11px] font-medium text-slate-600"
-                >
-                  Location
-                </label>
-                <select
-                  id="location"
-                  name="location"
-                  defaultValue={locationFilter || "all"}
-                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                >
-                  <option value="all">All locations</option>
-                  {locations.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Department */}
-              <div className="sm:w-40">
-                <label
-                  htmlFor="department"
-                  className="mb-1 block text-[11px] font-medium text-slate-600"
-                >
-                  Function
-                </label>
-                <select
-                  id="department"
-                  name="department"
-                  defaultValue={departmentFilter || "all"}
-                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                >
-                  <option value="all">All functions</option>
-                  {departments.map((dep) => (
-                    <option key={dep} value={dep}>
-                      {dep}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Work mode */}
-              <div className="sm:w-40">
-                <label
-                  htmlFor="workMode"
-                  className="mb-1 block text-[11px] font-medium text-slate-600"
-                >
-                  Work style
-                </label>
-                <select
-                  id="workMode"
-                  name="workMode"
-                  defaultValue={workModeFilter || "all"}
-                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                >
-                  <option value="all">All styles</option>
-                  {workModes.map((wm) => (
-                    <option key={wm} value={wm}>
-                      {formatWorkMode(wm)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                className="inline-flex items-center rounded-md bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
-              >
-                Apply filters
-              </button>
-
-              {(q ||
-                locationFilter !== "all" ||
-                departmentFilter !== "all" ||
-                workModeFilter !== "all") && (
-                <Link
-                  href="/jobs"
-                  className="text-[11px] text-slate-500 hover:text-slate-800"
-                >
-                  Clear all
-                </Link>
               )}
             </div>
+          </div>
+
+          {/* Filters */}
+          <form className="mt-6 grid gap-3 md:grid-cols-[minmax(0,2.2fr),minmax(0,1.2fr),minmax(0,1.2fr),minmax(0,1.2fr)]">
+            <div className="col-span-1 md:col-span-1">
+              <label className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                Keyword
+              </label>
+              <input
+                name="q"
+                defaultValue={q}
+                placeholder="Search by title, company, location..."
+                className="mt-1.5 w-full rounded-full border border-slate-300 bg-white px-4 py-2 text-sm outline-none placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/50"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                Location
+              </label>
+              <select
+                name="location"
+                defaultValue={locationFilter}
+                className="mt-1.5 w-full rounded-full border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/50"
+              >
+                <option value="">All locations</option>
+                {uniqueLocations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                Work pattern
+              </label>
+              <select
+                name="work_mode"
+                defaultValue={workModeFilter}
+                className="mt-1.5 w-full rounded-full border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/50"
+              >
+                <option value="">Any</option>
+                {uniqueWorkModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {formatWorkMode(mode)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+                Role level
+              </label>
+              <select
+                name="experience_level"
+                defaultValue={experienceFilter}
+                className="mt-1.5 w-full rounded-full border border-slate-300 bg-white px-3 py-2 text-xs outline-none focus:border-[#172965] focus:ring-1 focus:ring-[#172965]/50"
+              >
+                <option value="">Any</option>
+                {uniqueExperienceLevels.map((level) => (
+                  <option key={level} value={level}>
+                    {formatExperienceLevel(level)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </form>
-        </section>
+        </div>
+      </section>
 
-        {/* Jobs list */}
-        {visibleJobs === 0 ? (
-          <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            <p>No roles match the current filters.</p>
-            <p className="mt-1 text-[11px]">
-              Try removing some filters or check back soon as we add new
-              opportunities regularly.
+      {/* Job list */}
+      <section className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+        {visibleCount === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-700 shadow-sm">
+            <div className="text-sm font-semibold text-[#172965]">
+              No roles match these filters right now.
+            </div>
+            <p className="mt-1 text-sm text-slate-600">
+              Try clearing one or two filters, or check back soon as new roles
+              are added regularly.
             </p>
-          </section>
+          </div>
         ) : (
-          <section className="space-y-3">
-            {filteredJobs.map((job: any) => {
-              const companyName =
-                job.clientCompany?.name || "Confidential client";
-              const location = job.location || "Location flexible";
-              const workModeValue =
-                (job.workMode as string | null) ||
-                (job.locationType as string | null) ||
-                null;
-              const workModeLabel =
-                formatWorkMode(workModeValue) || undefined;
-              const employmentLabel =
-                formatEmploymentType(job.employmentType) ||
-                undefined;
-              const posted = formatDate(job.createdAt);
-              const snippet =
-                job.overview ||
-                job.description ||
-                "This is a live role with a detailed specification available on the next page.";
+          <div className="space-y-3">
+            {filteredJobs.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
 
-              return (
-                <article
-                  key={job.id}
-                  className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md sm:flex-row sm:items-stretch"
-                >
-                  {/* Left: role meta */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
-                        {job.title}
-                      </h2>
-                      <span className="inline-flex items-center rounded-full bg-[#E9F7EE] px-2 py-0.5 text-[10px] font-medium text-[#306B34]">
-                        Actively hiring
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] font-medium text-slate-600">
-                      {companyName}
-                    </p>
+// -------------------- job card --------------------
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                      <span>{location}</span>
-                      {workModeLabel && (
-                        <>
-                          <span className="text-slate-300">•</span>
-                          <span>{workModeLabel}</span>
-                        </>
-                      )}
-                      {employmentLabel && (
-                        <>
-                          <span className="text-slate-300">•</span>
-                          <span>{employmentLabel}</span>
-                        </>
-                      )}
-                      {job.department && (
-                        <>
-                          <span className="text-slate-300">•</span>
-                          <span>{job.department}</span>
-                        </>
-                      )}
-                    </div>
+function JobCard({ job }: { job: JobRow }) {
+  const href = `/jobs/${encodeURIComponent(job.slug || job.id)}`;
+  const postedLabel = formatPostedAt(job.created_at);
+  const displayEmploymentType = formatEmploymentType(job.employment_type);
+  const displayExperienceLevel = formatExperienceLevel(job.experience_level);
+  const displayWorkMode = formatWorkMode(job.work_mode);
 
-                    <p className="mt-3 line-clamp-2 text-xs text-slate-700">
-                      {snippet}
-                    </p>
-
-                    <p className="mt-2 text-[11px] text-slate-400">
-                      Posted {posted}
-                    </p>
-                  </div>
-
-                  {/* Right: CTA */}
-                  <div className="flex w-full flex-col items-stretch justify-between gap-2 sm:w-52 sm:items-end">
-                    <div className="flex flex-wrap justify-start gap-1 text-[10px] sm:justify-end">
-                      <span className="inline-flex items-center rounded-full bg-[#FFF7DF] px-2 py-0.5 font-medium text-[#9A7300]">
-                        Curated by Resourcin
-                      </span>
-                      {job.internalOnly && (
-                        <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-600">
-                          Internal only
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                      <Link
-                        href={jobPublicUrl(job)}
-                        className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
-                      >
-                        View & apply
-                        <span className="ml-1.5 text-[10px] opacity-80">
-                          ↗
-                        </span>
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
+  return (
+    <Link
+      href={href}
+      className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#172965]/40 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h2 className="truncate text-sm font-semibold text-[#172965] sm:text-base">
+            {job.title}
+          </h2>
+          <p className="text-[11px] text-slate-600">
+            {job.confidential
+              ? "Confidential search · via Resourcin"
+              : "Resourcin · Hiring for clients across Africa & beyond"}
+          </p>
+        </div>
+        {postedLabel && (
+          <span className="hidden text-[11px] text-slate-500 sm:inline">
+            {postedLabel}
+          </span>
         )}
       </div>
-    </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+        {job.location && (
+          <JobMetaPill icon={<IconLocation />} label={job.location} />
+        )}
+        {displayWorkMode && (
+          <JobMetaPill icon={<IconGlobe />} label={displayWorkMode} />
+        )}
+        {displayEmploymentType && (
+          <JobMetaPill icon={<IconBriefcase />} label={displayEmploymentType} />
+        )}
+        {displayExperienceLevel && (
+          <JobMetaPill icon={<IconClock />} label={displayExperienceLevel} />
+        )}
+      </div>
+
+      {job.short_description && (
+        <p className="mt-3 text-xs leading-relaxed text-slate-700">
+          {job.short_description}
+        </p>
+      )}
+
+      {job.tags && job.tags.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {job.tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center rounded-full bg-[#64C247]/10 px-2.5 py-0.5 text-[10px] font-medium text-[#306B34]"
+            >
+              #{tag}
+            </span>
+          ))}
+          {job.tags.length > 4 && (
+            <span className="text-[10px] text-slate-500">
+              +{job.tags.length - 4} more
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
+  );
+}
+
+function JobMetaPill({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5">
+      <span className="text-slate-500" aria-hidden="true">
+        {icon}
+      </span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
+// Reuse icons for consistency
+function IconLocation() {
+  return (
+    <svg
+      className="h-3.5 w-3.5 text-red-500"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M10 2.5a4.5 4.5 0 0 0-4.5 4.5c0 3.038 3.287 6.87 4.063 7.69a.6.6 0 0 0 .874 0C11.213 13.87 14.5 10.038 14.5 7A4.5 4.5 0 0 0 10 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <circle cx="10" cy="7" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function IconGlobe() {
+  return (
+    <svg
+      className="h-3.5 w-3.5 text-slate-600"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      fill="none"
+    >
+      <circle cx="10" cy="10" r="6.2" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M10 3.8c-1.5 1.7-2.3 3.9-2.3 6.2 0 2.3.8 4.5 2.3 6.2m0-12.4c1.5 1.7 2.3 3.9 2.3 6.2 0 2.3-.8 4.5-2.3 6.2M4.2 10h11.6"
+        stroke="currentColor"
+        strokeWidth="1.1"
+      />
+    </svg>
+  );
+}
+
+function IconBriefcase() {
+  return (
+    <svg
+      className="h-3.5 w-3.5 text-amber-700"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      fill="none"
+    >
+      <rect
+        x="3"
+        y="6"
+        width="14"
+        height="9"
+        rx="1.7"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <path
+        d="M7.5 6V5.4A1.9 1.9 0 0 1 9.4 3.5h1.2a1.9 1.9 0 0 1 1.9 1.9V6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <path
+        d="M3.5 9.5h4m5 0h4"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconClock() {
+  return (
+    <svg
+      className="h-3.5 w-3.5 text-orange-500"
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      fill="none"
+    >
+      <circle cx="10" cy="10" r="6.2" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M10 6.4v3.5l2 1.2"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
