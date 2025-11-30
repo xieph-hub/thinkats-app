@@ -9,7 +9,7 @@ type DashboardStats = {
 };
 
 async function getDashboardStats(): Promise<DashboardStats> {
-  const tenantId = getCurrentTenantId();
+  const tenantId = await getCurrentTenantId();
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -86,7 +86,7 @@ export default async function AtsDashboardPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             A quick view of open roles, candidates and recent applications for
-            this tenant.
+            the current tenant.
           </p>
         </div>
 
@@ -113,7 +113,8 @@ export default async function AtsDashboardPage() {
             {stats.openJobs}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Published roles currently visible on your public jobs page.
+            Published roles currently visible on your public jobs page for this
+            tenant.
           </p>
           <Link
             href="/ats/jobs"
@@ -129,7 +130,8 @@ export default async function AtsDashboardPage() {
             {stats.totalCandidates}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Unique profiles in your ATS across all roles and pipelines.
+            Unique profiles in your ATS for this tenant across all roles and
+            pipelines.
           </p>
           <Link
             href="/ats/candidates"
