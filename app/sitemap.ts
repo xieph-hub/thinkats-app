@@ -24,13 +24,4 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     url: `${baseUrl}${path}`,
     lastModified: new Date(),
   }));
-
-  // Dynamic Insights posts from Notion
-  const posts = await getAllPosts();
-  const insightRoutes: MetadataRoute.Sitemap = posts.map((post) => ({
-    url: `${baseUrl}/insights/${post.slug}`,
-    lastModified: post.date ? new Date(post.date) : new Date(),
-  }));
-
-  return [...staticRoutes, ...insightRoutes];
 }
