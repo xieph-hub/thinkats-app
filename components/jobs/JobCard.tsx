@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import React from "react";
 
 export interface JobCardData {
@@ -19,6 +20,12 @@ export interface JobCardData {
   shareUrl?: string; // relative or absolute URL
   applicants?: number;
   isConfidential?: boolean;
+
+  // NEW: brand metadata for SaaS-style cards
+  tenantName?: string;
+  tenantLogoUrl?: string | null;
+  clientName?: string;
+  clientLogoUrl?: string | null;
 }
 
 export interface JobCardProps {
@@ -32,23 +39,19 @@ const BASE_URL =
 // Helpers for human-friendly labels
 // -----------------------------------------------------
 
-/**
- * Generic helper for snake_case / kebab-case → "Title Case".
- */
 function humanizeEnum(value?: string | null): string {
   if (!value) return "";
   return value
-    .replace(/[_-]+/g, " ") // full_time / full-time -> full time
+    .replace(/[_-]+/g, " ")
     .split(" ")
     .filter(Boolean)
     .map(
       (part) =>
-        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+        part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
     )
     .join(" ");
 }
 
-// Normalised employment type labels
 const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   full_time: "Full Time",
   "full-time": "Full Time",
@@ -61,7 +64,6 @@ const EMPLOYMENT_TYPE_LABELS: Record<string, string> = {
   consultant: "Consulting / Advisory",
 };
 
-// Normalised experience level labels
 const EXPERIENCE_LEVEL_LABELS: Record<string, string> = {
   entry: "Entry level / Graduate",
   junior: "Junior (1–3 years)",
@@ -77,7 +79,6 @@ const EXPERIENCE_LEVEL_LABELS: Record<string, string> = {
   "c-level-partner": "C-level / Partner",
 };
 
-// Normalised work mode labels
 const WORK_MODE_LABELS: Record<string, string> = {
   onsite: "Onsite",
   "on-site": "Onsite",
@@ -88,7 +89,6 @@ const WORK_MODE_LABELS: Record<string, string> = {
   "field-based": "Field-based",
 };
 
-// Mirrors the taxonomy used on /ats/jobs/new (stored in Job.department)
 const DEPARTMENT_LABELS: Record<string, string> = {
   // Leadership & General Management
   executive_leadership: "Executive Leadership (CEO, MD, Country Manager)",
@@ -239,7 +239,7 @@ function MetaItem({
   );
 }
 
-/** Icons (aligned with the job-detail page) */
+// Icons
 
 function IconLocation() {
   return (
@@ -328,7 +328,7 @@ function IconClock() {
   );
 }
 
-/** Social icons (no email) */
+// Social icons
 
 function LinkedInIcon() {
   return (
@@ -385,6 +385,10 @@ export default function JobCard({ job }: JobCardProps) {
     postedAt,
     shareUrl,
     isConfidential,
+    tenantName,
+    tenantLogoUrl,
+    clientName,
+    clientLogoUrl,
   } = job;
 
   const url =
@@ -399,10 +403,20 @@ export default function JobCard({ job }: JobCardProps) {
     ? formatExperienceLevel(experienceLevel)
     : undefined;
   const displayWorkMode = workMode ? formatWorkMode(workMode) : undefined;
-  const displayDepartment = department ? formatDepartment(department) : undefined;
+  const displayDepartment = department
+    ? formatDepartment(department)
+    : undefined;
+
+  const displayCompany =
+    company ||
+    clientName ||
+    tenantName ||
+    (isConfidential
+      ? "Confidential search · via Resourcin"
+      : "Resourcin");
 
   const shareText = encodeURIComponent(
-    `${title}${location ? ` – ${location}` : ""} (via Resourcin)`
+    `${title}${location ? ` – ${location}` : ""} (via Resourcin)`,
   );
   const encodedUrl = encodeURIComponent(url);
 
@@ -413,8 +427,15 @@ export default function JobCard({ job }: JobCardProps) {
   return (
     <article className="flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
       <div className="space-y-2">
-        {/* Title + company */}
-        <div>
+        {/* Brand (logos + names) + title */}
+        <div className="space-y-1">
+          <BrandCluster
+            tenantName={tenantName || null}
+            tenantLogoUrl={tenantLogoUrl || null}
+            clientName={clientName || null}
+            clientLogoUrl={clientLogoUrl || null}
+          />
+
           <h2 className="text-sm font-semibold text-slate-900">
             <Link
               href={url}
@@ -424,11 +445,7 @@ export default function JobCard({ job }: JobCardProps) {
             </Link>
           </h2>
           <p className="mt-0.5 text-[11px] font-medium text-slate-600">
-            {company
-              ? company
-              : isConfidential
-              ? "Confidential search · via Resourcin"
-              : "Resourcin"}
+            {displayCompany}
           </p>
         </div>
 
@@ -529,5 +546,98 @@ export default function JobCard({ job }: JobCardProps) {
         </div>
       </div>
     </article>
+  );
+}
+
+function BrandCluster({
+  tenantName,
+  tenantLogoUrl,
+  clientName,
+  clientLogoUrl,
+}: {
+  tenantName: string | null;
+  tenantLogoUrl: string | null;
+  clientName: string | null;
+  clientLogoUrl: string | null;
+}) {
+  const primary = clientName || tenantName || "Confidential client";
+  const secondary =
+    clientName && tenantName ? `via ${tenantName}` : null;
+
+  const tenantInitial =
+    (tenantName?.charAt(0)?.toUpperCase?.() as string) || "T";
+  const clientInitial =
+    (clientName?.charAt(0)?.toUpperCase?.() as string) || "C";
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex -space-x-2">
+        <BrandAvatar
+          logoUrl={tenantLogoUrl}
+          fallback={tenantInitial}
+          tint="blue"
+          size="md"
+        />
+        {clientName && (
+          <BrandAvatar
+            logoUrl={clientLogoUrl}
+            fallback={clientInitial}
+            tint="green"
+            size="sm"
+          />
+        )}
+      </div>
+      <div className="flex flex-col">
+        <span className="text-[11px] font-semibold text-slate-900">
+          {primary}
+        </span>
+        {secondary && (
+          <span className="text-[10px] text-slate-500">{secondary}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BrandAvatar({
+  logoUrl,
+  fallback,
+  tint = "blue",
+  size = "md",
+}: {
+  logoUrl: string | null;
+  fallback: string;
+  tint?: "blue" | "green";
+  size?: "md" | "sm";
+}) {
+  const sizeClasses =
+    size === "md" ? "h-8 w-8 text-[11px]" : "h-6 w-6 text-[10px]";
+  const bgClass =
+    tint === "blue"
+      ? "bg-[#172965]/5 text-[#172965]"
+      : "bg-[#64C247]/10 text-[#306B34]";
+
+  if (logoUrl) {
+    return (
+      <div
+        className={`relative overflow-hidden rounded-md border border-slate-200 bg-white ${sizeClasses}`}
+      >
+        <Image
+          src={logoUrl}
+          alt="Logo"
+          fill
+          sizes={size === "md" ? "32px" : "24px"}
+          className="object-contain p-0.5"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`flex items-center justify-center rounded-md border border-slate-200 ${bgClass} ${sizeClasses}`}
+    >
+      {fallback}
+    </div>
   );
 }
