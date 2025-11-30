@@ -487,7 +487,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
             {job.requirements && (
               <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
-                  Experience & requirements
+                  Experience &amp; requirements
                 </h2>
                 <RichListBlock text={job.requirements} />
               </article>
@@ -497,7 +497,7 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
             {job.benefits && (
               <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
                 <h2 className="text-sm font-semibold text-[#172965]">
-                  Compensation & benefits
+                  Compensation &amp; benefits
                 </h2>
                 <RichListBlock text={job.benefits} />
               </article>
@@ -646,7 +646,7 @@ function RichListBlock({ text }: { text: string }) {
   );
 }
 
-// ---- ICONS (copied from JobCard so visuals match /jobs) -------------------
+// ---- ICONS --------------------------------------------------------------
 
 function IconLocation() {
   return (
