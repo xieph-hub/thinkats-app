@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { StageSelect } from "./StageSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -422,9 +423,7 @@ export default async function AtsJobDetailPage({
       <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] md:gap-6">
         {/* Job summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Role summary
-          </h2>
+          <h2 className="text-sm font-semibold text-slate-900">Role summary</h2>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] text-slate-600">
             <div>
               <dt className="font-medium text-slate-500">Client</dt>
@@ -443,17 +442,13 @@ export default async function AtsJobDetailPage({
               </dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-500">
-                Employment type
-              </dt>
+              <dt className="font-medium text-slate-500">Employment type</dt>
               <dd className="mt-0.5 text-slate-800">
                 {employmentTypeLabel || "Not specified"}
               </dd>
             </div>
             <div>
-              <dt className="font-medium text-slate-500">
-                Experience level
-              </dt>
+              <dt className="font-medium text-slate-500">Experience level</dt>
               <dd className="mt-0.5 text-slate-800">
                 {experienceLevelLabel || "Not specified"}
               </dd>
@@ -466,9 +461,7 @@ export default async function AtsJobDetailPage({
             </div>
             {hasSalary && (
               <div className="col-span-2">
-                <dt className="font-medium text-slate-500">
-                  Salary band
-                </dt>
+                <dt className="font-medium text-slate-500">Salary band</dt>
                 <dd className="mt-0.5 text-slate-800">
                   {salaryMinLabel && salaryMaxLabel
                     ? `${salaryMinLabel} – ${salaryMaxLabel}`
@@ -487,9 +480,7 @@ export default async function AtsJobDetailPage({
         {/* Pipeline summary */}
         <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Pipeline
-            </h2>
+            <h2 className="text-sm font-semibold text-slate-900">Pipeline</h2>
             <p className="text-[11px] text-slate-500">
               {totalApplications}{" "}
               {totalApplications === 1 ? "application" : "applications"}
@@ -728,44 +719,13 @@ export default async function AtsJobDetailPage({
                         </div>
                       </td>
 
-                      {/* Stage with change control */}
+                      {/* Stage with StageSelect */}
                       <td className="px-3 py-2 align-top">
-                        <form
-                          method="POST"
-                          action="/ats/applications/actions"
-                          className="inline-flex items-center gap-1"
-                        >
-                          <input
-                            type="hidden"
-                            name="jobId"
-                            value={job.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="applicationId"
-                            value={app.id}
-                          />
-                          <select
-                            name="newStage"
-                            defaultValue={app.stage || "APPLIED"}
-                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                          >
-                            {stagesForDisplay.map((stage) => (
-                              <option
-                                key={stage.id}
-                                value={stage.name}
-                              >
-                                {formatStageName(stage.name)}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="submit"
-                            className="text-[10px] font-medium text-[#172965] hover:underline"
-                          >
-                            Move
-                          </button>
-                        </form>
+                        <StageSelect
+                          jobId={job.id}
+                          applicationId={app.id}
+                          currentStage={app.stage || "APPLIED"}
+                        />
                         <div className="mt-1">
                           <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
                             {stageLabel}
