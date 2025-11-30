@@ -5,26 +5,28 @@ import { getCurrentTenantId } from "@/lib/tenant";
 type DashboardStats = {
   openJobs: number;
   totalCandidates: number;
-  applicationsLast7Days: number;
+  applicationsLast30Days: number;
 };
 
 async function getDashboardStats(): Promise<DashboardStats> {
   const tenantId = await getCurrentTenantId();
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   let openJobs = 0;
   let totalCandidates = 0;
-  let applicationsLast7Days = 0;
+  let applicationsLast30Days = 0;
 
   try {
-    // Open published jobs for this tenant
+    // OPEN JOBS
+    // Match the ATS meaning: "Jobs currently accepting applications"
+    // This is usually driven by a status like 'open'.
     const { count: openJobsCount, error: jobsError } = await supabaseAdmin
       .from("jobs")
       .select("id", { head: true, count: "exact" })
       .eq("tenant_id", tenantId)
-      .eq("is_published", true);
+      .eq("status", "open"); // if your column is different, align this to it
 
     if (!jobsError) {
       openJobs = openJobsCount ?? 0;
@@ -34,7 +36,7 @@ async function getDashboardStats(): Promise<DashboardStats> {
   }
 
   try {
-    // All candidates for this tenant
+    // CANDIDATES (this was already correct, and matches legacy ATS)
     const { count: candidatesCount, error: candidatesError } =
       await supabaseAdmin
         .from("candidates")
@@ -49,25 +51,27 @@ async function getDashboardStats(): Promise<DashboardStats> {
   }
 
   try {
-    // Applications for this tenant in the last 7 days
+    // APPLICATIONS (30 DAYS)
+    // Old ATS card: "Applications (30 days)" → mirror that.
+    // Very often this lives on an "applied_at" / "created_at" timestamp.
     const { count: applicationsCount, error: appsError } =
       await supabaseAdmin
         .from("job_applications")
         .select("id", { head: true, count: "exact" })
         .eq("tenant_id", tenantId)
-        .gte("created_at", sevenDaysAgo.toISOString());
+        .gte("applied_at", thirtyDaysAgo.toISOString()); // if your column is created_at, change this field name
 
     if (!appsError) {
-      applicationsLast7Days = applicationsCount ?? 0;
+      applicationsLast30Days = applicationsCount ?? 0;
     }
   } catch {
-    applicationsLast7Days = 0;
+    applicationsLast30Days = 0;
   }
 
   return {
     openJobs,
     totalCandidates,
-    applicationsLast7Days,
+    applicationsLast30Days,
   };
 }
 
@@ -107,14 +111,14 @@ export default async function AtsDashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
+        {/* Open jobs */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-slate-500">Open jobs</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
             {stats.openJobs}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Published roles currently visible on your public jobs page for this
-            tenant.
+            Jobs currently accepting applications for this tenant.
           </p>
           <Link
             href="/ats/jobs"
@@ -124,6 +128,7 @@ export default async function AtsDashboardPage() {
           </Link>
         </div>
 
+        {/* Candidates */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-slate-500">Candidates</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
@@ -141,15 +146,16 @@ export default async function AtsDashboardPage() {
           </Link>
         </div>
 
+        {/* Applications (30 days) */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-medium text-slate-500">
-            Applications (last 7 days)
+            Applications (30 days)
           </p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
-            {stats.applicationsLast7Days}
+            {stats.applicationsLast30Days}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            New applications created in the last seven days for this tenant.
+            New applications created in the last 30 days for this tenant.
           </p>
           <Link
             href="/jobs"
