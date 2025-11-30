@@ -11,6 +11,7 @@ const navItems = [
   { href: "/ats/candidates", label: "Candidates" },
   { href: "/ats/clients", label: "Clients" },
   { href: "/ats/tenants", label: "Workspaces" },
+  { href: "/ats/settings/workspace", label: "Settings" },
 ];
 
 export default function AtsLayout({ children }: { children: ReactNode }) {
@@ -26,7 +27,10 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
         <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-white/95 px-4 py-6 md:flex md:flex-col md:gap-6">
           {/* Brand */}
           <div>
-            <Link href="/ats/dashboard" className="inline-flex items-center gap-2">
+            <Link
+              href="/ats/dashboard"
+              className="inline-flex items-center gap-2"
+            >
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#172965] text-xs font-semibold text-white">
                 TA
               </div>
@@ -65,9 +69,14 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
                 Need help?
               </p>
               <p className="mt-1 text-[11px] text-slate-500">
-                Use <span className="font-mono text-[10px]">/ats/tenants</span> to
-                spin up new workspaces, and <span className="font-mono text-[10px]">/ats/clients</span> to add recruitment
-                clients under each tenant.
+                Use <span className="font-mono text-[10px]">/ats/tenants</span>{" "}
+                for workspaces,{" "}
+                <span className="font-mono text-[10px]">/ats/clients</span> for
+                recruitment clients, and{" "}
+                <span className="font-mono text-[10px]">
+                  /ats/settings/workspace
+                </span>{" "}
+                to update workspace details.
               </p>
             </div>
           </nav>
@@ -81,9 +90,7 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );
