@@ -1,3 +1,4 @@
+// components/Navbar.tsx
 "use client";
 
 import Link from "next/link";
@@ -5,12 +6,21 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-const navLinks = [
+const mainLinks = [
   { href: "/product", label: "Product" },
+  { href: "/career-sites", label: "Career sites" },
   { href: "/solutions", label: "Solutions" },
   { href: "/pricing", label: "Pricing" },
   { href: "/resources", label: "Resources" },
-  { href: "/company", label: "Company" },
+];
+
+const productSubLinks = [
+  { href: "/product", label: "Overview" },
+  { href: "/product/features/ats", label: "ATS & pipelines" },
+  { href: "/career-sites", label: "Career sites engine" },
+  { href: "/product/features/automation", label: "Automation & emails" },
+  { href: "/product/features/analytics", label: "Analytics & reporting" },
+  { href: "/product/features/integrations", label: "Integrations" },
 ];
 
 export default function Navbar() {
@@ -32,81 +42,90 @@ export default function Navbar() {
           aria-label="ThinkATS home"
         >
           <Image
-            src="/logo.svg"
+            src="/thinkats-logo.svg"
             alt="ThinkATS"
             width={140}
-            height={56}
-            className="h-10 w-auto sm:h-12"
+            height={40}
+            className="h-9 w-auto sm:h-10"
           />
-          <span className="hidden text-sm font-semibold tracking-tight text-slate-800 sm:inline">
-            ThinkATS
-          </span>
         </Link>
 
-        {/* Desktop navigation */}
+        {/* Desktop nav */}
         <div className="hidden flex-1 items-center justify-between md:flex">
-          {/* Left: nav links */}
+          {/* Left: links */}
           <div className="flex items-center gap-6">
-            <Link
-              href="/"
-              className={`text-sm transition-colors ${
-                isActive("/")
-                  ? "font-semibold text-[#1E40AF]"
-                  : "text-slate-600 hover:text-[#1E40AF]"
-              }`}
-            >
-              Home
-            </Link>
-
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`text-sm transition-colors ${
-                  isActive(link.href)
+            {/* Product (dropdown) */}
+            <div className="relative group">
+              <button
+                type="button"
+                className={`flex items-center gap-1 text-sm transition-colors ${
+                  isActive("/product")
                     ? "font-semibold text-[#1E40AF]"
                     : "text-slate-600 hover:text-[#1E40AF]"
                 }`}
               >
-                {link.label}
-              </Link>
-            ))}
+                <span>Product</span>
+                <span className="text-[11px]">▾</span>
+              </button>
+              <div className="invisible absolute left-0 top-full z-30 mt-2 w-60 rounded-xl border border-slate-200 bg-white opacity-0 shadow-lg ring-1 ring-black/5 transition-all group-hover:visible group-hover:opacity-100">
+                <div className="py-2">
+                  {productSubLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className={`block px-3 py-2 text-sm transition-colors ${
+                        isActive(link.href)
+                          ? "bg-slate-100 font-semibold text-[#1E40AF]"
+                          : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-            {/* Optional: quick link to public job board (Resourcin & other tenants) */}
-            <Link
-              href="/jobs"
-              className={`text-sm rounded-full border border-slate-200 px-3 py-1.5 transition-colors ${
-                isActive("/jobs")
-                  ? "bg-slate-100 font-semibold text-[#1E40AF]"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-[#1E40AF]"
-              }`}
-            >
-              Job board
-            </Link>
+            {/* Other main links */}
+            {mainLinks
+              .filter((l) => l.href !== "/product")
+              .map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`text-sm transition-colors ${
+                    isActive(link.href)
+                      ? "font-semibold text-[#1E40AF]"
+                      : "text-slate-600 hover:text-[#1E40AF]"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
           </div>
 
-          {/* Right: auth actions */}
+          {/* Right: Login + CTA */}
           <div className="flex items-center gap-3">
             <Link
               href="/login"
-              className="rounded-full border border-[#1E40AF] px-4 py-1.5 text-sm font-semibold text-[#1E40AF] transition-colors hover:bg-[#1E40AF] hover:text-white"
+              className="text-sm font-medium text-slate-700 hover:text-[#1E40AF]"
             >
               Login
             </Link>
             <Link
               href="/signup"
-              className="rounded-full bg-[#1E40AF] px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#1D4ED8]"
+              className="rounded-full bg-[#1E40AF] px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1D3A9A]"
             >
               Start free trial
             </Link>
           </div>
         </div>
 
-        {/* Mobile: CTAs + hamburger */}
+        {/* Mobile: login + hamburger */}
         <div className="flex items-center gap-2 md:hidden">
           <Link
             href="/login"
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
           >
             Login
           </Link>
@@ -122,72 +141,81 @@ export default function Navbar() {
             aria-label="Toggle navigation"
             className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 shadow-sm"
           >
-            <span className="sr-only">Toggle navigation</span>
             <span className="text-lg">{mobileOpen ? "✕" : "☰"}</span>
           </button>
         </div>
       </nav>
 
-      {/* Mobile menu */}
+      {/* Mobile panel */}
       {mobileOpen && (
         <div className="border-t border-slate-200 bg-white md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
+            {/* Product group */}
             <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Navigation
+              Product
             </p>
-
             <Link
-              href="/"
+              href="/product"
               onClick={() => setMobileOpen(false)}
               className={`rounded-md px-2 py-2 text-sm ${
-                isActive("/")
+                isActive("/product")
                   ? "bg-slate-100 font-semibold text-[#1E40AF]"
                   : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
               }`}
             >
-              Home
+              Overview
             </Link>
+            {productSubLinks
+              .filter((l) => l.href !== "/product")
+              .map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`rounded-md px-2 py-2 text-sm ${
+                    isActive(link.href)
+                      ? "bg-slate-100 font-semibold text-[#1E40AF]"
+                      : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
 
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={`rounded-md px-2 py-2 text-sm ${
-                  isActive(link.href)
-                    ? "bg-slate-100 font-semibold text-[#1E40AF]"
-                    : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {/* Main links */}
+            <p className="mt-3 px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Company
+            </p>
+            {mainLinks
+              .filter((l) => l.href !== "/product")
+              .map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`rounded-md px-2 py-2 text-sm ${
+                    isActive(link.href)
+                      ? "bg-slate-100 font-semibold text-[#1E40AF]"
+                      : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
 
-            <Link
-              href="/jobs"
-              onClick={() => setMobileOpen(false)}
-              className={`mt-2 rounded-md px-2 py-2 text-sm ${
-                isActive("/jobs")
-                  ? "bg-slate-100 font-semibold text-[#1E40AF]"
-                  : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
-              }`}
-            >
-              Job board
-            </Link>
-
-            {/* Mobile auth block */}
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-3">
+            {/* Login/CTA block */}
+            <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
               <Link
                 href="/login"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-800 shadow-sm"
+                className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-semibold text-slate-700 text-center"
               >
                 Login
               </Link>
               <Link
                 href="/signup"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-full bg-[#1E40AF] px-4 py-1.5 text-xs font-semibold text-white shadow-sm"
+                className="rounded-full bg-[#1E40AF] px-4 py-1.5 text-sm font-semibold text-white text-center shadow-sm"
               >
                 Start free trial
               </Link>
