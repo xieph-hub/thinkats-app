@@ -3,13 +3,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ThinkATS — Modern ATS & Career Sites Engine",
+  title: "ThinkATS | Modern Applicant Tracking System",
   description:
-    "ThinkATS is a multi-tenant ATS and white-label career sites engine for agencies and in-house HR teams.",
+    "ThinkATS is a modern, multi-tenant ATS for recruitment teams, agencies and HR departments.",
 };
 
 export default function RootLayout({
@@ -19,9 +20,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.className}>
-      <body className="bg-slate-50 text-slate-900">
+      <body className="bg-slate-50 text-slate-900 antialiased">
         <Navbar />
         <main className="min-h-screen">{children}</main>
+        <Footer />
       </body>
     </html>
   );
