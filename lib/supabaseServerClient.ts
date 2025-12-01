@@ -1,37 +1,40 @@
 // lib/supabaseServerClient.ts
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-export async function createSupabaseServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anonKey) {
-    throw new Error(
-      "Supabase env vars NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set"
-    );
-  }
-
-  // Next.js app router cookie store
+export function createSupabaseServerClient(): SupabaseClient {
   const cookieStore = cookies();
 
-  return createServerClient(url, anonKey, {
-    cookies: {
-      // Read all cookies for Supabase
-      getAll() {
-        return cookieStore.getAll();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        // server components/layouts only *read* cookies
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        // no-ops – we don't write cookies from layouts/pages,
+        // that happens in API routes / middleware instead
+        set() {},
+        remove() {},
       },
-      // Write cookies (auth tokens) – safe in route handlers / middleware.
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
-          });
-        } catch {
-          // When called from a Server Component, cookies() is read-only.
-          // We can safely ignore in that context.
-        }
-      },
-    },
-  });
+    }
+  );
+}
+
+/**
+ * Simple helper used by layouts to check auth.
+ */
+export async function getServerUser() {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error) {
+    console.error("Supabase getUser error:", error.message);
+    return null;
+  }
+
+  return data.user ?? null;
 }
