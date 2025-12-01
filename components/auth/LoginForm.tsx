@@ -6,30 +6,32 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 type LoginFormProps = {
-  redirectTo?: string;
-  initialWorkspace?: string;
+  callbackUrl?: string | null;
 };
 
-export default function LoginForm({
-  redirectTo = "/ats",
-  initialWorkspace = "",
-}: LoginFormProps) {
+type Status = "idle" | "loading" | "success" | "error";
+
+export default function LoginForm({ callbackUrl }: LoginFormProps) {
   const router = useRouter();
 
-  const [workspace, setWorkspace] = useState(initialWorkspace);
+  const [workspace, setWorkspace] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [status, setStatus] = useState<Status>("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const isLoading = status === "loading";
+  const isSuccess = status === "success";
+
+  // Fallback if callbackUrl is missing or weird
+  const redirectTarget =
+    callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : "/ats";
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
-    setIsSubmitting(true);
-    setStatusMessage(null);
-    setErrorMessage(null);
+    setStatus("loading");
+    setMessage(null);
 
     try {
       const { error } = await supabaseBrowser.auth.signInWithPassword({
@@ -38,136 +40,137 @@ export default function LoginForm({
       });
 
       if (error) {
-        console.error("Supabase log in error:", error);
-        setErrorMessage(
-          error.message || "Unable to log in. Please check your details."
+        console.error("Login error:", error);
+        setStatus("error");
+        setMessage(
+          error.message ||
+            "Unable to log in. Please check your email and password."
         );
-        setIsSubmitting(false);
         return;
       }
 
-      const target = redirectTo || "/ats";
-      setStatusMessage("Logged in successfully. Redirecting…");
+      // ✅ Login successful
+      setStatus("success");
+      setMessage("Logged in successfully. Redirecting...");
 
-      // Small delay so the message is visible, then navigate with Next router
+      // Small delay so the user sees the success message
       setTimeout(() => {
-        router.replace(target);
-        router.refresh(); // make sure server components see latest cookies/session
-      }, 300);
+        router.push(redirectTarget);
+        // Ensure server components see the fresh auth cookies/session
+        router.refresh();
+      }, 400);
     } catch (err) {
-      console.error("Unexpected log in error:", err);
-      setErrorMessage("Something went wrong while logging you in.");
-      setIsSubmitting(false);
+      console.error("Unexpected login error:", err);
+      setStatus("error");
+      setMessage("Something went wrong while logging you in. Please try again.");
     }
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-slate-900/80 border border-slate-800/80 px-6 py-8 shadow-2xl shadow-sky-900/30 backdrop-blur">
-      <h1 className="text-2xl font-semibold text-white mb-1">Log in</h1>
-      <p className="text-sm text-slate-300 mb-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl">
+      <h2 className="text-lg font-semibold tracking-tight text-slate-50">
+        Log in
+      </h2>
+      <p className="mt-1 text-xs text-slate-400">
         Use your work email and password to continue.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Organisation / Workspace (optional) */}
-        <div>
-          <label
-            htmlFor="workspace"
-            className="block text-xs font-semibold tracking-wide text-slate-300 mb-1.5 uppercase"
-          >
-            Organisation / workspace (optional)
+      <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+        {/* Workspace / organisation (optional) */}
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-slate-300">
+            ORGANISATION / WORKSPACE (OPTIONAL)
           </label>
           <input
-            id="workspace"
             type="text"
             autoComplete="organization"
-            placeholder="resourcin, acme, client-name..."
-            className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
             value={workspace}
             onChange={(e) => setWorkspace(e.target.value)}
+            placeholder="resourcin, acme, client-name..."
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
-          <p className="mt-1 text-[11px] text-slate-400">
-            Helps us route you to the right tenant/workspace.
+          <p className="text-[11px] text-slate-500">
+            Helps us route you to the right tenant/workspace (coming soon).
           </p>
         </div>
 
-        {/* Work email */}
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-xs font-semibold tracking-wide text-slate-300 mb-1.5 uppercase"
-          >
-            Work email
+        {/* Email */}
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-slate-300">
+            WORK EMAIL
           </label>
           <input
-            id="email"
             type="email"
             required
             autoComplete="email"
-            placeholder="you@company.com"
-            className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
         </div>
 
         {/* Password */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label
-              htmlFor="password"
-              className="block text-xs font-semibold tracking-wide text-slate-300 uppercase"
-            >
-              Password
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <label className="block text-xs font-medium text-slate-300">
+              PASSWORD
             </label>
             <a
               href="/auth/forgot"
-              className="text-xs text-sky-400 hover:text-sky-300"
+              className="text-[11px] font-medium text-sky-400 hover:text-sky-300"
             >
               Forgot password?
             </a>
           </div>
           <input
-            id="password"
             type="password"
             required
             autoComplete="current-password"
-            className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           />
         </div>
 
-        {/* Messages */}
-        {errorMessage && (
-          <p className="text-xs text-red-400 bg-red-950/40 border border-red-900 rounded-md px-3 py-2">
-            {errorMessage}
+        {/* Status / messages */}
+        {message && (
+          <p
+            className={`text-[11px] ${
+              status === "error"
+                ? "text-rose-400"
+                : status === "success"
+                ? "text-emerald-400"
+                : "text-slate-400"
+            }`}
+          >
+            {message}
           </p>
-        )}
-
-        {statusMessage && !errorMessage && (
-          <p className="text-xs text-emerald-300">{statusMessage}</p>
         )}
 
         {/* Submit */}
         <button
           type="submit"
-          disabled={isSubmitting}
-          className="mt-2 w-full rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-medium text-slate-950 transition"
+          disabled={isLoading || isSuccess}
+          className="flex w-full items-center justify-center rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {isSubmitting ? "Logging in…" : "Log in"}
+          {isLoading
+            ? "Logging in..."
+            : isSuccess
+            ? "Logged in. Redirecting..."
+            : "Log in"}
         </button>
-
-        <p className="mt-3 text-[11px] text-slate-400 text-center">
-          Don’t have access yet?{" "}
-          <a
-            href="/request-workspace"
-            className="text-sky-400 hover:text-sky-300"
-          >
-            Request a workspace
-          </a>
-        </p>
       </form>
+
+      <p className="mt-4 text-[11px] text-slate-500">
+        Don&apos;t have access yet?{" "}
+        <a
+          href="/request-workspace"
+          className="font-medium text-sky-400 hover:text-sky-300"
+        >
+          Request a workspace
+        </a>
+      </p>
     </div>
   );
 }
