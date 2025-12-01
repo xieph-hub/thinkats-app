@@ -1,4 +1,3 @@
-// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
@@ -20,18 +19,16 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Read the current user from Supabase via server-side cookies
-  const currentUser = await getServerUser().catch(() => null);
+  // Server-side check of current Supabase user
+  const user = await getServerUser().catch(() => null);
 
   return (
     <html lang="en" className={inter.className}>
       <body className="bg-slate-50 text-slate-900 antialiased">
-        {/* Handles Supabase recovery / magic links */}
+        {/* Handles password reset / magic-link flows */}
         <AuthRecoveryListener />
 
-        {/* Pass auth state into Navbar */}
-        <Navbar currentUser={currentUser} />
-
+        <Navbar currentUser={user} />
         <main className="min-h-screen">{children}</main>
         <Footer />
       </body>
