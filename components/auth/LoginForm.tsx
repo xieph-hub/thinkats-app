@@ -39,32 +39,21 @@ export default function LoginForm({
 
       if (error) {
         console.error("Supabase log in error:", error);
-        setErrorMessage(error.message || "Unable to log in. Please try again.");
+        setErrorMessage(
+          error.message || "Unable to log in. Please check your details."
+        );
         setIsSubmitting(false);
         return;
       }
 
-      if (workspace.trim()) {
-        try {
-          window.localStorage.setItem(
-            "thinkats:workspaceHint",
-            workspace.trim()
-          );
-        } catch {
-          // ignore storage failures
-        }
-      }
-
+      const target = redirectTo || "/ats";
       setStatusMessage("Logged in successfully. Redirecting…");
 
-      const target = redirectTo || "/ats";
-
-      if (typeof window !== "undefined") {
-        // Hard navigation so the whole app re-hydrates with the new session
-        window.location.assign(target);
-      } else {
+      // Small delay so the message is visible, then navigate with Next router
+      setTimeout(() => {
         router.replace(target);
-      }
+        router.refresh(); // make sure server components see latest cookies/session
+      }, 300);
     } catch (err) {
       console.error("Unexpected log in error:", err);
       setErrorMessage("Something went wrong while logging you in.");
