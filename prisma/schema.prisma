@@ -45,11 +45,14 @@ model Tenant {
 // --------------------------------------------------------------------------
 
 model User {
-  id        String           @id @db.Uuid
-  fullName  String?          @map("full_name")
-  email     String?
-  createdAt DateTime         @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime         @map("updated_at") @default(now()) @db.Timestamptz(6)
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName     String?          @map("full_name")
+  email        String?          @unique
+  passwordHash String?          @map("password_hash")
+  globalRole   String           @map("global_role") @default("USER") // SUPER_ADMIN / USER
+  isActive     Boolean          @map("is_active") @default(true)
+  createdAt    DateTime         @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime         @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   userTenantRoles UserTenantRole[]
 
