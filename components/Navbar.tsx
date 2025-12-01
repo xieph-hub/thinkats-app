@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 type NavLink = {
@@ -57,14 +57,30 @@ function getInitials(user: NavbarUser) {
 
 export default function Navbar({ currentUser }: NavbarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const loggedIn = !!currentUser;
 
-  // 🔒 Make ATS feel like a separate product:
-  // Hide the marketing navbar entirely on all /ats routes.
+  // 🧭 Marketing chrome should not appear inside the ATS product.
   if (pathname?.startsWith("/ats")) {
     return null;
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setMenuOpen(false);
+      router.push("/");
+      router.refresh();
+    } catch (e) {
+      // could add a toast later
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   return (
@@ -161,8 +177,46 @@ export default function Navbar({ currentUser }: NavbarProps) {
                 >
                   ATS workspace
                 </Link>
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-                  {getInitials(currentUser)}
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((prev) => !prev)}
+                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                  >
+                    <span className="hidden text-xs text-slate-500 sm:inline">
+                      Logged in
+                    </span>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+                      {getInitials(currentUser)}
+                    </div>
+                  </button>
+
+                  {menuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                      <div className="px-3 pb-2 pt-1 text-xs text-slate-500">
+                        {currentUser?.email}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          router.push("/ats");
+                        }}
+                        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50"
+                      >
+                        Open ATS workspace
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        disabled={loggingOut}
+                        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {loggingOut ? "Logging out…" : "Log out"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -280,13 +334,16 @@ export default function Navbar({ currentUser }: NavbarProps) {
             {/* Auth / workspace block */}
             <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
               {loggedIn ? (
-                <Link
-                  href="/ats"
-                  onClick={() => setMobileOpen(false)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    router.push("/ats");
+                  }}
                   className="rounded-full bg-slate-900 px-4 py-1.5 text-center text-sm font-semibold text-white shadow-sm"
                 >
                   Open ATS workspace
-                </Link>
+                </button>
               ) : (
                 <>
                   <Link
