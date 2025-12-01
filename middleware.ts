@@ -1,43 +1,47 @@
 // middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { jwtVerify } from "jose";
 
-export function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
-  const host = req.headers.get('host') || '';
+const AUTH_COOKIE_NAME = "thinkats_session";
 
-  // Example hosts:
-  // app.resourcin.com          -> ThinkATS app
-  // resourcin.com              -> marketing site
-  // clientslug.resourcin.com   -> careers
+async function verifyToken(token: string) {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("AUTH_SECRET env var is not set");
+  }
+  const key = new TextEncoder().encode(secret);
+  await jwtVerify(token, key);
+}
 
-  // 1) If host starts with "app.", we’re in ATS mode
-  if (host.startsWith('app.')) {
-    // We can optionally redirect / to /ats
-    if (url.pathname === '/') {
-      url.pathname = '/ats';
-      return NextResponse.redirect(url);
-    }
-    // Otherwise just continue; ATS pages will run
+export async function middleware(req: NextRequest) {
+  const { pathname, search } = req.nextUrl;
+
+  // Only guard ATS routes
+  if (!pathname.startsWith("/ats")) {
     return NextResponse.next();
   }
 
-  // 2) If host ends with ".resourcin.com" but not "app.", treat the subdomain as tenant slug
-  const rootDomain = 'resourcin.com';
-  if (host.endsWith('.' + rootDomain) && !host.startsWith('app.')) {
-    const subdomain = host.replace('.' + rootDomain, '');
+  const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
 
-    // Inject tenant slug into headers (or cookies) for server components
-    const res = NextResponse.next();
-    res.headers.set('x-tenant-slug', subdomain);
-    return res;
+  if (!token) {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", pathname + search);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // 3) Default (root domain) just continues (marketing site)
-  return NextResponse.next();
+  try {
+    await verifyToken(token);
+    return NextResponse.next();
+  } catch {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", pathname + search);
+    const res = NextResponse.redirect(loginUrl);
+    res.cookies.delete(AUTH_COOKIE_NAME);
+    return res;
+  }
 }
 
-// Limit middleware to paths we care about if needed
 export const config = {
-  matcher: ['/ats/:path*', '/careers/:path*', '/'],
+  matcher: ["/ats/:path*"],
 };
