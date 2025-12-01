@@ -1,43 +1,46 @@
 // middleware.ts
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
+import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+
+const PROTECTED_PREFIXES = ["/ats"];
 
 export async function middleware(req: NextRequest) {
-  // Clone the request headers for Next.js to continue the chain
-  const res = NextResponse.next({
-    request: {
-      headers: req.headers,
-    },
-  });
+  const { nextUrl } = req;
+  const pathname = nextUrl.pathname;
 
-  // Standard Supabase SSR pattern for middleware:
-  // keeps auth cookies in sync and refreshes sessions.
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            res.cookies.set(name, value, options);
-          });
-        },
-      },
-    }
+  // Only protect /ats and /ats/*
+  const requiresAuth = PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
 
-  // This call ensures middleware will exchange auth codes for a session if needed.
-  // We’re not doing redirects here; access control is in app/ats/layout.tsx.
-  await supabase.auth.getUser();
+  if (!requiresAuth) {
+    return NextResponse.next();
+  }
 
+  const res = NextResponse.next();
+
+  // Supabase server client, wired to cookies for this request/response
+  const supabase = createSupabaseRouteClient(req, res);
+  const { data, error } = await supabase.auth.getUser();
+
+  const user = data?.user;
+
+  // If no user, bounce to login with a callbackUrl back to the original path
+  if (error || !user) {
+    const redirectUrl = new URL("/login", req.url);
+    redirectUrl.searchParams.set(
+      "callbackUrl",
+      `${nextUrl.pathname}${nextUrl.search}`
+    );
+
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // User is authenticated → allow request through
   return res;
 }
 
-// Apply middleware to everything except static assets
+// Only run middleware on /ats routes
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/ats", "/ats/:path*"],
 };
