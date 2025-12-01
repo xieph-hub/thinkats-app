@@ -1,5 +1,5 @@
 // lib/candidates.ts
-import { createSupabaseServerClient } from "./supabaseServerClient";
+import { createSupabaseServerClient } from "./supabaseServer";
 
 /**
  * Get full candidate detail:
