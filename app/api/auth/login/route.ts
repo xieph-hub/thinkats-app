@@ -1,10 +1,8 @@
+// app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { SignJWT } from "jose";
-import { SESSION_COOKIE_NAME, getAuthSecret } from "@/lib/auth";
-
-const encoder = new TextEncoder();
+import { SESSION_COOKIE_NAME, createSessionToken } from "@/lib/auth";
 
 export async function POST(req: Request) {
   const formData = await req.formData();
@@ -20,16 +18,12 @@ export async function POST(req: Request) {
     return NextResponse.redirect(url, 303);
   }
 
-  const user = await prisma.user.findFirst({
-    where: {
-      email,
-    },
-    include: {
-      userTenantRoles: true,
-    },
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { userTenantRoles: true },
   });
 
-  if (!user || !user.passwordHash) {
+  if (!user || !user.passwordHash || !user.isActive) {
     const url = new URL("/login", req.url);
     url.searchParams.set("error", "invalid");
     return NextResponse.redirect(url, 303);
@@ -42,15 +36,7 @@ export async function POST(req: Request) {
     return NextResponse.redirect(url, 303);
   }
 
-  const secret = getAuthSecret();
-  const token = await new SignJWT({
-    userId: user.id,
-    email: user.email,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(encoder.encode(secret));
+  const token = await createSessionToken(user.id, user.email ?? null);
 
   const res = NextResponse.redirect(
     new URL("/ats/dashboard", req.url),
