@@ -118,7 +118,7 @@ export default async function AtsJobsPage({
   let selectedTenant =
     (tenantParam &&
       tenants.find(
-        (t) => t.id === tenantParam || t.slug === tenantParam,
+        (t) => t.id === tenantParam || (t as any).slug === tenantParam,
       )) ||
     (await getResourcinTenant());
 
@@ -227,7 +227,7 @@ export default async function AtsJobsPage({
   // Render
   // -----------------------------
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -240,7 +240,7 @@ export default async function AtsJobsPage({
           <p className="mt-1 text-xs text-slate-600">
             All roles managed under{" "}
             <span className="font-medium text-slate-900">
-              {selectedTenant.name ?? selectedTenant.slug ?? "Resourcin"}
+              {selectedTenant.name ?? (selectedTenant as any).slug ?? "Resourcin"}
             </span>
             . Create, publish and monitor pipelines from here.
           </p>
@@ -279,7 +279,7 @@ export default async function AtsJobsPage({
               >
                 {tenants.map((tenant) => (
                   <option key={tenant.id} value={tenant.id}>
-                    {tenant.name ?? tenant.slug ?? tenant.id}
+                    {tenant.name ?? (tenant as any).slug ?? tenant.id}
                   </option>
                 ))}
               </select>
