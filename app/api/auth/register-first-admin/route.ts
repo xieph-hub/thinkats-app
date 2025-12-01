@@ -4,13 +4,40 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// OPTIONAL: if you have a clear default tenant
+// Optional: set a default tenant if you want to bind the super admin
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || null;
+
+type ParsedBody = {
+  email: string;
+  name: string;
+  password: string;
+};
+
+async function parseBody(req: Request): Promise<ParsedBody> {
+  const contentType = req.headers.get("content-type") || "";
+
+  // If called via fetch("/api/...", { body: JSON.stringify(...) })
+  if (contentType.includes("application/json")) {
+    const body = await req.json();
+    return {
+      email: (body.email || "").toString(),
+      name: (body.name || "").toString(),
+      password: (body.password || "").toString(),
+    };
+  }
+
+  // If called via a normal HTML <form method="POST">
+  const form = await req.formData();
+  return {
+    email: (form.get("email") || "").toString(),
+    name: (form.get("name") || "").toString(),
+    password: (form.get("password") || "").toString(),
+  };
+}
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { email, name, password } = body ?? {};
+    const { email, name, password } = await parseBody(req);
 
     if (!email || !password) {
       return NextResponse.json(
@@ -19,7 +46,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Block if a super admin already exists
+    // 1) Block if a SUPER_ADMIN already exists
     const existingSuperAdmin = await prisma.user.findFirst({
       where: { role: "SUPER_ADMIN" as any },
     });
@@ -31,7 +58,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Create Supabase Auth user first (this satisfies the users_id_fkey)
+    // 2) Create Supabase Auth user first (this satisfies users_id_fkey)
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -47,15 +74,15 @@ export async function POST(req: Request) {
     }
 
     const authUser = data.user;
-    const authUserId = authUser.id; // this is what your DB FK expects
+    const authUserId = authUser.id; // this matches the foreign key constraint
 
-    // 3) Hash password for your own app-level user record (optional but good)
+    // 3) Hash password for your app-level User record
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // 4) Create Prisma User row, using SAME id as Supabase auth user
+    // 4) Create Prisma User row using SAME id as Supabase auth user
     const user = await prisma.user.create({
       data: {
-        id: authUserId, // <-- key line for satisfying `users_id_fkey`
+        id: authUserId, // <-- key line: this avoids P2003 `users_id_fkey`
         email,
         name,
         passwordHash,
@@ -71,7 +98,7 @@ export async function POST(req: Request) {
       },
       { status: 201 }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error("register-first-admin error:", err);
     return NextResponse.json(
       { error: "Unexpected error creating first admin." },
