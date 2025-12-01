@@ -1,15 +1,18 @@
 // app/api/auth/logout/route.ts
-import { NextResponse } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
-export async function POST(req: Request) {
-  const res = NextResponse.redirect(new URL("/login", req.url));
-  res.cookies.set(SESSION_COOKIE_NAME, "", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 0,
-    path: "/",
-  });
-  return res;
+export async function POST(req: NextRequest) {
+  const { supabase, res } = createSupabaseRouteClient(req);
+
+  // Clear Supabase auth cookies
+  await supabase.auth.signOut();
+
+  return NextResponse.json(
+    { success: true },
+    {
+      status: 200,
+      headers: res.headers, // forward updated cookies
+    }
+  );
 }
