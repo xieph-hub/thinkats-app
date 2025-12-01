@@ -1,8 +1,10 @@
+// app/ats/AtsLayoutClient.tsx
 "use client";
 
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import type { CurrentUser } from "@/lib/auth";
 
 const navItems = [
   { href: "/ats/dashboard", label: "Dashboard" },
@@ -12,19 +14,37 @@ const navItems = [
   { href: "/ats/tenants", label: "Workspaces" },
 ];
 
-export default function AtsLayoutClient({
-  children,
-}: {
+type Props = {
   children: ReactNode;
-}) {
+  user: CurrentUser;
+};
+
+export default function AtsLayoutClient({ children, user }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentTenantId = searchParams.get("tenantId");
+  const tenantIdFromUrl = searchParams.get("tenantId");
+
+  // For SUPER_ADMIN we let any tenantId through
+  // For others, tenantIdFromUrl is ignored if it doesn't belong to them.
+  const isSuperAdmin =
+    user.globalRole === "SUPER_ADMIN" ||
+    user.roles.some((r) => r.role === "SUPER_ADMIN");
+
+  const allowedTenantIds = isSuperAdmin
+    ? null
+    : user.allowedTenantIds ?? [];
+
+  const effectiveTenantId =
+    isSuperAdmin || !allowedTenantIds?.length
+      ? tenantIdFromUrl || user.primaryTenantId || null
+      : tenantIdFromUrl && allowedTenantIds.includes(tenantIdFromUrl)
+        ? tenantIdFromUrl
+        : user.primaryTenantId || allowedTenantIds[0] || null;
 
   const buildNavHref = (href: string) => {
-    if (!currentTenantId) return href;
+    if (!effectiveTenantId) return href;
     const url = new URL(href, "http://ats.local");
-    url.searchParams.set("tenantId", currentTenantId);
+    url.searchParams.set("tenantId", effectiveTenantId);
     return url.pathname + url.search;
   };
 
@@ -52,7 +72,7 @@ export default function AtsLayoutClient({
                   ThinkATS
                 </span>
                 <span className="text-[10px] text-slate-300">
-                  Admin workspace
+                  {isSuperAdmin ? "Super admin workspace" : "Admin workspace"}
                 </span>
               </div>
             </Link>
@@ -104,6 +124,14 @@ export default function AtsLayoutClient({
 
           {/* Footer: brand + sign out */}
           <div className="mt-auto border-t border-white/10 pt-3 text-[11px] text-slate-400">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="truncate">
+                Signed in as{" "}
+                <span className="font-medium text-slate-100">
+                  {user.fullName || user.email}
+                </span>
+              </p>
+            </div>
             <form
               method="POST"
               action="/api/auth/logout"
@@ -125,16 +153,20 @@ export default function AtsLayoutClient({
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto bg-slate-50">
-          {/* Tiny workspace ribbon */}
+          {/* Top ribbon */}
           <div className="border-b border-slate-200 bg-white/80 px-4 py-2 text-[11px] text-slate-600 backdrop-blur-sm sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-0.5 font-medium text-[#172965]">
-                  {currentTenantId ? "Workspace mode" : "Default workspace"}
+                  {isSuperAdmin
+                    ? "Super admin – all workspaces"
+                    : effectiveTenantId
+                      ? "Workspace mode"
+                      : "No workspace linked"}
                 </span>
-                {currentTenantId && (
+                {effectiveTenantId && (
                   <span className="font-mono text-[10px] text-slate-400">
-                    tenantId: {currentTenantId.slice(0, 8)}…
+                    tenantId: {effectiveTenantId.slice(0, 8)}…
                   </span>
                 )}
               </div>
