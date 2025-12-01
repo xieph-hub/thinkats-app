@@ -1,11 +1,7 @@
 // app/api/auth/register-first-admin/route.ts
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-// Optional: set a default tenant if you want to bind the super admin
-const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || null;
 
 type ParsedBody = {
   email: string;
@@ -16,7 +12,7 @@ type ParsedBody = {
 async function parseBody(req: Request): Promise<ParsedBody> {
   const contentType = req.headers.get("content-type") || "";
 
-  // If called via fetch("/api/...", { body: JSON.stringify(...) })
+  // JSON body (fetch with application/json)
   if (contentType.includes("application/json")) {
     const body = await req.json();
     return {
@@ -26,7 +22,7 @@ async function parseBody(req: Request): Promise<ParsedBody> {
     };
   }
 
-  // If called via a normal HTML <form method="POST">
+  // Fallback: regular <form method="POST">
   const form = await req.formData();
   return {
     email: (form.get("email") || "").toString(),
@@ -46,14 +42,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Block if a SUPER_ADMIN already exists
-    const existingSuperAdmin = await prisma.user.findFirst({
-      where: { role: "SUPER_ADMIN" as any },
-    });
-
-    if (existingSuperAdmin) {
+    // 1) Block if ANY user already exists (first user == first admin conceptually)
+    const existingUser = await prisma.user.findFirst();
+    if (existingUser) {
       return NextResponse.json(
-        { error: "A super admin already exists." },
+        { error: "An admin/user already exists." },
         { status: 403 }
       );
     }
@@ -74,21 +67,17 @@ export async function POST(req: Request) {
     }
 
     const authUser = data.user;
-    const authUserId = authUser.id; // this matches the foreign key constraint
+    const authUserId = authUser.id; // this is what the FK expects
 
-    // 3) Hash password for your app-level User record
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    // 4) Create Prisma User row using SAME id as Supabase auth user
+    // 3) Create Prisma User row using SAME id as Supabase auth user.
+    //    We only include fields that are very likely to exist; casting as any
+    //    so Prisma TS types don't complain if your model shape is different.
     const user = await prisma.user.create({
       data: {
-        id: authUserId, // <-- key line: this avoids P2003 `users_id_fkey`
+        id: authUserId,
         email,
         name,
-        passwordHash,
-        role: "SUPER_ADMIN" as any,
-        tenantId: DEFAULT_TENANT_ID,
-      },
+      } as any,
     });
 
     return NextResponse.json(
