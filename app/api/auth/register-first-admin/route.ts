@@ -1,122 +1,81 @@
 // app/api/auth/register-first-admin/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import {
-  SESSION_COOKIE_NAME,
-  createSessionToken,
-  getAuthSecret, // ensures env exists
-} from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+// OPTIONAL: if you have a clear default tenant
+const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID || null;
 
 export async function POST(req: Request) {
-  const formData = await req.formData();
+  try {
+    const body = await req.json();
+    const { email, name, password } = body ?? {};
 
-  const workspaceName =
-    ((formData.get("workspaceName") as string | null) ?? "").trim();
-  const fullName =
-    ((formData.get("fullName") as string | null) ?? "").trim();
-  const emailRaw =
-    ((formData.get("email") as string | null) ?? "").trim();
-  const password = (formData.get("password") as string | null) ?? "";
-  const confirmPassword =
-    (formData.get("confirmPassword") as string | null) ?? "";
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Email and password are required." },
+        { status: 400 }
+      );
+    }
 
-  const email = emailRaw.toLowerCase();
+    // 1) Block if a super admin already exists
+    const existingSuperAdmin = await prisma.user.findFirst({
+      where: { role: "SUPER_ADMIN" as any },
+    });
 
-  if (
-    !workspaceName ||
-    !fullName ||
-    !email ||
-    !password ||
-    password.length < 8 ||
-    password !== confirmPassword
-  ) {
-    const url = new URL("/register", req.url);
-    url.searchParams.set("error", "invalid");
-    return NextResponse.redirect(url, 303);
-  }
+    if (existingSuperAdmin) {
+      return NextResponse.json(
+        { error: "A super admin already exists." },
+        { status: 403 }
+      );
+    }
 
-  // Check if a SUPER_ADMIN already exists (globalRole).
-  const existingGlobalSuperAdmin = await prisma.user.findFirst({
-    where: { globalRole: "SUPER_ADMIN" },
-  });
+    // 2) Create Supabase Auth user first (this satisfies the users_id_fkey)
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
 
-  // Fallback: in case you already had SUPER_ADMIN roles wired via UserTenantRole.
-  const existingTenantSuperAdmin = await prisma.userTenantRole.findFirst({
-    where: { role: "SUPER_ADMIN" },
-  });
+    if (error || !data?.user) {
+      console.error("Supabase admin.createUser error:", error);
+      return NextResponse.json(
+        { error: "Failed to create auth user." },
+        { status: 500 }
+      );
+    }
 
-  if (existingGlobalSuperAdmin || existingTenantSuperAdmin) {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("error", "admin_exists");
-    return NextResponse.redirect(url, 303);
-  }
+    const authUser = data.user;
+    const authUserId = authUser.id; // this is what your DB FK expects
 
-  // If a user with this email already exists, don't create another.
-  const existingUserWithEmail = await prisma.user.findUnique({
-    where: { email },
-  });
+    // 3) Hash password for your own app-level user record (optional but good)
+    const passwordHash = await bcrypt.hash(password, 12);
 
-  if (existingUserWithEmail) {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("error", "admin_exists");
-    return NextResponse.redirect(url, 303);
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-
-  const defaultSlug = process.env.RESOURCIN_TENANT_SLUG || "resourcin";
-
-  let tenant = await prisma.tenant.findFirst({
-    where: { slug: defaultSlug },
-  });
-
-  if (!tenant) {
-    tenant = await prisma.tenant.create({
+    // 4) Create Prisma User row, using SAME id as Supabase auth user
+    const user = await prisma.user.create({
       data: {
-        slug: defaultSlug,
-        name: workspaceName || "Resourcin",
-        status: "active",
+        id: authUserId, // <-- key line for satisfying `users_id_fkey`
+        email,
+        name,
+        passwordHash,
+        role: "SUPER_ADMIN" as any,
+        tenantId: DEFAULT_TENANT_ID,
       },
     });
+
+    return NextResponse.json(
+      {
+        success: true,
+        userId: user.id,
+      },
+      { status: 201 }
+    );
+  } catch (err: any) {
+    console.error("register-first-admin error:", err);
+    return NextResponse.json(
+      { error: "Unexpected error creating first admin." },
+      { status: 500 }
+    );
   }
-
-  const user = await prisma.user.create({
-    data: {
-      fullName,
-      email,
-      passwordHash,
-      globalRole: "SUPER_ADMIN",
-      isActive: true,
-    },
-  });
-
-  await prisma.userTenantRole.create({
-    data: {
-      userId: user.id,
-      tenantId: tenant.id,
-      role: "SUPER_ADMIN",
-      isPrimary: true,
-    },
-  });
-
-  // Make sure AUTH_SECRET is set (throws if not).
-  getAuthSecret();
-
-  const token = await createSessionToken(user.id, user.email ?? null);
-
-  const res = NextResponse.redirect(
-    new URL("/ats/dashboard", req.url),
-    303,
-  );
-
-  res.cookies.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  });
-
-  return res;
 }
