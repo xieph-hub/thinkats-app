@@ -1,3 +1,4 @@
+// app/ats/layout.tsx
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
@@ -23,7 +24,8 @@ export default async function AtsLayout({
         </div>
       }
     >
-      <AtsLayoutClient>{children}</AtsLayoutClient>
+      {/* user is serialisable (plain object), safe to pass to client */}
+      <AtsLayoutClient user={user}>{children}</AtsLayoutClient>
     </Suspense>
   );
 }
