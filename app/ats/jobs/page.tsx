@@ -240,7 +240,9 @@ export default async function AtsJobsPage({
           <p className="mt-1 text-xs text-slate-600">
             All roles managed under{" "}
             <span className="font-medium text-slate-900">
-              {selectedTenant.name ?? (selectedTenant as any).slug ?? "Resourcin"}
+              {selectedTenant.name ??
+                (selectedTenant as any).slug ??
+                "Resourcin"}
             </span>
             . Create, publish and monitor pipelines from here.
           </p>
