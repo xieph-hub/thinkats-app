@@ -1,31 +1,15 @@
 // app/ats/layout.tsx
-import type { ReactNode } from "react";
-import { Suspense } from "react";
+import { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import AtsLayoutClient from "./AtsLayoutClient";
-import { getCurrentUser } from "@/lib/auth";
+import { getServerUser } from "@/lib/supabaseServer";
 
-export default async function AtsLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const user = await getCurrentUser();
+export default async function AtsLayout({ children }: { children: ReactNode }) {
+  const user = await getServerUser();
 
   if (!user) {
-    redirect("/login");
+    // Not logged in → send to login with callback to ATS
+    redirect("/login?callbackUrl=/ats");
   }
 
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-50 text-xs text-slate-500">
-          Loading ATS workspace…
-        </div>
-      }
-    >
-      {/* user is serialisable (plain object), safe to pass to client */}
-      <AtsLayoutClient user={user}>{children}</AtsLayoutClient>
-    </Suspense>
-  );
+  return <>{children}</>;
 }
