@@ -152,6 +152,20 @@ export default function AtsLayoutClient({
                 >
                   View career site as candidate
                 </Link>
+                <span className="text-slate-300">•</span>
+                {/* Mobile-visible sign out */}
+                <form
+                  method="POST"
+                  action="/api/auth/logout"
+                  className="inline"
+                >
+                  <button
+                    type="submit"
+                    className="text-[11px] font-medium text-slate-500 hover:text-[#172965] hover:underline"
+                  >
+                    Sign out
+                  </button>
+                </form>
               </div>
             </div>
           </div>
