@@ -61,6 +61,12 @@ export default function Navbar({ currentUser }: NavbarProps) {
 
   const loggedIn = !!currentUser;
 
+  // 🔒 Make ATS feel like a separate product:
+  // Hide the marketing navbar entirely on all /ats routes.
+  if (pathname?.startsWith("/ats")) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
