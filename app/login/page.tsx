@@ -1,50 +1,42 @@
 // app/login/page.tsx
 import type { Metadata } from "next";
 import LoginForm from "@/components/auth/LoginForm";
-import LoginRedirectWatcher from "@/components/auth/LoginRedirectWatcher";
 
 export const metadata: Metadata = {
   title: "Log in | ThinkATS",
-  description: "Log in with your work email to access your ThinkATS workspace.",
+  description:
+    "Log in to your ThinkATS hiring workspace to manage pipelines, automations and analytics.",
 };
 
 type LoginPageProps = {
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: {
+    callbackUrl?: string;
+  };
 };
 
-function getFirst(param: string | string[] | undefined): string | undefined {
-  if (Array.isArray(param)) return param[0];
-  return param;
-}
-
 export default function LoginPage({ searchParams }: LoginPageProps) {
-  const redirectTo = getFirst(searchParams?.redirectTo) || "/ats";
-  const initialWorkspace = getFirst(searchParams?.workspace) || "";
+  const callbackUrl = searchParams?.callbackUrl ?? "/ats";
 
   return (
-    <main className="min-h-[calc(100vh-4rem)] bg-slate-950">
-      <div className="mx-auto flex max-w-6xl flex-col gap-12 px-4 py-12 lg:flex-row lg:items-center">
-        <section className="flex-1 space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">
-            ThinkATS
+    <main className="bg-slate-950 text-slate-50">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col gap-12 px-6 py-16 md:flex-row md:items-center md:gap-16">
+        {/* Left copy */}
+        <section className="flex-1">
+          <p className="text-[11px] font-semibold tracking-[0.3em] text-sky-400">
+            THINKATS
           </p>
-          <h1 className="text-3xl sm:text-4xl font-semibold text-white">
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
             Log in to your hiring workspace.
           </h1>
-          <p className="text-sm sm:text-base text-slate-300 max-w-md">
-            Access your pipelines, automations and analytics in one place.
-            Use the same work email you used when your workspace was created.
+          <p className="mt-4 max-w-md text-sm text-slate-300">
+            Access your pipelines, automations and analytics in one place. Use
+            the same work email you used when your workspace was created.
           </p>
         </section>
 
-        <section className="flex-1 flex justify-center">
-          {/* This will kick you out of /login as soon as a session exists */}
-          <LoginRedirectWatcher redirectTo={redirectTo} />
-
-          <LoginForm
-            redirectTo={redirectTo}
-            initialWorkspace={initialWorkspace}
-          />
+        {/* Right side – form */}
+        <section className="flex-1">
+          <LoginForm callbackUrl={callbackUrl} />
         </section>
       </div>
     </main>
