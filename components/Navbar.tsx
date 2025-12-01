@@ -30,19 +30,25 @@ const productSubLinks: NavLink[] = [
   { href: "/product/features/integrations", label: "Integrations" },
 ];
 
+function isActivePath(pathname: string | null, href: string) {
+  if (!pathname) return false;
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname?.startsWith(href);
-  };
+  const homeLink = mainLinks.find((l) => l.href === "/")!;
+  const secondaryLinks = mainLinks.filter(
+    (l) => l.href !== "/" && l.href !== "/product"
+  );
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        {/* Logo = home */}
+        {/* Logo -> home */}
         <Link
           href="/"
           className="flex items-center gap-2"
@@ -59,14 +65,26 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <div className="hidden flex-1 items-center justify-between md:flex">
-          {/* Left: links */}
+          {/* Left: main links */}
           <div className="flex items-center gap-6">
+            {/* Home first */}
+            <Link
+              href={homeLink.href}
+              className={`text-sm transition-colors ${
+                isActivePath(pathname, homeLink.href)
+                  ? "font-semibold text-[#1E40AF]"
+                  : "text-slate-600 hover:text-[#1E40AF]"
+              }`}
+            >
+              {homeLink.label}
+            </Link>
+
             {/* Product (dropdown) */}
             <div className="relative group">
               <button
                 type="button"
                 className={`flex items-center gap-1 text-sm transition-colors ${
-                  isActive("/product")
+                  isActivePath(pathname, "/product")
                     ? "font-semibold text-[#1E40AF]"
                     : "text-slate-600 hover:text-[#1E40AF]"
                 }`}
@@ -81,7 +99,7 @@ export default function Navbar() {
                       key={link.href}
                       href={link.href}
                       className={`block px-3 py-2 text-sm transition-colors ${
-                        isActive(link.href)
+                        isActivePath(pathname, link.href)
                           ? "bg-slate-100 font-semibold text-[#1E40AF]"
                           : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
                       }`}
@@ -93,31 +111,29 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* Other main links including Home + Contact */}
-            {mainLinks
-              .filter((l) => l.href !== "/product")
-              .map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`text-sm transition-colors ${
-                    isActive(link.href)
-                      ? "font-semibold text-[#1E40AF]"
-                      : "text-slate-600 hover:text-[#1E40AF]"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+            {/* Remaining main links */}
+            {secondaryLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`text-sm transition-colors ${
+                  isActivePath(pathname, link.href)
+                    ? "font-semibold text-[#1E40AF]"
+                    : "text-slate-600 hover:text-[#1E40AF]"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
 
-          {/* Right: Login + CTA */}
+          {/* Right: auth actions */}
           <div className="flex items-center gap-3">
             <Link
               href="/login"
               className="text-sm font-medium text-slate-700 hover:text-[#1E40AF]"
             >
-              Login
+              Log in
             </Link>
             <Link
               href="/signup"
@@ -134,7 +150,7 @@ export default function Navbar() {
             href="/login"
             className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
           >
-            Login
+            Log in
           </Link>
           <Link
             href="/signup"
@@ -144,7 +160,7 @@ export default function Navbar() {
           </Link>
           <button
             type="button"
-            onClick={() => setMobileOpen((prev) => !prev)}
+            onClick={() => setMobileOpen((open) => !open)}
             aria-label="Toggle navigation"
             className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 shadow-sm"
           >
@@ -157,7 +173,6 @@ export default function Navbar() {
       {mobileOpen && (
         <div className="border-t border-slate-200 bg-white md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
-            {/* Product group */}
             <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Product
             </p>
@@ -165,7 +180,7 @@ export default function Navbar() {
               href="/product"
               onClick={() => setMobileOpen(false)}
               className={`rounded-md px-2 py-2 text-sm ${
-                isActive("/product")
+                isActivePath(pathname, "/product")
                   ? "bg-slate-100 font-semibold text-[#1E40AF]"
                   : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
               }`}
@@ -180,7 +195,7 @@ export default function Navbar() {
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
                   className={`rounded-md px-2 py-2 text-sm ${
-                    isActive(link.href)
+                    isActivePath(pathname, link.href)
                       ? "bg-slate-100 font-semibold text-[#1E40AF]"
                       : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
                   }`}
@@ -189,35 +204,31 @@ export default function Navbar() {
                 </Link>
               ))}
 
-            {/* Main links including Home + Contact */}
             <p className="mt-3 px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Company
             </p>
-            {mainLinks
-              .filter((l) => l.href !== "/product")
-              .map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`rounded-md px-2 py-2 text-sm ${
-                    isActive(link.href)
-                      ? "bg-slate-100 font-semibold text-[#1E40AF]"
-                      : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
+            {[homeLink, ...secondaryLinks].map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className={`rounded-md px-2 py-2 text-sm ${
+                  isActivePath(pathname, link.href)
+                    ? "bg-slate-100 font-semibold text-[#1E40AF]"
+                    : "text-slate-700 hover:bg-slate-50 hover:text-[#1E40AF]"
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
 
-            {/* Login/CTA block */}
             <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
               <Link
                 href="/login"
                 onClick={() => setMobileOpen(false)}
                 className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-center text-sm font-semibold text-slate-700"
               >
-                Login
+                Log in
               </Link>
               <Link
                 href="/signup"
