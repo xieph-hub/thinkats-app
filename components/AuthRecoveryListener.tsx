@@ -2,33 +2,67 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
-export default function AuthRecoveryListener() {
+type AuthRecoveryListenerProps = {
+  /**
+   * Where to send the user after a successful recovery / magic link.
+   * Adjust this to whatever route makes sense for ThinkATS.
+   */
+  redirectTo?: string;
+};
+
+export default function AuthRecoveryListener({
+  redirectTo = "/ats",
+}: AuthRecoveryListenerProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    // Supabase recovery / magic links hit your app with ?code=...&type=recovery
+    const code = searchParams.get("code");
+    const type = searchParams.get("type");
 
-    const hash = window.location.hash;
-    if (!hash || !hash.includes("type=recovery")) {
-      return;
-    }
+    if (!code || !type) return;
 
     (async () => {
-      const { error } = await supabaseBrowser.auth.getSessionFromUrl({
-        storeSession: true,
-      });
+      try {
+        const url = window.location.href;
+        const authAny = supabaseBrowser.auth as any;
 
-      if (error) {
-        console.error("Error completing recovery:", error);
-        return;
+        let error: unknown = null;
+
+        // Supabase JS v2: use exchangeCodeForSession
+        if (typeof authAny.exchangeCodeForSession === "function") {
+          const result = await authAny.exchangeCodeForSession(url);
+          error = result?.error ?? null;
+        }
+        // Fallback for older client versions (if you ever downgrade)
+        else if (typeof authAny.getSessionFromUrl === "function") {
+          const result = await authAny.getSessionFromUrl({
+            storeSession: true,
+          });
+          error = result?.error ?? null;
+        } else {
+          console.error(
+            "No compatible Supabase auth method found (exchangeCodeForSession / getSessionFromUrl)."
+          );
+          return;
+        }
+
+        if (error) {
+          console.error("Error exchanging code for session", error);
+          return;
+        }
+
+        // Strip the code/type query params from the URL and move user on
+        router.replace(redirectTo);
+      } catch (err) {
+        console.error("Unexpected error in AuthRecoveryListener", err);
       }
-
-      router.replace("/auth/reset");
     })();
-  }, [router]);
+  }, [redirectTo, router, searchParams]);
 
   return null;
 }
