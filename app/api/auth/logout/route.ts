@@ -1,18 +1,14 @@
-// app/api/auth/logout/route.ts
 import { NextResponse } from "next/server";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { SESSION_COOKIE_NAME } from "@/lib/auth";
 
 export async function POST(req: Request) {
-  const url = new URL("/login", req.url);
-  const res = NextResponse.redirect(url, 303);
-
-  res.cookies.set(AUTH_COOKIE_NAME, "", {
+  const res = NextResponse.redirect(new URL("/login", req.url));
+  res.cookies.set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
     sameSite: "lax",
+    maxAge: 0,
     path: "/",
-    expires: new Date(0),
   });
-
   return res;
 }
