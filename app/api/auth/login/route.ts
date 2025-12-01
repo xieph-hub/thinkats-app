@@ -1,15 +1,26 @@
 // app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
+/**
+ * Email + password login.
+ *
+ * Uses the server Supabase client wired to `cookies()`, so
+ * auth cookies are set correctly and are visible to both:
+ * - your Server Components (/ats, dashboards, etc.)
+ * - your middleware (via the Supabase proxy / route client)
+ */
 export async function POST(req: NextRequest) {
-  const { supabase, res } = createSupabaseRouteClient(req);
+  // Server-side Supabase client (uses next/headers cookies under the hood)
+  const supabase = await createSupabaseServerClient();
 
-  const body = await req.json().catch(() => ({}));
-  const { email, password } = body as {
+  // Parse body safely
+  const body = (await req.json().catch(() => ({}))) as {
     email?: string;
     password?: string;
   };
+
+  const { email, password } = body;
 
   if (!email || !password) {
     return NextResponse.json(
@@ -26,21 +37,19 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json(
       { error: error.message },
-      {
-        status: 401,
-        headers: res.headers, // forward Set-Cookie (even on error)
-      }
+      { status: 400 }
     );
   }
 
-  // At this point Supabase has written auth cookies into `res`
+  // At this point, Supabase has already written the auth cookies
+  // via the createSupabaseServerClient() helper.
+  // We just return a simple JSON payload the login page can use.
   return NextResponse.json(
     {
-      user: data.user,
+      success: true,
+      user: data.user ?? null,
+      redirectTo: "/ats", // your intended post-login landing
     },
-    {
-      status: 200,
-      headers: res.headers, // includes the auth Set-Cookie headers
-    }
+    { status: 200 }
   );
 }
