@@ -1,66 +1,68 @@
-// app/api/auth/login/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/password";
-import { AUTH_COOKIE_NAME, createAuthToken } from "@/lib/auth";
+import bcrypt from "bcryptjs";
+import { SignJWT } from "jose";
+import { SESSION_COOKIE_NAME, getAuthSecret } from "@/lib/auth";
+
+const encoder = new TextEncoder();
 
 export async function POST(req: Request) {
   const formData = await req.formData();
+  const emailRaw =
+    ((formData.get("email") as string | null) ?? "").trim();
+  const password = (formData.get("password") as string | null) ?? "";
 
-  const emailRaw = formData.get("email");
-  const passwordRaw = formData.get("password");
-  const callbackUrlRaw = formData.get("callbackUrl");
-
-  const email =
-    typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : "";
-  const password =
-    typeof passwordRaw === "string" ? passwordRaw : "";
-  const callbackUrl =
-    typeof callbackUrlRaw === "string" ? callbackUrlRaw : "";
-
-  const errorRedirect = (msg: string) => {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("error", encodeURIComponent(msg));
-    if (callbackUrl) {
-      url.searchParams.set("callbackUrl", callbackUrl);
-    }
-    return NextResponse.redirect(url, 303);
-  };
+  const email = emailRaw.toLowerCase();
 
   if (!email || !password) {
-    return errorRedirect("Email+and+password+are+required");
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "invalid");
+    return NextResponse.redirect(url, 303);
   }
 
   const user = await prisma.user.findFirst({
-    where: { email },
-    include: { userTenantRoles: true },
+    where: {
+      email,
+    },
+    include: {
+      userTenantRoles: true,
+    },
   });
 
-  if (!user || !user.passwordHash || !user.isActive) {
-    return errorRedirect("Invalid+email+or+password");
+  if (!user || !user.passwordHash) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "invalid");
+    return NextResponse.redirect(url, 303);
   }
 
-  const ok = await verifyPassword(password, user.passwordHash);
+  const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {
-    return errorRedirect("Invalid+email+or+password");
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "invalid");
+    return NextResponse.redirect(url, 303);
   }
 
-  const token = await createAuthToken(user.id);
+  const secret = getAuthSecret();
+  const token = await new SignJWT({
+    userId: user.id,
+    email: user.email,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(encoder.encode(secret));
 
-  const target =
-    callbackUrl && callbackUrl.startsWith("/")
-      ? callbackUrl
-      : "/ats/dashboard";
+  const res = NextResponse.redirect(
+    new URL("/ats/dashboard", req.url),
+    303,
+  );
 
-  const redirectUrl = new URL(target, req.url);
-  const res = NextResponse.redirect(redirectUrl, 303);
-
-  res.cookies.set(AUTH_COOKIE_NAME, token, {
+  res.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
     sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 7,
     path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
   });
 
   return res;
