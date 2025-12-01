@@ -5,26 +5,23 @@ import { getServerUser } from "@/lib/supabaseServer";
 
 export const metadata = {
   title: "ThinkATS | ATS Workspace",
+  description:
+    "ATS workspace for hiring teams using ThinkATS to manage roles, candidates, and pipelines.",
 };
 
-export default async function AtsLayout({
-  children,
-}: {
+type AtsLayoutProps = {
   children: ReactNode;
-}) {
-  const { user } = await getServerUser();
+};
+
+export default async function AtsLayout({ children }: AtsLayoutProps) {
+  // getServerUser() returns the Supabase `User | null` directly
+  const user = await getServerUser();
 
   if (!user) {
-    // If not authenticated, send to login and remember intention.
-    const callback = encodeURIComponent("/ats");
-    redirect(`/login?callbackUrl=${callback}`);
+    // Not authenticated: send to login and remember they were trying to reach /ats
+    redirect("/login?callbackUrl=/ats");
   }
 
-  // Optionally: load tenant/org context here with supabase if needed.
-
-  return (
-    <div className="min-h-screen bg-slate-50">
-      {children}
-    </div>
-  );
+  // Authenticated: render ATS workspace shell
+  return <div className="min-h-screen bg-slate-50">{children}</div>;
 }
