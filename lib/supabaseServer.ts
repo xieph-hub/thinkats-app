@@ -3,7 +3,11 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export function createSupabaseServerClient(): SupabaseClient {
+/**
+ * Server-side Supabase client that reads auth from cookies.
+ * Use ONLY in server components, layouts and server actions.
+ */
+export function getSupabaseServerClient(): SupabaseClient {
   const cookieStore = cookies();
 
   return createServerClient(
@@ -11,11 +15,11 @@ export function createSupabaseServerClient(): SupabaseClient {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // For server components/layouts we only *read* cookies
+        // On the server we only *read* cookies here
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        // No-ops so Supabase doesn't explode if it tries to write
+        // No-ops so we don't try to write cookies from server components
         set() {},
         remove() {},
       },
@@ -24,11 +28,10 @@ export function createSupabaseServerClient(): SupabaseClient {
 }
 
 /**
- * Convenience helper: get the current authenticated user on the server.
- * Returns `null` if not signed in.
+ * Convenience helper: "Who is the logged-in user on this request?"
  */
 export async function getServerUser() {
-  const supabase = createSupabaseServerClient();
+  const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
 
   if (error) {
