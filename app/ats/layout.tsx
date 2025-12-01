@@ -31,15 +31,15 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-slate-950">
       <div className="mx-auto flex max-w-7xl">
         {/* Sidebar */}
-        <aside className="hidden w-60 shrink-0 bg-gradient-to-b from-[#020617] via-[#020617] to-[#111827] px-4 py-6 text-slate-100 md:flex md:flex-col md:gap-6">
+        <aside className="hidden w-64 shrink-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 text-slate-100 md:flex md:flex-col md:gap-6">
           {/* Brand */}
           <div>
             <Link
               href={buildNavHref("/ats/dashboard")}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-2.5 py-2 text-xs hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-2.5 py-2 text-xs ring-1 ring-white/5 hover:bg-white/10"
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#172965] text-xs font-semibold text-white">
                 TA
@@ -65,28 +65,32 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={href}
-                  className={`flex items-center justify-between rounded-lg px-3 py-2 text-[13px] transition ${
+                  className={`group flex items-center justify-between rounded-lg px-3 py-2 text-[13px] transition ${
                     active
-                      ? "bg-white/10 text-white shadow-sm"
+                      ? "bg-white/10 text-white shadow-sm ring-1 ring-[#FFC000]/60"
                       : "text-slate-300 hover:bg-white/5 hover:text-white"
                   }`}
                 >
                   <span>{item.label}</span>
-                  {active && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#FFC000]" />
-                  )}
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full transition ${
+                      active
+                        ? "bg-[#FFC000]"
+                        : "bg-transparent group-hover:bg-slate-400"
+                    }`}
+                  />
                 </Link>
               );
             })}
 
             <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] text-slate-200">
-              <p className="font-medium">Need help?</p>
+              <p className="font-medium">Workspace tips</p>
               <p className="mt-1">
-                Manage workspaces in{" "}
+                Create & switch workspaces in{" "}
                 <code className="rounded bg-black/30 px-1 py-0.5">
                   /ats/tenants
                 </code>{" "}
-                and link clients in{" "}
+                and link recruitment clients in{" "}
                 <code className="rounded bg-black/30 px-1 py-0.5">
                   /ats/clients
                 </code>
@@ -95,16 +99,29 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
             </div>
           </nav>
 
+          {/* Footer: brand + sign out */}
           <div className="mt-auto border-t border-white/10 pt-3 text-[11px] text-slate-400">
-            <p>
-              Powered by{" "}
-              <span className="font-medium text-[#64C247]">Resourcin</span>
-            </p>
+            <form
+              method="POST"
+              action="/api/auth/logout"
+              className="flex items-center justify-between gap-2"
+            >
+              <p>
+                Powered by{" "}
+                <span className="font-medium text-[#64C247]">Resourcin</span>
+              </p>
+              <button
+                type="submit"
+                className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-slate-200 hover:border-[#FFC000]/80 hover:bg-[#172965]/60 hover:text-white"
+              >
+                Sign out
+              </button>
+            </form>
           </div>
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto bg-slate-50">
           {/* Tiny workspace ribbon */}
           <div className="border-b border-slate-200 bg-white/80 px-4 py-2 text-[11px] text-slate-600 backdrop-blur-sm sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -137,7 +154,11 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
           </div>
 
           {/* Page body */}
-          <div className="bg-slate-50">{children}</div>
+          <div className="bg-slate-50">
+            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+              {children}
+            </div>
+          </div>
         </main>
       </div>
     </div>
