@@ -1,19 +1,30 @@
 // app/ats/layout.tsx
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/supabaseServer";
+
+export const metadata = {
+  title: "ThinkATS | ATS Workspace",
+};
 
 export default async function AtsLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const user = await getServerUser();
+  const { user } = await getServerUser();
 
   if (!user) {
-    // Preserve where the user was trying to go
-    redirect("/login?callbackUrl=/ats");
+    // If not authenticated, send to login and remember intention.
+    const callback = encodeURIComponent("/ats");
+    redirect(`/login?callbackUrl=${callback}`);
   }
 
-  return <>{children}</>;
+  // Optionally: load tenant/org context here with supabase if needed.
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {children}
+    </div>
+  );
 }
