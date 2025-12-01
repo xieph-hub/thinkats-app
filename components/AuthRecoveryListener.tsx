@@ -17,18 +17,15 @@ export default function AuthRecoveryListener() {
     }
 
     (async () => {
-      // This reads the tokens from the URL fragment and stores the session
       const { error } = await supabaseBrowser.auth.getSessionFromUrl({
         storeSession: true,
       });
 
       if (error) {
         console.error("Error completing recovery:", error);
-        // You could show a toast or route to an error page if you want.
         return;
       }
 
-      // Once the session is set, send the user to the reset form
       router.replace("/auth/reset");
     })();
   }, [router]);
