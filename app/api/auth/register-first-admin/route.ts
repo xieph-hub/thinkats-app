@@ -1,10 +1,12 @@
+// app/api/auth/register-first-admin/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { SignJWT } from "jose";
-import { SESSION_COOKIE_NAME, getAuthSecret } from "@/lib/auth";
-
-const encoder = new TextEncoder();
+import {
+  SESSION_COOKIE_NAME,
+  createSessionToken,
+  getAuthSecret, // ensures env exists
+} from "@/lib/auth";
 
 export async function POST(req: Request) {
   const formData = await req.formData();
@@ -22,6 +24,7 @@ export async function POST(req: Request) {
   const email = emailRaw.toLowerCase();
 
   if (
+    !workspaceName ||
     !fullName ||
     !email ||
     !password ||
@@ -33,12 +36,28 @@ export async function POST(req: Request) {
     return NextResponse.redirect(url, 303);
   }
 
-  // If a SUPER_ADMIN already exists, bail out
-  const existingAdmin = await prisma.userTenantRole.findFirst({
+  // Check if a SUPER_ADMIN already exists (globalRole).
+  const existingGlobalSuperAdmin = await prisma.user.findFirst({
+    where: { globalRole: "SUPER_ADMIN" },
+  });
+
+  // Fallback: in case you already had SUPER_ADMIN roles wired via UserTenantRole.
+  const existingTenantSuperAdmin = await prisma.userTenantRole.findFirst({
     where: { role: "SUPER_ADMIN" },
   });
 
-  if (existingAdmin) {
+  if (existingGlobalSuperAdmin || existingTenantSuperAdmin) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "admin_exists");
+    return NextResponse.redirect(url, 303);
+  }
+
+  // If a user with this email already exists, don't create another.
+  const existingUserWithEmail = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (existingUserWithEmail) {
     const url = new URL("/login", req.url);
     url.searchParams.set("error", "admin_exists");
     return NextResponse.redirect(url, 303);
@@ -46,7 +65,6 @@ export async function POST(req: Request) {
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  // Find or create default tenant
   const defaultSlug = process.env.RESOURCIN_TENANT_SLUG || "resourcin";
 
   let tenant = await prisma.tenant.findFirst({
@@ -58,6 +76,7 @@ export async function POST(req: Request) {
       data: {
         slug: defaultSlug,
         name: workspaceName || "Resourcin",
+        status: "active",
       },
     });
   }
@@ -67,6 +86,8 @@ export async function POST(req: Request) {
       fullName,
       email,
       passwordHash,
+      globalRole: "SUPER_ADMIN",
+      isActive: true,
     },
   });
 
@@ -79,15 +100,10 @@ export async function POST(req: Request) {
     },
   });
 
-  const secret = getAuthSecret();
-  const token = await new SignJWT({
-    userId: user.id,
-    email: user.email,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(encoder.encode(secret));
+  // Make sure AUTH_SECRET is set (throws if not).
+  getAuthSecret();
+
+  const token = await createSessionToken(user.id, user.email ?? null);
 
   const res = NextResponse.redirect(
     new URL("/ats/dashboard", req.url),
