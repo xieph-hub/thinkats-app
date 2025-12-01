@@ -1,5 +1,5 @@
 // lib/candidates.ts
-import { createSupabaseServerClient } from "./supabaseServer";
+import { createSupabaseServer } from "./supabaseServer";
 
 /**
  * Get full candidate detail:
@@ -8,7 +8,8 @@ import { createSupabaseServerClient } from "./supabaseServer";
  * - notes + author info
  */
 export async function getCandidateDetail(candidateId: string) {
-  const supabase = await createSupabaseServer();
+  // Use the shared server-side Supabase client (cookie-based)
+  const supabase = createSupabaseServer();
 
   // Candidate profile
   const { data: candidate, error: candError } = await supabase
@@ -17,7 +18,9 @@ export async function getCandidateDetail(candidateId: string) {
     .eq("id", candidateId)
     .single();
 
-  if (candError) throw candError;
+  if (candError) {
+    throw candError;
+  }
 
   // Applications + job info
   const { data: applications, error: appsError } = await supabase
@@ -39,7 +42,9 @@ export async function getCandidateDetail(candidateId: string) {
     .eq("candidate_id", candidateId)
     .order("applied_at", { ascending: false });
 
-  if (appsError) throw appsError;
+  if (appsError) {
+    throw appsError;
+  }
 
   // Notes (timeline)
   const { data: notes, error: notesError } = await supabase
@@ -60,7 +65,9 @@ export async function getCandidateDetail(candidateId: string) {
     .eq("candidate_id", candidateId)
     .order("created_at", { ascending: false });
 
-  if (notesError) throw notesError;
+  if (notesError) {
+    throw notesError;
+  }
 
   return {
     candidate,
