@@ -80,7 +80,20 @@ model ClientCompany {
   name      String
   slug      String?
   logoUrl   String?  @map("logo_url")
-  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  // New richer fields
+  website   String?  @map("website")
+  industry  String?  @map("industry")
+
+  // Careersite configuration for this client
+  careersiteSlug         String?  @map("careersite_slug")
+  careersiteCustomDomain String?  @map("careersite_custom_domain")
+  careersiteEnabled      Boolean  @map("careersite_enabled") @default(false)
+
+  // Internal notes about how you work with them
+  notes      String?  @map("notes")
+
+  createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   jobs   Job[]
