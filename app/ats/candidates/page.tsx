@@ -209,10 +209,8 @@ export default async function AtsCandidatesPage({
       dbId ||
       `no-id:${(app as any).email || app.id || Math.random().toString(36)}`;
 
-    const name =
-      candidate?.fullName || app.fullName || "Unnamed candidate";
-    const email =
-      candidate?.email || (app as any).email || "";
+    const name = candidate?.fullName || app.fullName || "Unnamed candidate";
+    const email = candidate?.email || (app as any).email || "";
 
     const location =
       candidate?.location || app.location || "Not specified";
@@ -389,7 +387,9 @@ export default async function AtsCandidatesPage({
           <p className="mt-1 text-xs text-slate-600">
             All candidates who have engaged with roles under{" "}
             <span className="font-medium text-slate-900">
-              {selectedTenant.name ?? (selectedTenant as any).slug ?? "Resourcin"}
+              {selectedTenant.name ??
+                (selectedTenant as any).slug ??
+                "Resourcin"}
             </span>
             . Use filters to focus on active pipelines, hires or rejections.
           </p>
