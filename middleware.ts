@@ -1,47 +1,43 @@
 // middleware.ts
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
-
-const AUTH_COOKIE_NAME = "thinkats_session";
-
-async function verifyToken(token: string) {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error("AUTH_SECRET env var is not set");
-  }
-  const key = new TextEncoder().encode(secret);
-  await jwtVerify(token, key);
-}
+import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
+  // Clone the request headers for Next.js to continue the chain
+  const res = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  });
 
-  // Only guard ATS routes
-  if (!pathname.startsWith("/ats")) {
-    return NextResponse.next();
-  }
+  // Standard Supabase SSR pattern for middleware:
+  // keeps auth cookies in sync and refreshes sessions.
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
 
-  const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
+  // This call ensures middleware will exchange auth codes for a session if needed.
+  // We’re not doing redirects here; access control is in app/ats/layout.tsx.
+  await supabase.auth.getUser();
 
-  if (!token) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", pathname + search);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  try {
-    await verifyToken(token);
-    return NextResponse.next();
-  } catch {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", pathname + search);
-    const res = NextResponse.redirect(loginUrl);
-    res.cookies.delete(AUTH_COOKIE_NAME);
-    return res;
-  }
+  return res;
 }
 
+// Apply middleware to everything except static assets
 export const config = {
-  matcher: ["/ats/:path*"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
