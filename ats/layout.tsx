@@ -86,7 +86,7 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1">
           {/* Tiny workspace / career-site ribbon */}
           <div className="sticky top-0 z-20 border-b border-slate-200 bg-slate-50/95 px-4 py-2 text-[11px] text-slate-700 backdrop-blur">
             <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
@@ -117,8 +117,8 @@ export default function AtsLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          {/* Page content */}
-          <div className="px-4 py-4 sm:px-6 lg:px-8">{children}</div>
+          {/* Page content — each ATS page manages its own container/width */}
+          {children}
         </main>
       </div>
     </div>
