@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "./supabaseServer";
  * - notes + author info
  */
 export async function getCandidateDetail(candidateId: string) {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabaseServer();
 
   // Candidate profile
   const { data: candidate, error: candError } = await supabase
