@@ -1,13 +1,20 @@
-// app/ats/layout.tsx
 import type { ReactNode } from "react";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import AtsLayoutClient from "./AtsLayoutClient";
+import { getCurrentUser } from "@/lib/auth";
 
-export default function AtsLayout({
+export default async function AtsLayout({
   children,
 }: {
   children: ReactNode;
 }) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
   return (
     <Suspense
       fallback={
