@@ -11,27 +11,44 @@ export const metadata: Metadata = {
   description: "Client workspaces managed in this ATS environment.",
 };
 
+interface ClientsPageSearchParams {
+  tenantId?: string | string[];
+  created?: string;
+  error?: string;
+}
+
 export default async function ClientsIndexPage({
   searchParams,
 }: {
-  searchParams?: { created?: string; error?: string };
+  searchParams?: ClientsPageSearchParams;
 }) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Workspace not available
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No default tenant configured.
-        </p>
-      </div>
-    );
+  const rawTenant = searchParams?.tenantId ?? "";
+  const tenantParam =
+    Array.isArray(rawTenant) && rawTenant.length > 0
+      ? rawTenant[0]
+      : typeof rawTenant === "string"
+      ? rawTenant
+      : "";
+
+  const tenants = await prisma.tenant.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  let selectedTenant =
+    (tenantParam &&
+      tenants.find(
+        (t) => t.id === tenantParam || (t as any).slug === tenantParam,
+      )) ||
+    (await getResourcinTenant());
+
+  if (!selectedTenant) {
+    throw new Error("No default tenant configured.");
   }
 
+  const selectedTenantId = selectedTenant.id;
+
   const clients = await prisma.clientCompany.findMany({
-    where: { tenantId: tenant.id },
+    where: { tenantId: selectedTenantId },
     orderBy: { createdAt: "desc" },
     include: {
       _count: {
@@ -40,28 +57,67 @@ export default async function ClientsIndexPage({
     },
   });
 
-  const created = searchParams?.created === "1";
+  const createdFlag = searchParams?.created === "1";
   const errorMessage = searchParams?.error;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Clients</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            ATS · Clients
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+            Client workspaces
+          </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Each client represents a company that you run searches for under
-            this workspace.
+            Each client represents a company that you run searches for under{" "}
+            <span className="font-medium text-slate-900">
+              {selectedTenant.name ?? (selectedTenant as any).slug ?? "Resourcin"}
+            </span>
+            .
           </p>
         </div>
-        <Link
-          href="/ats/clients/new"
-          className="inline-flex items-center rounded-md bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
-        >
-          New client
-        </Link>
+
+        <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3">
+          {/* Tenant selector */}
+          <form method="GET" className="hidden items-center gap-2 sm:flex">
+            <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              <span className="text-[10px] uppercase tracking-wide text-slate-500">
+                Tenant
+              </span>
+              <select
+                name="tenantId"
+                defaultValue={selectedTenantId}
+                className="border-none bg-transparent text-[11px] text-slate-900 outline-none focus:ring-0"
+              >
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name ?? (tenant as any).slug ?? tenant.id}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="text-[11px] font-medium text-[#172965] hover:underline"
+              >
+                Switch
+              </button>
+            </div>
+          </form>
+
+          <Link
+            href={`/ats/clients/new?tenantId=${encodeURIComponent(
+              selectedTenantId,
+            )}`}
+            className="inline-flex items-center rounded-md bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
+          >
+            New client
+          </Link>
+        </div>
       </div>
 
-      {created && (
+      {createdFlag && (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
           Client created.
         </div>
@@ -75,19 +131,22 @@ export default async function ClientsIndexPage({
 
       {clients.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          <p>No clients yet.</p>
+          <p>No clients yet for this workspace.</p>
           <p className="mt-1 text-[11px]">
             Use the button above to add your first recruitment client.
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {clients.map((client) => {
-            const jobsCount = (client as any)._count?.jobs ?? 0;
-            const created = new Date(client.createdAt).toLocaleDateString(
-              undefined,
-              { year: "numeric", month: "short", day: "2-digit" },
-            );
+          {clients.map((client: any) => {
+            const jobsCount = client._count?.jobs ?? 0;
+            const createdLabel = new Date(
+              client.createdAt,
+            ).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "2-digit",
+            });
 
             return (
               <article
@@ -119,7 +178,7 @@ export default async function ClientsIndexPage({
                     </p>
                   )}
                   <p className="mt-1 text-[11px] text-slate-400">
-                    Added {created}
+                    Added {createdLabel}
                   </p>
                 </div>
 
@@ -138,7 +197,9 @@ export default async function ClientsIndexPage({
 
                   <div className="flex gap-2">
                     <Link
-                      href={`/ats/clients/${client.id}/edit`}
+                      href={`/ats/clients/${client.id}/edit?tenantId=${encodeURIComponent(
+                        selectedTenantId,
+                      )}`}
                       className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
                     >
                       Edit
