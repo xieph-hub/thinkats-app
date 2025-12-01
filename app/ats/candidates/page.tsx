@@ -18,6 +18,7 @@ interface CandidatesPageSearchParams {
   location?: string | string[];
   source?: string | string[];
   stage?: string | string[];
+  tenantId?: string | string[];
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -79,9 +80,7 @@ function applicationStatusBadgeClass(value?: string | null) {
 }
 
 type CandidateView = {
-  // key used for React list rendering (can be fallback)
   id: string;
-  // actual DB candidate id if it exists (used for profile route)
   candidateId: string | null;
   name: string;
   email: string;
@@ -149,11 +148,30 @@ export default async function AtsCandidatesPage({
       : "all";
   const stageFilterKey = (stageFilter || "all").toUpperCase();
 
-  const tenant = await getResourcinTenant();
-  if (!tenant) {
+  const rawTenant = searchParams?.tenantId ?? "";
+  const tenantParam =
+    Array.isArray(rawTenant) && rawTenant.length > 0
+      ? rawTenant[0]
+      : typeof rawTenant === "string"
+      ? rawTenant
+      : "";
+
+  const tenants = await prisma.tenant.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  let selectedTenant =
+    (tenantParam &&
+      tenants.find(
+        (t) => t.id === tenantParam || (t as any).slug === tenantParam,
+      )) ||
+    (await getResourcinTenant());
+
+  if (!selectedTenant) {
     throw new Error("No default tenant found.");
   }
-  const tenantId = tenant.id;
+
+  const tenantId = selectedTenant.id;
 
   // -----------------------------
   // Load applications scoped by tenant via job → tenantId
@@ -209,7 +227,6 @@ export default async function AtsCandidatesPage({
 
     const existing = candidateMap.get(key);
 
-    // Last applied = most recent application (we're already ordered desc)
     if (!existing) {
       candidateMap.set(key, {
         id: key,
@@ -230,7 +247,6 @@ export default async function AtsCandidatesPage({
         sources: app.source ? [app.source] : [],
       });
     } else {
-      // Update roles count / sources, keep earliest summary fields
       const rolesSet = new Set<string>();
       if (existing.rolesCount > 0 && existing.lastAppliedJobId) {
         rolesSet.add(existing.lastAppliedJobId);
@@ -315,7 +331,9 @@ export default async function AtsCandidatesPage({
 
     // Stage filter
     if (stageFilterKey !== "ALL" && stageFilterKey !== "ALL_STAGES") {
-      ok = ok && c.primaryStageKey === stageFilterKey;
+      if (stageFilterKey !== "ALL") {
+        ok = ok && c.primaryStageKey === stageFilterKey;
+      }
     }
 
     // Location filter
@@ -345,15 +363,20 @@ export default async function AtsCandidatesPage({
     return ok;
   });
 
-  // Sort by last applied date (desc)
   candidates.sort(
     (a, b) => b.lastAppliedAt.getTime() - a.lastAppliedAt.getTime(),
   );
 
   const filteredCount = candidates.length;
 
+  const clearFiltersHref = (() => {
+    const url = new URL("/ats/candidates", "http://dummy");
+    url.searchParams.set("tenantId", tenantId);
+    return url.pathname + url.search;
+  })();
+
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div>
@@ -364,10 +387,54 @@ export default async function AtsCandidatesPage({
             Talent pool
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            All candidates who have engaged with roles under this tenant. Use
-            filters to focus on active pipelines, hires or rejections.
+            All candidates who have engaged with roles under{" "}
+            <span className="font-medium text-slate-900">
+              {selectedTenant.name ?? (selectedTenant as any).slug ?? "Resourcin"}
+            </span>
+            . Use filters to focus on active pipelines, hires or rejections.
           </p>
         </div>
+
+        {/* Tenant selector */}
+        <form method="GET" className="hidden items-center gap-2 sm:flex">
+          {/* Preserve filters when switching tenant */}
+          {q && <input type="hidden" name="q" value={q} />}
+          {statusFilter && statusFilter !== "all" && (
+            <input type="hidden" name="status" value={statusFilter} />
+          )}
+          {locationFilter && locationFilter !== "all" && (
+            <input type="hidden" name="location" value={locationFilter} />
+          )}
+          {sourceFilter && sourceFilter !== "all" && (
+            <input type="hidden" name="source" value={sourceFilter} />
+          )}
+          {stageFilter && stageFilter !== "all" && (
+            <input type="hidden" name="stage" value={stageFilter} />
+          )}
+
+          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">
+              Tenant
+            </span>
+            <select
+              name="tenantId"
+              defaultValue={tenantId}
+              className="border-none bg-transparent text-[11px] text-slate-900 outline-none focus:ring-0"
+            >
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name ?? (tenant as any).slug ?? tenant.id}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="text-[11px] font-medium text-[#172965] hover:underline"
+            >
+              Switch
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Metrics */}
@@ -428,6 +495,9 @@ export default async function AtsCandidatesPage({
         method="GET"
         className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
       >
+        {/* Keep tenantId when filtering */}
+        <input type="hidden" name="tenantId" value={tenantId} />
+
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex-1">
             <label htmlFor="q" className="sr-only">
@@ -542,7 +612,7 @@ export default async function AtsCandidatesPage({
         sourceFilter !== "all" ||
         !!q ? (
           <Link
-            href="/ats/candidates"
+            href={clearFiltersHref}
             className="text-[11px] text-slate-500 hover:text-slate-800"
           >
             Clear filters
@@ -623,9 +693,7 @@ export default async function AtsCandidatesPage({
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                    <span>
-                      Last applied {formatDate(c.lastAppliedAt)}
-                    </span>
+                    <span>Last applied {formatDate(c.lastAppliedAt)}</span>
                   </div>
                 </div>
               </div>
@@ -648,7 +716,9 @@ export default async function AtsCandidatesPage({
                 <div className="flex flex-col items-end gap-1">
                   {c.lastAppliedJobId && (
                     <Link
-                      href={`/ats/jobs/${c.lastAppliedJobId}`}
+                      href={`/ats/jobs/${c.lastAppliedJobId}?tenantId=${encodeURIComponent(
+                        tenantId,
+                      )}`}
                       className="text-[11px] font-medium text-[#172965] hover:underline"
                     >
                       View pipeline
@@ -656,7 +726,9 @@ export default async function AtsCandidatesPage({
                   )}
                   {c.candidateId && (
                     <Link
-                      href={`/ats/candidates/${c.candidateId}`}
+                      href={`/ats/candidates/${c.candidateId}?tenantId=${encodeURIComponent(
+                        tenantId,
+                      )}`}
                       className="text-[11px] text-slate-500 hover:text-slate-800"
                     >
                       View candidate profile
