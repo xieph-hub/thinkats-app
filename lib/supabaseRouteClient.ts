@@ -1,33 +1,52 @@
 // lib/supabaseRouteClient.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Shared helper for middleware / route handlers that need
- * a Supabase server client wired to Next.js cookies.
+ * Helper for route handlers (app/api/*) that need Supabase auth
+ * and need to keep cookies in sync.
  *
- * - Works in the Edge runtime (middleware, route handlers).
- * - No custom Database type needed.
+ * Usage:
+ *   const { supabase, res } = createSupabaseRouteClient(request);
  */
-export function createSupabaseRouteClient(req: NextRequest, res: NextResponse) {
+type SupabaseRouteClient = {
+  supabase: SupabaseClient;
+  res: NextResponse;
+};
+
+export function createSupabaseRouteClient(
+  request: NextRequest
+): SupabaseRouteClient {
+  const res = NextResponse.next();
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // or PUBLISHABLE_KEY if that's what you use
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name: string) {
-          return req.cookies.get(name)?.value;
+          return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          res.cookies.set(name, value, options);
+          // Next 14 + Supabase recommended pattern: pass an object
+          res.cookies.set({
+            name,
+            value,
+            ...options,
+          });
         },
-        remove(name: string, _options: CookieOptions) {
-          // Next 14 delete signature: just pass the name
-          res.cookies.delete(name);
+        remove(name: string, options: CookieOptions) {
+          // Clear cookie by setting empty value
+          res.cookies.set({
+            name,
+            value: "",
+            ...options,
+          });
         },
       },
     }
   );
 
-  return supabase;
+  return { supabase, res };
 }
