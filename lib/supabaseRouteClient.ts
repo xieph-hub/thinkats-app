@@ -1,21 +1,27 @@
 // lib/supabaseRouteClient.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import type { Database } from "@/types/supabase";
 
 /**
- * Shared helper for middleware / route handlers that need
- * a Supabase client wired to the request/response cookies.
+ * Helper for middleware / route handlers that need a Supabase server client
+ * wired to Next.js cookies.
  *
- * Usage:
+ * Usage in middleware:
  *   const { supabase, res } = createSupabaseRouteClient(req);
  *   const { data: { session } } = await supabase.auth.getSession();
- *   // ...then return `res` (possibly modified) from middleware/route.
+ *   // ...redirect logic...
+ *   return res;
  */
 export function createSupabaseRouteClient(req: NextRequest) {
-  // We start with a "next" response so Supabase can mutate cookies on it.
-  const res = NextResponse.next({ request: req });
+  // Create a response we can mutate cookies on
+  const res = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  });
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -24,10 +30,17 @@ export function createSupabaseRouteClient(req: NextRequest) {
           return req.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          res.cookies.set(name, value, options);
+          // Write / update auth cookies on the response
+          res.cookies.set(name, value, {
+            ...options,
+          });
         },
         remove(name: string, options: CookieOptions) {
-          res.cookies.delete(name, options);
+          // "Delete" by setting an expired cookie – this matches Supabase docs
+          res.cookies.set(name, "", {
+            ...options,
+            maxAge: 0,
+          });
         },
       },
     }
