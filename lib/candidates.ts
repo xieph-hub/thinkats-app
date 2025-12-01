@@ -1,5 +1,5 @@
 // lib/candidates.ts
-import { createSupabaseServer } from "./supabaseServer";
+import { createSupabaseServerClient } from "./supabaseServer";
 
 /**
  * Get full candidate detail:
@@ -8,8 +8,8 @@ import { createSupabaseServer } from "./supabaseServer";
  * - notes + author info
  */
 export async function getCandidateDetail(candidateId: string) {
-  // Use the shared server-side Supabase client (cookie-based)
-  const supabase = createSupabaseServer();
+  // Shared cookie-based Supabase server client
+  const supabase = createSupabaseServerClient();
 
   // Candidate profile
   const { data: candidate, error: candError } = await supabase
