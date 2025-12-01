@@ -23,6 +23,7 @@ export default function LoginPage() {
 
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
+    const workspace = String(formData.get("workspace") || "").trim();
 
     if (!email || !password) {
       setStatus("error");
@@ -44,8 +45,44 @@ export default function LoginPage() {
     setStatus("success");
     setMessage("Signed in successfully. Redirecting…");
 
-    // Redirect into ATS – tweak this if your default landing is different
-    router.push("/ats/jobs");
+    // For now, we just pass the workspace/tenant hint as a query param.
+    // Later you can resolve this into a real tenantId server-side.
+    const basePath = "/ats/jobs";
+    const nextUrl =
+      workspace.length > 0
+        ? `${basePath}?tenant=${encodeURIComponent(workspace)}`
+        : basePath;
+
+    router.push(nextUrl);
+  }
+
+  async function handleSSO(provider: "google" | "azure") {
+    try {
+      setStatus("loading");
+      setMessage(null);
+
+      const redirectTo = `${window.location.origin}/ats/jobs`;
+
+      const { error } = await supabaseBrowser.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (error) {
+        setStatus("error");
+        setMessage(
+          error.message || "Unable to start single sign-on. Please try again."
+        );
+        return;
+      }
+
+      // Supabase will handle the redirect; we don't need to do anything else here.
+    } catch (err) {
+      setStatus("error");
+      setMessage("Unable to start single sign-on. Please try again.");
+    }
   }
 
   return (
@@ -61,8 +98,9 @@ export default function LoginPage() {
               Sign in to your hiring workspace
             </h1>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              Access your roles, pipelines and talent pool in one place. Use
-              the work email your organisation set up with ThinkATS.
+              Access roles, pipelines and your talent network across every
+              client and business unit. Use the work email and SSO your
+              organisation has set up with ThinkATS.
             </p>
 
             <div className="mt-8 space-y-3 text-sm text-slate-600">
@@ -89,16 +127,71 @@ export default function LoginPage() {
               Sign in
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Use your work email and password to continue.
+              Continue with your company SSO or work email.
             </p>
 
+            {/* SSO buttons */}
+            <div className="mt-5 space-y-3">
+              <button
+                type="button"
+                onClick={() => handleSSO("azure")}
+                disabled={status === "loading"}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+              >
+                {/* You can swap these placeholders for real icons later */}
+                <span className="inline-block h-4 w-4 rounded-sm bg-slate-900" />
+                <span>Sign in with Microsoft</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSSO("google")}
+                disabled={status === "loading"}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-100 disabled:opacity-60"
+              >
+                <span className="inline-block h-4 w-4 rounded-full bg-slate-900" />
+                <span>Sign in with Google</span>
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div className="mt-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-200" />
+              <span className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
+                or continue with email
+              </span>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            {/* Email + password + workspace */}
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <div>
+                <label
+                  htmlFor="workspace"
+                  className="block text-xs font-medium uppercase tracking-wide text-slate-500"
+                >
+                  Organisation / workspace (optional)
+                </label>
+                <input
+                  id="workspace"
+                  name="workspace"
+                  type="text"
+                  autoComplete="organization"
+                  placeholder="e.g. resourcin, acme, client-name"
+                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  This helps us route you to the right tenant. You can use a
+                  workspace name or short slug agreed with your account team.
+                </p>
+              </div>
+
               <div>
                 <label
                   htmlFor="email"
                   className="block text-xs font-medium uppercase tracking-wide text-slate-500"
                 >
-                  Email
+                  Work email
                 </label>
                 <input
                   id="email"
