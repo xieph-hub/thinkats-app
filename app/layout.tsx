@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.className}>
       <body className="bg-slate-50 text-slate-900 antialiased">
-        {/* Supabase password-recovery / magic-link handler */}
+        {/* Handles Supabase password-reset / magic-link callbacks */}
         <Suspense fallback={null}>
           <AuthRecoveryListener />
         </Suspense>
