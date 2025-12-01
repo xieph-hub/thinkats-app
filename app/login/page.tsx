@@ -1,7 +1,7 @@
 // app/login/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setStatus("loading");
     setMessage(null);
@@ -21,9 +21,9 @@ export default function LoginPage() {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    const workspace = String(formData.get("workspace") || "").trim();
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
-    const workspace = String(formData.get("workspace") || "").trim();
 
     if (!email || !password) {
       setStatus("error");
@@ -45,214 +45,190 @@ export default function LoginPage() {
     setStatus("success");
     setMessage("Signed in successfully. Redirecting…");
 
-    // For now, we just pass the workspace/tenant hint as a query param.
-    // Later you can resolve this into a real tenantId server-side.
     const basePath = "/ats/jobs";
-    const nextUrl =
+    const next =
       workspace.length > 0
         ? `${basePath}?tenant=${encodeURIComponent(workspace)}`
         : basePath;
 
-    router.push(nextUrl);
-  }
-
-  async function handleSSO(provider: "google" | "azure") {
-    try {
-      setStatus("loading");
-      setMessage(null);
-
-      const redirectTo = `${window.location.origin}/ats/jobs`;
-
-      const { error } = await supabaseBrowser.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo,
-        },
-      });
-
-      if (error) {
-        setStatus("error");
-        setMessage(
-          error.message || "Unable to start single sign-on. Please try again."
-        );
-        return;
-      }
-
-      // Supabase will handle the redirect; we don't need to do anything else here.
-    } catch (err) {
-      setStatus("error");
-      setMessage("Unable to start single sign-on. Please try again.");
-    }
+    router.push(next);
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-4 py-12 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-center">
-          {/* Left: brand & copy */}
-          <div>
-            <div className="mb-6 text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-              THINKATS
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-              Sign in to your hiring workspace
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              Access roles, pipelines and your talent network across every
-              client and business unit. Use the work email and SSO your
-              organisation has set up with ThinkATS.
-            </p>
-
-            <div className="mt-8 space-y-3 text-sm text-slate-600">
-              <p>
-                <span className="font-medium text-slate-800">
-                  Trouble signing in?
-                </span>{" "}
-                Contact your organisation’s ThinkATS administrator to confirm
-                your access, or{" "}
-                <Link
-                  href="/contact"
-                  className="font-medium text-slate-900 underline underline-offset-4"
-                >
-                  talk to our team about getting set up
-                </Link>
-                .
-              </p>
-            </div>
-          </div>
-
-          {/* Right: login card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <h2 className="text-base font-semibold text-slate-900">
-              Sign in
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Continue with your company SSO or work email.
-            </p>
-
-            {/* SSO buttons */}
-            <div className="mt-5 space-y-3">
-              <button
-                type="button"
-                onClick={() => handleSSO("azure")}
-                disabled={status === "loading"}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 disabled:opacity-60"
-              >
-                {/* You can swap these placeholders for real icons later */}
-                <span className="inline-block h-4 w-4 rounded-sm bg-slate-900" />
-                <span>Sign in with Microsoft</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSSO("google")}
-                disabled={status === "loading"}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-100 disabled:opacity-60"
-              >
-                <span className="inline-block h-4 w-4 rounded-full bg-slate-900" />
-                <span>Sign in with Google</span>
-              </button>
-            </div>
-
-            {/* Divider */}
-            <div className="mt-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-200" />
-              <span className="text-[11px] uppercase tracking-[0.16em] text-slate-400">
-                or continue with email
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-10 sm:py-14 lg:px-10">
+        {/* Top bar */}
+        <header className="flex items-center justify-between pb-10">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+              <span className="text-xs font-bold tracking-tight text-slate-900">
+                TA
               </span>
-              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+            <span className="text-sm font-semibold tracking-tight text-slate-50">
+              ThinkATS
+            </span>
+          </Link>
+
+          <Link
+            href="/signup"
+            className="hidden rounded-full border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-100 hover:border-slate-400 sm:inline-flex"
+          >
+            Start free trial
+          </Link>
+        </header>
+
+        <div className="grid flex-1 items-center gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          {/* Left narrative */}
+          <section>
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-[11px] text-slate-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span>Multi-tenant ATS for agencies & in-house teams</span>
             </div>
 
-            {/* Email + password + workspace */}
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div>
-                <label
-                  htmlFor="workspace"
-                  className="block text-xs font-medium uppercase tracking-wide text-slate-500"
-                >
-                  Organisation / workspace (optional)
-                </label>
-                <input
-                  id="workspace"
-                  name="workspace"
-                  type="text"
-                  autoComplete="organization"
-                  placeholder="e.g. resourcin, acme, client-name"
-                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                />
-                <p className="mt-1 text-[11px] text-slate-400">
-                  This helps us route you to the right tenant. You can use a
-                  workspace name or short slug agreed with your account team.
-                </p>
-              </div>
+            <h1 className="mt-5 text-3xl font-semibold tracking-tight text-slate-50 sm:text-4xl lg:text-5xl">
+              Sign in to your hiring workspace.
+            </h1>
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-300">
+              Move roles, pipelines and talent pools in one place. Use the work
+              email your organisation has configured with ThinkATS.
+            </p>
 
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-xs font-medium uppercase tracking-wide text-slate-500"
-                >
-                  Work email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="you@company.com"
-                />
-              </div>
+            <ul className="mt-6 space-y-3 text-sm text-slate-200/90">
+              <li className="flex items-start gap-2">
+                <span className="mt-[5px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Separate workspaces for every client or business unit.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-[5px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Shared talent network across all open and past roles.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-[5px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span>Clear visibility for founders, people teams and hiring managers.</span>
+              </li>
+            </ul>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="password"
-                    className="block text-xs font-medium uppercase tracking-wide text-slate-500"
-                  >
-                    Password
-                  </label>
-                  <Link
-                    href="/auth/reset"
-                    className="text-xs font-medium text-slate-700 hover:text-slate-900"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={status === "loading"}
-                className="mt-2 inline-flex w-full items-center justify-center rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+            <p className="mt-8 text-xs text-slate-400">
+              Trouble signing in? Contact your organisation’s ThinkATS
+              administrator, or{" "}
+              <Link
+                href="/contact"
+                className="font-medium text-slate-100 underline underline-offset-4"
               >
-                {status === "loading" ? "Signing in…" : "Sign in"}
-              </button>
+                talk to our team about getting set up
+              </Link>
+              .
+            </p>
+          </section>
 
-              {status === "error" && message && (
-                <p className="mt-3 text-xs text-red-600">{message}</p>
-              )}
-              {status === "success" && message && (
-                <p className="mt-3 text-xs text-emerald-700">{message}</p>
-              )}
-            </form>
+          {/* Right: email login card */}
+          <section className="lg:justify-self-end">
+            <div className="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-950/70 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.7)] backdrop-blur">
+              <h2 className="text-base font-semibold text-slate-50">Sign in</h2>
+              <p className="mt-1 text-xs text-slate-400">
+                Use your work email and password to continue.
+              </p>
 
-            <div className="mt-6 border-t border-slate-100 pt-4 text-xs text-slate-500">
-              <p>
+              <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                <div>
+                  <label
+                    htmlFor="workspace"
+                    className="block text-[11px] font-medium uppercase tracking-wide text-slate-400"
+                  >
+                    Organisation / workspace (optional)
+                  </label>
+                  <input
+                    id="workspace"
+                    name="workspace"
+                    type="text"
+                    autoComplete="organization"
+                    placeholder="resourcin, acme, client-name…"
+                    className="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Helps us route you to the right tenant/workspace.
+                  </p>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-[11px] font-medium uppercase tracking-wide text-slate-400"
+                  >
+                    Work email
+                  </label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    className="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    placeholder="you@company.com"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="password"
+                      className="block text-[11px] font-medium uppercase tracking-wide text-slate-400"
+                    >
+                      Password
+                    </label>
+                    <Link
+                      href="/auth/reset"
+                      className="text-[11px] font-medium text-slate-200 hover:text-slate-50"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    className="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={status === "loading"}
+                  className="mt-2 inline-flex w-full items-center justify-center rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-slate-950 shadow-sm hover:bg-sky-400 disabled:opacity-60"
+                >
+                  {status === "loading" ? "Signing in…" : "Sign in"}
+                </button>
+
+                {status === "error" && message && (
+                  <p className="mt-3 text-[11px] text-red-400">{message}</p>
+                )}
+                {status === "success" && message && (
+                  <p className="mt-3 text-[11px] text-emerald-400">
+                    {message}
+                  </p>
+                )}
+              </form>
+
+              <p className="mt-5 text-center text-[11px] text-slate-500">
+                Don’t have access yet?{" "}
+                <Link
+                  href="/signup"
+                  className="font-medium text-slate-100 underline underline-offset-4"
+                >
+                  Request a workspace
+                </Link>
+              </p>
+
+              <p className="mt-3 text-[10px] text-slate-500">
                 By signing in, you agree to any applicable agreements your
                 organisation has in place with ThinkATS.
               </p>
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>
