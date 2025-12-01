@@ -26,7 +26,6 @@ export async function getServerUser() {
   } = await supabase.auth.getUser();
 
   if (error) {
-    // Treat auth errors as "no user" instead of blowing up the layout.
     console.error("Error getting server user", error);
     return null;
   }
