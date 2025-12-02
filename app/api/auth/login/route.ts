@@ -1,26 +1,12 @@
 // app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
-/**
- * Email + password login.
- *
- * Uses the server Supabase client wired to `cookies()`, so
- * auth cookies are set correctly and are visible to both:
- * - your Server Components (/ats, dashboards, etc.)
- * - your middleware (via the Supabase proxy / route client)
- */
 export async function POST(req: NextRequest) {
-  // Server-side Supabase client (uses next/headers cookies under the hood)
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseRouteClient();
 
-  // Parse body safely
-  const body = (await req.json().catch(() => ({}))) as {
-    email?: string;
-    password?: string;
-  };
-
-  const { email, password } = body;
+  const body = await req.json().catch(() => ({}));
+  const { email, password } = body as { email?: string; password?: string };
 
   if (!email || !password) {
     return NextResponse.json(
@@ -29,27 +15,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
   if (error) {
+    console.error("Supabase login error:", error);
     return NextResponse.json(
-      { error: error.message },
+      { error: "Invalid email or password." },
       { status: 400 }
     );
   }
 
-  // At this point, Supabase has already written the auth cookies
-  // via the createSupabaseServerClient() helper.
-  // We just return a simple JSON payload the login page can use.
-  return NextResponse.json(
-    {
-      success: true,
-      user: data.user ?? null,
-      redirectTo: "/ats", // your intended post-login landing
-    },
-    { status: 200 }
-  );
+  const url = req.nextUrl;
+  const callbackUrl = url.searchParams.get("callbackUrl") || "/ats";
+
+  return NextResponse.json({
+    success: true,
+    redirectTo: callbackUrl,
+  });
 }
