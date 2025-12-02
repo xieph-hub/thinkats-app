@@ -11,9 +11,10 @@ function generateOtpCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient(req);
+    // 1) Get current Supabase user
+    const supabase = createSupabaseRouteClient();
 
     const {
       data: { user },
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 1) Find or create app-level User row tied to this email
+    // 2) Find or create app-level User row tied to this email
     let appUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2) Invalidate any existing, still-valid OTPs for this user
+    // 3) Invalidate any existing, still-valid OTPs for this user
     await prisma.loginOtp.updateMany({
       where: {
         userId: appUser.id,
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 3) Create a fresh OTP
+    // 4) Create a fresh OTP
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 4) Send via email (Resend)
+    // 5) Send via email (Resend)
     if (!process.env.RESEND_API_KEY) {
       console.warn(
         "[ThinkATS OTP] RESEND_API_KEY missing. OTP email not actually sent.",
@@ -98,8 +99,7 @@ export async function POST(req: NextRequest) {
         });
       } catch (err) {
         console.error("[ThinkATS OTP] Failed to send OTP email:", err);
-        // We still return ok: true because the OTP exists in DB;
-        // you can choose to surface this error to the UI if you prefer.
+        // Still return ok: true, since OTP exists in DB.
       }
     }
 
