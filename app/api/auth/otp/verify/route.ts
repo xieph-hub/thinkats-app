@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1) Get current Supabase user (no args – your helper reads cookies itself)
+    // 1) Get current Supabase user
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 2) Find app-level User (Prisma) by email
+    // 2) Find app-level User
     const appUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3) Find matching, active OTP
+    // 3) Find valid OTP
     const otp = await prisma.loginOtp.findFirst({
       where: {
         userId: appUser.id,
@@ -62,17 +62,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4) Mark OTP as consumed
+    // 4) Mark as consumed
     await prisma.loginOtp.update({
       where: { id: otp.id },
       data: { consumed: true },
     });
 
-    // 5) Decide redirect destination after OTP
+    // 5) Decide redirect target
     const redirectTo =
       typeof next === "string" && next.startsWith("/") ? next : "/ats";
 
-    // 6) Mark OTP as satisfied via cookie (this is what ensureOtpVerified checks)
+    // 6) Mark OTP as satisfied via cookie
     const res = NextResponse.json({ ok: true, redirectTo });
 
     res.cookies.set("thinkats_otp_verified", "1", {
