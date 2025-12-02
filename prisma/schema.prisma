@@ -55,6 +55,7 @@ model User {
   updatedAt    DateTime         @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   userTenantRoles UserTenantRole[]
+  loginOtps       LoginOtp[]      // NEW: OTP records for this user
 
   @@map("users")
 }
@@ -71,6 +72,24 @@ model UserTenantRole {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("user_tenant_roles")
+}
+
+// --------------------------------------------------------------------------
+// LOGIN OTPs (NEW)
+// --------------------------------------------------------------------------
+
+model LoginOtp {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  code      String
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  consumed  Boolean  @default(false)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("login_otps")
+  @@index([userId, consumed, expiresAt], map: "idx_login_otps_user_active")
 }
 
 // --------------------------------------------------------------------------
