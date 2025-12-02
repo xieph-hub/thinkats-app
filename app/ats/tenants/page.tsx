@@ -75,7 +75,7 @@ export default async function AtsTenantsPage({
   searchParams?: TenantsPageSearchParams;
 }) {
   // 🔐 Enforce OTP has been verified for this session
-  ensureOtpVerified("/ats/tenants");
+  await ensureOtpVerified();
 
   const tenants: Tenant[] = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
