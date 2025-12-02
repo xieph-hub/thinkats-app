@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1) Get current Supabase user
-    const supabase = createSupabaseRouteClient(req);
+    // 1) Get current Supabase user (no args – your helper reads cookies itself)
+    const supabase = createSupabaseRouteClient();
 
     const {
       data: { user },
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 2) Find app-level User for this email
+    // 2) Find app-level User (Prisma) by email
     const appUser = await prisma.user.findUnique({
       where: { email },
     });
