@@ -1,6 +1,7 @@
 // app/ats/tenants/page.tsx
 import type { Metadata } from "next";
 import Image from "next/image";
+import type { Tenant } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
@@ -31,12 +32,48 @@ function formatDate(value: any): string {
   });
 }
 
+function getStatusLabel(raw: string | null | undefined): string {
+  if (!raw) return "Active";
+  const status = raw.toLowerCase();
+  switch (status) {
+    case "active":
+      return "Active";
+    case "trial":
+      return "Trial";
+    case "suspended":
+      return "Suspended";
+    case "archived":
+      return "Archived";
+    default:
+      return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+}
+
+function getStatusClasses(raw: string | null | undefined): string {
+  if (!raw) {
+    return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  }
+  const status = raw.toLowerCase();
+  switch (status) {
+    case "active":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+    case "trial":
+      return "bg-amber-50 text-amber-700 ring-amber-100";
+    case "suspended":
+      return "bg-rose-50 text-rose-700 ring-rose-100";
+    case "archived":
+      return "bg-slate-50 text-slate-600 ring-slate-100";
+    default:
+      return "bg-slate-50 text-slate-600 ring-slate-100";
+  }
+}
+
 export default async function AtsTenantsPage({
   searchParams,
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
-  const tenants = await prisma.tenant.findMany({
+  const tenants: Tenant[] = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
   });
 
@@ -59,8 +96,8 @@ export default async function AtsTenantsPage({
           </h1>
           <p className="mt-1 max-w-2xl text-xs text-slate-600">
             Each tenant is a separate ATS workspace. Use this page to spin up
-            new workspaces for customers, and jump into their jobs & clients in
-            one click.
+            new workspaces for customers, and jump into their jobs &amp; clients
+            in one click.
           </p>
         </div>
 
@@ -242,6 +279,8 @@ export default async function AtsTenantsPage({
               <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Workspace</th>
+                  <th className="px-3 py-2">Primary contact</th>
+                  <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Slug</th>
                   <th className="px-3 py-2">ID</th>
                   <th className="px-3 py-2">Created</th>
@@ -249,17 +288,21 @@ export default async function AtsTenantsPage({
                 </tr>
               </thead>
               <tbody>
-                {tenants.map((tenant: any) => {
+                {tenants.map((tenant) => {
                   const label =
                     tenant.name || tenant.slug || (tenant.id as string);
                   const initial =
                     (label?.charAt?.(0)?.toUpperCase?.() as string) || "T";
+
+                  const statusLabel = getStatusLabel(tenant.status);
+                  const statusClasses = getStatusClasses(tenant.status);
 
                   return (
                     <tr
                       key={tenant.id}
                       className="border-b border-slate-100 last:border-0"
                     >
+                      {/* Workspace */}
                       <td className="px-3 py-2 align-top">
                         <div className="flex items-center gap-2">
                           {tenant.logoUrl ? (
@@ -289,49 +332,56 @@ export default async function AtsTenantsPage({
                           </div>
                         </div>
                       </td>
+
+                      {/* Primary contact */}
+                      <td className="px-3 py-2 align-top">
+                        {tenant.primaryContactEmail ? (
+                          <span className="text-[11px] text-slate-700">
+                            {tenant.primaryContactEmail}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] italic text-slate-400">
+                            No primary contact set
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-3 py-2 align-top">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${statusClasses}`}
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          {statusLabel}
+                        </span>
+                      </td>
+
+                      {/* Slug */}
                       <td className="px-3 py-2 align-top">
                         <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
                           {tenant.slug || "—"}
                         </span>
                       </td>
+
+                      {/* ID */}
                       <td className="px-3 py-2 align-top">
                         <span className="font-mono text-[10px] text-slate-500">
                           {String(tenant.id).slice(0, 8)}…
                         </span>
                       </td>
+
+                      {/* Created */}
                       <td className="px-3 py-2 align-top">
                         <span className="text-[11px] text-slate-600">
-                          {formatDate(tenant.createdAt || tenant.created_at)}
+                          {formatDate(tenant.createdAt)}
                         </span>
                       </td>
+
+                      {/* Shortcuts */}
                       <td className="px-3 py-2 align-top">
                         <div className="flex justify-end gap-2">
                           <a
                             href={`/ats/jobs?tenantId=${encodeURIComponent(
                               tenant.id,
                             )}`}
-                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                          >
-                            View jobs
-                          </a>
-                          <a
-                            href={`/ats/clients?tenantId=${encodeURIComponent(
-                              tenant.id,
-                            )}`}
-                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                          >
-                            View clients
-                          </a>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:b
