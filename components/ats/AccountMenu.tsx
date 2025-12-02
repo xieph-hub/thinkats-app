@@ -1,89 +1,84 @@
+// components/ats/AccountMenu.tsx
 "use client";
 
 import { useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
-type AccountMenuProps = {
-  email: string | null;
+type Props = {
+  user: User;
 };
 
-export default function AccountMenu({ email }: AccountMenuProps) {
+export default function AccountMenu({ user }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const safeEmail = email ?? "";
-
-  // Basic initials from the email before the "@"
+  const email = user.email ?? "";
   const initials =
-    safeEmail
-      .split("@")[0]
-      .split(/[.\s_-]+/)
-      .filter(Boolean)
+    (user.user_metadata?.full_name as string | undefined)
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
       .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "TA";
+      .toUpperCase() || email.slice(0, 2).toUpperCase();
 
   async function handleLogout() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-    } catch (err) {
-      console.error("Logout failed", err);
+    } catch {
+      // ignore network errors, just force nav to login
     } finally {
       setOpen(false);
       router.push("/login");
-      router.refresh();
     }
   }
 
   return (
     <div className="relative">
-      {/* Pill button – truncated and responsive */}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex max-w-[230px] items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-2 py-1.5 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
       >
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-slate-100">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
           {initials}
         </div>
-
-        {/* Hide the text on very small screens, truncate on wider ones */}
-        <div className="hidden min-w-0 flex-col text-left sm:flex">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        <div className="hidden min-w-0 flex-col sm:flex">
+          <span className="text-[11px] font-medium leading-tight text-slate-900">
             Account
           </span>
-          <span className="truncate text-xs text-slate-700">
-            {safeEmail}
+          <span className="max-w-[160px] truncate text-[11px] text-slate-500">
+            {email}
           </span>
         </div>
       </button>
 
-      {/* Dropdown – fixed width, overflow handled */}
       {open && (
-        <div className="absolute right-0 z-40 mt-2 w-60 max-w-[260px] overflow-hidden rounded-xl border border-slate-200 bg-white py-2 text-sm text-slate-800 shadow-xl">
-          <div className="px-3 pb-2 text-xs text-slate-500">
-            <div className="truncate font-medium text-slate-800">
-              {safeEmail}
-            </div>
+        <div className="absolute right-0 z-30 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-lg">
+          <div className="mb-3 border-b border-slate-100 pb-3">
+            <p className="text-xs font-medium text-slate-900">Signed in as</p>
+            <p className="mt-0.5 max-w-full break-all text-xs text-slate-500">
+              {email}
+            </p>
           </div>
 
           <button
             type="button"
             onClick={() => {
-              router.push("/ats");
               setOpen(false);
+              router.push("/ats");
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50"
+            className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
           >
-            ATS dashboard
+            <span>ATS dashboard</span>
           </button>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-600 hover:bg-red-50"
+            className="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-red-600 hover:bg-red-50"
           >
-            Log out
+            <span>Log out</span>
           </button>
         </div>
       )}
