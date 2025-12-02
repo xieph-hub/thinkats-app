@@ -1,82 +1,75 @@
 // app/api/auth/otp/verify/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 import { prisma } from "@/lib/prisma";
-import { hashOtpCode } from "@/lib/otp";
-
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}));
-  const { code } = body as { code?: string };
+  // Read body safely
+  const body = await req.json().catch(() => ({} as any));
+  const code = body.code as string | undefined;
+  const next = body.next as string | undefined;
 
-  if (!code || code.trim().length !== 6) {
+  if (!code || typeof code !== "string") {
     return NextResponse.json(
-      { error: "Enter the 6-digit code from your email." },
-      { status: 400 }
+      { ok: false, error: "invalid_code" },
+      { status: 400 },
     );
   }
 
-  const { supabase, res } = createSupabaseRouteClient(req);
+  // 🔐 Get currently authenticated user from Supabase session
+  const supabase = createSupabaseRouteClient(req);
+
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError || !user) {
+  if (userError || !user || !user.email) {
     return NextResponse.json(
-      { error: "Not authenticated" },
-      { status: 401 }
+      { ok: false, error: "unauthenticated" },
+      { status: 401 },
     );
   }
 
-  const userId = user.id;
-  const now = new Date();
-  const codeHash = hashOtpCode(code.trim());
+  const email = user.email.toLowerCase();
 
-  const otpRecord = await prisma.atsLoginOtp.findFirst({
+  // 🔎 Look up OTP record (this expects you to have the OtpToken model in Prisma)
+  const otp = await prisma.otpToken.findFirst({
     where: {
-      userId,
-      codeHash,
+      email,
+      code,
+      expiresAt: { gt: new Date() },
       usedAt: null,
-      expiresAt: { gt: now },
     },
-    orderBy: { createdAt: "desc" },
   });
 
-  if (!otpRecord) {
+  if (!otp) {
     return NextResponse.json(
-      { error: "Invalid or expired code. Request a new one." },
-      { status: 400 }
+      { ok: false, error: "invalid_or_expired" },
+      { status: 400 },
     );
   }
 
-  await prisma.atsLoginOtp.update({
-    where: { id: otpRecord.id },
-    data: { usedAt: now },
+  // Mark it as used (so each code is one-time)
+  await prisma.otpToken.update({
+    where: { id: otp.id },
+    data: { usedAt: new Date() },
   });
 
-  // Set a cookie that tells ATS pages "OTP passed"
-  const response = NextResponse.json(
-    { ok: true },
-    {
-      status: 200,
-    }
-  );
+  // Decide where to send them after OTP
+  const redirectTo =
+    typeof next === "string" && next.startsWith("/") ? next : "/ats";
 
-  // Copy Supabase cookies
-  res.cookies.getAll().forEach((cookie) => {
-    response.cookies.set(cookie);
-  });
+  // ✅ Mark OTP as satisfied for this browser (cookie is what ensureOtpVerified checks)
+  const res = NextResponse.json({ ok: true, redirectTo });
 
-  // Our own OTP verification cookie (7 days; adjust as you like)
-  response.cookies.set(OTP_COOKIE_NAME, "1", {
+  res.cookies.set("thinkats_otp_verified", "1", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
     sameSite: "lax",
+    secure: true,
+    path: "/",
+    maxAge: 60 * 60 * 8, // 8 hours
   });
 
-  return response;
+  return res;
 }
