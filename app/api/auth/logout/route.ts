@@ -2,17 +2,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
-export async function POST(req: NextRequest) {
-  const { supabase, res } = createSupabaseRouteClient(req);
+export async function POST(_req: NextRequest) {
+  const supabase = createSupabaseRouteClient();
 
-  // Clear Supabase auth session (and its cookies)
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
 
-  return NextResponse.json(
-    { success: true },
-    {
-      status: 200,
-      headers: res.headers, // forward updated cookies from Supabase
-    }
-  );
+  if (error) {
+    console.error("Supabase logout error:", error);
+    return NextResponse.json(
+      { error: "Failed to log out." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: true });
 }
