@@ -1,52 +1,34 @@
 // lib/supabaseRouteClient.ts
-import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Helper for route handlers (app/api/*) that need Supabase auth
- * and need to keep cookies in sync.
- *
- * Usage:
- *   const { supabase, res } = createSupabaseRouteClient(request);
+ * Supabase client for Route Handlers (/api/*).
+ * In this context it's safe to mutate cookies via next/headers.
  */
-type SupabaseRouteClient = {
-  supabase: SupabaseClient;
-  res: NextResponse;
-};
+export function createSupabaseRouteClient() {
+  const cookieStore = cookies();
 
-export function createSupabaseRouteClient(
-  request: NextRequest
-): SupabaseRouteClient {
-  const res = NextResponse.next();
-
-  const supabase = createServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         get(name: string) {
-          return request.cookies.get(name)?.value;
+          return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: CookieOptions) {
-          // Next 14 + Supabase recommended pattern: pass an object
-          res.cookies.set({
-            name,
-            value,
-            ...options,
-          });
+          cookieStore.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          // Clear cookie by setting empty value
-          res.cookies.set({
+          cookieStore.set({
             name,
             value: "",
             ...options,
+            maxAge: 0,
           });
         },
       },
     }
   );
-
-  return { supabase, res };
 }
