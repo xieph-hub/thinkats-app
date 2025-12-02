@@ -1,46 +1,73 @@
 // middleware.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-const PROTECTED_PREFIXES = ["/ats"];
-
+// Protect /ats/* and keep /login, /signup behaving correctly
 export async function middleware(req: NextRequest) {
-  const { nextUrl } = req;
-  const pathname = nextUrl.pathname;
-
-  // Only protect /ats and /ats/*
-  const requiresAuth = PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
-
-  if (!requiresAuth) {
-    return NextResponse.next();
-  }
-
   const res = NextResponse.next();
 
-  // Supabase server client, wired to cookies for this request/response
-  const supabase = createSupabaseRouteClient(req, res);
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          // Mirror Supabase's recommended pattern for App Router
+          res.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+        },
+        remove(name: string, options: CookieOptions) {
+          // Clear cookie by setting empty value
+          res.cookies.set({
+            name,
+            value: "",
+            ...options,
+          });
+        },
+      },
+    }
+  );
+
   const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error("Supabase auth.getUser error in middleware:", error);
+  }
 
-  const user = data?.user;
+  const user = data?.user ?? null;
+  const url = req.nextUrl;
 
-  // If no user, bounce to login with a callbackUrl back to the original path
-  if (error || !user) {
+  const isAuthPage =
+    url.pathname === "/login" || url.pathname === "/signup";
+  const isAtsRoute = url.pathname.startsWith("/ats");
+
+  // 1) Hitting /ats* while NOT logged in → send to /login with callbackUrl
+  if (!user && isAtsRoute) {
     const redirectUrl = new URL("/login", req.url);
     redirectUrl.searchParams.set(
       "callbackUrl",
-      `${nextUrl.pathname}${nextUrl.search}`
+      url.pathname + url.search
     );
-
     return NextResponse.redirect(redirectUrl);
   }
 
-  // User is authenticated → allow request through
+  // 2) Hitting /login or /signup while logged in → send to /ats (or callback)
+  if (user && isAuthPage) {
+    const callback = url.searchParams.get("callbackUrl");
+    const destination = callback || "/ats";
+    return NextResponse.redirect(new URL(destination, req.url));
+  }
+
+  // 3) All other cases → carry on, with cookies properly wired
   return res;
 }
 
-// Only run middleware on /ats routes
+// Only run middleware where we actually need auth logic
 export const config = {
-  matcher: ["/ats", "/ats/:path*"],
+  matcher: ["/ats/:path*", "/login", "/signup"],
 };
