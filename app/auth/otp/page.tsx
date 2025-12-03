@@ -130,8 +130,9 @@ export default function OtpPage() {
             Enter your sign-in code
           </h1>
           <p className="mt-1 text-center text-xs text-slate-600">
-            We&apos;ve sent a 6-digit code to your email. Enter it below to
-            unlock ATS workspaces like jobs, clients and dashboards.
+            We&apos;ll send a 6-digit code to your email. Enter it below to
+            unlock ATS workspaces like jobs, clients and dashboards. If you
+            don&apos;t see a code yet, request a new one below.
           </p>
         </div>
 
@@ -194,7 +195,7 @@ export default function OtpPage() {
             disabled={isResending}
             className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-[#172965] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isResending ? "Resending code…" : "Didn&apos;t get a code? Resend"}
+            {isResending ? "Resending code…" : "Didn’t get a code? Resend"}
           </button>
           <p className="text-[10px] text-slate-500">
             Check your spam or promotions folder if the email doesn&apos;t show
