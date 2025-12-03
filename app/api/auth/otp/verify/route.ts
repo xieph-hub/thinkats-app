@@ -5,18 +5,6 @@ import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({} as any));
-    const code = body.code as string | undefined;
-    const next = body.next as string | undefined;
-
-    if (!code || typeof code !== "string") {
-      return NextResponse.json(
-        { ok: false, error: "invalid_code" },
-        { status: 400 },
-      );
-    }
-
-    // 1) Get current Supabase user
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -26,68 +14,83 @@ export async function POST(req: NextRequest) {
 
     if (userError || !user || !user.email) {
       return NextResponse.json(
-        { ok: false, error: "unauthenticated" },
+        { ok: false, error: "You need to sign in again before verifying a code." },
         { status: 401 },
+      );
+    }
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      // no-op, will fail on missing code
+    }
+
+    const rawCode = typeof body?.code === "string" ? body.code.trim() : "";
+    const returnTo =
+      typeof body?.returnTo === "string" ? body.returnTo : null;
+
+    if (!rawCode) {
+      return NextResponse.json(
+        { ok: false, error: "Code is required." },
+        { status: 400 },
       );
     }
 
     const email = user.email.toLowerCase();
 
-    // 2) Find app-level User
     const appUser = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!appUser) {
+    if (!appUser || !appUser.otpCode || !appUser.otpExpiresAt) {
       return NextResponse.json(
-        { ok: false, error: "app_user_not_found" },
-        { status: 403 },
-      );
-    }
-
-    // 3) Find valid OTP
-    const otp = await prisma.loginOtp.findFirst({
-      where: {
-        userId: appUser.id,
-        code,
-        consumed: false,
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (!otp) {
-      return NextResponse.json(
-        { ok: false, error: "invalid_or_expired" },
+        {
+          ok: false,
+          error:
+            "No active code found for this account. Please request a new code.",
+        },
         { status: 400 },
       );
     }
 
-    // 4) Mark as consumed
-    await prisma.loginOtp.update({
-      where: { id: otp.id },
-      data: { consumed: true },
+    const now = new Date();
+
+    if (appUser.otpCode !== rawCode) {
+      return NextResponse.json(
+        { ok: false, error: "The code you entered is incorrect." },
+        { status: 400 },
+      );
+    }
+
+    if (appUser.otpExpiresAt < now) {
+      return NextResponse.json(
+        { ok: false, error: "This code has expired. Please request a new one." },
+        { status: 400 },
+      );
+    }
+
+    // Mark OTP as used/verified
+    await prisma.user.update({
+      where: { id: appUser.id },
+      data: {
+        otpCode: null,
+        otpExpiresAt: null,
+        otpVerifiedAt: new Date(), // make sure this field exists in your schema if you want it
+      },
     });
 
-    // 5) Decide redirect target
-    const redirectTo =
-      typeof next === "string" && next.startsWith("/") ? next : "/ats";
+    const redirectTo = returnTo || "/ats";
 
-    // 6) Mark OTP as satisfied via cookie
-    const res = NextResponse.json({ ok: true, redirectTo });
-
-    res.cookies.set("thinkats_otp_verified", "1", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: true,
-      path: "/",
-      maxAge: 60 * 60 * 8, // 8 hours
-    });
-
-    return res;
+    return NextResponse.json({ ok: true, redirectTo });
   } catch (err) {
-    console.error("[ThinkATS OTP] Verify error:", err);
+    console.error("Error in /api/auth/otp/verify:", err);
     return NextResponse.json(
-      { ok: false, error: "server_error" },
+      {
+        ok: false,
+        error:
+          "Something went wrong while verifying your code. Please try again.",
+      },
       { status: 500 },
     );
   }
