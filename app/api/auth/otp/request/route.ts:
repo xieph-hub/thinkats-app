@@ -23,7 +23,11 @@ export async function POST(_req: NextRequest) {
 
     if (userError || !user || !user.email) {
       return NextResponse.json(
-        { ok: false, error: "unauthenticated" },
+        {
+          ok: false,
+          error:
+            "You need to be signed in before requesting a new sign-in code.",
+        },
         { status: 401 },
       );
     }
@@ -99,15 +103,22 @@ export async function POST(_req: NextRequest) {
         });
       } catch (err) {
         console.error("[ThinkATS OTP] Failed to send OTP email:", err);
-        // Still return ok: true, since OTP exists in DB.
+        // We still return ok: true, since OTP exists in DB and can be re-used if the email eventually delivers.
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      // you *could* include a hint if you want, e.g. partially masked email
+    });
   } catch (err) {
     console.error("[ThinkATS OTP] Request error:", err);
     return NextResponse.json(
-      { ok: false, error: "server_error" },
+      {
+        ok: false,
+        error:
+          "Something went wrong while requesting your sign-in code. Please try again.",
+      },
       { status: 500 },
     );
   }
