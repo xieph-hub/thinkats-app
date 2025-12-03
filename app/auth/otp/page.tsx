@@ -7,11 +7,10 @@ import {
   useRef,
   type FormEvent,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function OtpPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   const [code, setCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
@@ -25,8 +24,6 @@ export default function OtpPage() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  const rawReturnTo = searchParams.get("returnTo");
 
   async function handleVerify(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -42,9 +39,6 @@ export default function OtpPage() {
     setIsVerifying(true);
     try {
       const payload: any = { code: trimmed };
-      if (rawReturnTo) {
-        payload.returnTo = rawReturnTo;
-      }
 
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
@@ -72,11 +66,9 @@ export default function OtpPage() {
         return;
       }
 
-      const redirectTo: string =
-        data?.redirectTo || rawReturnTo || "/ats";
+      const redirectTo: string = data?.redirectTo || "/ats";
 
       setSuccess("Code verified. Redirecting…");
-      // Small delay is optional; we can go straight to redirect.
       router.push(redirectTo);
     } catch (err) {
       console.error("Error verifying OTP:", err);
