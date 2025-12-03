@@ -37,6 +37,8 @@ type NavbarUser = {
 
 type NavbarProps = {
   currentUser: NavbarUser;
+  // true only if user has a recent, consumed OTP
+  otpVerified: boolean;
 };
 
 function isActive(pathname: string | null, href: string) {
@@ -55,14 +57,15 @@ function getInitials(user: NavbarUser) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export default function Navbar({ currentUser }: NavbarProps) {
+export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const loggedIn = !!currentUser;
+  const hasSession = !!currentUser; // Supabase session exists
+  const fullyLoggedIn = hasSession && otpVerified; // Supabase + OTP
 
   // 🧭 Marketing chrome should not appear inside the ATS product.
   if (pathname?.startsWith("/ats")) {
@@ -82,6 +85,10 @@ export default function Navbar({ currentUser }: NavbarProps) {
       setLoggingOut(false);
     }
   }
+
+  const atsWorkspaceHref = fullyLoggedIn
+    ? "/ats"
+    : "/auth/otp?returnTo=/ats";
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -169,7 +176,8 @@ export default function Navbar({ currentUser }: NavbarProps) {
 
           {/* Right: auth / workspace */}
           <div className="flex items-center gap-3">
-            {loggedIn ? (
+            {fullyLoggedIn ? (
+              // Supabase session + OTP verified
               <>
                 <Link
                   href="/ats"
@@ -219,7 +227,24 @@ export default function Navbar({ currentUser }: NavbarProps) {
                   )}
                 </div>
               </>
+            ) : hasSession ? (
+              // Supabase session but OTP NOT verified yet
+              <>
+                <Link
+                  href={atsWorkspaceHref}
+                  className="text-sm font-medium text-slate-700 hover:text-[#1E40AF]"
+                >
+                  ATS workspace
+                </Link>
+                <Link
+                  href="/auth/otp?returnTo=/ats"
+                  className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  Finish sign-in
+                </Link>
+              </>
             ) : (
+              // No session at all
               <>
                 <Link
                   href="/login"
@@ -240,12 +265,19 @@ export default function Navbar({ currentUser }: NavbarProps) {
 
         {/* Mobile: auth + hamburger */}
         <div className="flex items-center gap-2 md:hidden">
-          {loggedIn ? (
+          {fullyLoggedIn ? (
             <Link
               href="/ats"
               className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
             >
               ATS workspace
+            </Link>
+          ) : hasSession ? (
+            <Link
+              href={atsWorkspaceHref}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+            >
+              Finish sign-in
             </Link>
           ) : (
             <>
@@ -333,7 +365,7 @@ export default function Navbar({ currentUser }: NavbarProps) {
 
             {/* Auth / workspace block */}
             <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
-              {loggedIn ? (
+              {fullyLoggedIn ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -344,6 +376,14 @@ export default function Navbar({ currentUser }: NavbarProps) {
                 >
                   Open ATS workspace
                 </button>
+              ) : hasSession ? (
+                <Link
+                  href={atsWorkspaceHref}
+                  onClick={() => setMobileOpen(false)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-center text-sm font-semibold text-slate-700"
+                >
+                  Finish sign-in
+                </Link>
               ) : (
                 <>
                   <Link
