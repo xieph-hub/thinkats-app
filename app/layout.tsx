@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
@@ -5,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthRecoveryListener from "@/components/AuthRecoveryListener";
 import { getServerUser } from "@/lib/supabaseServer";
+import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,8 +21,13 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Server-side check of current Supabase user
+  // Supabase session (may exist even before OTP)
   const user = await getServerUser().catch(() => null);
+
+  // OTP status: has this user completed a recent OTP?
+  const otpVerified = user?.email
+    ? await getOtpVerifiedForEmail(user.email)
+    : false;
 
   return (
     <html lang="en" className={inter.className}>
@@ -28,7 +35,7 @@ export default async function RootLayout({
         {/* Handles password reset / magic-link flows */}
         <AuthRecoveryListener />
 
-        <Navbar currentUser={user} />
+        <Navbar currentUser={user} otpVerified={otpVerified} />
         <main className="min-h-screen">{children}</main>
         <Footer />
       </body>
