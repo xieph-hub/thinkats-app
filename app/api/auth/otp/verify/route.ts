@@ -1,93 +1,79 @@
 // app/api/auth/otp/verify/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+
+export const dynamic = "force-dynamic";
+
+const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({} as any));
-    const code = typeof body.code === "string" ? body.code.trim() : "";
-    const returnTo =
-      typeof body.returnTo === "string" && body.returnTo
-        ? body.returnTo
-        : "/ats";
+    const body = await req.json().catch(() => null) as
+      | { code?: string }
+      | null;
 
-    if (!code) {
+    const code = body?.code?.trim();
+
+    if (!code || code.length !== 6) {
       return NextResponse.json(
-        { ok: false, error: "Please enter the 6-digit code." },
+        { ok: false, error: "Please enter the 6-digit code we emailed you." },
         { status: 400 },
       );
     }
 
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user || !user.email) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Your session expired. Please sign in again.",
-        },
-        { status: 401 },
-      );
-    }
-
-    const email = user.email.toLowerCase();
-
-    const appUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!appUser) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "We couldn't find a user record for this email.",
-        },
-        { status: 400 },
-      );
-    }
-
+    // Find a non-expired, non-consumed OTP with this code
     const now = new Date();
 
     const otp = await prisma.loginOtp.findFirst({
       where: {
-        userId: appUser.id,
         code,
         consumed: false,
         expiresAt: { gt: now },
       },
-      orderBy: { createdAt: "desc" },
+      include: {
+        user: true,
+      },
     });
 
-    if (!otp) {
+    if (!otp || !otp.user) {
       return NextResponse.json(
         {
           ok: false,
-          error: "That code is invalid or has expired. Please request a new one.",
+          error:
+            "That code is invalid or has expired. Please request a new one.",
         },
         { status: 400 },
       );
     }
 
+    // Mark it as consumed
     await prisma.loginOtp.update({
       where: { id: otp.id },
       data: { consumed: true },
     });
 
-    return NextResponse.json({
-      ok: true,
-      redirectTo: returnTo,
+    // Mark this session as OTP-verified via cookie
+    const res = NextResponse.json({ ok: true });
+
+    // For now: 24h cookie, strict, sameSite=lax
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    res.cookies.set(OTP_COOKIE_NAME, "true", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      expires,
     });
+
+    return res;
   } catch (err) {
     console.error("[ThinkATS OTP] Verify error:", err);
     return NextResponse.json(
       {
         ok: false,
-        error: "Something went wrong while verifying your code.",
+        error:
+          "Something went wrong while checking your code. Please try again.",
       },
       { status: 500 },
     );
