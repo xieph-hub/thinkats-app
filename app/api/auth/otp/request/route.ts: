@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 import { Resend } from "resend";
 
+export const dynamic = "force-dynamic";
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Use env for branding, but default to ThinkATS
@@ -11,13 +13,11 @@ const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@thinkats.com>";
 
 function generateOtpCode(): string {
-  // 6-digit numeric OTP
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export async function POST(_req: NextRequest) {
   try {
-    // 1) Get current Supabase user (session is from login/magic-link)
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -29,8 +29,7 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "You need to be signed in before requesting a new sign-in code.",
+          error: "You need to be signed in before requesting a new sign-in code.",
         },
         { status: 401 },
       );
@@ -38,10 +37,8 @@ export async function POST(_req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 2) Find or create app-level User row
-    let appUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    // Find or create app user
+    let appUser = await prisma.user.findUnique({ where: { email } });
 
     if (!appUser) {
       appUser = await prisma.user.create({
@@ -57,7 +54,7 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    // 3) Invalidate any existing active OTPs
+    // Invalidate old active OTPs
     await prisma.loginOtp.updateMany({
       where: {
         userId: appUser.id,
@@ -67,9 +64,9 @@ export async function POST(_req: NextRequest) {
       data: { consumed: true },
     });
 
-    // 4) Create a fresh OTP
+    // Create new one
     const code = generateOtpCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await prisma.loginOtp.create({
       data: {
@@ -79,7 +76,7 @@ export async function POST(_req: NextRequest) {
       },
     });
 
-    // 5) Send via Resend
+    // Email via Resend
     if (!process.env.RESEND_API_KEY) {
       console.error("[ThinkATS OTP] RESEND_API_KEY missing.");
       return NextResponse.json(
