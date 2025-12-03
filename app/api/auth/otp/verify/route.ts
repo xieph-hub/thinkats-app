@@ -5,8 +5,21 @@ import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
+    const body = await req.json().catch(() => ({} as any));
+    const code = typeof body.code === "string" ? body.code.trim() : "";
+    const returnTo =
+      typeof body.returnTo === "string" && body.returnTo
+        ? body.returnTo
+        : "/ats";
 
+    if (!code) {
+      return NextResponse.json(
+        { ok: false, error: "Please enter the 6-digit code." },
+        { status: 400 },
+      );
+    }
+
+    const supabase = createSupabaseRouteClient();
     const {
       data: { user },
       error: userError,
@@ -16,29 +29,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "You need to be signed in again before verifying a sign-in code.",
+          error: "Your session expired. Please sign in again.",
         },
         { status: 401 },
-      );
-    }
-
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      // ignore, we'll validate below
-    }
-
-    const rawCode =
-      typeof body?.code === "string" ? body.code.trim() : "";
-    const rawReturnTo =
-      typeof body?.returnTo === "string" ? body.returnTo : null;
-
-    if (!rawCode) {
-      return NextResponse.json(
-        { ok: false, error: "Code is required." },
-        { status: 400 },
       );
     }
 
@@ -52,8 +45,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "We couldn’t find an account for this email. Please try signing in again.",
+          error: "We couldn't find a user record for this email.",
         },
         { status: 400 },
       );
@@ -61,62 +53,41 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
 
-    // Find the most recent matching, unconsumed, unexpired OTP
-    const otpRecord = await prisma.loginOtp.findFirst({
+    const otp = await prisma.loginOtp.findFirst({
       where: {
         userId: appUser.id,
-        code: rawCode,
+        code,
         consumed: false,
         expiresAt: { gt: now },
       },
-      orderBy: { createdAt: "desc" }, // assumes you have createdAt
+      orderBy: { createdAt: "desc" },
     });
 
-    if (!otpRecord) {
-      // Merge "expired" vs "invalid" into one message for security
+    if (!otp) {
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "This code is invalid or has expired. Please request a new code and try again.",
+          error: "That code is invalid or has expired. Please request a new one.",
         },
         { status: 400 },
       );
     }
 
-    // Mark OTP as consumed
     await prisma.loginOtp.update({
-      where: { id: otpRecord.id },
-      data: {
-        consumed: true,
-      },
+      where: { id: otp.id },
+      data: { consumed: true },
     });
-
-    // If you later add otpVerifiedAt to the User model, you can re-enable this:
-    // await prisma.user.update({
-    //   where: { id: appUser.id },
-    //   data: {
-    //     otpVerifiedAt: new Date(),
-    //   },
-    // });
-
-    // Basic protection against open redirects: only allow internal paths starting with "/"
-    let redirectTo = "/ats";
-    if (rawReturnTo && rawReturnTo.startsWith("/")) {
-      redirectTo = rawReturnTo;
-    }
 
     return NextResponse.json({
       ok: true,
-      redirectTo,
+      redirectTo: returnTo,
     });
   } catch (err) {
     console.error("[ThinkATS OTP] Verify error:", err);
     return NextResponse.json(
       {
         ok: false,
-        error:
-          "Something went wrong while verifying your code. Please request a new one and try again.",
+        error: "Something went wrong while verifying your code.",
       },
       { status: 500 },
     );
