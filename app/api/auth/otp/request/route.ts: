@@ -17,7 +17,7 @@ function generateOtpCode(): string {
 
 export async function POST(_req: NextRequest) {
   try {
-    // 1) Supabase user
+    // 1) Get current Supabase user (session is from login/magic-link)
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -38,7 +38,7 @@ export async function POST(_req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 2) App-level user
+    // 2) Find or create app-level User row
     let appUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -57,7 +57,7 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    // 3) Invalidate existing active OTPs
+    // 3) Invalidate any existing active OTPs
     await prisma.loginOtp.updateMany({
       where: {
         userId: appUser.id,
@@ -67,7 +67,7 @@ export async function POST(_req: NextRequest) {
       data: { consumed: true },
     });
 
-    // 4) Create fresh OTP
+    // 4) Create a fresh OTP
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
@@ -79,7 +79,7 @@ export async function POST(_req: NextRequest) {
       },
     });
 
-    // 5) Send email via Resend
+    // 5) Send via Resend
     if (!process.env.RESEND_API_KEY) {
       console.error("[ThinkATS OTP] RESEND_API_KEY missing.");
       return NextResponse.json(
@@ -123,10 +123,7 @@ export async function POST(_req: NextRequest) {
           : "We couldn’t send the sign-in code email. Please try again in a moment.";
 
       return NextResponse.json(
-        {
-          ok: false,
-          error: messageFromError,
-        },
+        { ok: false, error: messageFromError },
         { status: 500 },
       );
     }
