@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!otpRecord) {
-      // You can choose to distinguish "expired" vs "invalid", but it's safer to merge for security
+      // Merge "expired" vs "invalid" into one message for security
       return NextResponse.json(
         {
           ok: false,
@@ -92,25 +92,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Optionally mark user as OTP-verified (if you have such a column)
-    // Comment out if you don't have otpVerifiedAt on your User model.
-    try {
-      await prisma.user.update({
-        where: { id: appUser.id },
-        data: {
-          otpVerifiedAt: new Date(),
-        },
-      });
-    } catch (err) {
-      // non-fatal; only warn
-      console.warn(
-        "[ThinkATS OTP] Could not set otpVerifiedAt on user:",
-        err,
-      );
-    }
+    // If you later add otpVerifiedAt to the User model, you can re-enable this:
+    // await prisma.user.update({
+    //   where: { id: appUser.id },
+    //   data: {
+    //     otpVerifiedAt: new Date(),
+    //   },
+    // });
 
-    // Basic protection against open redirects:
-    // only allow internal paths starting with "/"
+    // Basic protection against open redirects: only allow internal paths starting with "/"
     let redirectTo = "/ats";
     if (rawReturnTo && rawReturnTo.startsWith("/")) {
       redirectTo = rawReturnTo;
