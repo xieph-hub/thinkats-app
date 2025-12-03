@@ -8,16 +8,18 @@ export const dynamic = "force-dynamic";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Use env for branding, but default to ThinkATS
+// You’ve already set RESEND_FROM_EMAIL on Vercel as a ThinkATS address
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@thinkats.com>";
 
 function generateOtpCode(): string {
+  // 6-digit numeric OTP
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 export async function POST(_req: NextRequest) {
   try {
+    // 1) Get current Supabase user
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -29,7 +31,7 @@ export async function POST(_req: NextRequest) {
       return NextResponse.json(
         {
           ok: false,
-          error: "You need to be signed in before requesting a new sign-in code.",
+          error: "You need to be signed in before requesting a sign-in code.",
         },
         { status: 401 },
       );
@@ -37,8 +39,10 @@ export async function POST(_req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // Find or create app user
-    let appUser = await prisma.user.findUnique({ where: { email } });
+    // 2) Find or create app-level User row tied to this email
+    let appUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
     if (!appUser) {
       appUser = await prisma.user.create({
@@ -54,19 +58,21 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    // Invalidate old active OTPs
+    // 3) Invalidate any existing, still-valid OTPs for this user
     await prisma.loginOtp.updateMany({
       where: {
         userId: appUser.id,
         consumed: false,
         expiresAt: { gt: new Date() },
       },
-      data: { consumed: true },
+      data: {
+        consumed: true,
+      },
     });
 
-    // Create new one
+    // 4) Create a fresh OTP
     const code = generateOtpCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     await prisma.loginOtp.create({
       data: {
@@ -76,14 +82,14 @@ export async function POST(_req: NextRequest) {
       },
     });
 
-    // Email via Resend
+    // 5) Send via email (Resend)
     if (!process.env.RESEND_API_KEY) {
       console.error("[ThinkATS OTP] RESEND_API_KEY missing.");
       return NextResponse.json(
         {
           ok: false,
           error:
-            "Email sending for OTP is not configured (RESEND_API_KEY missing).",
+            "Email sending for OTP is not configured (RESEND_API_KEY is missing).",
         },
         { status: 500 },
       );
@@ -93,7 +99,7 @@ export async function POST(_req: NextRequest) {
       const result = await resend.emails.send({
         from: FROM_EMAIL,
         to: email,
-        subject: "Your ThinkATS login code",
+        subject: "Your ThinkATS sign-in code",
         html: `
           <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; color: #0f172a;">
             <h1 style="font-size: 20px; margin-bottom: 8px;">Your ThinkATS login code</h1>
