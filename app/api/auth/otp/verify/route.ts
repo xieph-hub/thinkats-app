@@ -14,7 +14,11 @@ export async function POST(req: NextRequest) {
 
     if (userError || !user || !user.email) {
       return NextResponse.json(
-        { ok: false, error: "You need to sign in again before verifying a code." },
+        {
+          ok: false,
+          error:
+            "You need to be signed in again before verifying a sign-in code.",
+        },
         { status: 401 },
       );
     }
@@ -23,11 +27,12 @@ export async function POST(req: NextRequest) {
     try {
       body = await req.json();
     } catch {
-      // no-op, will fail on missing code
+      // ignore, we'll validate below
     }
 
-    const rawCode = typeof body?.code === "string" ? body.code.trim() : "";
-    const returnTo =
+    const rawCode =
+      typeof body?.code === "string" ? body.code.trim() : "";
+    const rawReturnTo =
       typeof body?.returnTo === "string" ? body.returnTo : null;
 
     if (!rawCode) {
@@ -43,12 +48,12 @@ export async function POST(req: NextRequest) {
       where: { email },
     });
 
-    if (!appUser || !appUser.otpCode || !appUser.otpExpiresAt) {
+    if (!appUser) {
       return NextResponse.json(
         {
           ok: false,
           error:
-            "No active code found for this account. Please request a new code.",
+            "We couldn’t find an account for this email. Please try signing in again.",
         },
         { status: 400 },
       );
@@ -56,40 +61,72 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
 
-    if (appUser.otpCode !== rawCode) {
+    // Find the most recent matching, unconsumed, unexpired OTP
+    const otpRecord = await prisma.loginOtp.findFirst({
+      where: {
+        userId: appUser.id,
+        code: rawCode,
+        consumed: false,
+        expiresAt: { gt: now },
+      },
+      orderBy: { createdAt: "desc" }, // assumes you have createdAt
+    });
+
+    if (!otpRecord) {
+      // You can choose to distinguish "expired" vs "invalid", but it's safer to merge for security
       return NextResponse.json(
-        { ok: false, error: "The code you entered is incorrect." },
+        {
+          ok: false,
+          error:
+            "This code is invalid or has expired. Please request a new code and try again.",
+        },
         { status: 400 },
       );
     }
 
-    if (appUser.otpExpiresAt < now) {
-      return NextResponse.json(
-        { ok: false, error: "This code has expired. Please request a new one." },
-        { status: 400 },
-      );
-    }
-
-    // Mark OTP as used/verified
-    await prisma.user.update({
-      where: { id: appUser.id },
+    // Mark OTP as consumed
+    await prisma.loginOtp.update({
+      where: { id: otpRecord.id },
       data: {
-        otpCode: null,
-        otpExpiresAt: null,
-        otpVerifiedAt: new Date(), // make sure this field exists in your schema if you want it
+        consumed: true,
       },
     });
 
-    const redirectTo = returnTo || "/ats";
+    // Optionally mark user as OTP-verified (if you have such a column)
+    // Comment out if you don't have otpVerifiedAt on your User model.
+    try {
+      await prisma.user.update({
+        where: { id: appUser.id },
+        data: {
+          otpVerifiedAt: new Date(),
+        },
+      });
+    } catch (err) {
+      // non-fatal; only warn
+      console.warn(
+        "[ThinkATS OTP] Could not set otpVerifiedAt on user:",
+        err,
+      );
+    }
 
-    return NextResponse.json({ ok: true, redirectTo });
+    // Basic protection against open redirects:
+    // only allow internal paths starting with "/"
+    let redirectTo = "/ats";
+    if (rawReturnTo && rawReturnTo.startsWith("/")) {
+      redirectTo = rawReturnTo;
+    }
+
+    return NextResponse.json({
+      ok: true,
+      redirectTo,
+    });
   } catch (err) {
-    console.error("Error in /api/auth/otp/verify:", err);
+    console.error("[ThinkATS OTP] Verify error:", err);
     return NextResponse.json(
       {
         ok: false,
         error:
-          "Something went wrong while verifying your code. Please try again.",
+          "Something went wrong while verifying your code. Please request a new one and try again.",
       },
       { status: 500 },
     );
