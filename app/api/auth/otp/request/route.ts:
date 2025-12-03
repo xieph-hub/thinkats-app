@@ -6,6 +6,10 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// Pull FROM email from env, with a safe ThinkATS default
+const FROM_EMAIL =
+  process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@thinkats.com>";
+
 function generateOtpCode(): string {
   // 6-digit numeric OTP
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -13,7 +17,6 @@ function generateOtpCode(): string {
 
 export async function POST(_req: NextRequest) {
   try {
-    // 1) Get current Supabase user
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -34,10 +37,8 @@ export async function POST(_req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 2) Find or create app-level User row tied to this email
-    let appUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    // 1) Find or create app-level User
+    let appUser = await prisma.user.findUnique({ where: { email } });
 
     if (!appUser) {
       appUser = await prisma.user.create({
@@ -53,21 +54,19 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    // 3) Invalidate any existing, still-valid OTPs for this user
+    // 2) Invalidate existing active OTPs
     await prisma.loginOtp.updateMany({
       where: {
         userId: appUser.id,
         consumed: false,
         expiresAt: { gt: new Date() },
       },
-      data: {
-        consumed: true,
-      },
+      data: { consumed: true },
     });
 
-    // 4) Create a fresh OTP
+    // 3) Create fresh OTP
     const code = generateOtpCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
     await prisma.loginOtp.create({
       data: {
@@ -77,40 +76,52 @@ export async function POST(_req: NextRequest) {
       },
     });
 
-    // 5) Send via email (Resend)
+    // 4) Send via Resend
     if (!process.env.RESEND_API_KEY) {
-      console.warn(
-        "[ThinkATS OTP] RESEND_API_KEY missing. OTP email not actually sent.",
+      console.error(
+        "[ThinkATS OTP] RESEND_API_KEY missing. OTP email not sent.",
       );
-    } else {
-      try {
-        await resend.emails.send({
-          from: "ThinkATS <no-reply@thinkats.com>",
-          to: email,
-          subject: "Your ThinkATS login code",
-          html: `
-            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; color: #0f172a;">
-              <h1 style="font-size: 20px; margin-bottom: 8px;">Your ThinkATS login code</h1>
-              <p style="font-size: 14px; margin: 0 0 16px;">Use this one-time code to complete your sign in:</p>
-              <p style="font-size: 32px; font-weight: 700; letter-spacing: 0.3em; margin: 0 0 16px;">
-                ${code}
-              </p>
-              <p style="font-size: 12px; color: #64748b; margin: 0;">
-                This code will expire in 10 minutes. If you did not request it, you can safely ignore this email.
-              </p>
-            </div>
-          `,
-        });
-      } catch (err) {
-        console.error("[ThinkATS OTP] Failed to send OTP email:", err);
-        // We still return ok: true, since OTP exists in DB and can be re-used if the email eventually delivers.
-      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Email sending for OTP is not configured. Please contact the administrator.",
+        },
+        { status: 500 },
+      );
     }
 
-    return NextResponse.json({
-      ok: true,
-      // you *could* include a hint if you want, e.g. partially masked email
-    });
+    try {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: email,
+        subject: "Your ThinkATS login code",
+        html: `
+          <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; color: #0f172a;">
+            <h1 style="font-size: 20px; margin-bottom: 8px;">Your ThinkATS login code</h1>
+            <p style="font-size: 14px; margin: 0 0 16px;">Use this one-time code to complete your sign in:</p>
+            <p style="font-size: 32px; font-weight: 700; letter-spacing: 0.3em; margin: 0 0 16px;">
+              ${code}
+            </p>
+            <p style="font-size: 12px; color: #64748b; margin: 0;">
+              This code will expire in 10 minutes. If you did not request it, you can safely ignore this email.
+            </p>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("[ThinkATS OTP] Failed to send OTP email:", err);
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "We couldn’t send the sign-in code email. Please try again in a moment.",
+        },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[ThinkATS OTP] Request error:", err);
     return NextResponse.json(
