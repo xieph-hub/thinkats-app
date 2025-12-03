@@ -6,7 +6,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Pull FROM email from env, with a safe ThinkATS default
+// Use env for branding, but default to ThinkATS
 const FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@thinkats.com>";
 
@@ -17,6 +17,7 @@ function generateOtpCode(): string {
 
 export async function POST(_req: NextRequest) {
   try {
+    // 1) Supabase user
     const supabase = createSupabaseRouteClient();
 
     const {
@@ -37,8 +38,10 @@ export async function POST(_req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // 1) Find or create app-level User
-    let appUser = await prisma.user.findUnique({ where: { email } });
+    // 2) App-level user
+    let appUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
     if (!appUser) {
       appUser = await prisma.user.create({
@@ -54,7 +57,7 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    // 2) Invalidate existing active OTPs
+    // 3) Invalidate existing active OTPs
     await prisma.loginOtp.updateMany({
       where: {
         userId: appUser.id,
@@ -64,7 +67,7 @@ export async function POST(_req: NextRequest) {
       data: { consumed: true },
     });
 
-    // 3) Create fresh OTP
+    // 4) Create fresh OTP
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
@@ -76,23 +79,21 @@ export async function POST(_req: NextRequest) {
       },
     });
 
-    // 4) Send via Resend
+    // 5) Send email via Resend
     if (!process.env.RESEND_API_KEY) {
-      console.error(
-        "[ThinkATS OTP] RESEND_API_KEY missing. OTP email not sent.",
-      );
+      console.error("[ThinkATS OTP] RESEND_API_KEY missing.");
       return NextResponse.json(
         {
           ok: false,
           error:
-            "Email sending for OTP is not configured. Please contact the administrator.",
+            "Email sending for OTP is not configured (RESEND_API_KEY missing).",
         },
         { status: 500 },
       );
     }
 
     try {
-      await resend.emails.send({
+      const result = await resend.emails.send({
         from: FROM_EMAIL,
         to: email,
         subject: "Your ThinkATS login code",
@@ -109,13 +110,22 @@ export async function POST(_req: NextRequest) {
           </div>
         `,
       });
-    } catch (err) {
+
+      console.log("[ThinkATS OTP] Resend response:", result);
+    } catch (err: any) {
       console.error("[ThinkATS OTP] Failed to send OTP email:", err);
+
+      const messageFromError =
+        typeof err?.message === "string"
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : "We couldn’t send the sign-in code email. Please try again in a moment.";
+
       return NextResponse.json(
         {
           ok: false,
-          error:
-            "We couldn’t send the sign-in code email. Please try again in a moment.",
+          error: messageFromError,
         },
         { status: 500 },
       );
