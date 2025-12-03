@@ -4,7 +4,6 @@ import Image from "next/image";
 import type { Tenant } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { ensureOtpVerified } from "@/lib/requireOtp";
 
 export const dynamic = "force-dynamic";
 
@@ -74,9 +73,6 @@ export default async function AtsTenantsPage({
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
-  // 🔐 Enforce OTP has been verified for this session
-  await ensureOtpVerified();
-
   const tenants: Tenant[] = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
   });
@@ -398,18 +394,4 @@ export default async function AtsTenantsPage({
                             )}`}
                             className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
                           >
-                            View clients
-                          </a>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+                            V
