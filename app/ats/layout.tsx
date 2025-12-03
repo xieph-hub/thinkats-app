@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/supabaseServer";
+import { ensureOtpVerified } from "@/lib/requireOtp";
 import AtsSidebar from "@/components/ats/AtsSidebar";
 import AtsTopbar from "@/components/ats/AtsTopbar";
 
@@ -12,12 +13,21 @@ export const metadata = {
 };
 
 export default async function AtsLayout({ children }: { children: ReactNode }) {
+  // 1) Primary auth – must be logged in
   const user = await getServerUser();
 
   if (!user) {
+    // Your existing login flow
     redirect("/login?callbackUrl=/ats");
   }
 
+  // 2) OTP enforcement – every /ats/* page is behind OTP
+  //    This will redirect to /auth/otp (or whatever you coded inside ensureOtpVerified)
+  await ensureOtpVerified("/ats");
+
+  // 3) Once we get here, user is both:
+  //    - Authenticated (Supabase)
+  //    - OTP-verified (per your loginOtp rules)
   return (
     <div className="flex min-h-screen bg-slate-50">
       <AtsSidebar />
