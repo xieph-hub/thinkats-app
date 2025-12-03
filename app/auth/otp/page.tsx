@@ -1,208 +1,175 @@
 // app/auth/otp/page.tsx
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useRef,
-  type FormEvent,
-} from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function OtpPage() {
+function OtpPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo") || "/ats";
 
   const [code, setCode] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isResending, setIsResending] = useState(false);
+  const [loadingSend, setLoadingSend] = useState(false);
+  const [loadingVerify, setLoadingVerify] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  async function requestCode() {
+    setError(null);
+    setInfo(null);
+    setLoadingSend(true);
+    try {
+      const res = await fetch("/api/otp/request", {
+        method: "POST",
+      });
 
-  // Autofocus on the code input
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        // ignore
+      }
 
-  async function handleVerify(e: FormEvent<HTMLFormElement>) {
+      if (!res.ok || data?.ok === false) {
+        const apiError = data?.error || `status_${res.status}`;
+        setError(`Could not send code (${apiError}).`);
+      } else {
+        setInfo("We sent a 6-digit code to your email.");
+      }
+    } catch {
+      setError("Network error while requesting code.");
+    } finally {
+      setLoadingSend(false);
+    }
+  }
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setSuccess(null);
+    setInfo(null);
+    setLoadingVerify(true);
 
-    const trimmed = code.trim();
-    if (trimmed.length < 6) {
-      setError("Please enter the 6-digit code.");
-      return;
-    }
-
-    setIsVerifying(true);
     try {
-      const payload: any = { code: trimmed };
-
-      const res = await fetch("/api/auth/otp/verify", {
+      const res = await fetch("/api/otp/verify", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
       });
 
       let data: any = {};
       try {
         data = await res.json();
       } catch {
-        // ignore JSON parse errors, fall back to generic message
+        // ignore
       }
 
-      if (!res.ok || !data?.ok) {
-        const message =
-          data?.error ||
-          (res.status === 401
-            ? "You need to sign in again before verifying a code."
-            : `Verification failed (status ${res.status}).`);
+      if (!res.ok || data?.ok === false) {
+        const apiError = data?.error || `status_${res.status}`;
 
-        setError(message);
-        return;
+        if (apiError === "invalid_or_expired") {
+          setError("That code is invalid or has expired. Try again.");
+        } else if (apiError === "missing_code") {
+          setError("Please enter your 6-digit code.");
+        } else if (apiError === "unauthenticated") {
+          setError("Your session expired. Please log in again.");
+          router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`);
+          return;
+        } else {
+          setError(`Could not verify code (${apiError}).`);
+        }
+      } else {
+        setInfo("Code verified. Redirecting…");
+        router.push(returnTo);
+        router.refresh();
       }
-
-      const redirectTo: string = data?.redirectTo || "/ats";
-
-      setSuccess("Code verified. Redirecting…");
-      router.push(redirectTo);
-    } catch (err) {
-      console.error("Error verifying OTP:", err);
-      setError("Network error while verifying code. Please try again.");
+    } catch {
+      setError("Network error while verifying code.");
     } finally {
-      setIsVerifying(false);
+      setLoadingVerify(false);
     }
   }
 
-  async function handleResend() {
-    setError(null);
-    setSuccess(null);
-    setIsResending(true);
+  useEffect(() => {
+    // Auto-request a code the first time this page loads
+    requestCode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    try {
-      const res = await fetch("/api/auth/otp/request", {
-        method: "POST",
-      });
-
-      let data: any = {};
-      try {
-        data = await res.json();
-      } catch {
-        // ignore JSON parse errors
-      }
-
-      if (!res.ok || !data?.ok) {
-        const message =
-          data?.error ||
-          (res.status === 401
-            ? "You need to sign in before requesting a new code."
-            : `Unable to resend code (status ${res.status}).`);
-
-        setError(message);
-        return;
-      }
-
-      setSuccess("A new sign-in code has been sent to your email.");
-    } catch (err) {
-      console.error("Error resending OTP:", err);
-      setError("Network error while resending code. Please try again.");
-    } finally {
-      setIsResending(false);
-    }
-  }
+  const disabled = loadingSend || loadingVerify;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
-        {/* Brand header */}
-        <div className="mb-5 flex flex-col items-center gap-1">
-          <div className="inline-flex items-center gap-2 rounded-full bg-[#172965]/5 px-3 py-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-            <span className="text-[11px] font-medium uppercase tracking-wide text-[#172965]">
-              ThinkATS secure sign-in
-            </span>
-          </div>
-          <h1 className="mt-2 text-center text-xl font-semibold text-slate-900">
-            Enter your sign-in code
-          </h1>
-          <p className="mt-1 text-center text-xs text-slate-600">
-            We&apos;ll send a 6-digit code to your email. Enter it below to
-            unlock ATS workspaces like jobs, clients and dashboards. If you
-            don&apos;t see a code yet, request a new one below.
-          </p>
-        </div>
+    <div className="flex min-h-[80vh] items-center justify-center bg-slate-50 px-4 py-12">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <h1 className="text-xl font-semibold text-slate-900">
+          Enter your one-time code
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          For extra security, we use a one-time code to unlock the ATS
+          workspace. Check your inbox for a 6-digit code.
+        </p>
 
-        {/* Alerts */}
-        {error && (
-          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-            {success}
-          </div>
-        )}
-
-        {/* Code form */}
-        <form onSubmit={handleVerify} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div className="space-y-1">
             <label
               htmlFor="otp-code"
-              className="text-xs font-medium text-slate-700"
+              className="text-sm font-medium text-slate-700"
             >
               6-digit code
             </label>
             <input
-              ref={inputRef}
               id="otp-code"
-              name="code"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
               value={code}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-                setCode(v);
-              }}
-              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-center text-lg tracking-[0.3em] text-slate-900 outline-none ring-0 placeholder:text-slate-300 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              onChange={(e) => setCode(e.target.value)}
+              maxLength={6}
+              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm tracking-[0.3em] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               placeholder="••••••"
             />
-            <p className="mt-1 text-[10px] text-slate-500">
-              Codes expire after a short time. If yours has expired, you can
-              request a new one.
-            </p>
           </div>
+
+          {error && (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {error}
+            </p>
+          )}
+
+          {info && !error && (
+            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              {info}
+            </p>
+          )}
 
           <button
             type="submit"
-            disabled={code.length !== 6 || isVerifying}
-            className="flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60 hover:bg-[#0f1c48]"
+            disabled={disabled}
+            className="flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0f1c48] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {isVerifying ? "Verifying…" : "Verify code"}
+            {loadingVerify ? "Verifying…" : "Verify and continue"}
           </button>
         </form>
 
-        {/* Footer actions */}
-        <div className="mt-4 flex flex-col items-center gap-2 text-[11px] text-slate-600">
+        <div className="mt-4 flex items-center justify-between text-xs text-slate-600">
+          <span>Didn&apos;t get a code?</span>
           <button
             type="button"
-            onClick={handleResend}
-            disabled={isResending}
-            className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-[#172965] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={requestCode}
+            disabled={loadingSend}
+            className="font-semibold text-[#172965] hover:underline disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isResending ? "Resending code…" : "Didn’t get a code? Resend"}
+            {loadingSend ? "Sending…" : "Resend code"}
           </button>
-          <p className="text-[10px] text-slate-500">
-            Check your spam or promotions folder if the email doesn&apos;t show
-            up in your inbox.
-          </p>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OtpPage() {
+  return (
+    <Suspense fallback={null}>
+      <OtpPageInner />
+    </Suspense>
   );
 }
