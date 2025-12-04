@@ -1,54 +1,31 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getResourcinTenant } from "@/lib/tenant";
+import { prisma } from "@/lib/prisma";
 
-type DashboardStats = {
-  tenantName: string;
-  openJobs: number;
-  totalCandidates: number;
-  applicationsLast30Days: number;
-  avgApplicationsPerOpenJob: number;
-  recentJobs: RecentJob[];
-  recentApplications: RecentApplication[];
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "ThinkATS | ATS Dashboard",
+  description:
+    "Overview of jobs, candidates and applications across a tenant in ThinkATS.",
 };
 
-type JobRow = {
-  id: string;
-  title: string;
-  location: string | null;
-  status: string | null;
-  created_at: string | null;
+type DashboardSearchParams = {
+  tenantId?: string | string[];
 };
 
-type RecentJob = {
-  id: string;
-  title: string;
-  location: string | null;
-  status: string | null;
-  createdAt: string | null;
-};
+function asString(
+  value: string | string[] | undefined,
+  fallback = "",
+): string {
+  if (!value) return fallback;
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  return value;
+}
 
-type JobApplicationRow = {
-  id: string;
-  job_id: string;
-  full_name: string;
-  location: string | null;
-  status: string | null;
-  created_at: string | null;
-};
-
-type RecentApplication = {
-  id: string;
-  fullName: string;
-  jobTitle: string;
-  location: string | null;
-  status: string | null;
-  createdAt: string | null;
-};
-
-function formatDate(dateString: string | null): string {
-  if (!dateString) return "";
-  const d = new Date(dateString);
+function formatDate(date: Date | string | null | undefined): string {
+  if (!date) return "";
+  const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -57,116 +34,86 @@ function formatDate(dateString: string | null): string {
   });
 }
 
-async function getDashboardStats(): Promise<DashboardStats> {
-  const tenant = await getResourcinTenant();
-  const tenantId = tenant.id;
-  const tenantName = tenant.name;
+export default async function AtsDashboardPage({
+  searchParams,
+}: {
+  searchParams?: DashboardSearchParams;
+}) {
+  const tenantParam = asString(searchParams?.tenantId);
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  // 1) Load all tenants – super admin can switch between them
+  const tenants = await prisma.tenant.findMany({
+    orderBy: { name: "asc" },
+  });
 
-  let openJobs = 0;
-  let totalCandidates = 0;
-  let applicationsLast30Days = 0;
-  let avgApplicationsPerOpenJob = 0;
-
-  let recentJobs: RecentJob[] = [];
-  let recentApplications: RecentApplication[] = [];
-
-  // 1) Load all jobs for this tenant
-  let jobs: JobRow[] = [];
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("jobs")
-      .select("id, title, location, status, created_at")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      jobs = data as JobRow[];
-      openJobs = jobs.filter((job) => job.status === "open").length;
-
-      recentJobs = jobs.slice(0, 5).map((job) => ({
-        id: job.id,
-        title: job.title,
-        location: job.location,
-        status: job.status,
-        createdAt: job.created_at,
-      }));
-    }
-  } catch {
-    openJobs = 0;
-    recentJobs = [];
+  if (tenants.length === 0) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-10 lg:px-8">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          ThinkATS dashboard
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          No tenants have been created yet. Once you add a tenant and start
+          posting jobs, this dashboard will show activity and pipeline metrics.
+        </p>
+      </div>
+    );
   }
 
-  // 2) Count candidates for this tenant
-  try {
-    const { count: candidatesCount, error: candidatesError } =
-      await supabaseAdmin
-        .from("candidates")
-        .select("id", { head: true, count: "exact" })
-        .eq("tenant_id", tenantId);
+  const selectedTenant =
+    tenants.find(
+      (t) => t.id === tenantParam || (t as any).slug === tenantParam,
+    ) ?? tenants[0];
 
-    if (!candidatesError) {
-      totalCandidates = candidatesCount ?? 0;
-    }
-  } catch {
-    totalCandidates = 0;
-  }
+  const selectedTenantId = selectedTenant.id;
+  const tenantName =
+    selectedTenant.name || (selectedTenant as any).slug || selectedTenant.id;
 
-  // 3) Applications (30 days) for this tenant, via job_ids
-  try {
-    const jobIds = jobs.map((j) => j.id);
-    if (jobIds.length > 0) {
-      const { data: appsData, error: appsError } = await supabaseAdmin
-        .from("job_applications")
-        .select("id, job_id, full_name, location, status, created_at")
-        .in("job_id", jobIds)
-        .gte("created_at", thirtyDaysAgo.toISOString())
-        .order("created_at", { ascending: false });
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(now.getDate() - 30);
 
-      if (!appsError && appsData) {
-        const apps = appsData as JobApplicationRow[];
-        applicationsLast30Days = apps.length;
+  // 2) Jobs, candidates and applications for this tenant
+  const [jobs, totalCandidates, recentApplications] = await Promise.all([
+    prisma.job.findMany({
+      where: { tenantId: selectedTenantId },
+      include: {
+        clientCompany: true,
+        _count: { select: { applications: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.candidate.count({
+      where: { tenantId: selectedTenantId },
+    }),
+    prisma.jobApplication.findMany({
+      where: {
+        job: { tenantId: selectedTenantId },
+        createdAt: {
+          gte: thirtyDaysAgo,
+          lte: now,
+        },
+      },
+      include: {
+        job: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
-        const jobsById = new Map(jobs.map((j) => [j.id, j]));
-        recentApplications = apps.slice(0, 5).map((app) => {
-          const job = jobsById.get(app.job_id);
-          return {
-            id: app.id,
-            fullName: app.full_name,
-            jobTitle: job?.title ?? "Unknown role",
-            location: app.location,
-            status: app.status,
-            createdAt: app.created_at,
-          };
-        });
-      }
-    }
-  } catch {
-    applicationsLast30Days = 0;
-    recentApplications = [];
-  }
+  const openJobs = jobs.filter(
+    (job) => (job.status || "").toLowerCase() === "open",
+  );
+  const openJobsCount = openJobs.length;
 
-  if (openJobs > 0) {
-    avgApplicationsPerOpenJob = applicationsLast30Days / openJobs;
-  } else {
-    avgApplicationsPerOpenJob = 0;
-  }
+  const applicationsLast30Days = recentApplications.length;
+  const avgApplicationsPerOpenJob =
+    openJobsCount > 0 ? applicationsLast30Days / openJobsCount : 0;
 
-  return {
-    tenantName,
-    openJobs,
-    totalCandidates,
-    applicationsLast30Days,
-    avgApplicationsPerOpenJob,
-    recentJobs,
-    recentApplications,
-  };
-}
+  const recentJobs = jobs.slice(0, 5);
+  const recentAppsForList = recentApplications.slice(0, 5);
 
-export default async function AtsDashboardPage() {
-  const stats = await getDashboardStats();
+  const tenantQuery = `tenantId=${encodeURIComponent(selectedTenantId)}`;
 
   return (
     <div className="flex flex-col gap-8">
@@ -181,27 +128,47 @@ export default async function AtsDashboardPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Overview of jobs, candidates and activity for{" "}
-            <span className="font-medium text-slate-900">
-              {stats.tenantName}
-            </span>
-            .
+            <span className="font-medium text-slate-900">{tenantName}</span>.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+          {/* Tenant chip + selector (if >1 tenant) */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Tenant: {stats.tenantName}
-          </span>
+            {tenants.length > 1 ? (
+              <>
+                <span className="text-[11px] uppercase tracking-wide text-slate-500">
+                  Tenant
+                </span>
+                <form method="GET">
+                  <select
+                    name="tenantId"
+                    defaultValue={selectedTenantId}
+                    className="border-none bg-transparent text-xs text-slate-900 outline-none focus:ring-0"
+                  >
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name || (t as any).slug || t.id}
+                      </option>
+                    ))}
+                  </select>
+                </form>
+              </>
+            ) : (
+              <span>Tenant: {tenantName}</span>
+            )}
+          </div>
+
           <Link
-            href="/ats/jobs/new"
+            href={`/ats/jobs/new?${tenantQuery}`}
             className="inline-flex items-center gap-1 rounded-full bg-[#1E40AF] px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1D3A9A]"
           >
             <span className="text-base leading-none">＋</span>
             New job
           </Link>
           <Link
-            href="/ats/jobs"
+            href={`/ats/jobs?${tenantQuery}`}
             className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             View all jobs
@@ -216,7 +183,7 @@ export default async function AtsDashboardPage() {
           <p className="text-[11px] font-medium uppercase tracking-wide text-slate-200">
             Open jobs
           </p>
-          <p className="mt-2 text-3xl font-semibold">{stats.openJobs}</p>
+          <p className="mt-2 text-3xl font-semibold">{openJobsCount}</p>
           <p className="mt-1 text-xs text-slate-200/80">
             Jobs currently accepting applications.
           </p>
@@ -228,7 +195,7 @@ export default async function AtsDashboardPage() {
             Applications (30 days)
           </p>
           <p className="mt-2 text-3xl font-semibold">
-            {stats.applicationsLast30Days}
+            {applicationsLast30Days}
           </p>
           <p className="mt-1 text-xs text-amber-800/80">
             New applications received across all jobs.
@@ -240,9 +207,7 @@ export default async function AtsDashboardPage() {
           <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-800/80">
             Candidates in talent pool
           </p>
-          <p className="mt-2 text-3xl font-semibold">
-            {stats.totalCandidates}
-          </p>
+          <p className="mt-2 text-3xl font-semibold">{totalCandidates}</p>
           <p className="mt-1 text-xs text-emerald-800/80">
             Unique candidates under this tenant.
           </p>
@@ -254,9 +219,7 @@ export default async function AtsDashboardPage() {
             Avg. applications / open job
           </p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">
-            {stats.openJobs > 0
-              ? stats.avgApplicationsPerOpenJob.toFixed(1)
-              : "–"}
+            {openJobsCount > 0 ? avgApplicationsPerOpenJob.toFixed(1) : "–"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Based on the last 30 days of applications.
@@ -278,21 +241,21 @@ export default async function AtsDashboardPage() {
               </p>
             </div>
             <Link
-              href="/ats/jobs"
+              href={`/ats/jobs?${tenantQuery}`}
               className="text-xs font-medium text-[#1E40AF] hover:underline"
             >
               View all jobs →
             </Link>
           </div>
 
-          {stats.recentJobs.length === 0 ? (
+          {recentJobs.length === 0 ? (
             <p className="py-4 text-xs text-slate-500">
               No jobs yet for this tenant. Create a role to start receiving
               applications.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {stats.recentJobs.map((job) => (
+              {recentJobs.map((job) => (
                 <li key={job.id} className="py-3 first:pt-1 last:pb-1">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -306,10 +269,10 @@ export default async function AtsDashboardPage() {
                             <span className="mx-1.5 text-slate-300">•</span>
                           </>
                         )}
-                        {job.createdAt && formatDate(job.createdAt)}
+                        {formatDate(job.createdAt)}
                       </p>
                     </div>
-                    {job.status === "open" && (
+                    {(job.status || "").toLowerCase() === "open" && (
                       <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700">
                         Open
                       </span>
@@ -329,24 +292,24 @@ export default async function AtsDashboardPage() {
                 Candidate inbox
               </h2>
               <p className="text-xs text-slate-500">
-                Most recent applications across all jobs.
+                Most recent applications across all jobs (last 30 days).
               </p>
             </div>
             <Link
-              href="/ats/candidates"
+              href={`/ats/candidates?${tenantQuery}`}
               className="text-xs font-medium text-[#1E40AF] hover:underline"
             >
               View all →
             </Link>
           </div>
 
-          {stats.recentApplications.length === 0 ? (
+          {recentAppsForList.length === 0 ? (
             <p className="py-4 text-xs text-slate-500">
               No applications in the last 30 days for this tenant.
             </p>
           ) : (
             <ul className="space-y-3">
-              {stats.recentApplications.map((app) => (
+              {recentAppsForList.map((app) => (
                 <li
                   key={app.id}
                   className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5"
@@ -359,7 +322,7 @@ export default async function AtsDashboardPage() {
                       <p className="mt-0.5 text-xs text-slate-600">
                         Applied for{" "}
                         <span className="font-medium">
-                          {app.jobTitle}
+                          {app.job?.title ?? "Unknown role"}
                         </span>
                       </p>
                       <p className="mt-0.5 text-[11px] text-slate-500">
@@ -369,7 +332,7 @@ export default async function AtsDashboardPage() {
                             <span className="mx-1 text-slate-300">•</span>
                           </>
                         )}
-                        {app.createdAt && formatDate(app.createdAt)}
+                        {formatDate(app.createdAt)}
                       </p>
                     </div>
                     {app.status && (
