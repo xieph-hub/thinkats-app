@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
         {
           filename: "interview.ics",
           content: ics,
-          type: "text/calendar",
+          // contentType: "text/calendar", // use this if your Resend version supports it
         },
       ],
     });
