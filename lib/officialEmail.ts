@@ -14,7 +14,7 @@ function parseList(envValue: string | undefined | null): string[] {
 }
 
 // e.g. THINKATS_OFFICIAL_DOMAINS = "resourcin.com, thinkats.com"
-// e.g. THINKATS_OVERRIDE_EMAILS = "you@gmail.com, bunmi@something.com"
+// e.g. THINKATS_OVERRIDE_EMAILS = "resourcinhumancapitaladvisors@gmail.com"
 const OFFICIAL_DOMAINS = parseList(process.env.THINKATS_OFFICIAL_DOMAINS);
 const OVERRIDE_EMAILS = parseList(process.env.THINKATS_OVERRIDE_EMAILS);
 
