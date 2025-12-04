@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import ApplicationStageStatusControls from "@/components/ats/ApplicationStageStatusControls";
-import ScheduleInterviewDialog from "@/components/ats/ScheduleInterviewDialog";
 
 export const dynamic = "force-dynamic";
 
@@ -30,19 +29,6 @@ function formatDate(value: string | Date | null | undefined) {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  });
-}
-
-function formatDateTime(value: string | Date | null | undefined) {
-  if (!value) return "";
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -136,11 +122,6 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
       applications: {
         include: {
           candidate: true,
-          interviews: {
-            orderBy: {
-              scheduledAt: "asc",
-            },
-          },
         },
         orderBy: {
           createdAt: "desc",
@@ -178,6 +159,7 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     buckets.get(key)!.push(app);
   }
 
+  // Ensure stable stage order, add "Other" bucket at the end if needed
   const knownStages = STAGE_ORDER.filter((s) => buckets.has(s));
   const unknownStages = Array.from(buckets.keys()).filter(
     (s) => !STAGE_ORDER.includes(s),
@@ -352,44 +334,19 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                       app.status || "PENDING",
                     );
 
+                    const matchScore =
+                      typeof (app as any).matchScore === "number"
+                        ? (app as any).matchScore
+                        : null;
+                    const matchReason =
+                      (app as any).matchReason &&
+                      typeof (app as any).matchReason === "string"
+                        ? (app as any).matchReason
+                        : null;
+
                     const candidateId = candidate?.id;
                     const cvUrl =
                       (app as any).cvUrl || (candidate as any)?.cvUrl || null;
-
-                    // Interview spotlight (next or last)
-                    const rawInterviews =
-                      ((app as any).interviews as
-                        | { scheduledAt: string | Date }[]
-                        | undefined) || [];
-                    let spotlightInterview:
-                      | { scheduledAt: string | Date }
-                      | undefined;
-                    let interviewLabelPrefix: string | null = null;
-
-                    if (rawInterviews.length > 0) {
-                      const now = Date.now();
-                      const upcoming = rawInterviews.find((i) => {
-                        const t = new Date(
-                          i.scheduledAt as any,
-                        ).getTime();
-                        return !Number.isNaN(t) && t > now;
-                      });
-                      const past = rawInterviews.filter((i) => {
-                        const t = new Date(
-                          i.scheduledAt as any,
-                        ).getTime();
-                        return !Number.isNaN(t) && t <= now;
-                      });
-                      const lastPast =
-                        past.length > 0
-                          ? past[past.length - 1]
-                          : undefined;
-
-                      spotlightInterview = upcoming || lastPast;
-                      interviewLabelPrefix = upcoming
-                        ? "Next interview"
-                        : "Last interview";
-                    }
 
                     return (
                       <div
@@ -467,23 +424,18 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                                 </>
                               )}
                             </div>
-
-                            {spotlightInterview && interviewLabelPrefix && (
-                              <p className="mt-1 text-[11px] text-slate-500">
-                                <span className="font-medium text-slate-700">
-                                  {interviewLabelPrefix}:
-                                </span>{" "}
-                                {formatDateTime(
-                                  spotlightInterview.scheduledAt,
-                                )}
-                              </p>
-                            )}
                           </div>
                         </div>
 
-                        {/* Right: stage/status controls + interview */}
+                        {/* Right: stage/status controls + match info */}
                         <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
+                          {/* Current state badges */}
                           <div className="flex flex-wrap justify-end gap-2">
+                            {typeof matchScore === "number" && (
+                              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                                Match {matchScore}%
+                              </span>
+                            )}
                             <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
                               {stageLabelInner}
                             </span>
@@ -496,19 +448,18 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                             </span>
                           </div>
 
-                          <div className="flex flex-col items-end gap-1">
-                            <ApplicationStageStatusControls
-                              applicationId={app.id}
-                              initialStage={app.stage || "APPLIED"}
-                              initialStatus={app.status || "PENDING"}
-                            />
-                            <ScheduleInterviewDialog
-                              applicationId={app.id}
-                              candidateName={name}
-                              candidateEmail={email}
-                              jobTitle={job.title || "Untitled role"}
-                            />
-                          </div>
+                          {/* Editable controls */}
+                          <ApplicationStageStatusControls
+                            applicationId={app.id}
+                            initialStage={app.stage || "APPLIED"}
+                            initialStatus={app.status || "PENDING"}
+                          />
+
+                          {matchReason && (
+                            <p className="max-w-xs pt-1 text-right text-[10px] text-slate-500">
+                              {matchReason}
+                            </p>
+                          )}
                         </div>
                       </div>
                     );
