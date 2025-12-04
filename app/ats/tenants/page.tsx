@@ -4,6 +4,7 @@ import Image from "next/image";
 import type { Tenant } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { ensureOtpVerified } from "@/lib/requireOtp";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,9 @@ export default async function AtsTenantsPage({
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
+  // 🔐 Every ATS workspace page should be behind OTP
+  await ensureOtpVerified("/ats/tenants");
+
   const tenants: Tenant[] = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
   });
@@ -264,7 +268,7 @@ export default async function AtsTenantsPage({
             Existing workspaces
           </h2>
           <p className="text-[11px] text-slate-500">
-            Click through to manage jobs and client companies for each
+            Click through to manage jobs, clients and careers sites for each
             workspace.
           </p>
         </div>
@@ -395,6 +399,14 @@ export default async function AtsTenantsPage({
                             className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
                           >
                             View clients
+                          </a>
+                          <a
+                            href={`/ats/tenants/${encodeURIComponent(
+                              tenant.id,
+                            )}/careersite`}
+                            className="rounded-full bg-slate-50 px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            Careers site
                           </a>
                         </div>
                       </td>
