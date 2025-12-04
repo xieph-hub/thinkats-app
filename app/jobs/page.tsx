@@ -7,9 +7,9 @@ import { prisma } from "@/lib/prisma";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Open roles | Resourcin & ThinkATS",
+  title: "Jobs on ThinkATS | Global roles",
   description:
-    "Explore open roles curated by Resourcin and its clients across Nigeria, Africa and beyond.",
+    "Explore open roles across companies and agencies hiring on ThinkATS.",
 };
 
 interface JobsPageSearchParams {
@@ -17,7 +17,17 @@ interface JobsPageSearchParams {
   location?: string | string[];
   department?: string | string[];
   workMode?: string | string[];
-  src?: string | string[]; // 👈 carry tracking source through
+  tenant?: string | string[];
+  src?: string | string[]; // carry tracking source through
+}
+
+function asStringParam(
+  value: string | string[] | undefined,
+  fallback = "",
+): string {
+  if (!value) return fallback;
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  return value;
 }
 
 function formatWorkMode(value?: string | null) {
@@ -62,6 +72,9 @@ export default async function PublicJobsPage({
 }: {
   searchParams?: JobsPageSearchParams;
 }) {
+  // -----------------------------
+  // Resolve search params
+  // -----------------------------
   const rawQ = searchParams?.q ?? "";
   const q =
     Array.isArray(rawQ) && rawQ.length > 0
@@ -94,7 +107,9 @@ export default async function PublicJobsPage({
       ? rawWorkMode
       : "all";
 
-  // 🔹 Tracking source (for multi-tenant / attribution)
+  const tenantFilter = asStringParam(searchParams?.tenant, "all");
+
+  // 🔹 Tracking source (for attribution)
   const rawSrcParam =
     typeof searchParams?.src === "string"
       ? searchParams.src
@@ -108,23 +123,77 @@ export default async function PublicJobsPage({
       : undefined;
 
   // -----------------------------
-  // Load all public + open jobs
+  // 1) Tenants allowed into marketplace
+  // -----------------------------
+  const marketplaceSettings = await prisma.careerSiteSettings.findMany({
+    where: {
+      isPublic: true,
+      includeInMarketplace: true,
+      tenant: {
+        status: "active",
+      },
+    },
+    select: {
+      tenantId: true,
+      tenant: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  const marketplaceTenantIds = Array.from(
+    new Set(marketplaceSettings.map((s) => s.tenantId)),
+  );
+
+  if (marketplaceTenantIds.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#F5F6FA]">
+        <div className="mx-auto max-w-3xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
+          <section className="rounded-3xl border border-slate-200 bg-white/90 p-6 text-sm text-slate-700 shadow-sm backdrop-blur sm:p-8">
+            <h1 className="text-2xl font-semibold text-[#172965]">
+              Jobs on ThinkATS
+            </h1>
+            <p className="mt-3">
+              No companies have published their roles to the ThinkATS marketplace
+              yet.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Once tenants enable{" "}
+              <span className="font-medium">“Include this tenant in the global
+              marketplace”</span> in their careers site settings, their public,
+              open roles will appear here automatically.
+            </p>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  // -----------------------------
+  // 2) Load all public + open jobs from marketplace tenants
   // -----------------------------
   const jobs = await prisma.job.findMany({
     where: {
       status: "open",
       visibility: "public",
+      tenantId: { in: marketplaceTenantIds },
     },
     orderBy: {
       createdAt: "desc",
     },
     include: {
       clientCompany: true,
-      tenant: true, // 👈 so we can show tenant logos & names
+      tenant: true,
     },
   });
 
-  // Build filter options
+  // -----------------------------
+  // 3) Filter options
+  // -----------------------------
   const locations = Array.from(
     new Set(
       jobs
@@ -152,8 +221,19 @@ export default async function PublicJobsPage({
     ),
   ).sort((a, b) => a.localeCompare(b));
 
+  const distinctTenants = Array.from(
+    new Map(
+      jobs.map((job) => {
+        const t = job.tenant;
+        const key = t.slug || t.id;
+        const label = t.name || t.slug || t.id;
+        return [key, { key, label }];
+      }),
+    ).values(),
+  ).sort((a, b) => a.label.localeCompare(b.label));
+
   // -----------------------------
-  // Apply filters in-memory
+  // 4) Apply filters in-memory
   // -----------------------------
   const filteredJobs = jobs.filter((job: any) => {
     let ok = true;
@@ -171,6 +251,11 @@ export default async function PublicJobsPage({
       ok = ok && wm === workModeFilter;
     }
 
+    if (tenantFilter !== "all" && tenantFilter) {
+      const key = job.tenant.slug || job.tenant.id;
+      ok = ok && key === tenantFilter;
+    }
+
     if (q) {
       const haystack = (
         job.title +
@@ -183,9 +268,14 @@ export default async function PublicJobsPage({
         " " +
         (job.overview || "") +
         " " +
-        (job.description || "")
-      ).toLowerCase();
-      ok = ok && haystack.includes(q.toLowerCase());
+        (job.description || "") +
+        " " +
+        (job.tenant.name || job.tenant.slug || "")
+      )
+        .toLowerCase()
+        .trim();
+
+      ok = ok && haystack.includes(q.toLowerCase().trim());
     }
 
     return ok;
@@ -208,6 +298,13 @@ export default async function PublicJobsPage({
     )}`;
   }
 
+  const hasFilters =
+    !!q ||
+    locationFilter !== "all" ||
+    departmentFilter !== "all" ||
+    workModeFilter !== "all" ||
+    tenantFilter !== "all";
+
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <div className="mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
@@ -216,16 +313,15 @@ export default async function PublicJobsPage({
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="max-w-xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#FFC000]">
-                Careers
+                Jobs on ThinkATS
               </p>
               <h1 className="mt-2 text-2xl font-semibold text-[#172965] sm:text-3xl">
-                Roles curated by Resourcin &amp; ThinkATS
+                Roles across companies hiring on ThinkATS
               </h1>
               <p className="mt-3 text-sm text-slate-600">
-                Live mandates across Nigeria, Africa and beyond. These roles
-                have been vetted with hiring teams and come with clear
-                expectations, transparent processes and support from our talent
-                advisors.
+                Live mandates from companies and agencies using ThinkATS. These
+                roles are managed directly in each employer&apos;s ATS workspace
+                with structured pipelines and clear expectations.
               </p>
               <p className="mt-2 text-xs text-slate-500">
                 {visibleJobs} of {totalJobs} open roles currently visible based
@@ -235,25 +331,23 @@ export default async function PublicJobsPage({
 
             <div className="space-y-3 rounded-2xl bg-[#172965] px-4 py-3 text-xs text-slate-100 sm:w-64">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
-                How we work with candidates
+                How we treat your profile
               </p>
               <ul className="space-y-1.5">
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>
-                    No blanket “CV pools” – you&apos;re considered for real
-                    roles.
-                  </span>
+                  <span>No blanket “CV pools” – you&apos;re matched to real roles.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
                   <span>
-                    Structured interview processes with clear feedback paths.
+                    Structured interview processes and visibility into your
+                    stage.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>We never share your details without your consent.</span>
+                  <span>Employers never see your details without your consent.</span>
                 </li>
               </ul>
             </div>
@@ -358,6 +452,29 @@ export default async function PublicJobsPage({
                   ))}
                 </select>
               </div>
+
+              {/* Company */}
+              <div className="sm:w-40">
+                <label
+                  htmlFor="tenant"
+                  className="mb-1 block text-[11px] font-medium text-slate-600"
+                >
+                  Company
+                </label>
+                <select
+                  id="tenant"
+                  name="tenant"
+                  defaultValue={tenantFilter || "all"}
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                >
+                  <option value="all">All companies</option>
+                  {distinctTenants.map((t) => (
+                    <option key={t.key} value={t.key}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -368,10 +485,7 @@ export default async function PublicJobsPage({
                 Apply filters
               </button>
 
-              {(q ||
-                locationFilter !== "all" ||
-                departmentFilter !== "all" ||
-                workModeFilter !== "all") && (
+              {hasFilters && (
                 <Link
                   href="/jobs"
                   className="text-[11px] text-slate-500 hover:text-slate-800"
@@ -388,8 +502,7 @@ export default async function PublicJobsPage({
           <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             <p>No roles match the current filters.</p>
             <p className="mt-1 text-[11px]">
-              Try removing some filters or check back soon as we add new
-              opportunities regularly.
+              Try removing some filters or check back soon as new roles go live.
             </p>
           </section>
         ) : (
@@ -413,8 +526,7 @@ export default async function PublicJobsPage({
               const workModeLabel =
                 formatWorkMode(workModeValue) || undefined;
               const employmentLabel =
-                formatEmploymentType(job.employmentType) ||
-                undefined;
+                formatEmploymentType(job.employmentType) || undefined;
               const posted = formatDate(job.createdAt);
               const snippet =
                 job.overview ||
@@ -485,7 +597,7 @@ export default async function PublicJobsPage({
                   <div className="flex w-full flex-col items-stretch justify-between gap-2 sm:w-52 sm:items-end">
                     <div className="flex flex-wrap justify-start gap-1 text-[10px] sm:justify-end">
                       <span className="inline-flex items-center rounded-full bg-[#FFF7DF] px-2 py-0.5 font-medium text-[#9A7300]">
-                        Curated by Resourcin
+                        ThinkATS network role
                       </span>
                       {job.internalOnly && (
                         <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-600">
