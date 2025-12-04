@@ -6,8 +6,6 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { resend } from "@/lib/resendClient";
 
 import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
-import ClientNewApplicationNotificationEmail from "@/emails/ClientNewApplicationNotificationEmail";
-import InternalNewApplicationNotificationEmail from "@/emails/InternalNewApplicationNotificationEmail";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
@@ -15,14 +13,12 @@ function safeSlug(input: string) {
 }
 
 const PUBLIC_SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.thinkats.com";
 
 const RESEND_FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL || "Resourcin <no-reply@mail.resourcin.com>";
+  process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@mail.thinkats.com>";
 
-// Internal notification email:
-// - Prefer ATS_NOTIFICATIONS_EMAIL if set (future per-tenant override)
-// - Fallback to RESOURCIN_ADMIN_EMAIL (hello@resourcin.com in your case)
+// We’re no longer using ATS_NOTIFICATIONS_EMAIL here (weekly digest will)
 const ATS_NOTIFICATIONS_EMAIL =
   process.env.ATS_NOTIFICATIONS_EMAIL ||
   process.env.RESOURCIN_ADMIN_EMAIL ||
@@ -87,6 +83,8 @@ export async function POST(req: Request) {
         tenantId: true,
         title: true,
         location: true,
+        visibility: true,
+        status: true,
       },
     });
 
@@ -94,6 +92,18 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { success: false, error: "Job not found or no longer available." },
         { status: 404 },
+      );
+    }
+
+    // Optional but sensible: block applications to non-open/non-public roles
+    if (job.status !== "open" || job.visibility !== "public") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This role is not currently accepting applications. Please check back later.",
+        },
+        { status: 400 },
       );
     }
 
@@ -212,91 +222,35 @@ export async function POST(req: Request) {
     });
 
     // -----------------------------------------------------------------------
-    // 5) Fire emails via Resend (candidate + internal + optional client)
+    // 5) Fire emails via Resend – CANDIDATE ONLY
     // -----------------------------------------------------------------------
-
     try {
       const jobTitle = job.title;
-      const jobLocation: string | undefined = job.location || undefined;
       const candidateName = fullName;
       const candidateEmail = email;
-
-      const trackingSource = (source || "CAREERS_SITE")
-        .toString()
-        .toUpperCase();
 
       const canonicalPath = job.slug
         ? `/jobs/${encodeURIComponent(job.slug)}`
         : `/jobs/${encodeURIComponent(job.id)}`;
       const publicJobUrl = `${PUBLIC_SITE_URL}${canonicalPath}`;
 
-      const atsJobLink = `${PUBLIC_SITE_URL}/ats/jobs/${job.id}`;
-
-      const sendPromises: Promise<unknown>[] = [];
-
-      // 5a) Candidate acknowledgement (branded React email)
-      sendPromises.push(
-        resend.emails.send({
-          from: RESEND_FROM_EMAIL,
-          to: candidateEmail,
-          subject: `We've received your application – ${jobTitle}`,
-          react: CandidateApplicationReceived({
-            candidateName,
-            jobTitle,
-            jobPublicUrl: publicJobUrl,
-            candidateEmail,
-            // source: trackingSource, // if your props support it, you can add this
-          }),
+      await resend.emails.send({
+        from: RESEND_FROM_EMAIL,
+        to: candidateEmail,
+        subject: `We've received your application – ${jobTitle}`,
+        react: CandidateApplicationReceived({
+          candidateName,
+          jobTitle,
+          jobPublicUrl: publicJobUrl,
+          candidateEmail,
         }),
-      );
-
-      // 5b) Internal notification (Resourcin team)
-      if (ATS_NOTIFICATIONS_EMAIL) {
-        sendPromises.push(
-          resend.emails.send({
-            from: RESEND_FROM_EMAIL,
-            to: ATS_NOTIFICATIONS_EMAIL,
-            subject: `New application: ${candidateName} → ${jobTitle}`,
-            react: InternalNewApplicationNotificationEmail({
-              jobTitle,
-              jobLocation,
-              candidateName,
-              candidateEmail,
-              source: trackingSource,
-              atsLink: atsJobLink,
-              linkedinUrl: linkedinUrl || undefined,
-              currentGrossAnnual: currentGrossAnnual || undefined,
-              expectation: grossAnnualExpectation || undefined,
-              noticePeriod: noticePeriod || undefined,
-            }),
-          }),
-        );
-      }
-
-      // 5c) Client-facing notification (currently delivered to ATS_NOTIFICATIONS_EMAIL)
-      if (ATS_NOTIFICATIONS_EMAIL) {
-        sendPromises.push(
-          resend.emails.send({
-            from: RESEND_FROM_EMAIL,
-            to: ATS_NOTIFICATIONS_EMAIL,
-            subject: `New candidate for ${jobTitle}`,
-            react: ClientNewApplicationNotificationEmail({
-              clientName: "Hiring team", // 🔹 required prop to satisfy ClientNewApplicationNotificationEmailProps
-              jobTitle,
-              jobLocation,
-              candidateName,
-              candidateEmail,
-              source: trackingSource,
-              atsLink: atsJobLink,
-            }),
-          }),
-        );
-      }
-
-      await Promise.allSettled(sendPromises);
+      });
     } catch (emailError) {
-      console.error("Resend email error (job application):", emailError);
-      // Deliberately don't fail the request – DB save is the source of truth
+      console.error(
+        "Resend email error (candidate acknowledgement):",
+        emailError,
+      );
+      // Don’t fail the request – DB is still the source of truth
     }
 
     return NextResponse.json({
