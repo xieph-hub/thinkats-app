@@ -87,9 +87,15 @@ function normaliseJobStatus(status: string | null | undefined) {
 
 interface AtsJobPageProps {
   params: { jobId: string };
+  searchParams?: {
+    [key: string]: string | string[] | undefined;
+  };
 }
 
-export default async function AtsJobPage({ params }: AtsJobPageProps) {
+export default async function AtsJobPage({
+  params,
+  searchParams,
+}: AtsJobPageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) {
     return (
@@ -111,6 +117,42 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
       </div>
     );
   }
+
+  // Build "Back to jobs" URL that remembers filters
+  const backToJobsHref = (() => {
+    const qs = new URLSearchParams();
+
+    const tenantParam = searchParams?.tenantId;
+    const tenantIdFromQs = Array.isArray(tenantParam)
+      ? tenantParam[0]
+      : tenantParam || tenant.id;
+
+    if (tenantIdFromQs) {
+      qs.set("tenantId", tenantIdFromQs);
+    }
+
+    const paramsToCarry = [
+      "q",
+      "status",
+      "visibility",
+      "location",
+      "clientId",
+    ] as const;
+
+    for (const key of paramsToCarry) {
+      const value = searchParams?.[key];
+      if (!value) continue;
+
+      if (Array.isArray(value)) {
+        if (value[0]) qs.set(key, value[0] as string);
+      } else {
+        qs.set(key, value as string);
+      }
+    }
+
+    const queryString = qs.toString();
+    return queryString ? `/ats/jobs?${queryString}` : "/ats/jobs";
+  })();
 
   const job = await prisma.job.findFirst({
     where: {
@@ -159,12 +201,11 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     buckets.get(key)!.push(app);
   }
 
-  // Ensure stable stage order, add "Other" bucket at the end if needed
+  // Ensure stable stage order, add any unknown stages at the end
   const knownStages = STAGE_ORDER.filter((s) => buckets.has(s));
   const unknownStages = Array.from(buckets.keys()).filter(
     (s) => !STAGE_ORDER.includes(s),
   );
-
   const orderedStages = [...knownStages, ...unknownStages];
 
   const jobStatusLabel = titleCaseFromEnum(job.status as any);
@@ -181,7 +222,7 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link
-            href="/ats/jobs"
+            href={backToJobsHref}
             className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
           >
             <span className="mr-1.5">←</span>
@@ -406,7 +447,9 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                                     <span className="text-slate-300">•</span>
                                   )}
                                   <Link
-                                    href={`/ats/candidates/${candidateId}`}
+                                    href={`/ats/candidates/${candidateId}?tenantId=${encodeURIComponent(
+                                      tenant.id,
+                                    )}`}
                                     className="text-[#172965] hover:underline"
                                   >
                                     View candidate profile
