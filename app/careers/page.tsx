@@ -50,36 +50,31 @@ export default async function CareersIndexPage({
 
   const q = qRaw || undefined;
 
-  // Build tenant filter once so we don't duplicate `tenant: { ... }`
-  const tenantFilter: any = {
-    careerSiteSettings: {
-      some: { isPublic: true },
+  // Build a single "where" object so it's easy to tweak later
+  const where: any = {
+    status: "open",
+    visibility: "public",
+    tenant: {
+      status: "active",
+      ...(tenantSlugFilter ? { slug: tenantSlugFilter } : {}),
     },
+    ...(q
+      ? {
+          OR: [
+            { title: { contains: q, mode: "insensitive" } },
+            { location: { contains: q, mode: "insensitive" } },
+            {
+              tenant: {
+                name: { contains: q, mode: "insensitive" },
+              },
+            },
+          ],
+        }
+      : {}),
   };
 
-  if (tenantSlugFilter) {
-    tenantFilter.slug = tenantSlugFilter;
-  }
-
   const jobs = await prisma.job.findMany({
-    where: {
-      status: "open",
-      visibility: "public",
-      tenant: tenantFilter,
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: "insensitive" } },
-              { location: { contains: q, mode: "insensitive" } },
-              {
-                tenant: {
-                  name: { contains: q, mode: "insensitive" },
-                },
-              },
-            ],
-          }
-        : {}),
-    },
+    where,
     include: {
       tenant: {
         select: {
