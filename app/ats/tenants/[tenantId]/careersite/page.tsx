@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Tenant career site | ThinkATS",
   description:
-    "Configure how this tenant's public careers page looks and whether its jobs appear in the ThinkATS marketplace.",
+    "Configure how this tenant's public careers page looks and whether its jobs appear in Jobs on ThinkATS.",
 };
 
 type PageProps = {
@@ -60,7 +60,8 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
         </h1>
         <p className="text-xs text-slate-600">
           Control how this tenant&apos;s public careers page looks and whether
-          its jobs appear in the global marketplace.
+          its jobs appear in{" "}
+          <span className="font-medium">Jobs on ThinkATS</span>.
         </p>
       </header>
 
@@ -72,7 +73,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
               Public URLs & visibility
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              This tenant&apos;s jobs appear on:
+              This tenant&apos;s jobs can show up in two places:
             </p>
           </div>
         </div>
@@ -86,6 +87,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
               </p>
               <p className="text-[11px] text-slate-500">
                 Public page with this tenant&apos;s logo, copy and job listing.
+                This is the link they can share with candidates.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -106,16 +108,16 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
             </div>
           </div>
 
-          {/* Marketplace explanation (no /jobs?tenant=… link) */}
+          {/* Jobs on ThinkATS explanation */}
           <div className="flex flex-col items-start justify-between gap-2 border-t border-slate-100 pt-3 text-[11px] sm:flex-row sm:items-center">
             <div className="space-y-0.5">
               <p className="text-[11px] font-medium text-slate-700">
-                ThinkATS marketplace
+                Jobs on ThinkATS (global marketplace)
               </p>
               <p className="text-[11px] text-slate-500">
                 When{" "}
                 <span className="font-medium">
-                  &quot;Show this tenant&apos;s jobs in the marketplace&quot;
+                  &quot;Show this tenant&apos;s jobs in Jobs on ThinkATS&quot;
                 </span>{" "}
                 is on, eligible roles are surfaced in the global listing at{" "}
                 <code className="rounded bg-slate-50 px-1.5 py-0.5">
@@ -131,7 +133,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
                   : "bg-slate-50 text-slate-500 border border-slate-200"
               }`}
             >
-              Marketplace status:{" "}
+              Jobs on ThinkATS:{" "}
               <span className="ml-1 font-semibold">
                 {includeInMarketplace ? "Included" : "Hidden"}
               </span>
@@ -263,7 +265,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
             />
             <div className="space-y-0.5">
               <span className="block text-[11px] font-medium text-slate-800">
-                Show this tenant&apos;s jobs in the marketplace
+                Show this tenant&apos;s jobs in Jobs on ThinkATS
               </span>
               <span className="block text-[11px] text-slate-500">
                 When on, open public roles for this tenant are eligible to show
