@@ -127,18 +127,31 @@ export default async function AtsJobsPage({
   }
 
   const selectedTenantId = selectedTenant.id;
+  const selectedTenantSlug =
+    ((selectedTenant as any).slug as string | undefined) || undefined;
+
+  const careerSiteUrl = selectedTenantSlug
+    ? `/careers/${encodeURIComponent(selectedTenantSlug)}`
+    : "/careers";
 
   // -----------------------------
-  // Load jobs + client companies for this tenant
+  // Load jobs + client companies + career-site settings
   // -----------------------------
-  const [jobs, clientCompanies] = await Promise.all([
+  const [jobs, clientCompanies, careerSettings] = await Promise.all([
     listTenantJobs(selectedTenantId),
     prisma.clientCompany.findMany({
       where: { tenantId: selectedTenantId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.careerSiteSettings.findFirst({
+      where: { tenantId: selectedTenantId },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+
+  const includeInMarketplace =
+    careerSettings?.includeInMarketplace ?? null;
 
   // Distinct locations for filter
   const locations = Array.from(
@@ -241,11 +254,40 @@ export default async function AtsJobsPage({
             All roles managed under{" "}
             <span className="font-medium text-slate-900">
               {selectedTenant.name ??
-                (selectedTenant as any).slug ??
-                "Resourcin"}
+                selectedTenantSlug ??
+                "this workspace"}
             </span>
             . Create, publish and monitor pipelines from here.
           </p>
+
+          {/* Career site + marketplace status */}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+            {careerSiteUrl && (
+              <Link
+                href={careerSiteUrl}
+                target="_blank"
+                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 font-medium text-slate-700 hover:bg-slate-50"
+              >
+                View public careers page
+                <span className="ml-1 text-[10px]">↗</span>
+              </Link>
+            )}
+
+            {includeInMarketplace !== null && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${
+                  includeInMarketplace
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                    : "bg-slate-50 text-slate-600 ring-slate-200"
+                }`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                {includeInMarketplace
+                  ? "Included in global marketplace"
+                  : "Hidden from global marketplace"}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -549,10 +591,14 @@ export default async function AtsJobsPage({
               const isPublished =
                 visibilityValue === "public" && statusValue === "open";
               const isOpen = statusValue === "open";
-              const publicJobUrl =
-                isPublished && job.slug
-                  ? `/jobs/${encodeURIComponent(job.slug)}`
-                  : null;
+
+              const publicJobPath = job.slug || job.id;
+              const publicJobUrl = isPublished
+                ? `/jobs/${encodeURIComponent(publicJobPath)}`
+                : null;
+
+              const clientName =
+                job.clientCompany?.name ?? "Client company";
 
               return (
                 <div
@@ -595,7 +641,7 @@ export default async function AtsJobsPage({
 
                       <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-600">
                         <span className="font-medium text-slate-800">
-                          {job.clientCompany?.name ?? "Resourcin client"}
+                          {clientName}
                         </span>
 
                         {job.location && (
