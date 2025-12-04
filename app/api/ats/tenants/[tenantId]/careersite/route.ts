@@ -1,114 +1,93 @@
-// app/api/ats/tenants/[tenantId]/careersite/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
-import { isOfficialUser } from "@/lib/officialEmail";
 
-export const dynamic = "force-dynamic";
-
-type RouteContext = {
-  params: {
-    tenantId: string;
-  };
-};
-
-export async function POST(req: NextRequest, { params }: RouteContext) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { tenantId: string } },
+) {
   try {
-    const { tenantId } = params;
+    const tenantId = params.tenantId;
 
     if (!tenantId) {
       return NextResponse.json(
-        { ok: false, error: "missing_tenant_id" },
+        { ok: false, error: "Missing tenantId" },
         { status: 400 },
       );
     }
 
-    // 🔐 Ensure caller is an authenticated Supabase user
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return NextResponse.json(
-        { ok: false, error: "unauthenticated" },
-        { status: 401 },
-      );
-    }
-
-    // 🔐 Optional: restrict to official / whitelisted emails
-    if (!isOfficialUser(user)) {
-      return NextResponse.json(
-        { ok: false, error: "forbidden_non_official_user" },
-        { status: 403 },
-      );
-    }
-
-    const form = await req.formData();
-
-    const heroTitle = (form.get("heroTitle") || "") as string;
-    const heroSubtitle = (form.get("heroSubtitle") || "") as string;
-    const primaryColor = (form.get("primaryColor") || "") as string;
-    const accentColor = (form.get("accentColor") || "") as string;
-    const aboutHtml = (form.get("aboutHtml") || "") as string;
-    const isPublic = form.get("isPublic") === "on";
-
-    // Very light validation
-    if (!heroTitle.trim()) {
-      return NextResponse.json(
-        { ok: false, error: "missing_hero_title" },
-        { status: 400 },
-      );
-    }
-
-    // Ensure tenant exists (defensive)
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
+      select: { id: true },
     });
 
     if (!tenant) {
       return NextResponse.json(
-        { ok: false, error: "tenant_not_found" },
+        { ok: false, error: "Tenant not found" },
         { status: 404 },
       );
     }
 
-    // Either update an existing settings row or create a new one
+    const formData = await req.formData();
+
+    const heroTitle = (formData.get("heroTitle") || "").toString().trim();
+    const heroSubtitle = (formData.get("heroSubtitle") || "")
+      .toString()
+      .trim();
+    const aboutHtml = (formData.get("aboutHtml") || "").toString().trim();
+    const primaryColor = (formData.get("primaryColor") || "")
+      .toString()
+      .trim();
+    const accentColor = (formData.get("accentColor") || "")
+      .toString()
+      .trim();
+
+    const isPublic = formData.get("isPublic") === "on";
+    const includeInMarketplace =
+      formData.get("includeInMarketplace") === "on";
+
     const existing = await prisma.careerSiteSettings.findFirst({
       where: { tenantId },
+      orderBy: { createdAt: "desc" },
     });
-
-    const data = {
-      tenantId,
-      heroTitle: heroTitle.trim(),
-      heroSubtitle: heroSubtitle.trim() || null,
-      primaryColor: primaryColor.trim() || null,
-      accentColor: accentColor.trim() || null,
-      aboutHtml: aboutHtml.trim() || null,
-      isPublic,
-    };
 
     if (existing) {
       await prisma.careerSiteSettings.update({
         where: { id: existing.id },
-        data,
+        data: {
+          heroTitle: heroTitle || null,
+          heroSubtitle: heroSubtitle || null,
+          aboutHtml: aboutHtml || null,
+          primaryColor: primaryColor || null,
+          accentColor: accentColor || null,
+          isPublic,
+          includeInMarketplace,
+        },
       });
     } else {
-      await prisma.careerSiteSettings.create({ data });
+      await prisma.careerSiteSettings.create({
+        data: {
+          tenantId,
+          heroTitle: heroTitle || null,
+          heroSubtitle: heroSubtitle || null,
+          aboutHtml: aboutHtml || null,
+          primaryColor: primaryColor || null,
+          accentColor: accentColor || null,
+          isPublic,
+          includeInMarketplace,
+        },
+      });
     }
 
-    // Redirect back to the ATS UI page with a success flag
     const redirectUrl = new URL(
-      `/ats/tenants/${tenantId}/careersite?saved=1`,
+      `/ats/tenants/${tenantId}/careersite?updated=1`,
       req.nextUrl.origin,
     );
 
-    return NextResponse.redirect(redirectUrl);
+    return NextResponse.redirect(redirectUrl.toString(), { status: 303 });
   } catch (err) {
-    console.error("[ThinkATS CareerSite] POST error:", err);
+    console.error("[CAREERSITE_SETTINGS_UPDATE] Error:", err);
     return NextResponse.json(
-      { ok: false, error: "server_error" },
+      { ok: false, error: "Unexpected error saving settings" },
       { status: 500 },
     );
   }
