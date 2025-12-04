@@ -3,11 +3,11 @@ import { Resend } from "resend";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL;
-const adminEmail = process.env.RESOURCIN_ADMIN_EMAIL;
+const adminEmail = process.env.THINKATS_ADMIN_EMAIL;
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
   process.env.SITE_URL ||
-  "https://www.resourcin.com";
+  "https://www.thinkats.com";
 
 let resend: Resend | null = null;
 
@@ -38,21 +38,21 @@ export async function sendCandidateApplicationConfirmationEmail({
   const text = `
 Hi ${safeName},
 
-Thank you for applying for the role of "${jobTitle}" via Resourcin.
+Thank you for applying for the role of "${jobTitle}".
 
 We’ve received your application and our team will review it shortly.
 If you’re shortlisted, we’ll contact you within ${timelineDays} days.
 
 Best regards,
-Resourcin Talent Team
+ThinkATS Team
 `.trim();
 
   const html = `
   <p>Hi ${safeName},</p>
-  <p>Thank you for applying for the role of <strong>${jobTitle}</strong> via Resourcin.</p>
+  <p>Thank you for applying for the role of <strong>${jobTitle}</strong>.</p>
   <p>We’ve received your application and our team will review it shortly.
   If you’re shortlisted, we’ll contact you within <strong>${timelineDays} days</strong>.</p>
-  <p>Best regards,<br/>Resourcin Talent Team</p>
+  <p>Best regards,<br/>ThinkATS Team</p>
   `.trim();
 
   try {
