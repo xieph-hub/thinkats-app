@@ -46,7 +46,7 @@ export default function CandidateApplicationReceived(
           ) : (
             "role "
           )}
-          via Resourcin.
+          via ThinkATS.
         </p>
 
         <p style={{ margin: "0 0 12px 0" }}>
