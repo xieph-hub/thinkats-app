@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { listTenantJobs } from "@/lib/jobs";
 import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -10,107 +9,93 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "ThinkATS | ATS Jobs",
   description:
-    "Admin view of all open and draft roles managed under the current ThinkATS tenant.",
+    "ATS job list for roles managed under the current ThinkATS tenant, with filters by status, visibility, client and location.",
 };
 
-interface JobsPageSearchParams {
+interface AtsJobsPageSearchParams {
   q?: string | string[];
   status?: string | string[];
-  tenantId?: string | string[];
-  clientId?: string | string[];
   visibility?: string | string[];
   location?: string | string[];
+  clientId?: string | string[];
+  tenantId?: string | string[];
 }
 
-function normaliseStatus(status: string | null | undefined) {
+function asStringParam(
+  value: string | string[] | undefined,
+  fallback = "",
+): string {
+  if (!value) return fallback;
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  return value;
+}
+
+function formatDate(value: string | Date | null | undefined) {
+  if (!value) return "";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function titleCaseFromEnum(value?: string | null) {
+  if (!value) return "";
+  return value
+    .toString()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normaliseJobStatus(status: string | null | undefined) {
   return (status || "").toLowerCase();
 }
 
-function statusLabel(status: string | null | undefined): string {
-  const s = normaliseStatus(status);
-  if (s === "open") return "Open";
-  if (s === "draft") return "Draft";
-  if (s === "on_hold" || s === "on-hold") return "On hold";
-  if (s === "closed") return "Closed";
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Unknown";
-}
-
-function statusBadgeClass(status: string | null | undefined): string {
-  const s = normaliseStatus(status);
-  if (s === "open") {
-    return "bg-[#E9F7EE] text-[#306B34] border-[#C5E7CF]";
+function jobStatusBadgeClass(status?: string | null) {
+  const key = normaliseJobStatus(status);
+  if (key === "open") {
+    return "bg-emerald-50 text-emerald-700 border-emerald-100";
   }
-  if (s === "draft") {
-    return "bg-slate-50 text-slate-600 border-slate-200";
+  if (key === "closed") {
+    return "bg-rose-50 text-rose-700 border-rose-100";
   }
-  if (s === "on_hold" || s === "on-hold") {
-    return "bg-[#FFF7DF] text-[#9A7300] border-[#FFE299]";
+  if (key === "draft") {
+    return "bg-slate-50 text-slate-700 border-slate-200";
   }
-  if (s === "closed") {
-    return "bg-red-50 text-red-700 border-red-100";
+  if (key === "archived") {
+    return "bg-slate-100 text-slate-500 border-slate-200";
   }
-  return "bg-slate-50 text-slate-600 border-slate-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
 export default async function AtsJobsPage({
   searchParams,
 }: {
-  searchParams?: JobsPageSearchParams;
+  searchParams?: AtsJobsPageSearchParams;
 }) {
-  // -----------------------------
-  // Resolve search params
-  // -----------------------------
-  const rawQ = searchParams?.q ?? "";
-  const q =
-    Array.isArray(rawQ) && rawQ.length > 0
-      ? rawQ[0]
-      : typeof rawQ === "string"
-      ? rawQ
-      : "";
+  // --------------------------------
+  // Resolve search + filter params
+  // --------------------------------
+  const q = asStringParam(searchParams?.q, "");
 
-  const rawStatus = searchParams?.status ?? "all";
-  const statusFilter =
-    Array.isArray(rawStatus) && rawStatus.length > 0
-      ? rawStatus[0]
-      : typeof rawStatus === "string"
-      ? rawStatus
-      : "all";
+  const statusFilter = asStringParam(searchParams?.status, "all");
+  const statusFilterKey = statusFilter.toLowerCase();
 
-  const rawTenant = searchParams?.tenantId ?? "";
-  const tenantParam =
-    Array.isArray(rawTenant) && rawTenant.length > 0
-      ? rawTenant[0]
-      : typeof rawTenant === "string"
-      ? rawTenant
-      : "";
+  const visibilityFilter = asStringParam(searchParams?.visibility, "all");
+  const visibilityFilterKey = visibilityFilter.toLowerCase();
 
-  const rawClient = searchParams?.clientId ?? "all";
-  const clientFilter =
-    Array.isArray(rawClient) && rawClient.length > 0
-      ? rawClient[0]
-      : typeof rawClient === "string"
-      ? rawClient
-      : "all";
+  const locationFilter = asStringParam(searchParams?.location, "all");
 
-  const rawVisibility = searchParams?.visibility ?? "all";
-  const visibilityFilter =
-    Array.isArray(rawVisibility) && rawVisibility.length > 0
-      ? rawVisibility[0]
-      : typeof rawVisibility === "string"
-      ? rawVisibility
-      : "all";
+  const clientFilter = asStringParam(searchParams?.clientId, "all");
 
-  const rawLocation = searchParams?.location ?? "all";
-  const locationFilter =
-    Array.isArray(rawLocation) && rawLocation.length > 0
-      ? rawLocation[0]
-      : typeof rawLocation === "string"
-      ? rawLocation
-      : "all";
+  const tenantParam = asStringParam(searchParams?.tenantId, "");
 
-  // -----------------------------
-  // Load tenants + resolve current tenant
-  // -----------------------------
+  // --------------------------------
+  // Tenant selection (same pattern as /ats/candidates)
+  // --------------------------------
   const tenants = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
   });
@@ -123,75 +108,120 @@ export default async function AtsJobsPage({
     (await getResourcinTenant());
 
   if (!selectedTenant) {
-    throw new Error("No default tenant found.");
+    throw new Error("No default tenant found for ATS jobs.");
   }
 
-  const selectedTenantId = selectedTenant.id;
-  const selectedTenantSlug =
-    ((selectedTenant as any).slug as string | undefined) || undefined;
+  const tenantId = selectedTenant.id;
 
-  const careerSiteUrl = selectedTenantSlug
-    ? `/careers/${encodeURIComponent(selectedTenantSlug)}`
-    : "/careers";
+  // --------------------------------
+  // Load jobs scoped by tenant
+  // --------------------------------
+  const jobs = await prisma.job.findMany({
+    where: {
+      tenantId,
+    },
+    include: {
+      clientCompany: true,
+      _count: {
+        select: { applications: true },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
 
-  // -----------------------------
-  // Load jobs + client companies + career-site settings
-  // -----------------------------
-  const [jobs, clientCompanies, careerSettings] = await Promise.all([
-    listTenantJobs(selectedTenantId),
-    prisma.clientCompany.findMany({
-      where: { tenantId: selectedTenantId },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.careerSiteSettings.findFirst({
-      where: { tenantId: selectedTenantId },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const totalJobs = jobs.length;
+  const openJobs = jobs.filter(
+    (job) => normaliseJobStatus(job.status as any) === "open",
+  ).length;
+  const closedJobs = jobs.filter(
+    (job) => normaliseJobStatus(job.status as any) === "closed",
+  ).length;
+  const draftJobs = jobs.filter(
+    (job) => normaliseJobStatus(job.status as any) === "draft",
+  ).length;
 
-  const includeInMarketplace =
-    careerSettings?.includeInMarketplace ?? null;
+  const totalApplications = jobs.reduce(
+    (sum, job) => sum + ((job as any)._count?.applications ?? 0),
+    0,
+  );
 
-  // Distinct locations for filter
-  const locations = Array.from(
+  // Distinct locations
+  const allLocations = Array.from(
     new Set(
       jobs
-        .map((job: any) => (job.location as string | null) || "")
-        .filter((loc) => loc.trim().length > 0),
+        .map((job) => (job.location || "").trim())
+        .filter((loc) => loc.length > 0),
     ),
   ).sort((a, b) => a.localeCompare(b));
 
-  // -----------------------------
-  // Filter jobs
-  // -----------------------------
-  const filteredJobs = jobs.filter((job: any) => {
+  // Distinct client companies
+  const clientMap = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+    }
+  >();
+
+  let hasUnassignedClient = false;
+
+  for (const job of jobs) {
+    if (job.clientCompanyId && job.clientCompany) {
+      clientMap.set(job.clientCompanyId, {
+        id: job.clientCompanyId,
+        name: job.clientCompany.name || "Unnamed client",
+      });
+    } else if (!job.clientCompanyId) {
+      hasUnassignedClient = true;
+    }
+  }
+
+  const clientOptions = Array.from(clientMap.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+
+  // --------------------------------
+  // Apply filters in-memory
+  // --------------------------------
+  let filteredJobs = jobs.filter((job) => {
     let ok = true;
 
-    if (statusFilter && statusFilter !== "all") {
-      ok =
-        ok &&
-        normaliseStatus(job.status as any) === statusFilter.toLowerCase();
-    }
+    const jobStatus = normaliseJobStatus(job.status as any);
+    const jobVisibility = (job.visibility || "").toLowerCase();
+    const jobLocation = (job.location || "").trim();
+    const jobClientId = (job as any).clientCompanyId as string | null;
 
-    if (clientFilter && clientFilter !== "all") {
-      ok = ok && job.clientCompanyId === clientFilter;
-    }
-
-    if (visibilityFilter && visibilityFilter !== "all") {
-      const v = ((job.visibility as string | null) || "internal").toLowerCase();
-      if (visibilityFilter === "public") {
-        ok = ok && v === "public";
-      } else if (visibilityFilter === "internal") {
-        ok = ok && v === "internal";
+    // Status filter
+    if (statusFilterKey !== "all") {
+      if (["open", "closed", "draft", "archived"].includes(statusFilterKey)) {
+        ok = ok && jobStatus === statusFilterKey;
+      } else if (statusFilterKey === "active") {
+        ok = ok && jobStatus === "open";
       }
     }
 
-    if (locationFilter && locationFilter !== "all") {
-      const jobLocation = (job.location as string | null) || "";
+    // Visibility filter
+    if (visibilityFilterKey !== "all") {
+      ok = ok && jobVisibility === visibilityFilterKey;
+    }
+
+    // Location filter
+    if (locationFilter !== "all") {
       ok = ok && jobLocation === locationFilter;
     }
 
+    // Client filter
+    if (clientFilter !== "all") {
+      if (clientFilter === "none") {
+        ok = ok && jobClientId === null;
+      } else {
+        ok = ok && jobClientId === clientFilter;
+      }
+    }
+
+    // Search
     if (q) {
       const haystack = (
         job.title +
@@ -200,45 +230,38 @@ export default async function AtsJobsPage({
         " " +
         (job.department || "") +
         " " +
-        (job.clientCompany?.name || "")
-      ).toLowerCase();
-      ok = ok && haystack.includes(q.toLowerCase());
+        (job.clientCompany?.name || "") +
+        " " +
+        (job.description || "") +
+        " " +
+        (job.overview || "")
+      )
+        .toLowerCase()
+        .trim();
+
+      if (!haystack.includes(q.toLowerCase().trim())) {
+        ok = false;
+      }
     }
 
     return ok;
   });
 
-  const totalJobs = jobs.length;
-  const openJobs = jobs.filter(
-    (job: any) => normaliseStatus(job.status as any) === "open",
-  ).length;
-  const draftJobs = jobs.filter(
-    (job: any) => normaliseStatus(job.status as any) === "draft",
-  ).length;
-  const totalApplications = jobs.reduce(
-    (sum: number, job: any) => sum + (job._count?.applications ?? 0),
-    0,
+  const visibleJobs = filteredJobs.length;
+
+  // Keep jobs sorted newest first
+  filteredJobs = filteredJobs.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
-  const activeJobsWithApps = jobs.filter(
-    (job: any) => (job._count?.applications ?? 0) > 0,
-  ).length;
 
-  const hasFilters =
-    !!q ||
-    (statusFilter && statusFilter !== "all") ||
-    (clientFilter && clientFilter !== "all") ||
-    (visibilityFilter && visibilityFilter !== "all") ||
-    (locationFilter && locationFilter !== "all");
-
+  // Clear filters link (preserve tenant)
   const clearFiltersHref = (() => {
     const url = new URL("/ats/jobs", "http://dummy");
-    url.searchParams.set("tenantId", selectedTenantId);
+    url.searchParams.set("tenantId", tenantId);
     return url.pathname + url.search;
   })();
 
-  // -----------------------------
-  // Render
-  // -----------------------------
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
@@ -247,167 +270,105 @@ export default async function AtsJobsPage({
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             ATS · Jobs
           </p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            Roles & pipelines
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">
+            Job list
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            All roles managed under{" "}
+            All roles created under{" "}
             <span className="font-medium text-slate-900">
               {selectedTenant.name ??
-                selectedTenantSlug ??
-                "this workspace"}
+                (selectedTenant as any).slug ??
+                "Current tenant"}
             </span>
-            . Create, publish and monitor pipelines from here.
+            . Filter by status, visibility, client and location.
           </p>
+        </div>
 
-          {/* Career site + marketplace status */}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-            {careerSiteUrl && (
-              <Link
-                href={careerSiteUrl}
-                target="_blank"
-                className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 font-medium text-slate-700 hover:bg-slate-50"
-              >
-                View public careers page
-                <span className="ml-1 text-[10px]">↗</span>
-              </Link>
-            )}
+        {/* Tenant selector */}
+        <form method="GET" className="hidden items-center gap-2 sm:flex">
+          {/* Preserve filters when switching tenant */}
+          {q && <input type="hidden" name="q" value={q} />}
+          {statusFilter && statusFilter !== "all" && (
+            <input type="hidden" name="status" value={statusFilter} />
+          )}
+          {visibilityFilter && visibilityFilter !== "all" && (
+            <input
+              type="hidden"
+              name="visibility"
+              value={visibilityFilter}
+            />
+          )}
+          {locationFilter && locationFilter !== "all" && (
+            <input type="hidden" name="location" value={locationFilter} />
+          )}
+          {clientFilter && clientFilter !== "all" && (
+            <input type="hidden" name="clientId" value={clientFilter} />
+          )}
 
-            {includeInMarketplace !== null && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${
-                  includeInMarketplace
-                    ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-                    : "bg-slate-50 text-slate-600 ring-slate-200"
-                }`}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                {includeInMarketplace
-                  ? "Included in global marketplace"
-                  : "Hidden from global marketplace"}
-              </span>
-            )}
+          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">
+              Tenant
+            </span>
+            <select
+              name="tenantId"
+              defaultValue={tenantId}
+              className="border-none bg-transparent text-[11px] text-slate-900 outline-none focus:ring-0"
+            >
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name ?? (tenant as any).slug ?? tenant.id}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="text-[11px] font-medium text-[#172965] hover:underline"
+            >
+              Switch
+            </button>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Multi-tenant selector */}
-          <form method="GET" className="flex items-center gap-2">
-            {/* preserve search + filters when switching tenant */}
-            {q && <input type="hidden" name="q" value={q} />}
-            {statusFilter && statusFilter !== "all" && (
-              <input type="hidden" name="status" value={statusFilter} />
-            )}
-            {clientFilter && clientFilter !== "all" && (
-              <input type="hidden" name="clientId" value={clientFilter} />
-            )}
-            {visibilityFilter && visibilityFilter !== "all" && (
-              <input
-                type="hidden"
-                name="visibility"
-                value={visibilityFilter}
-              />
-            )}
-            {locationFilter && locationFilter !== "all" && (
-              <input type="hidden" name="location" value={locationFilter} />
-            )}
-
-            <div className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 sm:flex">
-              <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                Tenant
-              </span>
-              <select
-                name="tenantId"
-                defaultValue={selectedTenantId}
-                className="border-none bg-transparent text-[11px] text-slate-900 outline-none focus:ring-0"
-              >
-                {tenants.map((tenant) => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenant.name ?? (tenant as any).slug ?? tenant.id}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                className="text-[11px] font-medium text-[#172965] hover:underline"
-              >
-                Switch
-              </button>
-            </div>
-          </form>
-
-          <Link
-            href={`/ats/jobs/new?tenantId=${encodeURIComponent(
-              selectedTenantId,
-            )}`}
-            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
-          >
-            <span className="mr-1.5 text-sm">＋</span>
-            New job
-          </Link>
-        </div>
+        </form>
       </div>
 
-      {/* Quick stats cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Open jobs
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-[#172965]">
-            {openJobs}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            {totalJobs} total in this tenant
-          </p>
+      {/* Summary strip */}
+      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-sm">
+        <div>
+          <span className="text-[11px] font-medium text-slate-800">
+            {visibleJobs}{" "}
+            {visibleJobs === 1 ? "job" : "jobs"} visible
+          </span>
+          {visibleJobs !== totalJobs && (
+            <span className="ml-1 text-slate-500">
+              (out of {totalJobs} total)
+            </span>
+          )}
         </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Draft roles
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {draftJobs}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Ready to review and publish
-          </p>
+        <span className="hidden h-4 w-px bg-slate-200 sm:inline-block" />
+        <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+          <span>{openJobs} open</span>
+          <span className="text-slate-300">•</span>
+          <span>{closedJobs} closed</span>
+          {draftJobs > 0 && (
+            <>
+              <span className="text-slate-300">•</span>
+              <span>{draftJobs} draft</span>
+            </>
+          )}
+          <span className="text-slate-300">•</span>
+          <span>{totalApplications} applications total</span>
         </div>
+      </section>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Total applications
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-[#306B34]">
-            {totalApplications}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Across all non-closed jobs
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Active pipelines
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-[#64C247]">
-            {activeJobsWithApps}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Jobs with at least one candidate
-          </p>
-        </div>
-      </div>
-
-      {/* Search + filters (GET) */}
+      {/* Filters */}
       <form
         method="GET"
-        className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] shadow-sm sm:flex-row sm:items-center sm:justify-between"
       >
-        {/* Keep tenantId in all filter submits */}
-        <input type="hidden" name="tenantId" value={selectedTenantId} />
+        {/* Keep tenantId when filtering */}
+        <input type="hidden" name="tenantId" value={tenantId} />
 
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+          {/* Search */}
           <div className="flex-1">
             <label htmlFor="q" className="sr-only">
               Search jobs
@@ -418,7 +379,7 @@ export default async function AtsJobsPage({
                 name="q"
                 type="text"
                 defaultValue={q}
-                placeholder="Search by title, client, location..."
+                placeholder="Search by title, client, location, keywords..."
                 className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
               <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[13px] text-slate-400">
@@ -427,11 +388,12 @@ export default async function AtsJobsPage({
             </div>
           </div>
 
+          {/* Filters cluster */}
           <div className="flex flex-wrap items-center gap-2 sm:w-auto">
-            {/* Status filter */}
+            {/* Status */}
             <div>
               <label htmlFor="status" className="sr-only">
-                Status filter
+                Status
               </label>
               <select
                 id="status"
@@ -441,56 +403,16 @@ export default async function AtsJobsPage({
               >
                 <option value="all">All statuses</option>
                 <option value="open">Open</option>
-                <option value="draft">Draft</option>
-                <option value="on_hold">On hold</option>
                 <option value="closed">Closed</option>
+                <option value="draft">Draft</option>
+                <option value="archived">Archived</option>
               </select>
             </div>
 
-            {/* Location filter */}
-            <div>
-              <label htmlFor="location" className="sr-only">
-                Location filter
-              </label>
-              <select
-                id="location"
-                name="location"
-                defaultValue={locationFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All locations</option>
-                {locations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Client filter */}
-            <div>
-              <label htmlFor="clientId" className="sr-only">
-                Client filter
-              </label>
-              <select
-                id="clientId"
-                name="clientId"
-                defaultValue={clientFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All clients</option>
-                {clientCompanies.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Visibility filter */}
+            {/* Visibility */}
             <div>
               <label htmlFor="visibility" className="sr-only">
-                Visibility filter
+                Visibility
               </label>
               <select
                 id="visibility"
@@ -499,8 +421,52 @@ export default async function AtsJobsPage({
                 className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               >
                 <option value="all">All visibilities</option>
-                <option value="public">Public only</option>
-                <option value="internal">Internal only</option>
+                <option value="public">Public</option>
+                <option value="internal">Internal</option>
+                <option value="private">Private</option>
+              </select>
+            </div>
+
+            {/* Location */}
+            <div>
+              <label htmlFor="location" className="sr-only">
+                Location
+              </label>
+              <select
+                id="location"
+                name="location"
+                defaultValue={locationFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All locations</option>
+                {allLocations.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Client */}
+            <div>
+              <label htmlFor="clientId" className="sr-only">
+                Client
+              </label>
+              <select
+                id="clientId"
+                name="clientId"
+                defaultValue={clientFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All clients</option>
+                {clientOptions.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+                {hasUnassignedClient && (
+                  <option value="none">No client (unassigned)</option>
+                )}
               </select>
             </div>
 
@@ -508,318 +474,134 @@ export default async function AtsJobsPage({
               type="submit"
               className="inline-flex items-center rounded-md bg-[#172965] px-3 py-2 text-xs font-medium text-white hover:bg-[#12204d]"
             >
-              Apply
+              Apply filters
             </button>
           </div>
         </div>
 
-        {hasFilters && (
+        {statusFilterKey !== "all" ||
+        visibilityFilterKey !== "all" ||
+        locationFilter !== "all" ||
+        clientFilter !== "all" ||
+        !!q ? (
           <Link
             href={clearFiltersHref}
             className="text-[11px] text-slate-500 hover:text-slate-800"
           >
             Clear filters
           </Link>
-        )}
+        ) : null}
       </form>
 
-      {/* Bulk actions + jobs list (POST) */}
-      <form
-        id="jobs-actions-form"
-        method="POST"
-        action="/ats/jobs/actions"
-        className="space-y-3"
-      >
-        {/* Preserve context on redirect */}
-        <input type="hidden" name="tenantId" value={selectedTenantId} />
-        <input type="hidden" name="q" value={q} />
-        <input type="hidden" name="status" value={statusFilter} />
-        <input type="hidden" name="clientId" value={clientFilter} />
-        <input type="hidden" name="visibility" value={visibilityFilter} />
-        <input type="hidden" name="location" value={locationFilter} />
-
-        {/* Bulk controls */}
-        <div className="flex flex-col items-start justify-between gap-2 rounded-2xl border border-slate-200 bg-[#F7F7FB] px-3 py-2 text-[11px] text-slate-600 sm:flex-row sm:items-center">
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              name="bulkAction"
-              defaultValue=""
-              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-            >
-              <option value="">Bulk actions…</option>
-              <option value="publish">Publish to careers site</option>
-              <option value="unpublish">Unpublish from careers site</option>
-              <option value="close">Close roles</option>
-              <option value="duplicate">Duplicate roles</option>
-              <option value="delete">Delete roles</option>
-            </select>
-
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-md bg-[#172965] px-3 py-1.5 text-[11px] font-medium text-white hover:bg-[#12204d]"
-            >
-              Run
-            </button>
-
-            <span className="text-[11px] text-slate-500">
-              Bulk actions apply to all selected jobs.
-            </span>
-          </div>
-
-          <span className="text-[11px] text-slate-500">
-            Tick the checkbox next to each role to include it in bulk updates.
-          </span>
+      {/* Job list */}
+      {filteredJobs.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          No jobs match the current filters. Adjust your search or remove
+          some filters to see more roles.
         </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredJobs.map((job) => {
+            const statusLabel = titleCaseFromEnum(job.status as any) || "–";
+            const visibilityLabel =
+              titleCaseFromEnum(job.visibility as any) || "–";
+            const createdLabel = formatDate(job.createdAt);
+            const applicationsCount =
+              (job as any)._count?.applications ?? 0;
+            const clientName =
+              job.clientCompany?.name || "No client assigned";
+            const location = job.location || "Location not specified";
 
-        {/* Jobs list */}
-        {filteredJobs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-            No jobs match the current filters. Try adjusting your search or
-            status.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredJobs.map((job: any) => {
-              const statusText = statusLabel(job.status);
-              const applicationsCount = job._count?.applications ?? 0;
+            const pipelineUrl = `/ats/jobs/${job.id}`;
+            const publicUrl = job.slug
+              ? `/jobs/${encodeURIComponent(job.slug)}`
+              : `/jobs/${encodeURIComponent(job.id)}`;
 
-              const statusValue =
-                (job.status as string | null)?.toLowerCase() || "";
-              const visibilityValue =
-                (job.visibility as string | null)?.toLowerCase() || "";
-
-              const isPublished =
-                visibilityValue === "public" && statusValue === "open";
-              const isOpen = statusValue === "open";
-
-              const publicJobPath = job.slug || job.id;
-              const publicJobUrl = isPublished
-                ? `/jobs/${encodeURIComponent(publicJobPath)}`
-                : null;
-
-              const clientName =
-                job.clientCompany?.name ?? "Client company";
-
-              return (
-                <div
-                  key={job.id}
-                  className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
-                >
-                  {/* Left: checkbox + job meta */}
-                  <div className="flex min-w-0 flex-1 gap-3">
-                    <div className="mt-1 flex shrink-0 items-start">
-                      <input
-                        type="checkbox"
-                        name="jobIds"
-                        value={job.id}
-                        className="mt-1 h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-                        aria-label={`Select ${job.title}`}
-                      />
-                    </div>
-
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/ats/jobs/${job.id}`}
-                          className="truncate text-sm font-semibold text-slate-900 hover:text-[#172965] hover:underline"
-                        >
-                          {job.title}
-                        </Link>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusBadgeClass(
-                            job.status,
-                          )}`}
-                        >
-                          {statusText}
-                        </span>
-                        {isPublished && (
-                          <span className="inline-flex items-center rounded-full border border-[#C5E7CF] bg-[#E9F7EE] px-2 py-0.5 text-[10px] font-medium text-[#306B34]">
-                            Published
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-600">
-                        <span className="font-medium text-slate-800">
-                          {clientName}
-                        </span>
-
-                        {job.location && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span>{job.location}</span>
-                          </>
-                        )}
-
-                        {job.employmentType && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span>{job.employmentType}</span>
-                          </>
-                        )}
-
-                        {job.experienceLevel && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span className="capitalize">
-                              {job.experienceLevel}
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                        <span>
-                          Created{" "}
-                          {new Date(job.createdAt).toLocaleDateString("en-GB", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </span>
-
-                        {job.visibility && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span className="capitalize">
-                              {job.visibility === "public"
-                                ? "Public career site"
-                                : "Internal only"}
-                            </span>
-                          </>
-                        )}
-
-                        {job.internalOnly && (
-                          <>
-                            <span className="text-slate-300">•</span>
-                            <span>Internal posting</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
+            return (
+              <article
+                key={job.id}
+                className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[11px] text-slate-600 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
+              >
+                {/* Left: job meta */}
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={pipelineUrl}
+                      className="truncate text-sm font-semibold text-slate-900 hover:text-[#172965] hover:underline"
+                    >
+                      {job.title || "Untitled role"}
+                    </Link>
                   </div>
-
-                  {/* Middle: pipeline summary */}
-                  <div className="hidden shrink-0 flex-col items-end justify-center text-right text-[11px] text-slate-600 sm:flex">
-                    <div className="font-medium text-slate-900">
-                      {applicationsCount}{" "}
-                      {applicationsCount === 1 ? "candidate" : "candidates"}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-slate-500">
-                      Pipeline view
-                      <span className="mx-1">·</span>
-                      <Link
-                        href={`/ats/jobs/${job.id}`}
-                        className="text-[#172965] hover:underline"
-                      >
-                        Open board
-                      </Link>
-                    </div>
-                    {publicJobUrl && (
-                      <div className="mt-1 text-[11px]">
-                        <Link
-                          href={publicJobUrl}
-                          target="_blank"
-                          className="inline-flex items-center text-[#172965] hover:underline"
-                        >
-                          View career page
-                          <span className="ml-1 text-[10px]">↗</span>
-                        </Link>
-                      </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <span className="font-medium text-slate-800">
+                      {clientName}
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span>{location}</span>
+                    {job.department && (
+                      <>
+                        <span className="text-slate-300">•</span>
+                        <span>{job.department}</span>
+                      </>
+                    )}
+                    {job.employmentType && (
+                      <>
+                        <span className="text-slate-300">•</span>
+                        <span>{titleCaseFromEnum(job.employmentType)}</span>
+                      </>
                     )}
                   </div>
-
-                  {/* Right: 3-dot menu wired to real actions */}
-                  <div className="flex shrink-0 items-start">
-                    <div className="group relative">
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        aria-label="Job actions"
-                      >
-                        <svg
-                          viewBox="0 0 20 20"
-                          aria-hidden="true"
-                          className="h-4 w-4"
-                        >
-                          <circle cx="4" cy="10" r="1.5" />
-                          <circle cx="10" cy="10" r="1.5" />
-                          <circle cx="16" cy="10" r="1.5" />
-                        </svg>
-                      </button>
-
-                      <div className="pointer-events-none absolute right-0 z-10 mt-2 hidden min-w-[190px] flex-col rounded-md border border-slate-200 bg-white p-1 text-[11px] text-slate-700 shadow-lg group-hover:pointer-events-auto group-hover:flex">
-                        <Link
-                          href={`/ats/jobs/${job.id}`}
-                          className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
-                        >
-                          View pipeline
-                        </Link>
-
-                        <Link
-                          href={`/ats/jobs/${job.id}/edit`}
-                          className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
-                        >
-                          Edit details
-                        </Link>
-
-                        {isPublished ? (
-                          <button
-                            type="submit"
-                            name="singleAction"
-                            value={`unpublish:${job.id}`}
-                            className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
-                          >
-                            Unpublish from careers site
-                          </button>
-                        ) : (
-                          <button
-                            type="submit"
-                            name="singleAction"
-                            value={`publish:${job.id}`}
-                            className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
-                          >
-                            Publish to careers site
-                          </button>
-                        )}
-
-                        {isOpen && (
-                          <button
-                            type="submit"
-                            name="singleAction"
-                            value={`close:${job.id}`}
-                            className="w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-50"
-                          >
-                            Close role
-                          </button>
-                        )}
-
-                        <button
-                          type="submit"
-                          name="singleAction"
-                          value={`duplicate:${job.id}`}
-                          className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
-                        >
-                          Duplicate
-                        </button>
-
-                        <button
-                          type="submit"
-                          name="singleAction"
-                          value={`delete:${job.id}`}
-                          className="w-full rounded px-2 py-1.5 text-left text-red-700 hover:bg-red-50"
-                        >
-                          Delete role
-                        </button>
-                      </div>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                    {createdLabel && (
+                      <>
+                        <span>Created {createdLabel}</span>
+                        <span className="text-slate-300">•</span>
+                      </>
+                    )}
+                    <span>
+                      {applicationsCount}{" "}
+                      {applicationsCount === 1
+                        ? "application"
+                        : "applications"}
+                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </form>
+
+                {/* Right: status + actions */}
+                <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px]">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${jobStatusBadgeClass(
+                        job.status as any,
+                      )}`}
+                    >
+                      {statusLabel}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
+                      {visibilityLabel} visibility
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Link
+                      href={pipelineUrl}
+                      className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-[#12204d]"
+                    >
+                      View pipeline
+                    </Link>
+                    <Link
+                      href={publicUrl}
+                      className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Public page ↗
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
