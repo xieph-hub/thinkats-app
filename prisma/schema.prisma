@@ -329,15 +329,19 @@ model JobStage {
 // CAREER SITE SETTINGS
 // --------------------------------------------------------------------------
 
-model CareerSiteSettings {
+  model CareerSiteSettings {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
+  tenantId     String   @map("tenant_id") 
   logoUrl      String?  @map("logo_url")
   primaryColor String?  @map("primary_color")
   accentColor  String?  @map("accent_color")
   heroTitle    String?  @map("hero_title")
   heroSubtitle String?  @map("hero_subtitle")
   aboutHtml    String?  @map("about_html")
+
+  // NEW
+  includeInMarketplace Boolean @map("include_in_marketplace") @default(false)
+
   isPublic     Boolean  @map("is_public") @default(true)
   createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
