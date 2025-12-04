@@ -1,245 +1,328 @@
 // app/careers/[tenantSlug]/page.tsx
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
-
-type PageProps = {
-  params: { tenantSlug: string };
-};
 
 export const dynamic = "force-dynamic";
 
-/**
- * Per-tenant SEO
- */
-export async function generateMetadata({
-  params,
-}: PageProps): Promise<Metadata> {
-  const slug = params.tenantSlug;
+export const metadata: Metadata = {
+  title: "Careers | ThinkATS",
+  description: "Explore roles at companies hiring on ThinkATS.",
+};
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { name: true },
-  });
-
-  const name = tenant?.name || "Careers";
-
-  return {
-    title: `${name} – Careers | ThinkATS`,
-    description: `Explore open roles at ${name}, powered by ThinkATS.`,
+type TenantCareersPageProps = {
+  params: {
+    tenantSlug: string;
   };
+};
+
+function formatWorkMode(value?: string | null) {
+  if (!value) return "";
+  const map: Record<string, string> = {
+    onsite: "Onsite",
+    hybrid: "Hybrid",
+    remote: "Remote",
+    field_based: "Field-based",
+  };
+  const key = value.toLowerCase();
+  return map[key] || value;
 }
 
-export default async function TenantCareersPage({ params }: PageProps) {
-  const slug = params.tenantSlug;
+function formatEmploymentType(value?: string | null) {
+  if (!value) return "";
+  const map: Record<string, string> = {
+    full_time: "Full Time",
+    part_time: "Part Time",
+    contract: "Contract",
+    temporary: "Temporary",
+    internship: "Internship",
+    consulting: "Consulting / Advisory",
+  };
+  const key = value.toLowerCase();
+  return map[key] || value;
+}
 
-  // 1) Load tenant + latest career site settings
-  const tenant = await prisma.tenant.findUnique({
+function formatDate(value: string | Date | null | undefined) {
+  if (!value) return "";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export default async function TenantCareersPage({
+  params,
+}: TenantCareersPageProps) {
+  const slug = decodeURIComponent(params.tenantSlug);
+
+  // 1) Resolve tenant by slug
+  const tenant = await prisma.tenant.findFirst({
     where: { slug },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      logoUrl: true,
-      careerSiteSettings: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        select: {
-          logoUrl: true,
-          heroTitle: true,
-          heroSubtitle: true,
-          aboutHtml: true,
-          primaryColor: true,
-          accentColor: true,
-        },
-      },
-    },
   });
 
   if (!tenant) {
     notFound();
   }
 
-  const site = tenant.careerSiteSettings[0] ?? null;
+  // 2) Load careersite settings (branding, copy, marketplace flag, etc.)
+  const settings = await prisma.careerSiteSettings.findFirst({
+    where: { tenantId: tenant.id },
+  });
 
-  // Simple color fallbacks
-  const primaryColor = site?.primaryColor || "#172965";
-  const accentColor = site?.accentColor || "#64C247";
-
-  // 2) Load public jobs for this tenant
+  // 3) Load this tenant's public, open jobs (careers site should show them
+  //    even if they are NOT in the global marketplace)
   const jobs = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
       status: "open",
       visibility: "public",
-      OR: [
-        { internalOnly: false },
-        { internalOnly: null }, // treat null as public
-      ],
     },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      title: true,
-      location: true,
-      locationType: true,
-      experienceLevel: true,
-      shortDescription: true,
-      createdAt: true,
-      clientCompany: {
-        select: { name: true },
-      },
+    orderBy: {
+      createdAt: "desc",
     },
   });
 
+  const totalJobs = jobs.length;
+
+  const heroTitle =
+    settings?.heroTitle ||
+    `Careers at ${tenant.name || tenant.slug || "our company"}`;
+  const heroSubtitle =
+    settings?.heroSubtitle ||
+    "Explore open roles and opportunities to join the team.";
+
+  const aboutHtml =
+    settings?.aboutHtml ||
+    `<p>We use ThinkATS to manage our hiring process. Every application is reviewed by a real hiring team member, and you can expect a structured, respectful interview experience.</p>`;
+
+  const logoUrl = settings?.logoUrl || tenant.logoUrl || null;
+
+  // Tracking source for job detail (so /jobs/[id] knows it came from this careers page)
+  const trackingSource = `CAREERS_${(tenant.slug || tenant.id).toUpperCase()}`;
+
+  function jobPublicUrl(job: any) {
+    const basePath = job.slug
+      ? `/jobs/${encodeURIComponent(job.slug)}`
+      : `/jobs/${job.id}`;
+
+    const connector = basePath.includes("?") ? "&" : "?";
+    return `${basePath}${connector}src=${encodeURIComponent(trackingSource)}`;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Top bar / hero */}
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-6 sm:px-6 lg:px-8">
-          {(site?.logoUrl || tenant.logoUrl) && (
-            <div className="relative h-10 w-10 overflow-hidden rounded-md border border-slate-200 bg-white">
-              <Image
-                src={site?.logoUrl || tenant.logoUrl || ""}
-                alt={`${tenant.name} logo`}
-                width={40}
-                height={40}
-                className="h-full w-full object-contain"
-              />
+    <div className="min-h-screen bg-[#F5F6FA]">
+      <div className="mx-auto max-w-5xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
+        {/* Hero */}
+        <section className="mb-8 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur sm:p-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-4">
+              {/* Logo / avatar */}
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                {logoUrl ? (
+                  <Image
+                    src={logoUrl}
+                    alt={tenant.name || "Company logo"}
+                    width={56}
+                    height={56}
+                    className="h-full w-full object-contain p-1"
+                  />
+                ) : (
+                  <span className="text-xl font-semibold text-[#172965]">
+                    {(tenant.name || tenant.slug || "T")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </span>
+                )}
+              </div>
+
+              <div className="max-w-xl">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#FFC000]">
+                  Careers
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-[#172965] sm:text-3xl">
+                  {heroTitle}
+                </h1>
+                {tenant.name && (
+                  <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                    {tenant.name}
+                  </p>
+                )}
+                <p className="mt-3 text-sm text-slate-600">
+                  {heroSubtitle}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {totalJobs === 0
+                    ? "No open roles at the moment."
+                    : `${totalJobs} open ${
+                        totalJobs === 1 ? "role" : "roles"
+                      } currently accepting applications.`}
+                </p>
+              </div>
             </div>
-          )}
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Careers at
-            </p>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              {tenant.name}
-            </h1>
-            {site?.heroSubtitle && (
-              <p className="mt-1 text-sm text-slate-600">
-                {site.heroSubtitle}
+
+            <div className="space-y-3 rounded-2xl bg-[#172965] px-4 py-3 text-xs text-slate-100 sm:w-64">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
+                Powered by ThinkATS
               </p>
-            )}
+              <p className="text-xs">
+                This careers site is powered by ThinkATS. Applications go
+                directly into the company&apos;s ATS workspace with structured
+                pipelines and clear interview stages.
+              </p>
+              <p className="text-[11px] text-slate-200">
+                You&apos;ll create a simple candidate profile once, then can be
+                considered for multiple suitable roles.
+              </p>
+              <Link
+                href="/jobs"
+                className="inline-flex items-center text-[11px] font-medium text-[#FFC000] hover:text-white"
+              >
+                Browse all jobs on ThinkATS
+                <span className="ml-1 text-[10px]">↗</span>
+              </Link>
+            </div>
           </div>
-        </div>
-      </header>
-
-      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
-        {/* Open roles */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">
-              {site?.heroTitle || "Open roles"}
-            </h2>
-            <span
-              className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-slate-600"
-              style={{ backgroundColor: `${accentColor}22` }}
-            >
-              {jobs.length} role{jobs.length === 1 ? "" : "s"} open
-            </span>
-          </div>
-
-          {jobs.length === 0 ? (
-            <p className="mt-4 text-[13px] text-slate-600">
-              There are currently no open roles. Please check back soon, or
-              connect with the team to be notified about future opportunities.
-            </p>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {jobs.map((job) => {
-                const companyName = job.clientCompany?.name ?? tenant.name;
-                const created = new Date(job.createdAt);
-                const createdLabel = created.toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                });
-
-                return (
-                  <li
-                    key={job.id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
-                        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                          {companyName}
-                        </p>
-                        <h3 className="mt-0.5 text-sm font-semibold text-slate-900">
-                          {job.title}
-                        </h3>
-                        <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
-                          {job.location && (
-                            <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
-                              {job.location}
-                            </span>
-                          )}
-                          {job.locationType && (
-                            <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
-                              {job.locationType}
-                            </span>
-                          )}
-                          {job.experienceLevel && (
-                            <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
-                              {job.experienceLevel}
-                            </span>
-                          )}
-                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
-                            Posted {createdLabel}
-                          </span>
-                        </div>
-                        {job.shortDescription && (
-                          <p className="mt-2 line-clamp-3 text-[13px] text-slate-600">
-                            {job.shortDescription}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-2">
-                        <Link
-                          href={`/jobs/${job.id}`}
-                          className="inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold text-white shadow-sm"
-                          style={{ backgroundColor: primaryColor }}
-                        >
-                          View role
-                        </Link>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </section>
 
         {/* About section */}
-        {site?.aboutHtml && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
-              About {tenant.name}
+        <section className="mb-8 grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
+            <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Working here
             </h2>
             <div
-              className="prose prose-sm mt-3 max-w-none text-slate-700 prose-p:mb-3 prose-p:mt-0"
-              dangerouslySetInnerHTML={{ __html: site.aboutHtml }}
+              className="prose prose-sm max-w-none text-slate-700 prose-p:mb-2 prose-ul:mt-1 prose-ul:list-disc prose-ul:pl-4"
+              dangerouslySetInnerHTML={{ __html: aboutHtml }}
             />
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-xs text-slate-600 shadow-sm">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Hiring process at a glance
+            </h3>
+            <ol className="mt-2 space-y-1.5 list-decimal pl-4">
+              <li>Submit your application via the relevant role.</li>
+              <li>Screening by the hiring team using ThinkATS pipelines.</li>
+              <li>Interviews and assessments where relevant.</li>
+              <li>Decision and feedback shared as soon as possible.</li>
+            </ol>
+            <p className="mt-2 text-[11px] text-slate-500">
+              Specific steps may vary by role, but you can expect clear
+              communication and structured interviews.
+            </p>
+          </div>
+        </section>
+
+        {/* Jobs list */}
+        {totalJobs === 0 ? (
+          <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+            <p>No open roles are currently listed on this careers site.</p>
+            <p className="mt-1 text-[11px]">
+              You can still{" "}
+              <Link
+                href="/jobs"
+                className="font-medium text-[#172965] hover:underline"
+              >
+                explore other roles on ThinkATS
+              </Link>{" "}
+              or check back soon.
+            </p>
+          </section>
+        ) : (
+          <section className="space-y-3">
+            {jobs.map((job: any) => {
+              const location = job.location || "Location flexible";
+              const workModeValue =
+                (job.workMode as string | null) ||
+                (job.locationType as string | null) ||
+                null;
+              const workModeLabel =
+                formatWorkMode(workModeValue) || undefined;
+              const employmentLabel =
+                formatEmploymentType(job.employmentType) || undefined;
+              const posted = formatDate(job.createdAt);
+              const snippet =
+                job.shortDescription ||
+                job.overview ||
+                job.description ||
+                "This is a live role with a detailed specification available on the next page.";
+
+              return (
+                <article
+                  key={job.id}
+                  className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-700 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md sm:flex-row sm:items-stretch"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
+                        {job.title}
+                      </h2>
+                      <span className="inline-flex items-center rounded-full bg-[#E9F7EE] px-2 py-0.5 text-[10px] font-medium text-[#306B34]">
+                        Actively hiring
+                      </span>
+                    </div>
+
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                      <span>{location}</span>
+                      {workModeLabel && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span>{workModeLabel}</span>
+                        </>
+                      )}
+                      {employmentLabel && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span>{employmentLabel}</span>
+                        </>
+                      )}
+                      {job.department && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span>{job.department}</span>
+                        </>
+                      )}
+                    </div>
+
+                    <p className="mt-3 line-clamp-2 text-xs text-slate-700">
+                      {snippet}
+                    </p>
+
+                    <p className="mt-2 text-[11px] text-slate-400">
+                      Posted {posted}
+                    </p>
+                  </div>
+
+                  <div className="flex w-full flex-col items-stretch justify-between gap-2 sm:w-52 sm:items-end">
+                    <div className="flex flex-wrap justify-start gap-1 text-[10px] sm:justify-end">
+                      <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 font-medium text-slate-600">
+                        Careers site
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                      <Link
+                        href={jobPublicUrl(job)}
+                        className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
+                      >
+                        View &amp; apply
+                        <span className="ml-1.5 text-[10px] opacity-80">
+                          ↗
+                        </span>
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </section>
         )}
-      </main>
-
-      {/* Small footer hint */}
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 text-[11px] text-slate-500 sm:px-6 lg:px-8">
-          <span>Powered by ThinkATS</span>
-          <Link
-            href="https://www.thinkats.com"
-            className="underline-offset-2 hover:underline"
-          >
-            Learn more
-          </Link>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }
