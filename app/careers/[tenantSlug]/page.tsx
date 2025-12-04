@@ -1,83 +1,71 @@
 // app/careers/[tenantSlug]/page.tsx
-import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
-type CareersPageProps = {
+type PageProps = {
   params: { tenantSlug: string };
 };
 
-export async function generateMetadata(
-  { params }: CareersPageProps,
-): Promise<Metadata> {
-  const slug = decodeURIComponent(params.tenantSlug);
+export const dynamic = "force-dynamic";
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    select: { name: true },
+// Optional: dynamic metadata based on tenant
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const tenant = await prisma.tenant.findFirst({
+    where: { slug: params.tenantSlug },
+    select: { name: true, slug: true },
   });
 
-  if (!tenant) {
-    return {
-      title: "Careers | ThinkATS",
-      description: "Jobs listed on ThinkATS.",
-    };
-  }
+  const label = tenant?.name || tenant?.slug || params.tenantSlug;
 
   return {
-    title: `Careers at ${tenant.name} | ThinkATS`,
-    description: `Open roles at ${tenant.name}, powered by ThinkATS.`,
+    title: `${label} – Careers | ThinkATS`,
+    description: `View open roles at ${label}, powered by ThinkATS.`,
   };
 }
 
-export default async function TenantCareersPage({
-  params,
-}: CareersPageProps) {
-  const slug = decodeURIComponent(params.tenantSlug);
+export default async function CareersTenantPage({ params }: PageProps) {
+  const { tenantSlug } = params;
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug },
-    include: {
-      careerSiteSettings: true,
-    },
+  // 🔍 Use findFirst (slug is NOT unique in Prisma schema)
+  const tenant = await prisma.tenant.findFirst({
+    where: { slug: tenantSlug },
+    select: { id: true, name: true, slug: true },
   });
 
   if (!tenant) {
     notFound();
   }
 
-  const settings = tenant.careerSiteSettings[0] ?? null;
+  const [settings, jobs] = await Promise.all([
+    prisma.careerSiteSettings.findFirst({
+      where: { tenantId: tenant.id },
+    }),
+    prisma.job.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: "open",
+        visibility: "public",
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
-  // If you want the ability to "turn off" a tenant's public careers page:
-  if (settings && settings.isPublic === false) {
-    notFound();
-  }
-
-  const jobs = await prisma.job.findMany({
-    where: {
-      tenantId: tenant.id,
-      status: "open",
-      visibility: "public",
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  const hasJobs = jobs.length > 0;
-
-  const heroTitle =
-    settings?.heroTitle || `Join ${tenant.name}`;
+  const label = tenant.name || tenant.slug || tenantSlug;
+  const heroTitle = settings?.heroTitle || `Careers at ${label}`;
   const heroSubtitle =
     settings?.heroSubtitle ||
-    "These roles are managed through ThinkATS. Apply once and we’ll keep you updated through each stage.";
-  const aboutHtml = settings?.aboutHtml;
+    "Explore open roles and join the team.";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 lg:px-8">
-      {/* HERO */}
-      <header className="mb-8 space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Careers
+    <div className="mx-auto max-w-4xl px-4 py-8 lg:px-8">
+      {/* Header / hero */}
+      <header className="mb-8 space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          Powered by ThinkATS
         </p>
         <h1 className="text-3xl font-semibold text-slate-900">
           {heroTitle}
@@ -85,74 +73,73 @@ export default async function TenantCareersPage({
         <p className="max-w-2xl text-sm text-slate-600">
           {heroSubtitle}
         </p>
-
-        {aboutHtml && (
-          <div
-            className="prose prose-sm mt-4 max-w-none text-slate-700"
-            dangerouslySetInnerHTML={{ __html: aboutHtml }}
-          />
-        )}
       </header>
 
-      {/* JOBS LIST */}
-      {!hasJobs ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
-          There are no open roles right now. Check back soon or follow our
-          updates on social media.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => {
-            const href = `/jobs/${encodeURIComponent(job.slug || job.id)}`;
-
-            return (
-              <Link
-                key={job.id}
-                href={href}
-                className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-[#172965]/50 hover:shadow-md"
-              >
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold text-slate-900">
-                      {job.title}
-                    </h2>
-                    {job.shortDescription && (
-                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">
-                        {job.shortDescription}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                    {job.location && (
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1">
-                        {job.location}
-                      </span>
-                    )}
-                    {job.employmentType && (
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1">
-                        {job.employmentType}
-                      </span>
-                    )}
-                    {job.seniority && (
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1">
-                        {job.seniority}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                  <span>
-                    Posted {job.createdAt.toLocaleDateString("en-GB")}
-                  </span>
-                  <span className="font-semibold text-[#172965]">
-                    View role →
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+      {/* About section from CareerSiteSettings */}
+      {settings?.aboutHtml && (
+        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
+          <div
+            className="prose prose-sm max-w-none text-slate-700"
+            dangerouslySetInnerHTML={{ __html: settings.aboutHtml }}
+          />
+        </section>
       )}
+
+      {/* Jobs list */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-slate-900">
+            Open roles
+          </h2>
+          <p className="text-xs text-slate-500">
+            {jobs.length === 0
+              ? "No open roles at the moment."
+              : `${jobs.length} open role${
+                  jobs.length === 1 ? "" : "s"
+                }.`}
+          </p>
+        </div>
+
+        {jobs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+            Join the talent network to be notified when new roles go live.
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {jobs.map((job) => (
+              <li
+                key={job.id}
+                className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800 shadow-sm"
+              >
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      {job.title}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {job.location || "Location flexible"}
+                      {job.employmentType
+                        ? ` • ${job.employmentType}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/jobs/${job.id}`}
+                    className="mt-2 inline-flex items-center justify-center rounded-full bg-[#172965] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48] sm:mt-0"
+                  >
+                    View role
+                  </Link>
+                </div>
+                {job.shortDescription && (
+                  <p className="mt-2 text-xs text-slate-600">
+                    {job.shortDescription}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
