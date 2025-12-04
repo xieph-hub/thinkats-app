@@ -55,7 +55,7 @@ model User {
   updatedAt    DateTime         @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   userTenantRoles UserTenantRole[]
-  loginOtps       LoginOtp[]      // NEW: OTP records for this user
+  loginOtps       LoginOtp[]      // OTP records for this user
 
   @@map("users")
 }
@@ -75,7 +75,7 @@ model UserTenantRole {
 }
 
 // --------------------------------------------------------------------------
-// LOGIN OTPs (NEW)
+// LOGIN OTPs
 // --------------------------------------------------------------------------
 
 model LoginOtp {
