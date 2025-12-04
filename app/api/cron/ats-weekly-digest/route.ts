@@ -1,142 +1,181 @@
 // app/api/cron/ats-weekly-digest/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resend } from "@/lib/resendClient";
 import AtsWeeklyDigestEmail from "@/emails/AtsWeeklyDigestEmail";
 
 const RESEND_FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@mail.thinkats.com>";
-const SUPERADMIN_DIGEST_EMAIL =
-  process.env.SUPERADMIN_DIGEST_EMAIL || process.env.ATS_NOTIFICATIONS_EMAIL || "";
+  process.env.RESEND_FROM_EMAIL ||
+  "ThinkATS <no-reply@mail.resourcin.com>";
 
-export const dynamic = "force-dynamic";
+const PUBLIC_SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
 
-export async function GET() {
+function getWeekWindow() {
   const now = new Date();
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const end = now;
+  const start = new Date(now);
+  start.setDate(now.getDate() - 7);
 
-  // 1) Load all tenants
-  const tenants = await prisma.tenant.findMany();
+  const rangeLabel = `${start.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+  })} – ${end.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })}`;
 
-  const tenantDigests: any[] = [];
-  const sendPromises: Promise<unknown>[] = [];
+  return { start, end, rangeLabel };
+}
 
-  for (const tenant of tenants) {
-    const tenantId = tenant.id;
+export async function GET(_req: NextRequest) {
+  try {
+    const { start, end, rangeLabel } = getWeekWindow();
 
-    // Jobs created in last 7 days
-    const jobs = await prisma.job.findMany({
-      where: {
-        tenantId,
-        createdAt: {
-          gte: sevenDaysAgo,
+    const tenants = await prisma.tenant.findMany();
+
+    const results: Array<{
+      tenantId: string;
+      tenantName: string;
+      sent: boolean;
+      reason?: string;
+    }> = [];
+
+    for (const tenant of tenants) {
+      const tenantName = tenant.name;
+      const notificationEmail =
+        (tenant as any).notificationEmail ||
+        (tenant as any).primaryContactEmail;
+
+      if (!notificationEmail) {
+        results.push({
+          tenantId: tenant.id,
+          tenantName,
+          sent: false,
+          reason: "No notification email configured",
+        });
+        continue;
+      }
+
+      // Open jobs (simple lower/upper case support)
+      const openJobsCount = await prisma.job.count({
+        where: {
+          tenantId: tenant.id,
+          status: { in: ["open", "OPEN"] },
         },
-      },
-      include: {
-        _count: {
-          select: { applications: true },
-        },
-      },
-    });
+      });
 
-    // Applications in last 7 days
-    const applications = await prisma.jobApplication.findMany({
-      where: {
-        job: { tenantId },
-        createdAt: {
-          gte: sevenDaysAgo,
-        },
-      },
-      include: {
-        job: true,
-      },
-    });
-
-    if (jobs.length === 0 && applications.length === 0) {
-      continue; // skip inactive tenants for this digest
-    }
-
-    const hires = applications.filter(
-      (app) => (app.status || "").toUpperCase() === "HIRED",
-    ).length;
-
-    const rejections = applications.filter((app) =>
-      ["REJECTED", "ARCHIVED"].includes((app.status || "").toUpperCase()),
-    ).length;
-
-    // Top 3 jobs by applications in this window
-    const appsByJob = new Map<string, { jobTitle: string; count: number }>();
-    for (const app of applications) {
-      const jobId = app.jobId;
-      const jobTitle = app.job?.title || "Untitled role";
-      const existing = appsByJob.get(jobId) || {
-        jobTitle,
-        count: 0,
-      };
-      existing.count += 1;
-      appsByJob.set(jobId, existing);
-    }
-    const topJobs = Array.from(appsByJob.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 3)
-      .map(([jobId, info]) => ({
-        jobId,
-        title: info.jobTitle,
-        applications: info.count,
-      }));
-
-    const digestPayload = {
-      tenantId,
-      tenantName: tenant.name,
-      fromDate: sevenDaysAgo,
-      toDate: now,
-      newJobsCount: jobs.length,
-      newApplicationsCount: applications.length,
-      hiresCount: hires,
-      rejectionsCount: rejections,
-      topJobs,
-    };
-
-    tenantDigests.push(digestPayload);
-
-    const tenantEmail =
-      (tenant as any).notificationEmail ||
-      (tenant as any).ownerEmail ||
-      SUPERADMIN_DIGEST_EMAIL;
-
-    if (tenantEmail) {
-      sendPromises.push(
-        resend.emails.send({
-          from: RESEND_FROM_EMAIL,
-          to: tenantEmail,
-          subject: `Weekly ATS digest – ${tenant.name || tenant.id}`,
-          react: AtsWeeklyDigestEmail({ digest: digestPayload }),
-        }),
-      );
-    }
-  }
-
-  // Superadmin global digest
-  if (SUPERADMIN_DIGEST_EMAIL && tenantDigests.length > 0) {
-    sendPromises.push(
-      resend.emails.send({
-        from: RESEND_FROM_EMAIL,
-        to: SUPERADMIN_DIGEST_EMAIL,
-        subject: "Weekly ATS digest – global overview",
-        react: AtsWeeklyDigestEmail({
-          digest: {
-            scope: "GLOBAL",
-            tenants: tenantDigests,
+      // New applications in window
+      const newApplicationsCount = await prisma.jobApplication.count({
+        where: {
+          job: {
+            tenantId: tenant.id,
           },
+          createdAt: {
+            gte: start,
+            lte: end,
+          },
+        },
+      });
+
+      // New candidates in window
+      const newCandidatesCount = await prisma.candidate.count({
+        where: {
+          tenantId: tenant.id,
+          createdAt: {
+            gte: start,
+            lte: end,
+          },
+        },
+      });
+
+      // Per-job breakdown
+      const jobsWithApps = await prisma.job.findMany({
+        where: {
+          tenantId: tenant.id,
+        },
+        select: {
+          id: true,
+          title: true,
+          applications: {
+            where: {
+              createdAt: {
+                gte: start,
+                lte: end,
+              },
+            },
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      const perJobStats = jobsWithApps
+        .map((job) => ({
+          jobId: job.id,
+          jobTitle: job.title || "Untitled role",
+          newApplications: job.applications.length,
+        }))
+        .filter((j) => j.newApplications > 0)
+        .sort((a, b) => b.newApplications - a.newApplications);
+
+      // If absolutely nothing happened, skip sending noise
+      if (
+        newApplicationsCount === 0 &&
+        newCandidatesCount === 0 &&
+        openJobsCount === 0
+      ) {
+        results.push({
+          tenantId: tenant.id,
+          tenantName,
+          sent: false,
+          reason: "No activity in the last 7 days",
+        });
+        continue;
+      }
+
+      await resend.emails.send({
+        from: RESEND_FROM_EMAIL,
+        to: notificationEmail,
+        subject: `ThinkATS weekly digest – ${rangeLabel}`,
+        react: AtsWeeklyDigestEmail({
+          tenantName,
+          weekRangeLabel: rangeLabel,
+          totalNewApplications: newApplicationsCount,
+          totalNewCandidates: newCandidatesCount,
+          totalOpenJobs: openJobsCount,
+          perJobStats,
+          dashboardUrl: `${PUBLIC_SITE_URL}/ats/dashboard`,
         }),
-      }),
+      });
+
+      results.push({
+        tenantId: tenant.id,
+        tenantName,
+        sent: true,
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      window: {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        label: rangeLabel,
+      },
+      results,
+    });
+  } catch (error) {
+    console.error("Error sending ATS weekly digests:", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Something went wrong while generating ATS weekly digests.",
+      },
+      { status: 500 },
     );
   }
-
-  await Promise.allSettled(sendPromises);
-
-  return NextResponse.json({
-    ok: true,
-    tenantsProcessed: tenantDigests.length,
-  });
 }
