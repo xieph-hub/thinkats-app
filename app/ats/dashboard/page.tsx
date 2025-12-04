@@ -1,7 +1,9 @@
-// app/ats/page.tsx (or whatever file currently exports AtsDashboardPage)
+// app/ats/dashboard/page.tsx
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+
+export const dynamic = "force-dynamic";
 
 type DashboardStats = {
   tenantName: string;
@@ -380,4 +382,13 @@ function applicationStatusBadgeClass(value?: string | null) {
     return "bg-rose-50 text-rose-700 border-rose-100";
   }
   return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+function titleCaseFromEnum(value?: string | null) {
+  if (!value) return "";
+  return value
+    .toString()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
