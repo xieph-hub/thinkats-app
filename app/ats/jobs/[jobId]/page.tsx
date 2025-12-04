@@ -3,116 +3,46 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import ApplicationStageStatusControls from "@/components/ats/ApplicationStageStatusControls";
 
 export const dynamic = "force-dynamic";
 
-interface JobPageProps {
-  params: { jobId: string };
-  searchParams?: {
-    status?: string | string[];
-    stage?: string | string[];
-  };
-}
+const STAGE_ORDER = [
+  "APPLIED",
+  "SCREEN",
+  "SCREENING",
+  "SHORTLISTED",
+  "INTERVIEW",
+  "INTERVIEWING",
+  "OFFER",
+  "OFFERED",
+  "HIRED",
+  "REJECTED",
+  "WITHDRAWN",
+];
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "";
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
+  return d.toLocaleDateString("en-GB", {
     day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
-}
-
-function formatMoney(amount: any, currency: string | null | undefined) {
-  if (amount == null) return "";
-  const n =
-    typeof amount === "number"
-      ? amount
-      : Number((amount as any).toString ? (amount as any).toString() : amount);
-
-  if (!Number.isFinite(n)) return "";
-
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: currency || "NGN",
-      maximumFractionDigits: 0,
-    }).format(n);
-  } catch {
-    return `${currency || ""} ${n.toLocaleString()}`;
-  }
 }
 
 function titleCaseFromEnum(value?: string | null) {
   if (!value) return "";
   return value
+    .toString()
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatEmploymentType(value?: string | null) {
+function formatStageName(value: string | null | undefined) {
   if (!value) return "";
-  const map: Record<string, string> = {
-    full_time: "Full Time",
-    part_time: "Part Time",
-    contract: "Contract",
-    temporary: "Temporary",
-    internship: "Internship",
-    consulting: "Consulting / Advisory",
-  };
-  const key = value.toLowerCase();
-  return map[key] || titleCaseFromEnum(value);
-}
-
-function formatExperienceLevel(value?: string | null) {
-  if (!value) return "";
-  const map: Record<string, string> = {
-    entry: "Entry level / Graduate",
-    junior: "Junior (1–3 years)",
-    mid: "Mid-level (3–7 years)",
-    senior: "Senior (7–12 years)",
-    lead_principal: "Lead / Principal",
-    manager_head: "Manager / Head of",
-    director_vp: "Director / VP",
-    c_level_partner: "C-level / Partner",
-  };
-  const key = value.toLowerCase();
-  return map[key] || titleCaseFromEnum(value);
-}
-
-function formatWorkMode(value?: string | null) {
-  if (!value) return "";
-  const map: Record<string, string> = {
-    onsite: "Onsite",
-    hybrid: "Hybrid",
-    remote: "Remote",
-    field_based: "Field-based",
-  };
-  const key = value.toLowerCase();
-  return map[key] || titleCaseFromEnum(value);
-}
-
-function formatStatus(value?: string | null) {
-  if (!value) return "";
-  const key = value.toLowerCase();
-  if (key === "open") return "Open";
-  if (key === "draft") return "Draft";
-  if (key === "closed") return "Closed";
-  return titleCaseFromEnum(value);
-}
-
-function formatVisibility(value?: string | null) {
-  if (!value) return "";
-  const key = value.toLowerCase();
-  if (key === "public") return "Public";
-  if (key === "internal") return "Internal";
-  return titleCaseFromEnum(value);
-}
-
-function formatStageName(value: string) {
   const key = value.toUpperCase();
   const map: Record<string, string> = {
     APPLIED: "Applied",
@@ -151,23 +81,21 @@ function applicationStatusBadgeClass(value?: string | null) {
   return "bg-slate-50 text-slate-700 border-slate-200";
 }
 
-type StageDisplay = {
-  id: string;
-  name: string;
-  isTerminal?: boolean;
-};
+function normaliseJobStatus(status: string | null | undefined) {
+  return (status || "").toLowerCase();
+}
 
-export default async function AtsJobDetailPage({
-  params,
-  searchParams,
-}: JobPageProps) {
+interface AtsJobPageProps {
+  params: { jobId: string };
+}
+
+export default async function AtsJobPage({ params }: AtsJobPageProps) {
   const tenant = await getResourcinTenant();
-
   if (!tenant) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-10">
         <h1 className="text-xl font-semibold text-slate-900">
-          ATS job not available
+          Job pipeline not available
         </h1>
         <p className="mt-2 text-sm text-slate-600">
           No default tenant configured. Check{" "}
@@ -191,13 +119,12 @@ export default async function AtsJobDetailPage({
     },
     include: {
       clientCompany: true,
-      stages: {
-        orderBy: { position: "asc" },
-      },
       applications: {
-        orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
+        },
+        orderBy: {
+          createdAt: "desc",
         },
       },
     },
@@ -207,130 +134,49 @@ export default async function AtsJobDetailPage({
     notFound();
   }
 
-  // Group applications by stage
-  const applicationsByStage = new Map<string, any[]>();
-  for (const app of job.applications) {
-    const rawStage = app.stage || "APPLIED";
-    const key = rawStage.toUpperCase();
-    const bucket = applicationsByStage.get(key) ?? [];
-    bucket.push(app);
-    applicationsByStage.set(key, bucket);
-  }
+  const applications = job.applications || [];
+  const totalApplications = applications.length;
 
-  const stagesForDisplay: StageDisplay[] =
-    job.stages.length > 0
-      ? job.stages.map((s) => ({
-          id: s.id,
-          name: s.name,
-          isTerminal: s.isTerminal,
-        }))
-      : applicationsByStage.size > 0
-      ? Array.from(applicationsByStage.keys()).map((name, index) => ({
-          id: `${index}-${name}`,
-          name,
-        }))
-      : [
-          {
-            id: "applied",
-            name: "APPLIED",
-          },
-        ];
+  const inProcessCount = applications.filter((app) =>
+    ["IN_PROGRESS", "ON_HOLD"].includes((app.status || "").toUpperCase()),
+  ).length;
 
-  const totalApplications = job.applications.length;
+  const hiredCount = applications.filter(
+    (app) => (app.status || "").toUpperCase() === "HIRED",
+  ).length;
 
-  const workModeValue = job.workMode || job.locationType || null;
-  const employmentTypeLabel = formatEmploymentType(job.employmentType);
-  const experienceLevelLabel = formatExperienceLevel(job.experienceLevel);
-  const workModeLabel = formatWorkMode(workModeValue);
+  const rejectedCount = applications.filter((app) =>
+    ["REJECTED", "ARCHIVED"].includes((app.status || "").toUpperCase()),
+  ).length;
 
-  const statusLabelJob = formatStatus(job.status);
-  const visibilityLabel = formatVisibility(job.visibility);
-
-  const salaryMinLabel = formatMoney(
-    job.salaryMin,
-    job.salaryCurrency || "NGN",
-  );
-  const salaryMaxLabel = formatMoney(
-    job.salaryMax,
-    job.salaryCurrency || "NGN",
-  );
-  const hasSalary = salaryMinLabel || salaryMaxLabel;
-
-  const publicJobUrl =
-    job.slug && job.visibility === "public" && job.status === "open"
-      ? `/jobs/${encodeURIComponent(job.slug)}`
-      : null;
-
-  const clientLabel =
-    job.clientCompany?.name ?? "Resourcin (internal role / no client set)";
-
-  // --------------------------------
-  // Status + stage filters (applications)
-  // --------------------------------
-  const rawStatusFilter = searchParams?.status ?? "all";
-  const statusFilter =
-    Array.isArray(rawStatusFilter) && rawStatusFilter.length > 0
-      ? rawStatusFilter[0]
-      : typeof rawStatusFilter === "string"
-      ? rawStatusFilter
-      : "all";
-  const statusFilterKey = (statusFilter || "all").toLowerCase();
-
-  const rawStageFilter = searchParams?.stage ?? "ALL";
-  const stageFilter =
-    Array.isArray(rawStageFilter) && rawStageFilter.length > 0
-      ? rawStageFilter[0]
-      : typeof rawStageFilter === "string"
-      ? rawStageFilter
-      : "ALL";
-  const stageFilterKey = (stageFilter || "ALL").toUpperCase();
-
-  function matchesStatusFilter(appStatus: string | null | undefined): boolean {
-    const key = (appStatus || "PENDING").toUpperCase();
-
-    if (statusFilterKey === "all") return true;
-
-    if (statusFilterKey === "in_process") {
-      return key === "IN_PROGRESS" || key === "ON_HOLD";
+  // Group applications into stages
+  const buckets = new Map<string, typeof applications>();
+  for (const app of applications) {
+    const key = (app.stage || "APPLIED").toUpperCase();
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
     }
-
-    if (statusFilterKey === "hired") {
-      return key === "HIRED";
-    }
-
-    if (statusFilterKey === "rejected") {
-      return key === "REJECTED" || key === "ARCHIVED";
-    }
-
-    return true;
+    buckets.get(key)!.push(app);
   }
 
-  function matchesStageFilter(appStage: string | null | undefined): boolean {
-    const key = (appStage || "APPLIED").toUpperCase();
-    if (stageFilterKey === "ALL") return true;
-    return key === stageFilterKey;
-  }
-
-  const filteredApplications = job.applications.filter(
-    (app) => matchesStatusFilter(app.status) && matchesStageFilter(app.stage),
+  // Ensure stable stage order, add "Other" bucket at the end if needed
+  const knownStages = STAGE_ORDER.filter((s) => buckets.has(s));
+  const unknownStages = Array.from(buckets.keys()).filter(
+    (s) => !STAGE_ORDER.includes(s),
   );
-  const visibleApplications = filteredApplications.length;
 
-  function buildHref(nextStatus?: string, nextStage?: string) {
-    const params = new URLSearchParams();
+  const orderedStages = [...knownStages, ...unknownStages];
 
-    const status = (nextStatus ?? statusFilterKey).toLowerCase();
-    const stage = (nextStage ?? stageFilterKey).toUpperCase();
+  const jobStatusLabel = titleCaseFromEnum(job.status as any);
+  const jobLocation = job.location || "Location not specified";
+  const clientName = job.clientCompany?.name || null;
 
-    if (status && status !== "all") params.set("status", status);
-    if (stage && stage !== "ALL") params.set("stage", stage);
-
-    const qs = params.toString();
-    return qs ? `?${qs}` : "";
-  }
+  const publicJobPath = job.slug
+    ? `/jobs/${encodeURIComponent(job.slug)}`
+    : `/jobs/${encodeURIComponent(job.id)}`;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -341,589 +187,268 @@ export default async function AtsJobDetailPage({
             <span className="mr-1.5">←</span>
             Back to ATS jobs
           </Link>
-          <h1 className="mt-3 text-2xl font-semibold text-slate-900">
-            {job.title}
-          </h1>
-          <p className="mt-1 text-xs text-slate-600">
-            {clientLabel}
-            {job.location ? ` · ${job.location}` : ""}
-          </p>
+
+          <div className="mt-3 space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              ATS · Job pipeline
+            </p>
+            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+              {job.title || "Untitled role"}
+            </h1>
+            <p className="text-xs text-slate-600">
+              {clientName && (
+                <>
+                  <span className="font-medium">{clientName}</span>
+                  <span className="mx-1 text-slate-300">•</span>
+                </>
+              )}
+              {jobLocation}
+              {job.employmentType && (
+                <>
+                  <span className="mx-1 text-slate-300">•</span>
+                  <span>{titleCaseFromEnum(job.employmentType)}</span>
+                </>
+              )}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          {/* Current state badges */}
           <div className="flex flex-wrap justify-end gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-700">
-              {statusLabelJob}
-            </span>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-700">
-              {visibilityLabel}
-            </span>
-            {job.internalOnly && (
-              <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-medium text-amber-800">
-                Internal only
+            {job.status && (
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium ${
+                  normaliseJobStatus(job.status) === "open"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                    : "bg-slate-50 text-slate-700 border border-slate-200"
+                }`}
+              >
+                {jobStatusLabel || "Status not set"}
               </span>
             )}
-            {job.confidential && (
-              <span className="rounded-full bg-rose-50 px-3 py-1 text-[11px] font-medium text-rose-800">
-                Confidential
+            {job.visibility && (
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-700">
+                {titleCaseFromEnum(job.visibility)} visibility
               </span>
             )}
           </div>
 
-          {/* Inline job controls */}
-          <form
-            method="POST"
-            action="/ats/jobs/update"
-            className="flex flex-wrap items-center justify-end gap-2 rounded-full bg-slate-50 px-3 py-2"
-          >
-            <input type="hidden" name="jobId" value={job.id} />
-            <label className="flex items-center gap-1 text-[10px] text-slate-600">
-              <span>Status</span>
-              <select
-                name="status"
-                defaultValue={job.status || "open"}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-800 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="open">Open</option>
-                <option value="draft">Draft</option>
-                <option value="closed">Closed</option>
-              </select>
-            </label>
-
-            <label className="flex items-center gap-1 text-[10px] text-slate-600">
-              <span>Visibility</span>
-              <select
-                name="visibility"
-                defaultValue={job.visibility || "public"}
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-800 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="public">Public</option>
-                <option value="internal">Internal</option>
-              </select>
-            </label>
-
-            <label className="flex items-center gap-1 text-[10px] text-slate-600">
-              <input
-                type="checkbox"
-                name="internalOnly"
-                value="1"
-                defaultChecked={!!job.internalOnly}
-                className="h-3 w-3 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-              />
-              <span>Internal only</span>
-            </label>
-
-            <label className="flex items-center gap-1 text-[10px] text-slate-600">
-              <input
-                type="checkbox"
-                name="confidential"
-                value="1"
-                defaultChecked={!!job.confidential}
-                className="h-3 w-3 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-              />
-              <span>Confidential</span>
-            </label>
-
-            <button
-              type="submit"
-              className="rounded-full bg-[#172965] px-3 py-1 text-[10px] font-semibold text-white shadow-sm hover:bg-[#0f1c45]"
-            >
-              Save
-            </button>
-          </form>
-
-          {publicJobUrl && (
-            <Link
-              href={publicJobUrl}
-              target="_blank"
-              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#0f1c45]"
-            >
-              View public page
-              <span className="ml-1.5 text-[10px] opacity-80">↗</span>
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* Summary + pipeline */}
-      <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] md:gap-6">
-        {/* Job summary */}
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Role summary
-          </h2>
-          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] text-slate-600">
-            <div>
-              <dt className="font-medium text-slate-500">Client</dt>
-              <dd className="mt-0.5 text-slate-800">{clientLabel}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Location</dt>
-              <dd className="mt-0.5 text-slate-800">
-                {job.location || "Not specified"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Work mode</dt>
-              <dd className="mt-0.5 text-slate-800">
-                {workModeLabel || "Not specified"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">
-                Employment type
-              </dt>
-              <dd className="mt-0.5 text-slate-800">
-                {employmentTypeLabel || "Not specified"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">
-                Experience level
-              </dt>
-              <dd className="mt-0.5 text-slate-800">
-                {experienceLevelLabel || "Not specified"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Created</dt>
-              <dd className="mt-0.5 text-slate-800">
-                {formatDate(job.createdAt)}
-              </dd>
-            </div>
-            {hasSalary && (
-              <div className="col-span-2">
-                <dt className="font-medium text-slate-500">
-                  Salary band
-                </dt>
-                <dd className="mt-0.5 text-slate-800">
-                  {salaryMinLabel && salaryMaxLabel
-                    ? `${salaryMinLabel} – ${salaryMaxLabel}`
-                    : salaryMinLabel || salaryMaxLabel}
-                  {!job.salaryVisible && hasSalary && (
-                    <span className="ml-1 text-[10px] text-slate-500">
-                      (internal only)
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </section>
-
-        {/* Pipeline summary */}
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Pipeline
-            </h2>
-            <p className="text-[11px] text-slate-500">
+          <div className="flex flex-wrap justify-end gap-2 text-[11px] text-slate-600">
+            <span>
               {totalApplications}{" "}
               {totalApplications === 1 ? "application" : "applications"}
-            </p>
+            </span>
+            <span className="text-slate-300">•</span>
+            <span>{inProcessCount} in process</span>
+            <span className="text-slate-300">•</span>
+            <span>{hiredCount} hired</span>
+            <span className="text-slate-300">•</span>
+            <span>{rejectedCount} rejected / archived</span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {/* "All" chip */}
-            <Link
-              href={buildHref(undefined, "ALL")}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] transition ${
-                stageFilterKey === "ALL"
-                  ? "border-[#172965] bg-[#172965]/5 text-[#172965]"
-                  : "border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300"
-              }`}
-            >
-              <span className="font-medium">All stages</span>
-              <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-800">
-                {totalApplications}
-              </span>
-            </Link>
 
-            {stagesForDisplay.map((stage) => {
-              const key = stage.name.toUpperCase();
-              const count = applicationsByStage.get(key)?.length ?? 0;
-              const isActive = stageFilterKey === key;
-              const isTerminal = !!stage.isTerminal;
-              return (
-                <Link
-                  key={stage.id}
-                  href={buildHref(undefined, isActive ? "ALL" : key)}
-                  className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] transition ${
-                    isActive
-                      ? "border-[#172965] bg-[#172965]/5 text-[#172965]"
-                      : isTerminal
-                      ? "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300"
-                      : "border-slate-200 bg-slate-50 text-slate-800 hover:border-slate-300"
-                  }`}
-                >
-                  <span className="font-medium">
-                    {formatStageName(stage.name)}
-                  </span>
-                  <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-800">
-                    {count}
-                  </span>
-                </Link>
-              );
-            })}
+          <div className="flex flex-wrap justify-end gap-2 text-[11px]">
+            <Link
+              href={publicJobPath}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-[#172965] hover:bg-slate-50"
+            >
+              View public job page ↗
+            </Link>
           </div>
-          <p className="mt-1 text-[10px] text-slate-500">
-            Click a stage to filter applications below. Use the controls in
-            the table to move candidates between stages and update their
-            statuses as you screen them.
-          </p>
-        </section>
+        </div>
       </div>
 
-      {/* Narrative (overview, responsibilities, etc.) */}
-      <section className="grid gap-4 md:grid-cols-2 md:gap-6">
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Role narrative
-          </h2>
-          {job.overview && (
-            <div className="space-y-1">
-              <h3 className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Overview
-              </h3>
-              <p className="whitespace-pre-line text-xs text-slate-800">
-                {job.overview}
-              </p>
-            </div>
-          )}
-          {job.aboutClient && (
-            <div className="space-y-1">
-              <h3 className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                About the client
-              </h3>
-              <p className="whitespace-pre-line text-xs text-slate-800">
-                {job.aboutClient}
-              </p>
-            </div>
-          )}
+      {/* Stage summary pills */}
+      {totalApplications > 0 && (
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-sm">
+          {orderedStages.map((stageKey) => {
+            const stageApps = buckets.get(stageKey) || [];
+            if (stageApps.length === 0) return null;
+            return (
+              <div
+                key={stageKey}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1"
+              >
+                <span className="font-medium text-slate-800">
+                  {formatStageName(stageKey)}
+                </span>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span>{stageApps.length}</span>
+              </div>
+            );
+          })}
         </div>
+      )}
 
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Responsibilities & requirements
-          </h2>
-          {job.responsibilities && (
-            <div className="space-y-1">
-              <h3 className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Responsibilities
-              </h3>
-              <p className="whitespace-pre-line text-xs text-slate-800">
-                {job.responsibilities}
-              </p>
-            </div>
-          )}
-          {job.requirements && (
-            <div className="space-y-1">
-              <h3 className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Requirements
-              </h3>
-              <p className="whitespace-pre-line text-xs text-slate-800">
-                {job.requirements}
-              </p>
-            </div>
-          )}
-          {job.benefits && (
-            <div className="space-y-1">
-              <h3 className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Benefits
-              </h3>
-              <p className="whitespace-pre-line text-xs text-slate-800">
-                {job.benefits}
-              </p>
-            </div>
-          )}
+      {/* Pipeline list */}
+      {totalApplications === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          No applications have been received for this role yet. Once candidates
+          apply, they will appear here grouped by stage.
         </div>
-      </section>
+      ) : (
+        <div className="space-y-4">
+          {orderedStages.map((stageKey) => {
+            const stageApps = buckets.get(stageKey) || [];
+            if (stageApps.length === 0) return null;
 
-      {/* Applications table + filters */}
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Applications
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Showing {visibleApplications} of {totalApplications}{" "}
-              {totalApplications === 1 ? "application" : "applications"}
-            </p>
-          </div>
+            const stageLabel = formatStageName(stageKey);
 
-          {/* Quick status filters */}
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-slate-500">Status:</span>
-            <div className="flex flex-wrap gap-1">
-              <Link
-                href={buildHref("all")}
-                className={`rounded-full px-2.5 py-1 ${
-                  statusFilterKey === "all"
-                    ? "bg-[#172965] text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
+            return (
+              <section
+                key={stageKey}
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
               >
-                All
-              </Link>
-              <Link
-                href={buildHref("in_process")}
-                className={`rounded-full px-2.5 py-1 ${
-                  statusFilterKey === "in_process"
-                    ? "bg-[#172965] text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                In process
-              </Link>
-              <Link
-                href={buildHref("hired")}
-                className={`rounded-full px-2.5 py-1 ${
-                  statusFilterKey === "hired"
-                    ? "bg-[#172965] text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                Hired
-              </Link>
-              <Link
-                href={buildHref("rejected")}
-                className={`rounded-full px-2.5 py-1 ${
-                  statusFilterKey === "rejected"
-                    ? "bg-[#172965] text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                Rejected
-              </Link>
-            </div>
-          </div>
-        </div>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      {stageLabel}
+                    </h2>
+                    <p className="text-[11px] text-slate-500">
+                      {stageApps.length}{" "}
+                      {stageApps.length === 1
+                        ? "candidate in this stage"
+                        : "candidates in this stage"}
+                    </p>
+                  </div>
+                </div>
 
-        {totalApplications === 0 ? (
-          <p className="text-[11px] text-slate-500">
-            Once candidates apply (or you add them manually), they’ll appear
-            here with stage, status and basic details.
-          </p>
-        ) : filteredApplications.length === 0 ? (
-          <p className="text-[11px] text-slate-500">
-            No applications match the current status / stage filter.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-[11px] text-slate-700">
-              <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-2">Candidate</th>
-                  <th className="px-3 py-2">Stage</th>
-                  <th className="px-3 py-2">Status</th>
-                  <th className="px-3 py-2">Location</th>
-                  <th className="px-3 py-2">
-                    Comp (current / expected)
-                  </th>
-                  <th className="px-3 py-2">Notice</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2">Applied</th>
-                  <th className="px-3 py-2">CV</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredApplications.map((app) => {
-                  const candidateName =
-                    app.fullName ||
-                    app.candidate?.fullName ||
-                    "Unnamed candidate";
-                  const candidateEmail =
-                    (app as any).email || app.candidate?.email || "";
+                <div className="space-y-3">
+                  {stageApps.map((app) => {
+                    const candidate = app.candidate;
+                    const name =
+                      candidate?.fullName ||
+                      app.fullName ||
+                      "Unnamed candidate";
+                    const email =
+                      candidate?.email || (app as any).email || "";
+                    const location =
+                      candidate?.location ||
+                      app.location ||
+                      "Location not set";
+                    const appliedAt = formatDate(app.createdAt);
+                    const sourceLabel = app.source || "—";
+                    const stageLabelInner = formatStageName(
+                      app.stage || "APPLIED",
+                    );
+                    const statusLabel = titleCaseFromEnum(
+                      app.status || "PENDING",
+                    );
 
-                  const stageLabel = formatStageName(
-                    app.stage || "APPLIED",
-                  );
-                  const statusLabelApp = titleCaseFromEnum(
-                    app.status || "PENDING",
-                  );
+                    const candidateId = candidate?.id;
+                    const cvUrl =
+                      (app as any).cvUrl || (candidate as any)?.cvUrl || null;
 
-                  const locationLabel =
-                    app.location || app.candidate?.location || "—";
+                    return (
+                      <div
+                        key={app.id}
+                        className="flex items-stretch justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
+                      >
+                        {/* Left: candidate meta */}
+                        <div className="flex min-w-0 flex-1 gap-3">
+                          <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700">
+                            {name
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((part) => part[0]?.toUpperCase())
+                              .join("") || "C"}
+                          </div>
 
-                  const compLabel =
-                    app.currentGrossAnnual && app.grossAnnualExpectation
-                      ? `${app.currentGrossAnnual} → ${app.grossAnnualExpectation}`
-                      : app.currentGrossAnnual ||
-                        app.grossAnnualExpectation ||
-                        "—";
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-semibold text-slate-900">
+                                {name}
+                              </span>
+                              {email && (
+                                <span className="truncate text-[11px] text-slate-500">
+                                  {email}
+                                </span>
+                              )}
+                            </div>
 
-                  const noticeLabel = app.noticePeriod || "—";
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                              <span className="font-medium text-slate-800">
+                                {location}
+                              </span>
+                              {appliedAt && (
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span>Applied {appliedAt}</span>
+                                </>
+                              )}
+                              {sourceLabel !== "—" && (
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span>
+                                    Source:{" "}
+                                    <span className="font-medium">
+                                      {sourceLabel}
+                                    </span>
+                                  </span>
+                                </>
+                              )}
+                            </div>
 
-                  const cvUrl =
-                    app.cvUrl || app.candidate?.cvUrl || "";
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                              {cvUrl && (
+                                <a
+                                  href={cvUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[#172965] hover:underline"
+                                >
+                                  View CV ↗
+                                </a>
+                              )}
+                              {candidateId && (
+                                <>
+                                  {cvUrl && (
+                                    <span className="text-slate-300">•</span>
+                                  )}
+                                  <Link
+                                    href={`/ats/candidates/${candidateId}`}
+                                    className="text-[#172965] hover:underline"
+                                  >
+                                    View candidate profile
+                                  </Link>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                  return (
-                    <tr
-                      key={app.id}
-                      className="border-b border-slate-100 last:border-0"
-                    >
-                      <td className="px-3 py-2 align-top">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium text-slate-900">
-                            {candidateName}
-                          </span>
-                          {candidateEmail && (
-                            <span className="text-[10px] text-slate-500">
-                              {candidateEmail}
+                        {/* Right: stage/status controls */}
+                        <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
+                          {/* Current state badges */}
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
+                              {stageLabelInner}
                             </span>
-                          )}
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
+                                app.status,
+                              )}`}
+                            >
+                              {statusLabel}
+                            </span>
+                          </div>
+
+                          {/* Editable controls */}
+                          <ApplicationStageStatusControls
+                            applicationId={app.id}
+                            initialStage={app.stage || "APPLIED"}
+                            initialStatus={app.status || "PENDING"}
+                          />
                         </div>
-                      </td>
-
-                      {/* Stage with inline control */}
-                      <td className="px-3 py-2 align-top">
-                        <form
-                          method="POST"
-                          action="/ats/applications/actions"
-                          className="inline-flex items-center gap-1"
-                        >
-                          <input
-                            type="hidden"
-                            name="jobId"
-                            value={job.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="applicationId"
-                            value={app.id}
-                          />
-                          <select
-                            name="newStage"
-                            defaultValue={app.stage || "APPLIED"}
-                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                          >
-                            {stagesForDisplay.map((stage) => (
-                              <option
-                                key={stage.id}
-                                value={stage.name}
-                              >
-                                {formatStageName(stage.name)}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="submit"
-                            className="text-[10px] font-medium text-[#172965] hover:underline"
-                          >
-                            Move
-                          </button>
-                        </form>
-                        <div className="mt-1">
-                          <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                            {stageLabel}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Status with inline control */}
-                      <td className="px-3 py-2 align-top">
-                        <form
-                          method="POST"
-                          action="/ats/applications/status"
-                          className="inline-flex items-center gap-1"
-                        >
-                          <input
-                            type="hidden"
-                            name="jobId"
-                            value={job.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="applicationId"
-                            value={app.id}
-                          />
-                          <select
-                            name="newStatus"
-                            defaultValue={app.status || "PENDING"}
-                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                          >
-                            <option value="PENDING">Pending</option>
-                            <option value="IN_PROGRESS">
-                              In progress
-                            </option>
-                            <option value="ON_HOLD">On hold</option>
-                            <option value="HIRED">Hired</option>
-                            <option value="REJECTED">Rejected</option>
-                            <option value="ARCHIVED">Archived</option>
-                          </select>
-                          <button
-                            type="submit"
-                            className="text-[10px] font-medium text-[#172965] hover:underline"
-                          >
-                            Set
-                          </button>
-                        </form>
-                        <div className="mt-1">
-                          <span
-                            className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
-                              app.status,
-                            )}`}
-                          >
-                            {statusLabelApp}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">
-                        <span className="text-[11px] text-slate-700">
-                          {locationLabel}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">
-                        <span className="text-[11px] text-slate-700">
-                          {compLabel}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">
-                        <span className="text-[11px] text-slate-700">
-                          {noticeLabel}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">
-                        <span className="text-[11px] text-slate-700">
-                          {app.source || "—"}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">
-                        <span className="text-[11px] text-slate-700">
-                          {formatDate(app.createdAt)}
-                        </span>
-                      </td>
-
-                      <td className="px-3 py-2 align-top">
-                        {cvUrl ? (
-                          <a
-                            href={cvUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[11px] font-medium text-[#172965] hover:underline"
-                          >
-                            View CV
-                          </a>
-                        ) : (
-                          <span className="text-[11px] text-slate-400">
-                            —
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
