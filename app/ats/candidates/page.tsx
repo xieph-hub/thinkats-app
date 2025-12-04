@@ -20,6 +20,7 @@ interface CandidatesPageSearchParams {
   stage?: string | string[];
   tenantId?: string | string[];
   jobId?: string | string[];
+  page?: string | string[];
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -100,6 +101,8 @@ type CandidateView = {
   jobIds: string[];
 };
 
+const PAGE_SIZE = 50;
+
 export default async function AtsCandidatesPage({
   searchParams,
 }: {
@@ -165,6 +168,16 @@ export default async function AtsCandidatesPage({
       : typeof rawTenant === "string"
       ? rawTenant
       : "";
+
+  const rawPage = searchParams?.page ?? "1";
+  const pageParam =
+    Array.isArray(rawPage) && rawPage.length > 0
+      ? rawPage[0]
+      : typeof rawPage === "string"
+      ? rawPage
+      : "1";
+  const parsedPage = parseInt(pageParam || "1", 10);
+  const requestedPage = Number.isNaN(parsedPage) ? 1 : parsedPage;
 
   const tenants = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
@@ -385,6 +398,82 @@ export default async function AtsCandidatesPage({
   );
 
   const filteredCount = candidates.length;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredCount === 0 ? 1 : filteredCount / PAGE_SIZE),
+  );
+  const currentPage = Math.min(
+    Math.max(requestedPage, 1),
+    totalPages,
+  );
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+
+  const paginatedCandidates =
+    filteredCount === 0
+      ? []
+      : candidates.slice(startIndex, endIndex);
+
+  function buildPageHref(page: number) {
+    const params = new URLSearchParams();
+    params.set("tenantId", tenantId);
+    if (q) params.set("q", q);
+    if (statusFilter && statusFilter !== "all") {
+      params.set("status", statusFilter);
+    }
+    if (stageFilter && stageFilter !== "all") {
+      params.set("stage", stageFilter);
+    }
+    if (locationFilter && locationFilter !== "all") {
+      params.set("location", locationFilter);
+    }
+    if (sourceFilter && sourceFilter !== "all") {
+      params.set("source", sourceFilter);
+    }
+    if (jobFilter && jobFilter !== "all") {
+      params.set("jobId", jobFilter);
+    }
+    if (page > 1) {
+      params.set("page", page.toString());
+    }
+    const qs = params.toString();
+    return qs ? `/ats/candidates?${qs}` : "/ats/candidates";
+  }
+
+  function buildPagesArray(
+    current: number,
+    total: number,
+  ): (number | "ellipsis")[] {
+    const pages: (number | "ellipsis")[] = [];
+    if (total <= 7) {
+      for (let i = 1; i <= total; i += 1) {
+        pages.push(i);
+      }
+      return pages;
+    }
+
+    pages.push(1);
+    const left = Math.max(2, current - 1);
+    const right = Math.min(total - 1, current + 1);
+
+    if (left > 2) {
+      pages.push("ellipsis");
+    }
+
+    for (let i = left; i <= right; i += 1) {
+      pages.push(i);
+    }
+
+    if (right < total - 1) {
+      pages.push("ellipsis");
+    }
+
+    pages.push(total);
+    return pages;
+  }
+
+  const pagesToShow =
+    filteredCount === 0 ? [] : buildPagesArray(currentPage, totalPages);
 
   const clearFiltersHref = (() => {
     const url = new URL("/ats/candidates", "http://dummy");
@@ -416,7 +505,7 @@ export default async function AtsCandidatesPage({
 
         {/* Tenant selector */}
         <form method="GET" className="hidden items-center gap-2 sm:flex">
-          {/* Preserve filters when switching tenant */}
+          {/* Preserve filters when switching tenant (but reset page) */}
           {q && <input type="hidden" name="q" value={q} />}
           {statusFilter && statusFilter !== "all" && (
             <input type="hidden" name="status" value={statusFilter} />
@@ -517,7 +606,7 @@ export default async function AtsCandidatesPage({
         method="GET"
         className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
       >
-        {/* Keep tenantId when filtering */}
+        {/* Keep tenantId when filtering; page resets to 1 */}
         <input type="hidden" name="tenantId" value={tenantId} />
 
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
@@ -664,14 +753,14 @@ export default async function AtsCandidatesPage({
       </form>
 
       {/* Candidate list */}
-      {candidates.length === 0 ? (
+      {filteredCount === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
           No candidates match the current filters. Adjust your search or remove
           some filters to see more of the pool.
         </div>
       ) : (
         <div className="space-y-3">
-          {candidates.map((c) => (
+          {paginatedCandidates.map((c) => (
             <div
               key={c.id}
               className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
@@ -781,6 +870,65 @@ export default async function AtsCandidatesPage({
               </div>
             </div>
           ))}
+
+          {/* Pagination footer */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
+              <p>
+                Showing{" "}
+                <span className="font-medium">
+                  {startIndex + 1}–
+                  {Math.min(endIndex, filteredCount)}
+                </span>{" "}
+                of{" "}
+                <span className="font-medium">{filteredCount}</span>{" "}
+                candidates
+              </p>
+
+              <div className="flex items-center gap-1">
+                {currentPage > 1 && (
+                  <Link
+                    href={buildPageHref(currentPage - 1)}
+                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 hover:bg-slate-50"
+                  >
+                    Previous
+                  </Link>
+                )}
+
+                {pagesToShow.map((p, idx) =>
+                  p === "ellipsis" ? (
+                    <span
+                      key={`ellipsis-${idx}`}
+                      className="px-1 text-slate-400"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <Link
+                      key={p}
+                      href={buildPageHref(p)}
+                      className={`min-w-[28px] rounded-full px-2 py-1 text-center ${
+                        p === currentPage
+                          ? "bg-[#172965] text-white"
+                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {p}
+                    </Link>
+                  ),
+                )}
+
+                {currentPage < totalPages && (
+                  <Link
+                    href={buildPageHref(currentPage + 1)}
+                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 hover:bg-slate-50"
+                  >
+                    Next
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
