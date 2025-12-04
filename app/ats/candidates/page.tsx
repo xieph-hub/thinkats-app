@@ -19,6 +19,7 @@ interface CandidatesPageSearchParams {
   source?: string | string[];
   stage?: string | string[];
   tenantId?: string | string[];
+  jobId?: string | string[];
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -96,6 +97,7 @@ type CandidateView = {
   lastAppliedJobTitle: string | null;
   rolesCount: number;
   sources: string[];
+  jobIds: string[];
 };
 
 export default async function AtsCandidatesPage({
@@ -148,6 +150,14 @@ export default async function AtsCandidatesPage({
       : "all";
   const stageFilterKey = (stageFilter || "all").toUpperCase();
 
+  const rawJobId = searchParams?.jobId ?? "all";
+  const jobFilter =
+    Array.isArray(rawJobId) && rawJobId.length > 0
+      ? rawJobId[0]
+      : typeof rawJobId === "string"
+      ? rawJobId
+      : "all";
+
   const rawTenant = searchParams?.tenantId ?? "";
   const tenantParam =
     Array.isArray(rawTenant) && rawTenant.length > 0
@@ -172,6 +182,16 @@ export default async function AtsCandidatesPage({
   }
 
   const tenantId = selectedTenant.id;
+
+  // Roles for filter
+  const jobs = await prisma.job.findMany({
+    where: { tenantId },
+    select: {
+      id: true,
+      title: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
   // -----------------------------
   // Load applications scoped by tenant via job → tenantId
@@ -243,15 +263,11 @@ export default async function AtsCandidatesPage({
         lastAppliedJobTitle: jobTitle,
         rolesCount: jobId ? 1 : 0,
         sources: app.source ? [app.source] : [],
+        jobIds: jobId ? [jobId] : [],
       });
     } else {
-      const rolesSet = new Set<string>();
-      if (existing.rolesCount > 0 && existing.lastAppliedJobId) {
-        rolesSet.add(existing.lastAppliedJobId);
-      }
-      if (jobId) {
-        rolesSet.add(jobId);
-      }
+      const rolesSet = new Set(existing.jobIds || []);
+      if (jobId) rolesSet.add(jobId);
 
       const sourcesSet = new Set(existing.sources);
       if (app.source) sourcesSet.add(app.source);
@@ -260,6 +276,7 @@ export default async function AtsCandidatesPage({
         ...existing,
         rolesCount: rolesSet.size,
         sources: Array.from(sourcesSet),
+        jobIds: Array.from(rolesSet),
       });
     }
   }
@@ -275,9 +292,6 @@ export default async function AtsCandidatesPage({
   ).length;
   const hiredCandidates = allCandidateViews.filter(
     (c) => c.primaryStatusKey === "HIRED",
-  ).length;
-  const rejectedCandidates = allCandidateViews.filter((c) =>
-    ["REJECTED", "ARCHIVED"].includes(c.primaryStatusKey),
   ).length;
   const newLast30Days = allCandidateViews.filter((c) => {
     return now - c.lastAppliedAt.getTime() <= THIRTY_DAYS;
@@ -332,6 +346,11 @@ export default async function AtsCandidatesPage({
       if (stageFilterKey !== "ALL") {
         ok = ok && c.primaryStageKey === stageFilterKey;
       }
+    }
+
+    // Role filter
+    if (jobFilter !== "all") {
+      ok = ok && c.jobIds.includes(jobFilter);
     }
 
     // Location filter
@@ -410,6 +429,9 @@ export default async function AtsCandidatesPage({
           )}
           {stageFilter && stageFilter !== "all" && (
             <input type="hidden" name="stage" value={stageFilter} />
+          )}
+          {jobFilter && jobFilter !== "all" && (
+            <input type="hidden" name="jobId" value={jobFilter} />
           )}
 
           <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
@@ -557,6 +579,26 @@ export default async function AtsCandidatesPage({
               </select>
             </div>
 
+            {/* Role filter */}
+            <div>
+              <label htmlFor="jobId" className="sr-only">
+                Role filter
+              </label>
+              <select
+                id="jobId"
+                name="jobId"
+                defaultValue={jobFilter || "all"}
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              >
+                <option value="all">All roles</option>
+                {jobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Location filter */}
             <div>
               <label htmlFor="location" className="sr-only">
@@ -610,6 +652,7 @@ export default async function AtsCandidatesPage({
         stageFilterKey !== "ALL" ||
         locationFilter !== "all" ||
         sourceFilter !== "all" ||
+        jobFilter !== "all" ||
         !!q ? (
           <Link
             href={clearFiltersHref}
