@@ -19,8 +19,6 @@ interface CandidatesPageSearchParams {
   source?: string | string[];
   stage?: string | string[];
   tenantId?: string | string[];
-  jobId?: string | string[];
-  page?: string | string[];
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -98,10 +96,9 @@ type CandidateView = {
   lastAppliedJobTitle: string | null;
   rolesCount: number;
   sources: string[];
-  jobIds: string[];
+  // NEW: best match score across this candidate's applications under this tenant
+  matchScore: number | null;
 };
-
-const PAGE_SIZE = 50;
 
 export default async function AtsCandidatesPage({
   searchParams,
@@ -153,14 +150,6 @@ export default async function AtsCandidatesPage({
       : "all";
   const stageFilterKey = (stageFilter || "all").toUpperCase();
 
-  const rawJobId = searchParams?.jobId ?? "all";
-  const jobFilter =
-    Array.isArray(rawJobId) && rawJobId.length > 0
-      ? rawJobId[0]
-      : typeof rawJobId === "string"
-      ? rawJobId
-      : "all";
-
   const rawTenant = searchParams?.tenantId ?? "";
   const tenantParam =
     Array.isArray(rawTenant) && rawTenant.length > 0
@@ -168,16 +157,6 @@ export default async function AtsCandidatesPage({
       : typeof rawTenant === "string"
       ? rawTenant
       : "";
-
-  const rawPage = searchParams?.page ?? "1";
-  const pageParam =
-    Array.isArray(rawPage) && rawPage.length > 0
-      ? rawPage[0]
-      : typeof rawPage === "string"
-      ? rawPage
-      : "1";
-  const parsedPage = parseInt(pageParam || "1", 10);
-  const requestedPage = Number.isNaN(parsedPage) ? 1 : parsedPage;
 
   const tenants = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
@@ -195,16 +174,6 @@ export default async function AtsCandidatesPage({
   }
 
   const tenantId = selectedTenant.id;
-
-  // Roles for filter
-  const jobs = await prisma.job.findMany({
-    where: { tenantId },
-    select: {
-      id: true,
-      title: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
 
   // -----------------------------
   // Load applications scoped by tenant via job → tenantId
@@ -256,6 +225,11 @@ export default async function AtsCandidatesPage({
     const jobTitle = app.job?.title || null;
     const jobId = app.job?.id || null;
 
+    const appMatchScore =
+      typeof (app as any).matchScore === "number"
+        ? (app as any).matchScore
+        : null;
+
     const existing = candidateMap.get(key);
 
     if (!existing) {
@@ -276,20 +250,33 @@ export default async function AtsCandidatesPage({
         lastAppliedJobTitle: jobTitle,
         rolesCount: jobId ? 1 : 0,
         sources: app.source ? [app.source] : [],
-        jobIds: jobId ? [jobId] : [],
+        matchScore: appMatchScore,
       });
     } else {
-      const rolesSet = new Set(existing.jobIds || []);
-      if (jobId) rolesSet.add(jobId);
+      const rolesSet = new Set<string>();
+      if (existing.rolesCount > 0 && existing.lastAppliedJobId) {
+        rolesSet.add(existing.lastAppliedJobId);
+      }
+      if (jobId) {
+        rolesSet.add(jobId);
+      }
 
       const sourcesSet = new Set(existing.sources);
       if (app.source) sourcesSet.add(app.source);
+
+      let bestMatchScore = existing.matchScore;
+      if (
+        typeof appMatchScore === "number" &&
+        (bestMatchScore == null || appMatchScore > bestMatchScore)
+      ) {
+        bestMatchScore = appMatchScore;
+      }
 
       candidateMap.set(key, {
         ...existing,
         rolesCount: rolesSet.size,
         sources: Array.from(sourcesSet),
-        jobIds: Array.from(rolesSet),
+        matchScore: bestMatchScore,
       });
     }
   }
@@ -305,6 +292,9 @@ export default async function AtsCandidatesPage({
   ).length;
   const hiredCandidates = allCandidateViews.filter(
     (c) => c.primaryStatusKey === "HIRED",
+  ).length;
+  const rejectedCandidates = allCandidateViews.filter((c) =>
+    ["REJECTED", "ARCHIVED"].includes(c.primaryStatusKey),
   ).length;
   const newLast30Days = allCandidateViews.filter((c) => {
     return now - c.lastAppliedAt.getTime() <= THIRTY_DAYS;
@@ -361,11 +351,6 @@ export default async function AtsCandidatesPage({
       }
     }
 
-    // Role filter
-    if (jobFilter !== "all") {
-      ok = ok && c.jobIds.includes(jobFilter);
-    }
-
     // Location filter
     if (locationFilter !== "all") {
       ok = ok && c.location === locationFilter;
@@ -393,87 +378,17 @@ export default async function AtsCandidatesPage({
     return ok;
   });
 
-  candidates.sort(
-    (a, b) => b.lastAppliedAt.getTime() - a.lastAppliedAt.getTime(),
-  );
-
   const filteredCount = candidates.length;
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredCount === 0 ? 1 : filteredCount / PAGE_SIZE),
-  );
-  const currentPage = Math.min(
-    Math.max(requestedPage, 1),
-    totalPages,
-  );
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const endIndex = startIndex + PAGE_SIZE;
 
-  const paginatedCandidates =
-    filteredCount === 0
-      ? []
-      : candidates.slice(startIndex, endIndex);
-
-  function buildPageHref(page: number) {
-    const params = new URLSearchParams();
-    params.set("tenantId", tenantId);
-    if (q) params.set("q", q);
-    if (statusFilter && statusFilter !== "all") {
-      params.set("status", statusFilter);
+  // Sort: best matchScore first, then recency
+  candidates.sort((a, b) => {
+    const aScore = a.matchScore ?? -1;
+    const bScore = b.matchScore ?? -1;
+    if (aScore !== bScore) {
+      return bScore - aScore;
     }
-    if (stageFilter && stageFilter !== "all") {
-      params.set("stage", stageFilter);
-    }
-    if (locationFilter && locationFilter !== "all") {
-      params.set("location", locationFilter);
-    }
-    if (sourceFilter && sourceFilter !== "all") {
-      params.set("source", sourceFilter);
-    }
-    if (jobFilter && jobFilter !== "all") {
-      params.set("jobId", jobFilter);
-    }
-    if (page > 1) {
-      params.set("page", page.toString());
-    }
-    const qs = params.toString();
-    return qs ? `/ats/candidates?${qs}` : "/ats/candidates";
-  }
-
-  function buildPagesArray(
-    current: number,
-    total: number,
-  ): (number | "ellipsis")[] {
-    const pages: (number | "ellipsis")[] = [];
-    if (total <= 7) {
-      for (let i = 1; i <= total; i += 1) {
-        pages.push(i);
-      }
-      return pages;
-    }
-
-    pages.push(1);
-    const left = Math.max(2, current - 1);
-    const right = Math.min(total - 1, current + 1);
-
-    if (left > 2) {
-      pages.push("ellipsis");
-    }
-
-    for (let i = left; i <= right; i += 1) {
-      pages.push(i);
-    }
-
-    if (right < total - 1) {
-      pages.push("ellipsis");
-    }
-
-    pages.push(total);
-    return pages;
-  }
-
-  const pagesToShow =
-    filteredCount === 0 ? [] : buildPagesArray(currentPage, totalPages);
+    return b.lastAppliedAt.getTime() - a.lastAppliedAt.getTime();
+  });
 
   const clearFiltersHref = (() => {
     const url = new URL("/ats/candidates", "http://dummy");
@@ -505,7 +420,7 @@ export default async function AtsCandidatesPage({
 
         {/* Tenant selector */}
         <form method="GET" className="hidden items-center gap-2 sm:flex">
-          {/* Preserve filters when switching tenant (but reset page) */}
+          {/* Preserve filters when switching tenant */}
           {q && <input type="hidden" name="q" value={q} />}
           {statusFilter && statusFilter !== "all" && (
             <input type="hidden" name="status" value={statusFilter} />
@@ -518,9 +433,6 @@ export default async function AtsCandidatesPage({
           )}
           {stageFilter && stageFilter !== "all" && (
             <input type="hidden" name="stage" value={stageFilter} />
-          )}
-          {jobFilter && jobFilter !== "all" && (
-            <input type="hidden" name="jobId" value={jobFilter} />
           )}
 
           <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
@@ -606,7 +518,7 @@ export default async function AtsCandidatesPage({
         method="GET"
         className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
       >
-        {/* Keep tenantId when filtering; page resets to 1 */}
+        {/* Keep tenantId when filtering */}
         <input type="hidden" name="tenantId" value={tenantId} />
 
         <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
@@ -668,26 +580,6 @@ export default async function AtsCandidatesPage({
               </select>
             </div>
 
-            {/* Role filter */}
-            <div>
-              <label htmlFor="jobId" className="sr-only">
-                Role filter
-              </label>
-              <select
-                id="jobId"
-                name="jobId"
-                defaultValue={jobFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All roles</option>
-                {jobs.map((job) => (
-                  <option key={job.id} value={job.id}>
-                    {job.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Location filter */}
             <div>
               <label htmlFor="location" className="sr-only">
@@ -741,7 +633,6 @@ export default async function AtsCandidatesPage({
         stageFilterKey !== "ALL" ||
         locationFilter !== "all" ||
         sourceFilter !== "all" ||
-        jobFilter !== "all" ||
         !!q ? (
           <Link
             href={clearFiltersHref}
@@ -753,14 +644,14 @@ export default async function AtsCandidatesPage({
       </form>
 
       {/* Candidate list */}
-      {filteredCount === 0 ? (
+      {candidates.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
           No candidates match the current filters. Adjust your search or remove
           some filters to see more of the pool.
         </div>
       ) : (
         <div className="space-y-3">
-          {paginatedCandidates.map((c) => (
+          {candidates.map((c) => (
             <div
               key={c.id}
               className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
@@ -833,6 +724,11 @@ export default async function AtsCandidatesPage({
               {/* Right: stage / status and quick links */}
               <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
                 <div className="flex flex-wrap justify-end gap-2">
+                  {typeof c.matchScore === "number" && (
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                      Match {c.matchScore}%
+                    </span>
+                  )}
                   <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
                     {formatStageName(c.primaryStage)}
                   </span>
@@ -870,65 +766,6 @@ export default async function AtsCandidatesPage({
               </div>
             </div>
           ))}
-
-          {/* Pagination footer */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
-              <p>
-                Showing{" "}
-                <span className="font-medium">
-                  {startIndex + 1}–
-                  {Math.min(endIndex, filteredCount)}
-                </span>{" "}
-                of{" "}
-                <span className="font-medium">{filteredCount}</span>{" "}
-                candidates
-              </p>
-
-              <div className="flex items-center gap-1">
-                {currentPage > 1 && (
-                  <Link
-                    href={buildPageHref(currentPage - 1)}
-                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 hover:bg-slate-50"
-                  >
-                    Previous
-                  </Link>
-                )}
-
-                {pagesToShow.map((p, idx) =>
-                  p === "ellipsis" ? (
-                    <span
-                      key={`ellipsis-${idx}`}
-                      className="px-1 text-slate-400"
-                    >
-                      …
-                    </span>
-                  ) : (
-                    <Link
-                      key={p}
-                      href={buildPageHref(p)}
-                      className={`min-w-[28px] rounded-full px-2 py-1 text-center ${
-                        p === currentPage
-                          ? "bg-[#172965] text-white"
-                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      {p}
-                    </Link>
-                  ),
-                )}
-
-                {currentPage < totalPages && (
-                  <Link
-                    href={buildPageHref(currentPage + 1)}
-                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 hover:bg-slate-50"
-                  >
-                    Next
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
