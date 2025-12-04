@@ -10,6 +10,9 @@ interface CandidateProfilePageProps {
   params: {
     candidateId: string;
   };
+  searchParams?: {
+    [key: string]: string | string[] | undefined;
+  };
 }
 
 function formatDate(value: string | Date | null | undefined) {
@@ -72,6 +75,7 @@ function applicationStatusBadgeClass(value?: string | null) {
 
 export default async function CandidateProfilePage({
   params,
+  searchParams,
 }: CandidateProfilePageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) {
@@ -94,6 +98,42 @@ export default async function CandidateProfilePage({
       </div>
     );
   }
+
+  // Build "Back to candidates" URL that remembers filters
+  const backToCandidatesHref = (() => {
+    const qs = new URLSearchParams();
+
+    const tenantParam = searchParams?.tenantId;
+    const tenantIdFromQs = Array.isArray(tenantParam)
+      ? tenantParam[0]
+      : tenantParam || tenant.id;
+
+    if (tenantIdFromQs) {
+      qs.set("tenantId", tenantIdFromQs);
+    }
+
+    const paramsToCarry = [
+      "q",
+      "status",
+      "location",
+      "source",
+      "stage",
+    ] as const;
+
+    for (const key of paramsToCarry) {
+      const value = searchParams?.[key];
+      if (!value) continue;
+
+      if (Array.isArray(value)) {
+        if (value[0]) qs.set(key, value[0] as string);
+      } else {
+        qs.set(key, value as string);
+      }
+    }
+
+    const queryString = qs.toString();
+    return queryString ? `/ats/candidates?${queryString}` : "/ats/candidates";
+  })();
 
   // Tenant-scoped candidate + applications
   const candidate = await prisma.candidate.findFirst({
@@ -195,7 +235,7 @@ export default async function CandidateProfilePage({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link
-            href="/ats/candidates"
+            href={backToCandidatesHref}
             className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
           >
             <span className="mr-1.5">←</span>
@@ -211,7 +251,10 @@ export default async function CandidateProfilePage({
                 .join("") || "C"}
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-slate-900">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                ATS · Candidate
+              </p>
+              <h1 className="mt-1 text-xl font-semibold text-slate-900">
                 {name}
               </h1>
               <p className="mt-0.5 text-xs text-slate-600">
@@ -532,7 +575,9 @@ export default async function CandidateProfilePage({
                         </div>
                         {job?.id && (
                           <Link
-                            href={`/ats/jobs/${job.id}`}
+                            href={`/ats/jobs/${job.id}?tenantId=${encodeURIComponent(
+                              tenant.id,
+                            )}`}
                             className="text-[10px] font-medium text-[#172965] hover:underline"
                           >
                             View job pipeline
