@@ -14,7 +14,7 @@ datasource db {
 
 model Tenant {
   id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  slug                String
+  slug                String      @unique
   name                String
   status              String      @default("active")
   primaryContactEmail String?     @map("primary_contact_email")
