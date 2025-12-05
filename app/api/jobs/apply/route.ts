@@ -6,11 +6,10 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { resend } from "@/lib/resendClient";
 
 import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
-import {
-  defaultScoringConfigForPlan,
-  mergeScoringConfig,
-  computeApplicationScore,
-} from "@/lib/scoring";
+
+// NEW: scoring imports
+import { getScoringConfigForJob } from "@/lib/scoring/server";
+import { computeApplicationScore } from "@/lib/scoring/compute";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
@@ -84,7 +83,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job + tenant plan + scoringConfig
+    // 1) Load job to get tenant id + title (+ slug for nice URLs)
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
@@ -93,22 +92,11 @@ export async function POST(req: Request) {
         tenantId: true,
         title: true,
         location: true,
-        locationType: true,
-        experienceLevel: true,
-        seniority: true,
-        requiredSkills: true,
-        salaryMin: true,
-        salaryMax: true,
-        salaryCurrency: true,
         visibility: true,
         status: true,
-        tenant: {
-          select: {
-            plan: true,
-            trialEndsAt: true,
-            scoringConfig: true,
-          },
-        },
+        workMode: true,
+        experienceLevel: true,
+        requiredSkills: true,
       },
     });
 
@@ -139,6 +127,7 @@ export async function POST(req: Request) {
       },
     });
 
+    // We’ll keep / override CV URL on candidate if we successfully upload one
     let candidateCvUrl: string | null =
       (candidate?.cvUrl as string | null | undefined) || null;
 
@@ -154,6 +143,7 @@ export async function POST(req: Request) {
         },
       });
     } else {
+      // Light touch update with fresher data
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
@@ -164,7 +154,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 3) Optional CV upload to Supabase Storage
+    // 3) Optional CV upload to Supabase Storage (bucket: resourcin-uploads)
     let applicationCvUrl: string | null = null;
 
     if (cvFile instanceof File && cvFile.size > 0) {
@@ -201,6 +191,7 @@ export async function POST(req: Request) {
       }
     }
 
+    // If we got a CV URL, also sync it to candidate profile
     if (applicationCvUrl && applicationCvUrl !== candidateCvUrl) {
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
@@ -211,47 +202,7 @@ export async function POST(req: Request) {
       candidateCvUrl = applicationCvUrl;
     }
 
-    // 4) Resolve scoring config (plan defaults + tenant overrides)
-    const plan = job.tenant?.plan ?? "free";
-    const baseConfig = defaultScoringConfigForPlan(plan);
-    const overrides = (job.tenant as any)?.scoringConfig || null;
-    const scoringConfig = mergeScoringConfig(baseConfig, overrides || undefined);
-
-    const scoringResult = computeApplicationScore({
-      job: {
-        title: job.title,
-        location: job.location,
-        locationType: job.locationType,
-        experienceLevel: job.experienceLevel,
-        seniority: job.seniority,
-        requiredSkills: job.requiredSkills || [],
-        salaryMin: job.salaryMin,
-        salaryMax: job.salaryMax,
-        salaryCurrency: job.salaryCurrency,
-      },
-      candidate: candidate
-        ? {
-            location: candidate.location,
-            currentTitle: candidate.currentTitle,
-            currentCompany: candidate.currentCompany,
-          }
-        : null,
-      application: {
-        location,
-        currentGrossAnnual,
-        grossAnnualExpectation,
-        noticePeriod,
-        coverLetter,
-        screeningAnswers: null, // future: structured answers
-        howHeard,
-      },
-      config: scoringConfig,
-    });
-
-    const matchScore = scoringResult.score;
-    const matchReason = scoringResult.summary;
-
-    // 5) Create the job application with scoring fields
+    // 4) Create the job application
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -273,18 +224,44 @@ export async function POST(req: Request) {
         source: source || null,
 
         cvUrl: applicationCvUrl || candidateCvUrl || null,
-
         coverLetter: coverLetter || null,
 
+        // sensible defaults
         stage: "APPLIED",
         status: "PENDING",
-
-        matchScore,
-        matchReason,
       },
     });
 
-    // 6) Candidate acknowledgement email
+    // 4b) SMALL SCORING HOOK – persist matchScore + matchReason
+    try {
+      const { config } = await getScoringConfigForJob(job.id);
+
+      const scored = computeApplicationScore({
+        application,
+        candidate,
+        job,
+        config,
+      });
+
+      await prisma.jobApplication.update({
+        where: { id: application.id },
+        data: {
+          matchScore: scored.score,
+          matchReason: scored.reason,
+        },
+      });
+    } catch (scoringError) {
+      console.error(
+        "Error in scoring pipeline for application",
+        application.id,
+        scoringError,
+      );
+      // Do not block the candidate – scoring errors should never break apply
+    }
+
+    // -----------------------------------------------------------------------
+    // 5) Fire emails via Resend – CANDIDATE ONLY
+    // -----------------------------------------------------------------------
     try {
       const jobTitle = job.title;
       const candidateName = fullName;
@@ -311,6 +288,7 @@ export async function POST(req: Request) {
         "Resend email error (candidate acknowledgement):",
         emailError,
       );
+      // Don’t fail the request – DB is still the source of truth
     }
 
     return NextResponse.json({
