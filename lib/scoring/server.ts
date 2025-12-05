@@ -90,7 +90,7 @@ export function mergeScoringConfig(opts: {
   jobOverrides: any;
   tenantHiringMode: string | null;
   jobHiringMode: string | null;
-}: NormalizedScoringConfig): NormalizedScoringConfig {
+}): NormalizedScoringConfig {
   const base: any = {
     ...DEFAULT_SCORING_CONFIG,
     ...(opts.tenantConfig ?? {}),
@@ -372,7 +372,7 @@ async function callScoringService(opts: {
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        // align with our spec: x-api-key
+        // spec: use x-api-key for auth
         "x-api-key": apiKey,
       },
       body: JSON.stringify(payload),
@@ -403,7 +403,7 @@ async function callScoringService(opts: {
     }
 
     const normalized = normalizeWireResponse(json);
-    // clamp score defensively
+    // clamp defensively
     normalized.score = clampNumber(normalized.score, 0, 0, 100);
 
     return normalized;
@@ -432,13 +432,6 @@ async function callScoringService(opts: {
 /* scoreAndPersistApplication                                               */
 /* ------------------------------------------------------------------------ */
 
-/**
- * Main hook for write-paths:
- * - Calls external scoring service
- * - Updates job_applications.match_score / match_reason
- * - Writes a scoring_events row for audit
- * - Returns a normalized ScoredApplicationView shape for callers (if needed)
- */
 export async function scoreAndPersistApplication(
   applicationId: string,
 ): Promise<ScoredApplicationView | null> {
@@ -480,7 +473,6 @@ export async function scoreAndPersistApplication(
   const tier: Tier =
     semantic.tier ?? tierFromScore(score, config.thresholds);
 
-  // Persist on the application itself
   await prisma.jobApplication.update({
     where: { id: application.id },
     data: {
@@ -491,7 +483,6 @@ export async function scoreAndPersistApplication(
     },
   });
 
-  // Write audit event
   await prisma.scoringEvent.create({
     data: {
       tenantId: tenant.id,
