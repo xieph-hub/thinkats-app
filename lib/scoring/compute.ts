@@ -47,7 +47,7 @@ export function computeApplicationScore(args: {
   return {
     score,
     tier,
-    risks: [],          // can be filled once you persist risks per application
+    risks: [],          // will be populated from ScoringEvent later
     redFlags: [],
     interviewFocus: [],
     reason,
