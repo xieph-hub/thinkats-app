@@ -2,8 +2,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { NormalizedScoringConfig } from "@/lib/scoring/types";
 
-type HiringMode = "exec" | "volume" | "hybrid";
+type HiringMode = NormalizedScoringConfig["hiringMode"]; // "balanced" | "volume" | "executive"
 type PlanMode = "free" | "pro" | "enterprise";
 
 type CategoryWeights = {
@@ -36,8 +37,6 @@ type NlpConfig = {
 };
 
 type ScoringConfig = {
-  mode: HiringMode;
-  plan: PlanMode;
   weights: CategoryWeights;
   thresholds: Thresholds;
   skills: SkillsConfig;
@@ -51,9 +50,36 @@ type ApiState = {
   saving: boolean;
 };
 
+const DEFAULT_CONFIG: ScoringConfig = {
+  weights: {
+    coreCompetencies: 30,
+    experienceQuality: 25,
+    education: 15,
+    achievements: 15,
+    culturalFit: 15,
+  },
+  thresholds: {
+    tierA: 80,
+    tierB: 65,
+    tierC: 50,
+  },
+  skills: {
+    mustHaveSkillMatchPercent: 70,
+    treatMissingMustHaveAsRedFlag: true,
+  },
+  bias: {
+    anonymizeForScoring: true,
+    downweightEducation: true,
+  },
+  nlp: {
+    enableNlp: true,
+    nlpWeightBoost: 20,
+  },
+};
+
 export default function ScoringSettingsCard() {
   const [plan, setPlan] = useState<PlanMode>("free");
-  const [hiringMode, setHiringMode] = useState<HiringMode>("exec");
+  const [hiringMode, setHiringMode] = useState<HiringMode>("balanced");
   const [config, setConfig] = useState<ScoringConfig | null>(null);
   const [state, setState] = useState<ApiState>({
     loading: true,
@@ -71,14 +97,45 @@ export default function ScoringSettingsCard() {
         const res = await fetch("/api/ats/settings/scoring", {
           method: "GET",
         });
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || "Failed to load settings");
+
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Failed to load settings");
         }
         if (cancelled) return;
-        setPlan(data.plan as PlanMode);
-        setHiringMode(data.hiringMode as HiringMode);
-        setConfig(data.config as ScoringConfig);
+
+        setPlan((data.plan as PlanMode) ?? "free");
+        setHiringMode(
+          (data.hiringMode as HiringMode) ?? ("balanced" as HiringMode),
+        );
+
+        const rawConfig = (data.config ?? {}) as Partial<ScoringConfig>;
+        setConfig({
+          ...DEFAULT_CONFIG,
+          ...rawConfig,
+          weights: {
+            ...DEFAULT_CONFIG.weights,
+            ...(rawConfig.weights ?? {}),
+          },
+          thresholds: {
+            ...DEFAULT_CONFIG.thresholds,
+            ...(rawConfig.thresholds ?? {}),
+          },
+          skills: {
+            ...DEFAULT_CONFIG.skills,
+            ...(rawConfig.skills ?? {}),
+          },
+          bias: {
+            ...DEFAULT_CONFIG.bias,
+            ...(rawConfig.bias ?? {}),
+          },
+          nlp: {
+            ...DEFAULT_CONFIG.nlp,
+            ...(rawConfig.nlp ?? {}),
+          },
+        });
+
         setState((s) => ({ ...s, loading: false, error: null }));
       } catch (err: any) {
         console.error("Load scoring settings error:", err);
@@ -109,9 +166,9 @@ export default function ScoringSettingsCard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          hiringMode,
+          hiringMode, // "balanced" | "volume" | "executive"
           config: {
-            mode: hiringMode,
+            // extra knobs live in tenant.scoringConfig JSON
             weights: config.weights,
             thresholds: config.thresholds,
             skills: config.skills,
@@ -121,14 +178,42 @@ export default function ScoringSettingsCard() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Failed to save settings");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to save settings");
       }
 
-      setPlan(data.plan as PlanMode);
-      setHiringMode(data.hiringMode as HiringMode);
-      setConfig(data.config as ScoringConfig);
+      setPlan((data.plan as PlanMode) ?? plan);
+      setHiringMode(
+        (data.hiringMode as HiringMode) ?? hiringMode,
+      );
+
+      const rawConfig = (data.config ?? {}) as Partial<ScoringConfig>;
+      setConfig({
+        ...DEFAULT_CONFIG,
+        ...rawConfig,
+        weights: {
+          ...DEFAULT_CONFIG.weights,
+          ...(rawConfig.weights ?? {}),
+        },
+        thresholds: {
+          ...DEFAULT_CONFIG.thresholds,
+          ...(rawConfig.thresholds ?? {}),
+        },
+        skills: {
+          ...DEFAULT_CONFIG.skills,
+          ...(rawConfig.skills ?? {}),
+        },
+        bias: {
+          ...DEFAULT_CONFIG.bias,
+          ...(rawConfig.bias ?? {}),
+        },
+        nlp: {
+          ...DEFAULT_CONFIG.nlp,
+          ...(rawConfig.nlp ?? {}),
+        },
+      });
+
       setSaveMessage("Scoring settings updated");
       setState((s) => ({ ...s, saving: false }));
     } catch (err: any) {
@@ -221,7 +306,7 @@ export default function ScoringSettingsCard() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">
-            Scoring & bias settings
+            Scoring &amp; bias settings
           </h2>
           <p className="text-xs text-slate-500">
             Control how ThinkATS ranks candidates across exec search and volume
@@ -275,7 +360,9 @@ export default function ScoringSettingsCard() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(["exec", "volume", "hybrid"] as HiringMode[]).map((mode) => (
+              {(
+                ["executive", "volume", "balanced"] as HiringMode[]
+              ).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -287,9 +374,9 @@ export default function ScoringSettingsCard() {
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100",
                   ].join(" ")}
                 >
-                  {mode === "exec" && "Executive search"}
+                  {mode === "executive" && "Executive search"}
                   {mode === "volume" && "Volume hiring"}
-                  {mode === "hybrid" && "Hybrid"}
+                  {mode === "balanced" && "Balanced"}
                 </button>
               ))}
             </div>
@@ -404,7 +491,7 @@ export default function ScoringSettingsCard() {
           <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-2 flex flex-col gap-1">
               <h3 className="text-xs font-semibold text-slate-900">
-                Must-have skills & bias reduction
+                Must-have skills &amp; bias reduction
               </h3>
               <p className="text-[11px] text-slate-500">
                 Tighten how &quot;must-have&quot; skills are treated and apply
@@ -487,7 +574,7 @@ export default function ScoringSettingsCard() {
                   NLP / semantic matching
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  Uses CV & job description text for deeper fit scoring.
+                  Uses CV &amp; job description text for deeper fit scoring.
                 </p>
               </div>
               <div className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">
