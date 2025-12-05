@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import ApplicationStageStatusInline from "@/components/ats/jobs/ApplicationStageStatusInline";
-import ApplicationEmailDrawer from "@/components/ats/jobs/ApplicationEmailDrawer";
+import { matchesBooleanQuery } from "@/lib/booleanSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ type PageProps = {
     stage?: string;
     status?: string;
     tier?: string;
-    emailError?: string;
+    viewId?: string;
   };
 };
 
@@ -76,39 +76,74 @@ export default async function JobPipelinePage({
     notFound();
   }
 
-  // Email templates for this tenant – for the per-application drawer
-  const emailTemplatesRaw = await prisma.emailTemplate.findMany({
-    where: { tenantId: tenant.id },
+  // Load saved views for this job
+  const rawViewId =
+    typeof searchParams.viewId === "string" ? searchParams.viewId : "";
+
+  const savedViewsRaw = await prisma.savedView.findMany({
+    where: {
+      tenantId: tenant.id,
+      scope: "job_pipeline",
+    },
     orderBy: { createdAt: "asc" },
   });
 
-  const emailTemplates = emailTemplatesRaw.map((tpl) => ({
-    id: tpl.id,
-    name: tpl.name,
-    subject: tpl.subject,
-    body: tpl.body,
-  }));
+  const jobViews = savedViewsRaw.filter((v) => {
+    const params = (v.params || {}) as any;
+    return params.jobId === job.id;
+  });
 
-  const q =
-    typeof searchParams.q === "string"
-      ? searchParams.q.trim().toLowerCase()
-      : "";
-  const filterStage =
-    typeof searchParams.stage === "string" && searchParams.stage !== ""
-      ? searchParams.stage
-      : "ALL";
-  const filterStatus =
-    typeof searchParams.status === "string" && searchParams.status !== ""
-      ? searchParams.status
-      : "ALL";
-  const filterTier =
-    typeof searchParams.tier === "string" && searchParams.tier !== ""
-      ? searchParams.tier
-      : "ALL";
-  const emailError =
-    typeof searchParams.emailError === "string"
-      ? searchParams.emailError
-      : "";
+  const viewFromId =
+    rawViewId && jobViews.length
+      ? jobViews.find((v) => v.id === rawViewId) || null
+      : null;
+
+  const defaultView =
+    jobViews.find((v) => v.isDefault) || null;
+
+  const activeView = viewFromId || defaultView || null;
+
+  // Base filters
+  let filterQ = "";
+  let filterStage = "ALL";
+  let filterStatus = "ALL";
+  let filterTier = "ALL";
+
+  if (activeView) {
+    const params = (activeView.params || {}) as any;
+    if (typeof params.q === "string") filterQ = params.q;
+    if (typeof params.stage === "string")
+      filterStage = params.stage;
+    if (typeof params.status === "string")
+      filterStatus = params.status;
+    if (typeof params.tier === "string") filterTier = params.tier;
+  }
+
+  // Overlay explicit query params
+  if (typeof searchParams.q === "string") {
+    filterQ = searchParams.q;
+  }
+
+  if (
+    typeof searchParams.stage === "string" &&
+    searchParams.stage !== ""
+  ) {
+    filterStage = searchParams.stage;
+  }
+
+  if (
+    typeof searchParams.status === "string" &&
+    searchParams.status !== ""
+  ) {
+    filterStatus = searchParams.status;
+  }
+
+  if (
+    typeof searchParams.tier === "string" &&
+    searchParams.tier !== ""
+  ) {
+    filterTier = searchParams.tier;
+  }
 
   const stageNames =
     job.stages.length > 0
@@ -123,9 +158,8 @@ export default async function JobPipelinePage({
     _engine: string | null;
   };
 
-  const columns: { name: string; apps: DecoratedApp[] }[] = stageNames.map(
-    (name) => ({ name, apps: [] }),
-  );
+  const columns: { name: string; apps: DecoratedApp[] }[] =
+    stageNames.map((name) => ({ name, apps: [] }));
   const unassigned: DecoratedApp[] = [];
 
   for (const app of job.applications) {
@@ -146,25 +180,37 @@ export default async function JobPipelinePage({
       _engine: engine,
     };
 
-    // search filter
-    if (q) {
-      const haystack = [
-        app.fullName,
-        app.email,
-        app.location,
-        app.linkedinUrl,
-        app.source,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!haystack.includes(q)) continue;
-    }
+    // Keyword + boolean search
+    const haystack = [
+      app.fullName,
+      app.email,
+      app.location,
+      app.linkedinUrl,
+      app.source,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const matchesQuery = matchesBooleanQuery(filterQ, {
+      haystack,
+      fields: {
+        name: app.fullName || "",
+        email: app.email || "",
+        location: app.location || "",
+        source: app.source || "",
+        stage: app.stage || "",
+        status: app.status || "",
+        tier: tier || "",
+      },
+    });
+
+    if (!matchesQuery) continue;
 
     // status filter
     if (
       filterStatus !== "ALL" &&
-      (app.status || "").toUpperCase() !== filterStatus.toUpperCase()
+      (app.status || "").toUpperCase() !==
+        filterStatus.toUpperCase()
     ) {
       continue;
     }
@@ -178,7 +224,10 @@ export default async function JobPipelinePage({
     }
 
     const stageName = (app.stage || "APPLIED").toUpperCase();
-    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
+    if (
+      filterStage !== "ALL" &&
+      stageName !== filterStage.toUpperCase()
+    ) {
       continue;
     }
 
@@ -204,10 +253,18 @@ export default async function JobPipelinePage({
     new Set(
       job.applications
         .flatMap((a) => a.scoringEvents)
-        .map((e) => (e?.tier as string | null | undefined) || null)
+        .map(
+          (e) =>
+            (e?.tier as string | null | undefined) || null,
+        )
         .filter(Boolean) as string[],
     ),
   ).sort();
+
+  const currentViewId =
+    typeof searchParams.viewId === "string"
+      ? searchParams.viewId
+      : activeView?.id || "";
 
   return (
     <div className="flex h-full flex-1 flex-col">
@@ -250,26 +307,46 @@ export default async function JobPipelinePage({
             <span>
               Tenant plan:{" "}
               <span className="font-medium capitalize">
-                {/* Tenant type in lib/tenant must include `plan` */}
-                {/* @ts-expect-error plan is present on runtime tenant row */}
                 {tenant.plan}
               </span>
             </span>
+            {activeView && (
+              <span className="mt-0.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                Active view: {activeView.name}
+              </span>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Filters + bulk bar */}
+      {/* Filters + bulk bar + saved views */}
       <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
-        {emailError && (
-          <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
-            {emailError}
-          </div>
-        )}
-
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           {/* Filters */}
-          <form className="flex flex-wrap items-end gap-2 text-xs" method="GET">
+          <form
+            className="flex flex-wrap items-end gap-2 text-xs"
+            method="GET"
+          >
+            {/* View selector */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                View
+              </label>
+              <select
+                name="viewId"
+                defaultValue={currentViewId}
+                className="h-8 min-w-[140px] rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="">All candidates</option>
+                {jobViews.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                    {v.isDefault ? " · default" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex flex-col">
               <label className="mb-1 text-[11px] text-slate-600">
                 Search
@@ -277,9 +354,9 @@ export default async function JobPipelinePage({
               <input
                 type="text"
                 name="q"
-                defaultValue={searchParams.q || ""}
-                placeholder="Name, email, location…"
-                className="h-8 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+                defaultValue={filterQ}
+                placeholder='e.g. "senior engineer" email:gmail.com -contract'
+                className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
               />
             </div>
 
@@ -344,9 +421,15 @@ export default async function JobPipelinePage({
             >
               Apply filters
             </button>
+            <Link
+              href={`/ats/jobs/${job.id}`}
+              className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 hover:bg-slate-100"
+            >
+              Reset
+            </Link>
           </form>
 
-          {/* Bulk info: just shows how many are visible now */}
+          {/* Bulk info */}
           <div className="flex flex-col items-end text-[11px] text-slate-500">
             <span>
               Visible applications:{" "}
@@ -359,6 +442,54 @@ export default async function JobPipelinePage({
             </span>
           </div>
         </div>
+
+        {/* Save current filters as a named view */}
+        <form
+          action="/api/ats/views"
+          method="POST"
+          className="mt-3 flex flex-wrap items-end gap-2 text-xs"
+        >
+          <input type="hidden" name="scope" value="job_pipeline" />
+          <input type="hidden" name="jobId" value={job.id} />
+          <input
+            type="hidden"
+            name="redirectTo"
+            value={`/ats/jobs/${job.id}`}
+          />
+          <input type="hidden" name="q" value={filterQ} />
+          <input type="hidden" name="stage" value={filterStage} />
+          <input type="hidden" name="status" value={filterStatus} />
+          <input type="hidden" name="tier" value={filterTier} />
+
+          <div className="flex flex-col">
+            <label className="mb-1 text-[11px] text-slate-600">
+              Save current filters as view
+            </label>
+            <input
+              type="text"
+              name="name"
+              required
+              placeholder="e.g. Tier A · Interview ready"
+              className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+            />
+          </div>
+
+          <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-600">
+            <input
+              type="checkbox"
+              name="setDefault"
+              className="h-3 w-3 rounded border-slate-400"
+            />
+            <span>Set as default view for this job</span>
+          </label>
+
+          <button
+            type="submit"
+            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+          >
+            Save view
+          </button>
+        </form>
       </div>
 
       {/* Pipeline + bulk move form */}
@@ -368,6 +499,11 @@ export default async function JobPipelinePage({
         className="flex flex-1 flex-col overflow-hidden"
       >
         <input type="hidden" name="jobId" value={job.id} />
+        <input
+          type="hidden"
+          name="visibleApplicationIds"
+          value={allVisibleApplicationIds.join(",")}
+        />
 
         <div className="flex-1 overflow-x-auto bg-slate-50 px-4 py-4">
           <div className="flex min-w-full gap-4">
@@ -458,31 +594,12 @@ export default async function JobPipelinePage({
                         )}
                       </div>
 
-                      {/* Stage + email actions */}
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <ApplicationStageStatusInline
-                          applicationId={app.id}
-                          currentStage={app.stage}
-                          currentStatus={app.status}
-                          stageOptions={stageOptions}
-                        />
-
-                        <ApplicationEmailDrawer
-                          tenantName={tenant.name}
-                          templates={emailTemplates}
-                          application={{
-                            id: app.id,
-                            jobId: job.id,
-                            candidateId: app.candidateId,
-                            candidateName: app.fullName,
-                            candidateEmail: app.email,
-                            jobTitle: job.title,
-                            clientName: job.clientCompany?.name ?? null,
-                            stage: app.stage,
-                            status: app.status,
-                          }}
-                        />
-                      </div>
+                      <ApplicationStageStatusInline
+                        applicationId={app.id}
+                        currentStage={app.stage}
+                        currentStatus={app.status}
+                        stageOptions={stageOptions}
+                      />
 
                       {app.matchReason && (
                         <p className="mt-1 line-clamp-2 text-[11px] text-slate-300">
@@ -505,7 +622,8 @@ export default async function JobPipelinePage({
                 Bulk move
               </span>{" "}
               <span className="text-slate-500">
-                Select candidates above, then move them to a new stage.
+                Select candidates above, then move them to a new
+                stage.
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
