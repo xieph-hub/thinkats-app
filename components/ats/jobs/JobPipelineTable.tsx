@@ -100,16 +100,21 @@ export default function JobPipelineTable({ rows }: { rows: PipelineRow[] }) {
     );
 
     try {
-      await fetch(`/api/ats/applications/${applicationId}/stage-status`, {
-        method: "PATCH",
+      // Use your existing Prisma + tenant-aware endpoint
+      await fetch("/api/ats/applications/update-stage", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(patch),
+        body: JSON.stringify({
+          applicationId,
+          stage: patch.stage,
+          status: patch.status,
+        }),
       });
     } catch (err) {
       console.error("Failed to update stage/status", err);
-      // You could add a toast / rollback here if you want.
+      // You can later add a toast + rollback if you want
     } finally {
       setSavingId(null);
     }
