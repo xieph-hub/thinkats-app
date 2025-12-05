@@ -84,24 +84,26 @@ export async function POST(request: Request) {
           },
         });
 
+        // Log as ApplicationEvent
         await tx.applicationEvent.create({
           data: {
             applicationId: updated.id,
             type: "bulk_stage_change",
-            tenantId: tenant.id,
-            jobId: updated.jobId,
-            candidateId: updated.candidateId,
-            createdById: actor?.id,
             payload: {
               previousStage: app.stage,
               nextStage: newStage,
               previousStatus: app.status,
-              // status unchanged here
+              nextStatus: app.status,
               bulk: true,
+              tenantId: tenant.id,
+              jobId: updated.jobId,
+              candidateId: updated.candidateId,
+              actorId: actor?.id,
             },
           },
         });
 
+        // Global ActivityLog
         await tx.activityLog.create({
           data: {
             tenantId: tenant.id,
