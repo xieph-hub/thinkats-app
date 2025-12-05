@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import ApplicationStageStatusInline from "@/components/ats/jobs/ApplicationStageStatusInline";
+import ApplicationEmailDrawer from "@/components/ats/jobs/ApplicationEmailDrawer";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ type PageProps = {
     stage?: string;
     status?: string;
     tier?: string;
+    emailError?: string;
   };
 };
 
@@ -46,10 +48,6 @@ export default async function JobPipelinePage({
 }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
-
-  // Avoid TS whining about `plan` on TenantRow – read it via `any`
-  const tenantPlan: string =
-    ((tenant as any)?.plan as string | undefined) ?? "free";
 
   const job = await prisma.job.findFirst({
     where: {
@@ -78,6 +76,19 @@ export default async function JobPipelinePage({
     notFound();
   }
 
+  // Email templates for this tenant – for the per-application drawer
+  const emailTemplatesRaw = await prisma.emailTemplate.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const emailTemplates = emailTemplatesRaw.map((tpl) => ({
+    id: tpl.id,
+    name: tpl.name,
+    subject: tpl.subject,
+    body: tpl.body,
+  }));
+
   const q =
     typeof searchParams.q === "string"
       ? searchParams.q.trim().toLowerCase()
@@ -94,6 +105,10 @@ export default async function JobPipelinePage({
     typeof searchParams.tier === "string" && searchParams.tier !== ""
       ? searchParams.tier
       : "ALL";
+  const emailError =
+    typeof searchParams.emailError === "string"
+      ? searchParams.emailError
+      : "";
 
   const stageNames =
     job.stages.length > 0
@@ -119,7 +134,8 @@ export default async function JobPipelinePage({
       (latestScore?.score as number | null | undefined) ??
       (app.matchScore as number | null | undefined) ??
       null;
-    const tier = (latestScore?.tier as string | null | undefined) ?? null;
+    const tier =
+      (latestScore?.tier as string | null | undefined) ?? null;
     const engine =
       (latestScore?.engine as string | null | undefined) ?? null;
 
@@ -234,7 +250,9 @@ export default async function JobPipelinePage({
             <span>
               Tenant plan:{" "}
               <span className="font-medium capitalize">
-                {tenantPlan}
+                {/* Tenant type in lib/tenant must include `plan` */}
+                {/* @ts-expect-error plan is present on runtime tenant row */}
+                {tenant.plan}
               </span>
             </span>
           </div>
@@ -243,6 +261,12 @@ export default async function JobPipelinePage({
 
       {/* Filters + bulk bar */}
       <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+        {emailError && (
+          <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+            {emailError}
+          </div>
+        )}
+
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           {/* Filters */}
           <form className="flex flex-wrap items-end gap-2 text-xs" method="GET">
@@ -434,12 +458,31 @@ export default async function JobPipelinePage({
                         )}
                       </div>
 
-                      <ApplicationStageStatusInline
-                        applicationId={app.id}
-                        currentStage={app.stage}
-                        currentStatus={app.status}
-                        stageOptions={stageOptions}
-                      />
+                      {/* Stage + email actions */}
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <ApplicationStageStatusInline
+                          applicationId={app.id}
+                          currentStage={app.stage}
+                          currentStatus={app.status}
+                          stageOptions={stageOptions}
+                        />
+
+                        <ApplicationEmailDrawer
+                          tenantName={tenant.name}
+                          templates={emailTemplates}
+                          application={{
+                            id: app.id,
+                            jobId: job.id,
+                            candidateId: app.candidateId,
+                            candidateName: app.fullName,
+                            candidateEmail: app.email,
+                            jobTitle: job.title,
+                            clientName: job.clientCompany?.name ?? null,
+                            stage: app.stage,
+                            status: app.status,
+                          }}
+                        />
+                      </div>
 
                       {app.matchReason && (
                         <p className="mt-1 line-clamp-2 text-[11px] text-slate-300">
