@@ -10,11 +10,36 @@ export const metadata: Metadata = {
   description: "Pipeline and sourcing analytics across your ThinkATS tenant.",
 };
 
-export default async function AnalyticsPage() {
+type PageProps = {
+  searchParams?: {
+    range?: string;
+  };
+};
+
+export default async function AnalyticsPage({ searchParams }: PageProps) {
   const tenant = await getResourcinTenant();
 
   // ---------------------------------------------------------------------------
-  // 1) Load jobs for this tenant (basic info + application counts)
+  // Time window: "all" (default) vs "30d"
+  // ---------------------------------------------------------------------------
+  const rawRange =
+    typeof searchParams?.range === "string" ? searchParams.range : "all";
+  const range = rawRange === "30d" ? "30d" : "all";
+
+  const now = new Date();
+  const cutoff =
+    range === "30d"
+      ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      : null;
+
+  const rangeLabel = range === "30d" ? "Last 30 days" : "All time";
+
+  // Helper snippet to apply createdAt >= cutoff when in 30d mode
+  const createdAtFilter =
+    cutoff != null ? { createdAt: { gte: cutoff } } : {};
+
+  // ---------------------------------------------------------------------------
+  // 1) Load jobs for this tenant (basic info)
   // ---------------------------------------------------------------------------
   const jobs = await prisma.job.findMany({
     where: { tenantId: tenant.id },
@@ -28,11 +53,6 @@ export default async function AnalyticsPage() {
           name: true,
         },
       },
-      applications: {
-        select: {
-          id: true,
-        },
-      },
     },
     orderBy: {
       createdAt: "desc",
@@ -43,15 +63,25 @@ export default async function AnalyticsPage() {
   const hasJobs = jobIds.length > 0;
 
   // ---------------------------------------------------------------------------
-  // 2) Aggregate applications & candidates
+  // 2) Aggregate applications, candidates, stages, sources, tiers
+  //    All metrics below respect the selected time window.
   // ---------------------------------------------------------------------------
+
+  // Candidates (createdAt window if 30d)
   const totalCandidatesPromise = prisma.candidate.count({
-    where: { tenantId: tenant.id },
+    where: {
+      tenantId: tenant.id,
+      ...createdAtFilter,
+    },
   });
 
+  // Applications count across all jobs
   const totalApplicationsPromise = hasJobs
     ? prisma.jobApplication.count({
-        where: { jobId: { in: jobIds } },
+        where: {
+          jobId: { in: jobIds },
+          ...createdAtFilter,
+        },
       })
     : Promise.resolve(0);
 
@@ -62,9 +92,12 @@ export default async function AnalyticsPage() {
         _count: { _all: true },
         where: {
           jobId: { in: jobIds },
+          ...createdAtFilter,
         },
       })
-    : Promise.resolve([] as { stage: string | null; _count: { _all: number } }[]);
+    : Promise.resolve(
+        [] as { stage: string | null; _count: { _all: number } }[],
+      );
 
   // Group applications by source
   const sourceBucketsPromise = hasJobs
@@ -73,11 +106,14 @@ export default async function AnalyticsPage() {
         _count: { _all: true },
         where: {
           jobId: { in: jobIds },
+          ...createdAtFilter,
         },
       })
-    : Promise.resolve([] as { source: string | null; _count: { _all: number } }[]);
+    : Promise.resolve(
+        [] as { source: string | null; _count: { _all: number } }[],
+      );
 
-  // Group scoring tiers from ScoringEvent (for all jobs under this tenant)
+  // Group scoring tiers from ScoringEvent
   const tierBucketsPromise = hasJobs
     ? prisma.scoringEvent.groupBy({
         by: ["tier"],
@@ -85,9 +121,26 @@ export default async function AnalyticsPage() {
         where: {
           tenantId: tenant.id,
           jobId: { in: jobIds },
+          ...(cutoff != null ? { createdAt: { gte: cutoff } } : {}),
         },
       })
-    : Promise.resolve([] as { tier: string | null; _count: { _all: number } }[]);
+    : Promise.resolve(
+        [] as { tier: string | null; _count: { _all: number } }[],
+      );
+
+  // Application volume per job (for "top roles by volume")
+  const applicationsByJobPromise = hasJobs
+    ? prisma.jobApplication.groupBy({
+        by: ["jobId"],
+        _count: { _all: true },
+        where: {
+          jobId: { in: jobIds },
+          ...createdAtFilter,
+        },
+      })
+    : Promise.resolve(
+        [] as { jobId: string; _count: { _all: number } }[],
+      );
 
   const [
     totalCandidates,
@@ -95,13 +148,20 @@ export default async function AnalyticsPage() {
     stageBuckets,
     sourceBuckets,
     tierBuckets,
+    applicationsByJob,
   ] = await Promise.all([
     totalCandidatesPromise,
     totalApplicationsPromise,
     stageBucketsPromise,
     sourceBucketsPromise,
     tierBucketsPromise,
+    applicationsByJobPromise,
   ]);
+
+  const applicationsByJobMap = new Map<string, number>();
+  for (const bucket of applicationsByJob) {
+    applicationsByJobMap.set(bucket.jobId, bucket._count._all);
+  }
 
   const openJobs = jobs.filter(
     (j) => (j.status || "").toLowerCase() === "open",
@@ -110,11 +170,11 @@ export default async function AnalyticsPage() {
     (j) => (j.status || "").toLowerCase() !== "open",
   );
 
-  // Sort jobs by application volume (top 5)
+  // Jobs ranked by application volume *within the time window*
   const jobsByVolume = [...jobs]
     .map((j) => ({
       ...j,
-      applicationCount: j.applications.length,
+      applicationCount: applicationsByJobMap.get(j.id) ?? 0,
     }))
     .sort((a, b) => b.applicationCount - a.applicationCount)
     .slice(0, 5);
@@ -156,6 +216,42 @@ export default async function AnalyticsPage() {
       </header>
 
       <main className="flex-1 space-y-4 p-5">
+        {/* Time window selector */}
+        <section className="mb-1 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-[11px] text-slate-500">
+            <span className="font-medium text-slate-700">
+              Time window:
+            </span>{" "}
+            {rangeLabel}
+          </div>
+          <form
+            method="GET"
+            className="flex items-center gap-2 text-[11px] text-slate-600"
+          >
+            <label
+              htmlFor="range"
+              className="text-[11px] text-slate-600"
+            >
+              View metrics for
+            </label>
+            <select
+              id="range"
+              name="range"
+              defaultValue={range}
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+            >
+              <option value="all">All time</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+            <button
+              type="submit"
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+            >
+              Apply
+            </button>
+          </form>
+        </section>
+
         {/* Summary cards */}
         <section className="grid gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -178,7 +274,7 @@ export default async function AnalyticsPage() {
               {totalCandidates}
             </div>
             <div className="mt-1 text-[11px] text-slate-400">
-              Unique people in your talent graph
+              Unique people created in this window
             </div>
           </div>
 
@@ -190,7 +286,7 @@ export default async function AnalyticsPage() {
               {totalApplications}
             </div>
             <div className="mt-1 text-[11px] text-slate-400">
-              Across all jobs under this tenant
+              Applications submitted in this window
             </div>
           </div>
 
@@ -216,28 +312,34 @@ export default async function AnalyticsPage() {
                 Pipeline by stage
               </h2>
               <span className="text-[11px] text-slate-400">
-                Based on all applications under this tenant
+                Based on applications in {rangeLabel.toLowerCase()}
               </span>
             </div>
 
             {stageBuckets.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No applications yet — once candidates start applying to jobs,
-                you&apos;ll see your pipeline distribution here.
+                No applications in this time window — once candidates start
+                applying to jobs, you&apos;ll see pipeline distribution here.
               </div>
             ) : (
               <table className="w-full table-fixed text-left text-[11px] text-slate-600">
                 <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="py-1.5 pr-2">Stage</th>
-                    <th className="py-1.5 pr-2 text-right">Applications</th>
-                    <th className="py-1.5 pr-2 text-right">% of total</th>
+                    <th className="py-1.5 pr-2 text-right">
+                      Applications
+                    </th>
+                    <th className="py-1.5 pr-2 text-right">
+                      % of total
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {stageBuckets
                     .slice()
-                    .sort((a, b) => (a.stage || "").localeCompare(b.stage || ""))
+                    .sort((a, b) =>
+                      (a.stage || "").localeCompare(b.stage || ""),
+                    )
                     .map((bucket) => {
                       const label = (bucket.stage || "UNKNOWN").toUpperCase();
                       const count = bucket._count._all;
@@ -269,15 +371,12 @@ export default async function AnalyticsPage() {
               <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                 Scoring tiers
               </h2>
-              <span className="text-[11px] text-slate-400">
-                From scoring events
-              </span>
             </div>
 
             {tierBuckets.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No scoring data yet. Once your auto-screening engine runs, you
-                will see A/B/C distribution here.
+                No scoring data in this time window. Once your auto-screening
+                engine runs, you&apos;ll see A/B/C distribution here.
               </div>
             ) : (
               <ul className="space-y-1.5 text-[11px] text-slate-600">
@@ -322,22 +421,27 @@ export default async function AnalyticsPage() {
                 Source breakdown
               </h2>
               <span className="text-[11px] text-slate-400">
-                Where your applications are coming from
+                Where applications in this window came from
               </span>
             </div>
 
             {sourceBuckets.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No applications yet with a source set. Once you tag sources
-                (e.g. &quot;LinkedIn&quot;, &quot;Referral&quot;), they will appear here.
+                No applications with a source set in this time window.
+                Once you tag sources (e.g. &quot;LinkedIn&quot;,
+                &quot;Referral&quot;), they will appear here.
               </div>
             ) : (
               <table className="w-full table-fixed text-left text-[11px] text-slate-600">
                 <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
                   <tr>
                     <th className="py-1.5 pr-2">Source</th>
-                    <th className="py-1.5 pr-2 text-right">Applications</th>
-                    <th className="py-1.5 pr-2 text-right">% of total</th>
+                    <th className="py-1.5 pr-2 text-right">
+                      Applications
+                    </th>
+                    <th className="py-1.5 pr-2 text-right">
+                      % of total
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -378,14 +482,15 @@ export default async function AnalyticsPage() {
                 Top roles by volume
               </h2>
               <span className="text-[11px] text-slate-400">
-                Roles attracting the most applications
+                Roles attracting the most applications in this window
               </span>
             </div>
 
             {jobsByVolume.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No jobs yet. Once you start posting roles, you&apos;ll see their
-                relative application volume here.
+                No applications in this time window. Once roles start
+                receiving candidates, you&apos;ll see their relative volume
+                here.
               </div>
             ) : (
               <ul className="space-y-2 text-[11px] text-slate-600">
