@@ -8,6 +8,7 @@ import { resend } from "@/lib/resendClient";
 import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
 import {
   defaultScoringConfigForPlan,
+  mergeScoringConfig,
   computeApplicationScore,
 } from "@/lib/scoring";
 
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job to get tenant id + title (+ slug, comp, skills etc.)
+    // 1) Load job + tenant plan + scoringConfig
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
@@ -105,6 +106,7 @@ export async function POST(req: Request) {
           select: {
             plan: true,
             trialEndsAt: true,
+            scoringConfig: true,
           },
         },
       },
@@ -137,7 +139,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // We’ll keep / override CV URL on candidate if we successfully upload one
     let candidateCvUrl: string | null =
       (candidate?.cvUrl as string | null | undefined) || null;
 
@@ -153,7 +154,6 @@ export async function POST(req: Request) {
         },
       });
     } else {
-      // Light touch update with fresher data (no scoring on name to reduce bias)
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
@@ -164,7 +164,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 3) Optional CV upload to Supabase Storage (bucket: resourcin-uploads)
+    // 3) Optional CV upload to Supabase Storage
     let applicationCvUrl: string | null = null;
 
     if (cvFile instanceof File && cvFile.size > 0) {
@@ -201,7 +201,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // If we got a CV URL, also sync it to candidate profile
     if (applicationCvUrl && applicationCvUrl !== candidateCvUrl) {
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
@@ -212,11 +211,12 @@ export async function POST(req: Request) {
       candidateCvUrl = applicationCvUrl;
     }
 
-    // 4) Compute bias-aware match score + tier + reason
+    // 4) Resolve scoring config (plan defaults + tenant overrides)
     const plan = job.tenant?.plan ?? "free";
     const baseConfig = defaultScoringConfigForPlan(plan);
+    const overrides = (job.tenant as any)?.scoringConfig || null;
+    const scoringConfig = mergeScoringConfig(baseConfig, overrides || undefined);
 
-    // (Future: when you add per-tenant overrides, merge them here.)
     const scoringResult = computeApplicationScore({
       job: {
         title: job.title,
@@ -242,17 +242,16 @@ export async function POST(req: Request) {
         grossAnnualExpectation,
         noticePeriod,
         coverLetter,
-        screeningAnswers: null, // you can pass structured answers here later
+        screeningAnswers: null, // future: structured answers
         howHeard,
       },
-      config: baseConfig,
+      config: scoringConfig,
     });
 
-    // Stored fields – DB is still the source of truth, UI derives tier from score.
     const matchScore = scoringResult.score;
     const matchReason = scoringResult.summary;
 
-    // 5) Create the job application (including matchScore + matchReason)
+    // 5) Create the job application with scoring fields
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -277,19 +276,15 @@ export async function POST(req: Request) {
 
         coverLetter: coverLetter || null,
 
-        // sensible defaults
         stage: "APPLIED",
         status: "PENDING",
 
-        // EXECUTIVE SEARCH scoring output
         matchScore,
         matchReason,
       },
     });
 
-    // -----------------------------------------------------------------------
-    // 6) Fire emails via Resend – CANDIDATE ONLY
-    // -----------------------------------------------------------------------
+    // 6) Candidate acknowledgement email
     try {
       const jobTitle = job.title;
       const candidateName = fullName;
@@ -316,7 +311,6 @@ export async function POST(req: Request) {
         "Resend email error (candidate acknowledgement):",
         emailError,
       );
-      // Don’t fail the request – DB is still the source of truth
     }
 
     return NextResponse.json({
