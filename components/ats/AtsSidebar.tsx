@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type NavItem = { href: string; label: string };
 
@@ -14,7 +15,10 @@ const mainNav: NavItem[] = [
   { href: "/ats/tenants", label: "Tenants" },
 ];
 
-const secondaryNav: NavItem[] = [{ href: "/ats/settings", label: "Settings" }];
+const secondaryNavBase: NavItem[] = [
+  { href: "/ats/settings", label: "Settings" },
+  // "Plans" will be appended at runtime for super-admins
+];
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
@@ -26,6 +30,41 @@ function isActive(pathname: string | null, href: string) {
 
 export default function AtsSidebar() {
   const pathname = usePathname();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRole() {
+      try {
+        // Piggyback on scoring settings API which already returns isSuperAdmin
+        const res = await fetch("/api/ats/settings/scoring", {
+          method: "GET",
+        });
+        const data = await res.json().catch(() => null);
+
+        if (cancelled) return;
+
+        if (res.ok && data && data.ok && typeof data.isSuperAdmin === "boolean") {
+          setIsSuperAdmin(data.isSuperAdmin);
+        }
+      } catch {
+        // Fail quietly – sidebar still works, just without Plans
+      }
+    }
+
+    loadRole();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const secondaryNav: NavItem[] = isSuperAdmin
+    ? [
+        ...secondaryNavBase,
+        { href: "/ats/admin/plans", label: "Plans" }, // manual upgrade/downgrade UI
+      ]
+    : secondaryNavBase;
 
   return (
     <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-slate-950 text-slate-50 md:flex md:flex-col">
