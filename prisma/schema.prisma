@@ -1,4 +1,4 @@
-generator client { 
+generator client {
   provider = "prisma-client-js"
 }
 
@@ -23,13 +23,13 @@ model Tenant {
   trialEndsAt         DateTime?   @map("trial_ends_at") @db.Timestamptz(6)
 
   // Scoring + hiring configuration
-  hiringMode          String      @map("hiring_mode") @default("balanced") // volume | executive | balanced
-  scoringConfig       Json?       @map("scoring_config")                   // tenant-level weights/thresholds
+  hiringMode    String @map("hiring_mode") @default("balanced") // volume | executive | balanced
+  scoringConfig Json?  @map("scoring_config")                    // tenant-level weights/thresholds
 
-  internalNotes       String?     @map("notes")
-  logoUrl             String?     @map("logo_url")
-  createdAt           DateTime    @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime    @map("updated_at") @default(now()) @db.Timestamptz(6)
+  internalNotes String?   @map("notes")
+  logoUrl       String?   @map("logo_url")
+  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   // Relations
   jobs               Job[]
@@ -46,7 +46,11 @@ model Tenant {
   tags               Tag[]
 
   // scoring audit trail
-  scoringEvents      ScoringEvent[]
+  scoringEvents ScoringEvent[]
+
+  // search / views / analytics
+  savedViews          SavedView[]
+  analyticsSnapshots  AnalyticsSnapshot[]
 
   @@map("tenants")
 }
@@ -56,14 +60,14 @@ model Tenant {
 // --------------------------------------------------------------------------
 
 model User {
-  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  fullName     String?          @map("full_name")
-  email        String?          @unique
-  passwordHash String?          @map("password_hash")
-  globalRole   String           @map("global_role") @default("USER") // SUPER_ADMIN / USER
-  isActive     Boolean          @map("is_active") @default(true)
-  createdAt    DateTime         @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime         @map("updated_at") @default(now()) @db.Timestamptz(6)
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fullName     String?  @map("full_name")
+  email        String?  @unique
+  passwordHash String?  @map("password_hash")
+  globalRole   String   @map("global_role") @default("USER") // SUPER_ADMIN / USER
+  isActive     Boolean  @map("is_active") @default(true)
+  createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   userTenantRoles UserTenantRole[]
   loginOtps       LoginOtp[]      // OTP records for this user
@@ -108,25 +112,24 @@ model LoginOtp {
 // --------------------------------------------------------------------------
 
 model ClientCompany {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  name      String
-  slug      String?
-  logoUrl   String?  @map("logo_url")
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  name     String
+  slug     String?
+  logoUrl  String? @map("logo_url")
 
   // New richer fields
-  website   String?  @map("website")
-  industry  String?  @map("industry")
+  website  String? @map("website")
+  industry String? @map("industry")
 
   // Careersite configuration for this client
-  careersiteSlug         String?  @map("careersite_slug")
-  careersiteCustomDomain String?  @map("careersite_custom_domain")
-  careersiteEnabled      Boolean  @map("careersite_enabled") @default(false)
+  careersiteSlug         String? @map("careersite_slug")
+  careersiteCustomDomain String? @map("careersite_custom_domain")
+  careersiteEnabled      Boolean @map("careersite_enabled") @default(false)
 
   // Internal notes about how you work with them
-  notes      String?  @map("notes")
-
-  createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  notes     String?  @map("notes")
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   jobs   Job[]
@@ -139,49 +142,49 @@ model ClientCompany {
 // --------------------------------------------------------------------------
 
 model Job {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId           String    @map("tenant_id") @db.Uuid
-  externalId         String?   @map("external_id")
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String   @map("tenant_id") @db.Uuid
+  externalId         String?  @map("external_id")
   title              String
   department         String?
   location           String?
-  employmentType     String?   @map("employment_type")
+  employmentType     String?  @map("employment_type")
   seniority          String?
   description        String?
-  hiringManagerId    String?   @map("hiring_manager_id") @db.Uuid
-  status             String    @default("open")   @db.Text
-  visibility         String    @default("public") @db.Text
-  tags               String[]  @default([]) @db.Text
-  createdBy          String?   @map("created_by") @db.Uuid
-  createdAt          DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
+  hiringManagerId    String?  @map("hiring_manager_id") @db.Uuid
+  status             String   @default("open")   @db.Text
+  visibility         String   @default("public") @db.Text
+  tags               String[] @default([]) @db.Text
+  createdBy          String?  @map("created_by") @db.Uuid
+  createdAt          DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
   slug               String?
-  clientCompanyId    String?   @map("client_company_id") @db.Uuid
-  workMode           String?   @map("work_mode")
+  clientCompanyId    String?  @map("client_company_id") @db.Uuid
+  workMode           String?  @map("work_mode")
   overview           String?
-  aboutClient        String?   @map("about_client")
+  aboutClient        String?  @map("about_client")
   responsibilities   String?
   requirements       String?
   benefits           String?
-  shortDescription   String?   @map("short_description")
-  locationType       String?   @map("location_type")
-  experienceLevel    String?   @map("experience_level")
-  yearsExperienceMin Int?      @map("years_experience_min")
-  yearsExperienceMax Int?      @map("years_experience_max")
-  salaryMin          Decimal?  @map("salary_min")
-  salaryMax          Decimal?  @map("salary_max")
-  salaryCurrency     String?   @map("salary_currency")
-  salaryVisible      Boolean?  @map("salary_visible")
-  requiredSkills     String[]  @default([]) @map("required_skills") @db.Text
-  educationRequired  String?   @map("education_required")
-  educationField     String?   @map("education_field")
-  internalOnly       Boolean?  @map("internal_only")
-  confidential       Boolean?  @map("confidential")
-  screeningSchema    Json?     @map("screening_schema")
+  shortDescription   String?  @map("short_description")
+  locationType       String?  @map("location_type")
+  experienceLevel    String?  @map("experience_level")
+  yearsExperienceMin Int?     @map("years_experience_min")
+  yearsExperienceMax Int?     @map("years_experience_max")
+  salaryMin          Decimal? @map("salary_min")
+  salaryMax          Decimal? @map("salary_max")
+  salaryCurrency     String?  @map("salary_currency")
+  salaryVisible      Boolean? @map("salary_visible")
+  requiredSkills     String[] @default([]) @map("required_skills") @db.Text
+  educationRequired  String?  @map("education_required")
+  educationField     String?  @map("education_field")
+  internalOnly       Boolean? @map("internal_only")
+  confidential       Boolean? @map("confidential")
+  screeningSchema    Json?    @map("screening_schema")
 
   // Scoring overrides per job
-  hiringMode        String?   @map("hiring_mode")       // override tenant.hiring_mode if set
-  scoringOverrides  Json?     @map("scoring_overrides") // per-job tweaks to weights/thresholds
+  hiringMode       String? @map("hiring_mode")       // override tenant.hiring_mode if set
+  scoringOverrides Json?   @map("scoring_overrides") // per-job tweaks to weights/thresholds
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
@@ -192,6 +195,9 @@ model Job {
   // scoring audit trail
   scoringEvents ScoringEvent[]
 
+  // analytics snapshots (optional, one-way relation in AnalyticsSnapshot)
+  // analyticsSnapshots AnalyticsSnapshot[]  // you can add this later if you want back-rel
+
   @@map("jobs")
 }
 
@@ -200,19 +206,19 @@ model Job {
 // --------------------------------------------------------------------------
 
 model Candidate {
-  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String             @map("tenant_id") @db.Uuid
-  fullName       String             @map("full_name")
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  fullName       String   @map("full_name")
   email          String
   phone          String?
   location       String?
-  linkedinUrl    String?            @map("linkedin_url")
-  currentTitle   String?            @map("current_title")
-  currentCompany String?            @map("current_company")
-  cvUrl          String?            @map("cv_url")
+  linkedinUrl    String?  @map("linkedin_url")
+  currentTitle   String?  @map("current_title")
+  currentCompany String?  @map("current_company")
+  cvUrl          String?  @map("cv_url")
   source         String?
-  createdAt      DateTime           @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime           @map("updated_at") @default(now()) @db.Timestamptz(6)
+  createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   tenant       Tenant            @relation(fields: [tenantId], references: [id])
   applications JobApplication[]
@@ -224,12 +230,12 @@ model Candidate {
 }
 
 model Tag {
-  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String         @map("tenant_id") @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
   name      String
   color     String?
-  createdAt DateTime       @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime       @map("updated_at") @default(now()) @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   tenant     Tenant         @relation(fields: [tenantId], references: [id])
   candidates CandidateTag[]
@@ -289,11 +295,11 @@ model JobApplication {
   statusChangedAt        DateTime? @map("status_changed_at") @db.Timestamptz(6)
 
   // For auto-screening / ranking
-  matchScore             Int?      @map("match_score")   // e.g. 0–100
-  matchReason            String?   @map("match_reason")  // short explanation / rationale
+  matchScore  Int?    @map("match_score")  // e.g. 0–100
+  matchReason String? @map("match_reason") // short explanation / rationale
 
-  job        Job                 @relation(fields: [jobId], references: [id])
-  candidate  Candidate?          @relation(fields: [candidateId], references: [id])
+  job        Job        @relation(fields: [jobId], references: [id])
+  candidate  Candidate? @relation(fields: [candidateId], references: [id])
   events     ApplicationEvent[]
   interviews ApplicationInterview[]
   notes      Note[]
@@ -305,11 +311,11 @@ model JobApplication {
 }
 
 model ApplicationEvent {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  applicationId String    @map("application_id") @db.Uuid
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String   @map("application_id") @db.Uuid
   type          String
-  payload       Json?     @map("payload")
-  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+  payload       Json?    @map("payload")
+  createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   application JobApplication @relation(fields: [applicationId], references: [id])
 
@@ -321,9 +327,9 @@ model ApplicationInterview {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   applicationId String   @map("application_id") @db.Uuid
   scheduledAt   DateTime @map("scheduled_at") @db.Timestamptz(6)
-  type          String?  @map("type")        // PHONE, VIRTUAL, ONSITE, PANEL, etc.
-  location      String?  @map("location")    // address or meeting room
-  videoUrl      String?  @map("video_url")   // e.g. Zoom/Meet link
+  type          String?  @map("type")      // PHONE, VIRTUAL, ONSITE, PANEL, etc.
+  location      String?  @map("location")  // address or meeting room
+  videoUrl      String?  @map("video_url") // e.g. Zoom/Meet link
   status        String   @map("status") @default("SCHEDULED") @db.Text // SCHEDULED, COMPLETED, NO_SHOW, CANCELLED
   durationMins  Int?     @map("duration_mins")
   notes         String?  @map("notes")
@@ -420,19 +426,19 @@ model EmailTemplate {
 }
 
 model SentEmail {
-  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId          String      @map("tenant_id") @db.Uuid
-  templateId        String?     @map("template_id") @db.Uuid
-  toEmail           String      @map("to_email")
-  candidateId       String?     @map("candidate_id") @db.Uuid
-  jobId             String?     @map("job_id") @db.Uuid
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  templateId        String?  @map("template_id") @db.Uuid
+  toEmail           String   @map("to_email")
+  candidateId       String?  @map("candidate_id") @db.Uuid
+  jobId             String?  @map("job_id") @db.Uuid
   subject           String
   body              String
-  status            String      @default("sent") @db.Text
-  errorMessage      String?     @map("error_message")
-  providerMessageId String?     @map("provider_message_id")
-  createdById       String?     @map("created_by") @db.Uuid
-  sentAt            DateTime    @map("sent_at") @default(now()) @db.Timestamptz(6)
+  status            String   @default("sent") @db.Text
+  errorMessage      String?  @map("error_message")
+  providerMessageId String?  @map("provider_message_id")
+  createdById       String?  @map("created_by") @db.Uuid
+  sentAt            DateTime @map("sent_at") @default(now()) @db.Timestamptz(6)
 
   tenant    Tenant         @relation(fields: [tenantId], references: [id])
   template  EmailTemplate? @relation(fields: [templateId], references: [id])
@@ -490,19 +496,19 @@ model ScoringEvent {
   jobId         String?   @map("job_id") @db.Uuid
   applicationId String?   @map("application_id") @db.Uuid
 
-  engine        String    @map("engine")           // e.g. "semantic-v1"
-  engineVersion String?   @map("engine_version")
-  mode          String?   @map("mode")             // volume | executive | balanced
-  score         Int?      @map("score")
-  tier          String?   @map("tier")
+  engine        String   @map("engine") // e.g. "semantic-v1"
+  engineVersion String?  @map("engine_version")
+  mode          String?  @map("mode")  // volume | executive | balanced
+  score         Int?     @map("score")
+  tier          String?  @map("tier")
 
-  configSnapshot Json?    @map("config_snapshot")  // scoring config used
-  inputSummary   Json?    @map("input_summary")    // metadata about features
-  reason         String?  @map("reason")
-  risks          Json?    @map("risks")            // list of risk strings
-  redFlags       Json?    @map("red_flags")        // list of red-flag strings
+  configSnapshot Json?   @map("config_snapshot") // scoring config used
+  inputSummary   Json?   @map("input_summary")   // metadata about features
+  reason         String? @map("reason")
+  risks          Json?   @map("risks")           // list of risk strings
+  redFlags       Json?   @map("red_flags")       // list of red-flag strings
 
-  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant      Tenant          @relation(fields: [tenantId], references: [id])
   job         Job?            @relation(fields: [jobId], references: [id])
@@ -510,4 +516,53 @@ model ScoringEvent {
 
   @@map("scoring_events")
   @@index([tenantId, jobId, applicationId], map: "idx_scoring_events_tenant_job_app")
+}
+
+// --------------------------------------------------------------------------
+// SAVED VIEWS (FILTER PRESETS)
+// --------------------------------------------------------------------------
+
+model SavedView {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  ownerId   String?  @map("owner_id") @db.Uuid
+  scope     String   @map("scope") // e.g. "job_applications", "candidates"
+  name      String
+  isShared  Boolean  @map("is_shared") @default(false)
+  isDefault Boolean  @map("is_default") @default(false)
+  filters   Json?    @map("filters") // persisted filters (stage, status, tier, query, etc.)
+  sort      Json?    @map("sort")    // sort config
+
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  owner  User?  @relation(fields: [ownerId], references: [id])
+
+  @@map("saved_views")
+  @@index([tenantId, scope], map: "idx_saved_views_tenant_scope")
+}
+
+// --------------------------------------------------------------------------
+// ANALYTICS SNAPSHOTS
+// --------------------------------------------------------------------------
+
+model AnalyticsSnapshot {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  jobId    String?  @map("job_id") @db.Uuid
+
+  scope String  @map("scope") // e.g. "pipeline_daily", "source_breakdown"
+  label String? @map("label") // e.g. "2025-12-05" or "last_30_days"
+
+  asOf    DateTime @map("as_of") @db.Timestamptz(6)
+  payload Json     @map("payload") // arbitrary JSON with metrics
+
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  job    Job?   @relation(fields: [jobId], references: [id])
+
+  @@map("analytics_snapshots")
+  @@index([tenantId, scope, asOf], map: "idx_analytics_snapshots_scope_asof")
 }
