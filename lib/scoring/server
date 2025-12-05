@@ -1,0 +1,83 @@
+// lib/scoring/server.ts
+
+import { prisma } from "@/lib/prisma";
+import { mergeScoringConfig, type NormalizedScoringConfig } from "./config";
+
+/**
+ * Get scoring config for a given tenant id.
+ * Uses tenant.hiringMode, tenant.plan and tenant.scoringConfig JSON.
+ */
+export async function getScoringConfigForTenant(
+  tenantId: string,
+): Promise<NormalizedScoringConfig> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      id: true,
+      plan: true,
+      hiringMode: true,
+      scoringConfig: true,
+    },
+  });
+
+  if (!tenant) {
+    throw new Error("Tenant not found when loading scoring config");
+  }
+
+  return mergeScoringConfig({
+    mode: tenant.hiringMode,
+    plan: tenant.plan,
+    tenantConfig: tenant.scoringConfig,
+  });
+}
+
+/**
+ * Get scoring config in the context of a specific job.
+ * Job.hiringMode overrides tenant.hiringMode if set.
+ */
+export async function getScoringConfigForJob(
+  jobId: string,
+): Promise<{
+  config: NormalizedScoringConfig;
+  tenantId: string;
+}> {
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: {
+      id: true,
+      tenantId: true,
+      hiringMode: true,
+    },
+  });
+
+  if (!job) {
+    throw new Error("Job not found when loading scoring config");
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: job.tenantId },
+    select: {
+      id: true,
+      plan: true,
+      hiringMode: true,
+      scoringConfig: true,
+    },
+  });
+
+  if (!tenant) {
+    throw new Error("Tenant not found for job when loading scoring config");
+  }
+
+  const effectiveMode = job.hiringMode || tenant.hiringMode || "exec";
+
+  const config = mergeScoringConfig({
+    mode: effectiveMode,
+    plan: tenant.plan,
+    tenantConfig: tenant.scoringConfig,
+  });
+
+  return {
+    config,
+    tenantId: tenant.id,
+  };
+}
