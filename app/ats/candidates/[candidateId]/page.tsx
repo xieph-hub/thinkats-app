@@ -41,7 +41,13 @@ export default async function CandidateProfilePage({
     notFound();
   }
 
-  const applicationViews = [];
+  const applicationViews: {
+    application: any;
+    job: any;
+    scored: any;
+    cvUrl: string | null;
+  }[] = [];
+
   for (const app of candidate.applications) {
     const { config } = await getScoringConfigForJob(app.jobId);
     const scored = computeApplicationScore({
@@ -62,32 +68,68 @@ export default async function CandidateProfilePage({
   }
 
   const latestCvUrl =
-    candidate.cvUrl ||
-    applicationViews.find((v) => v.cvUrl)?.cvUrl ||
-    null;
+    candidate.cvUrl || applicationViews.find((v) => v.cvUrl)?.cvUrl || null;
 
   const latestApp = applicationViews[0] || null;
+
+  const lastSeen =
+    applicationViews.length > 0
+      ? applicationViews[0].application.createdAt
+      : null;
+  const firstSeen =
+    applicationViews.length > 0
+      ? applicationViews[applicationViews.length - 1].application.createdAt
+      : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
+        <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             ATS · Candidate
           </p>
-          <h1 className="text-xl font-semibold text-slate-900">
-            {candidate.fullName}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-[#172965]">
+              {candidate.fullName}
+            </h1>
+            {latestApp && <TierBadge tier={latestApp.scored.tier} />}
+          </div>
           <p className="text-xs text-slate-600">
             {candidate.currentTitle || "Role not set"}
-            {candidate.currentCompany
-              ? ` · ${candidate.currentCompany}`
-              : ""}
+            {candidate.currentCompany ? ` · ${candidate.currentCompany}` : ""}
           </p>
           <p className="text-[11px] text-slate-500">
             {candidate.location || "Location not set"}
           </p>
+          <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+            {applicationViews.length > 0 && (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1">
+                {applicationViews.length} application
+                {applicationViews.length === 1 ? "" : "s"} recorded
+              </span>
+            )}
+            {firstSeen && (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1">
+                First seen{" "}
+                {firstSeen.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+            {lastSeen && (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1">
+                Last active{" "}
+                {lastSeen.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2 text-right text-[11px] text-slate-600">
@@ -96,7 +138,7 @@ export default async function CandidateProfilePage({
               href={latestCvUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4a]"
+              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#111c4a]"
             >
               View latest CV
             </a>
@@ -264,7 +306,7 @@ export default async function CandidateProfilePage({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                    <td className="whitespace-nowrap px-4 py-3 text-[11px] text-slate-500">
                       {application.createdAt.toLocaleDateString("en-GB", {
                         day: "2-digit",
                         month: "short",
@@ -294,8 +336,7 @@ function TierBadge({ tier }: { tier: Tier | string }) {
   const map: Record<Tier, { label: string; classes: string }> = {
     A: {
       label: "Tier A · Priority",
-      classes:
-        "border-emerald-200 bg-emerald-50 text-emerald-800",
+      classes: "border-emerald-200 bg-emerald-50 text-emerald-800",
     },
     B: {
       label: "Tier B · Strong",
@@ -312,9 +353,7 @@ function TierBadge({ tier }: { tier: Tier | string }) {
   };
 
   const safeTier: Tier =
-    tier === "A" || tier === "B" || tier === "C" || tier === "D"
-      ? tier
-      : "D";
+    tier === "A" || tier === "B" || tier === "C" || tier === "D" ? tier : "D";
 
   const { label, classes } = map[safeTier];
 
