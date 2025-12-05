@@ -89,8 +89,9 @@ export default async function JobPipelinePage({
   });
 
   const jobViews = savedViewsRaw.filter((v) => {
-    const params = (v.params || {}) as any;
-    return params.jobId === job.id;
+    const filters = (v.filters || {}) as any;
+    // views are tied to a specific job via filters.jobId
+    return filters.jobId === job.id;
   });
 
   const viewFromId =
@@ -98,8 +99,7 @@ export default async function JobPipelinePage({
       ? jobViews.find((v) => v.id === rawViewId) || null
       : null;
 
-  const defaultView =
-    jobViews.find((v) => v.isDefault) || null;
+  const defaultView = jobViews.find((v) => v.isDefault) || null;
 
   const activeView = viewFromId || defaultView || null;
 
@@ -110,13 +110,11 @@ export default async function JobPipelinePage({
   let filterTier = "ALL";
 
   if (activeView) {
-    const params = (activeView.params || {}) as any;
-    if (typeof params.q === "string") filterQ = params.q;
-    if (typeof params.stage === "string")
-      filterStage = params.stage;
-    if (typeof params.status === "string")
-      filterStatus = params.status;
-    if (typeof params.tier === "string") filterTier = params.tier;
+    const filters = (activeView.filters || {}) as any;
+    if (typeof filters.q === "string") filterQ = filters.q;
+    if (typeof filters.stage === "string") filterStage = filters.stage;
+    if (typeof filters.status === "string") filterStatus = filters.status;
+    if (typeof filters.tier === "string") filterTier = filters.tier;
   }
 
   // Overlay explicit query params
@@ -124,24 +122,15 @@ export default async function JobPipelinePage({
     filterQ = searchParams.q;
   }
 
-  if (
-    typeof searchParams.stage === "string" &&
-    searchParams.stage !== ""
-  ) {
+  if (typeof searchParams.stage === "string" && searchParams.stage !== "") {
     filterStage = searchParams.stage;
   }
 
-  if (
-    typeof searchParams.status === "string" &&
-    searchParams.status !== ""
-  ) {
+  if (typeof searchParams.status === "string" && searchParams.status !== "") {
     filterStatus = searchParams.status;
   }
 
-  if (
-    typeof searchParams.tier === "string" &&
-    searchParams.tier !== ""
-  ) {
+  if (typeof searchParams.tier === "string" && searchParams.tier !== "") {
     filterTier = searchParams.tier;
   }
 
@@ -158,8 +147,9 @@ export default async function JobPipelinePage({
     _engine: string | null;
   };
 
-  const columns: { name: string; apps: DecoratedApp[] }[] =
-    stageNames.map((name) => ({ name, apps: [] }));
+  const columns: { name: string; apps: DecoratedApp[] }[] = stageNames.map(
+    (name) => ({ name, apps: [] }),
+  );
   const unassigned: DecoratedApp[] = [];
 
   for (const app of job.applications) {
@@ -209,8 +199,7 @@ export default async function JobPipelinePage({
     // status filter
     if (
       filterStatus !== "ALL" &&
-      (app.status || "").toUpperCase() !==
-        filterStatus.toUpperCase()
+      (app.status || "").toUpperCase() !== filterStatus.toUpperCase()
     ) {
       continue;
     }
