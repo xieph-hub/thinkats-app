@@ -19,15 +19,12 @@ model Tenant {
   status              String      @default("active")
   primaryContactEmail String?     @map("primary_contact_email")
   notificationEmail   String?     @map("notification_email") // where digests / ATS alerts can go
-
   plan                String      @default("free") @db.Text   // free, pro, enterprise, etc.
   trialEndsAt         DateTime?   @map("trial_ends_at") @db.Timestamptz(6)
 
-  // NEW: default hiring / scoring mode for this tenant
-  hiringMode          String      @map("hiring_mode") @default("exec") // exec | volume | hybrid
-
-  // NEW: JSON blob for scoring weights, thresholds, bias settings, etc.
-  scoringConfig       Json?       @map("scoring_config")
+  // Scoring + hiring configuration
+  hiringMode          String      @map("hiring_mode") @default("balanced") // volume | executive | balanced
+  scoringConfig       Json?       @map("scoring_config")                  // tenant-level weights/thresholds
 
   internalNotes       String?     @map("notes")
   logoUrl             String?     @map("logo_url")
@@ -47,6 +44,9 @@ model Tenant {
   sentEmails         SentEmail[]
   userTenantRoles    UserTenantRole[]
   tags               Tag[]
+
+  // NEW: scoring audit trail
+  scoringEvents      ScoringEvent[]
 
   @@map("tenants")
 }
@@ -151,10 +151,6 @@ model Job {
   hiringManagerId    String?   @map("hiring_manager_id") @db.Uuid
   status             String    @default("open")   @db.Text
   visibility         String    @default("public") @db.Text
-
-  // NEW: job-level override of tenant.hiringMode (exec / volume / hybrid)
-  hiringMode         String?   @map("hiring_mode")
-
   tags               String[]  @default([]) @db.Text
   createdBy          String?   @map("created_by") @db.Uuid
   createdAt          DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
@@ -183,11 +179,18 @@ model Job {
   confidential       Boolean?  @map("confidential")
   screeningSchema    Json?     @map("screening_schema")
 
+  // Scoring overrides per job
+  hiringMode        String?   @map("hiring_mode")         // override tenant.hiring_mode if set
+  scoringOverrides  Json?     @map("scoring_overrides")   // per-job tweaks to weights/thresholds
+
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
   applications  JobApplication[]
   stages        JobStage[]
   sentEmails    SentEmail[]
+
+  // NEW: scoring audit trail
+  scoringEvents ScoringEvent[]
 
   @@map("jobs")
 }
@@ -295,6 +298,9 @@ model JobApplication {
   interviews ApplicationInterview[]
   notes      Note[]
 
+  // NEW: scoring audit trail
+  scoringEvents ScoringEvent[]
+
   @@map("job_applications")
 }
 
@@ -346,7 +352,7 @@ model InterviewParticipant {
 }
 
 // --------------------------------------------------------------------------
-// JOB STAGES
+// CAREER SITE SETTINGS
 // --------------------------------------------------------------------------
 
 model JobStage {
@@ -472,4 +478,36 @@ model ActivityLog {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("activity_log")
+}
+
+// --------------------------------------------------------------------------
+// SCORING EVENTS (AUDIT TRAIL)
+// --------------------------------------------------------------------------
+
+model ScoringEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  jobId         String?   @map("job_id") @db.Uuid
+  applicationId String?   @map("application_id") @db.Uuid
+
+  engine        String    @map("engine")           // e.g. "semantic-v1"
+  engineVersion String?   @map("engine_version")
+  mode          String?   @map("mode")             // volume | executive | balanced
+  score         Int?      @map("score")
+  tier          String?   @map("tier")
+
+  configSnapshot Json?    @map("config_snapshot")  // scoring config used
+  inputSummary   Json?    @map("input_summary")    // metadata about features
+  reason         String?  @map("reason")
+  risks          Json?    @map("risks")            // list of risk strings
+  redFlags       Json?    @map("red_flags")        // list of red-flag strings
+
+  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  job         Job?            @relation(fields: [jobId], references: [id])
+  application JobApplication? @relation(fields: [applicationId], references: [id])
+
+  @@map("scoring_events")
+  @@index([tenantId, jobId, applicationId], map: "idx_scoring_events_tenant_job_app")
 }
