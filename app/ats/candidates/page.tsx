@@ -106,13 +106,18 @@ export default async function AtsCandidatesPage() {
                       {/* Candidate */}
                       <td className="px-4 py-3">
                         <div className="space-y-0.5">
-                          <Link
-                            href={`/ats/candidates/${candidate?.id ?? ""}`}
-                            className="text-xs font-medium text-[#172965] hover:underline disabled:pointer-events-none disabled:text-slate-400"
-                            aria-disabled={!candidate?.id}
-                          >
-                            {application.fullName}
-                          </Link>
+                          {candidate?.id ? (
+                            <Link
+                              href={`/ats/candidates/${candidate.id}`}
+                              className="text-xs font-medium text-[#172965] hover:underline"
+                            >
+                              {application.fullName}
+                            </Link>
+                          ) : (
+                            <span className="text-xs font-medium text-slate-900">
+                              {application.fullName}
+                            </span>
+                          )}
                           <p className="text-[11px] text-slate-500">
                             {candidate?.currentTitle || "—"}
                             {candidate?.currentCompany
@@ -177,7 +182,7 @@ export default async function AtsCandidatesPage() {
                         )}
                       </td>
 
-                      {/* Risks / red flags – currently empty until ScoringEvent is wired */}
+                      {/* Risks / red flags */}
                       <td className="px-4 py-3">
                         <RiskBadges
                           risks={scored.risks}
@@ -233,7 +238,7 @@ export default async function AtsCandidatesPage() {
   );
 }
 
-function TierBadge({ tier }: { tier: Tier }) {
+function TierBadge({ tier }: { tier: Tier | string }) {
   const map: Record<Tier, { label: string; classes: string }> = {
     A: {
       label: "Tier A · Priority",
@@ -254,7 +259,12 @@ function TierBadge({ tier }: { tier: Tier }) {
     },
   };
 
-  const { label, classes } = map[tier];
+  const safeTier: Tier =
+    tier === "A" || tier === "B" || tier === "C" || tier === "D"
+      ? tier
+      : "D";
+
+  const { label, classes } = map[safeTier];
 
   return (
     <span
