@@ -7,9 +7,8 @@ import { resend } from "@/lib/resendClient";
 
 import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
 
-// NEW: scoring imports
-import { getScoringConfigForJob } from "@/lib/scoring/server";
-import { computeApplicationScore } from "@/lib/scoring/compute";
+// NEW: scoring engine hook
+import { scoreAndPersistApplication } from "@/lib/scoring/server";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
@@ -232,31 +231,16 @@ export async function POST(req: Request) {
       },
     });
 
-    // 4b) SMALL SCORING HOOK – persist matchScore + matchReason
+    // 4b) FIRE SCORING ENGINE (non-blocking for candidate experience)
     try {
-      const { config } = await getScoringConfigForJob(job.id);
-
-      const scored = computeApplicationScore({
-        application,
-        candidate,
-        job,
-        config,
-      });
-
-      await prisma.jobApplication.update({
-        where: { id: application.id },
-        data: {
-          matchScore: scored.score,
-          matchReason: scored.reason,
-        },
-      });
+      await scoreAndPersistApplication(application.id);
     } catch (scoringError) {
       console.error(
         "Error in scoring pipeline for application",
         application.id,
         scoringError,
       );
-      // Do not block the candidate – scoring errors should never break apply
+      // Never break candidate apply flow because of scoring
     }
 
     // -----------------------------------------------------------------------
