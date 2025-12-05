@@ -19,8 +19,16 @@ model Tenant {
   status              String      @default("active")
   primaryContactEmail String?     @map("primary_contact_email")
   notificationEmail   String?     @map("notification_email") // where digests / ATS alerts can go
+
   plan                String      @default("free") @db.Text   // free, pro, enterprise, etc.
   trialEndsAt         DateTime?   @map("trial_ends_at") @db.Timestamptz(6)
+
+  // NEW: default hiring / scoring mode for this tenant
+  hiringMode          String      @map("hiring_mode") @default("exec") // exec | volume | hybrid
+
+  // NEW: JSON blob for scoring weights, thresholds, bias settings, etc.
+  scoringConfig       Json?       @map("scoring_config")
+
   internalNotes       String?     @map("notes")
   logoUrl             String?     @map("logo_url")
   createdAt           DateTime    @map("created_at") @default(now()) @db.Timestamptz(6)
@@ -143,6 +151,10 @@ model Job {
   hiringManagerId    String?   @map("hiring_manager_id") @db.Uuid
   status             String    @default("open")   @db.Text
   visibility         String    @default("public") @db.Text
+
+  // NEW: job-level override of tenant.hiringMode (exec / volume / hybrid)
+  hiringMode         String?   @map("hiring_mode")
+
   tags               String[]  @default([]) @db.Text
   createdBy          String?   @map("created_by") @db.Uuid
   createdAt          DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
