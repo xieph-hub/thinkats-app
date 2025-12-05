@@ -13,8 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AtsJobsPage() {
-  // For now we assume a single tenant ("resourcin") in this environment.
-  // getResourcinTenant should just read from Prisma (no Supabase dependency).
+  // Single-tenant for now (Resourcin)
   const tenant = await getResourcinTenant();
 
   const jobs = await prisma.job.findMany({
@@ -38,15 +37,26 @@ export default async function AtsJobsPage() {
     take: 100,
   });
 
+  // For the client filter dropdown
+  const uniqueClients = Array.from(
+    new Map(
+      jobs
+        .filter((j) => j.clientCompany)
+        .map((j) => [j.clientCompany!.id, j.clientCompany!]),
+    ).values(),
+  );
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
-      <header className="space-y-2">
+      {/* Page header */}
+      <header className="space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           ATS · Jobs
         </p>
+
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">
+          <div className="space-y-1.5">
+            <h1 className="text-xl font-semibold text-[#172965]">
               Job mandates
             </h1>
             <p className="text-xs text-slate-600">
@@ -54,6 +64,7 @@ export default async function AtsJobsPage() {
               <span className="font-medium">{tenant.name}</span> tenant.
             </p>
           </div>
+
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
               Jobs:{" "}
@@ -61,19 +72,57 @@ export default async function AtsJobsPage() {
                 {jobs.length}
               </span>
             </span>
+            <Link
+              href="/ats/jobs/new"
+              className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#111c4a]"
+            >
+              + New job
+            </Link>
           </div>
         </div>
       </header>
 
+      {/* Jobs table card */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* Card header with filters */}
         <div className="border-b border-slate-100 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Latest jobs
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Showing up to 100 most recently created roles.
-            </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Latest jobs
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Showing up to 100 most recently created roles.
+              </p>
+            </div>
+
+            {/* Filters – UI only for now (no server filtering yet) */}
+            <form className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+              <select className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/40">
+                <option value="">All statuses</option>
+                <option value="open">Open</option>
+                <option value="paused">Paused</option>
+                <option value="closed">Closed</option>
+              </select>
+
+              <select className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/40">
+                <option value="">All clients</option>
+                {uniqueClients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px]">
+                <span className="hidden text-slate-400 sm:inline">Search</span>
+                <input
+                  type="search"
+                  placeholder="Role, client or location"
+                  className="w-40 bg-transparent text-[11px] text-slate-700 outline-none placeholder:text-slate-400"
+                />
+              </div>
+            </form>
           </div>
         </div>
 
@@ -102,8 +151,7 @@ export default async function AtsJobsPage() {
                     appCount > 0
                       ? Math.round(
                           job.applications.reduce(
-                            (sum, app) =>
-                              sum + (app.matchScore ?? 0),
+                            (sum, app) => sum + (app.matchScore ?? 0),
                             0,
                           ) / appCount,
                         )
@@ -143,9 +191,9 @@ export default async function AtsJobsPage() {
                       {/* Status */}
                       <td className="px-4 py-3">
                         <div className="space-y-0.5">
-                          <p className="text-xs font-medium capitalize text-slate-900">
+                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium capitalize text-slate-800">
                             {job.status || "open"}
-                          </p>
+                          </span>
                           <p className="text-[11px] text-slate-500 capitalize">
                             {job.visibility || "public"}
                           </p>
@@ -178,7 +226,7 @@ export default async function AtsJobsPage() {
                       </td>
 
                       {/* Last activity */}
-                      <td className="px-4 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-4 py-3 text-[11px] text-slate-500">
                         {lastActivity.toLocaleDateString("en-GB", {
                           day: "2-digit",
                           month: "short",
