@@ -29,6 +29,12 @@ const DEFAULT_SCORING_CONFIG: NormalizedScoringConfig = {
   },
 };
 
+const DEFAULT_TIMEOUT_MS = 5000;
+
+/* ------------------------------------------------------------------------ */
+/* Helpers                                                                  */
+/* ------------------------------------------------------------------------ */
+
 function clampNumber(
   value: unknown,
   fallback: number,
@@ -84,7 +90,7 @@ export function mergeScoringConfig(opts: {
   jobOverrides: any;
   tenantHiringMode: string | null;
   jobHiringMode: string | null;
-}): NormalizedScoringConfig {
+}: NormalizedScoringConfig): NormalizedScoringConfig {
   const base: any = {
     ...DEFAULT_SCORING_CONFIG,
     ...(opts.tenantConfig ?? {}),
@@ -139,6 +145,137 @@ function tierFromScore(
   return "D";
 }
 
+/* ------------------------------------------------------------------------ */
+/* Scoring service wire types                                               */
+/* ------------------------------------------------------------------------ */
+
+type TenantPayload = {
+  id: string;
+  slug: string;
+  plan: string;
+  hiringMode: NormalizedScoringConfig["hiringMode"];
+};
+
+type JobPayload = {
+  id: string;
+  title: string;
+  description?: string | null;
+  requiredSkills: string[];
+  experienceLevel?: string | null;
+  workMode?: string | null;
+  location?: string | null;
+  department?: string | null;
+  clientName?: string | null;
+  hiringMode?: NormalizedScoringConfig["hiringMode"] | null;
+};
+
+type CandidatePayload = {
+  id?: string;
+  fullName?: string;
+  email?: string;
+  location?: string | null;
+  currentTitle?: string | null;
+  currentCompany?: string | null;
+  linkedinUrl?: string | null;
+  githubUrl?: string | null;
+  portfolioUrl?: string | null;
+  cvUrl?: string | null;
+};
+
+type ApplicationPayload = {
+  id: string;
+  fullName: string;
+  email: string;
+  location?: string | null;
+  source?: string | null;
+  howHeard?: string | null;
+  coverLetter?: string | null;
+  cvUrl?: string | null;
+  githubUrl?: string | null;
+  portfolioUrl?: string | null;
+  noticePeriod?: string | null;
+  grossAnnualExpectation?: number | null;
+  currentGrossAnnual?: number | null;
+};
+
+type ScoringContext = {
+  trigger: "application_created" | "manual_rescore" | "batch_rescore";
+  jobExternalRef?: string | null;
+};
+
+type ScoreApplicationRequest = {
+  tenant: TenantPayload;
+  job: JobPayload;
+  candidate?: CandidatePayload;
+  application: ApplicationPayload;
+  config: NormalizedScoringConfig;
+  context?: ScoringContext;
+};
+
+type ScoreApplicationResponseWire = {
+  score: number;
+  tier?: Tier;
+  reason: string;
+  risks?: string[];
+  redFlags?: string[];
+  interviewFocus?: string[];
+  engine?: string;
+  engineVersion?: string;
+};
+
+function buildNeutralResponse(reason: string): SemanticScoringResponse {
+  return {
+    score: 0,
+    reason,
+    risks: [],
+    redFlags: [],
+    interviewFocus: [],
+    engine: "semantic-external",
+    engineVersion: "unavailable",
+  };
+}
+
+function isValidWireResponse(json: any): json is ScoreApplicationResponseWire {
+  if (!json || typeof json !== "object") return false;
+  if (typeof json.score !== "number") return false;
+  if (typeof json.reason !== "string") return false;
+  return true;
+}
+
+function normalizeWireResponse(
+  wire: ScoreApplicationResponseWire,
+): SemanticScoringResponse {
+  return {
+    score:
+      typeof wire.score === "number" && Number.isFinite(wire.score)
+        ? wire.score
+        : 0,
+    tier: wire.tier,
+    reason: wire.reason,
+    risks: Array.isArray(wire.risks) ? wire.risks.filter(Boolean) : [],
+    redFlags: Array.isArray(wire.redFlags)
+      ? wire.redFlags.filter(Boolean)
+      : [],
+    interviewFocus: Array.isArray(wire.interviewFocus)
+      ? wire.interviewFocus.filter(Boolean)
+      : [],
+    engine: wire.engine ?? "semantic-external",
+    engineVersion: wire.engineVersion ?? "v1",
+  };
+}
+
+async function safeReadText(res: Response): Promise<string | undefined> {
+  try {
+    return await res.text();
+  } catch {
+    return undefined;
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Concrete callScoringService                                              */
+/* ------------------------------------------------------------------------ */
+
 async function callScoringService(opts: {
   tenant: Tenant;
   job: Job;
@@ -150,131 +287,150 @@ async function callScoringService(opts: {
 
   const url = process.env.SCORING_SERVICE_URL;
   const apiKey = process.env.SCORING_SERVICE_API_KEY;
+  const timeoutMs =
+    Number.parseInt(process.env.SCORING_SERVICE_TIMEOUT_MS ?? "", 10) ||
+    DEFAULT_TIMEOUT_MS;
 
   if (!url || !apiKey) {
-    // Best-practice: fail softly, but *log* so you catch env drift.
     console.warn(
       "[scoring] SCORING_SERVICE_URL or SCORING_SERVICE_API_KEY not configured – returning neutral score.",
     );
-    return {
-      score: 0,
-      reason: "Scoring service not configured.",
-      risks: [],
-      redFlags: [],
-      interviewFocus: [],
-    };
+    return buildNeutralResponse(
+      "Scoring service not configured; defaulting to neutral score.",
+    );
   }
 
+  const payload: ScoreApplicationRequest = {
+    tenant: {
+      id: tenant.id,
+      slug: tenant.slug,
+      plan: tenant.plan,
+      hiringMode:
+        (tenant.hiringMode as NormalizedScoringConfig["hiringMode"]) ||
+        config.hiringMode,
+    },
+    job: {
+      id: job.id,
+      title: job.title,
+      description: job.description,
+      requiredSkills: Array.isArray(job.requiredSkills)
+        ? job.requiredSkills
+        : [],
+      experienceLevel: (job as any).experienceLevel ?? null,
+      workMode: (job as any).workMode ?? null,
+      location: (job as any).location ?? null,
+      department: (job as any).department ?? null,
+      clientName: (job as any).aboutClient ?? null,
+      hiringMode:
+        (job.hiringMode as NormalizedScoringConfig["hiringMode"]) ||
+        tenant.hiringMode ||
+        config.hiringMode,
+    },
+    candidate: candidate
+      ? {
+          id: candidate.id,
+          fullName: candidate.fullName,
+          email: candidate.email,
+          location: candidate.location,
+          currentTitle: candidate.currentTitle ?? null,
+          currentCompany: candidate.currentCompany ?? null,
+          linkedinUrl: (candidate as any).linkedinUrl ?? null,
+          githubUrl: (candidate as any).githubUrl ?? null,
+          portfolioUrl: (candidate as any).portfolioUrl ?? null,
+          cvUrl: candidate.cvUrl ?? null,
+        }
+      : undefined,
+    application: {
+      id: application.id,
+      fullName: application.fullName,
+      email: application.email,
+      location: application.location ?? null,
+      source: application.source ?? null,
+      howHeard: application.howHeard ?? null,
+      coverLetter: application.coverLetter ?? null,
+      cvUrl: application.cvUrl ?? candidate?.cvUrl ?? null,
+      githubUrl: (application as any).githubUrl ?? null,
+      portfolioUrl: (application as any).portfolioUrl ?? null,
+      noticePeriod: application.noticePeriod ?? null,
+      grossAnnualExpectation: application.grossAnnualExpectation ?? null,
+      currentGrossAnnual: application.currentGrossAnnual ?? null,
+    },
+    config,
+    context: {
+      trigger: "application_created",
+    },
+  };
+
   const controller = new AbortController();
-  const timeoutMs = Number(process.env.SCORING_SERVICE_TIMEOUT_MS ?? "5000");
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
+    const startedAt = Date.now();
+
+    const res = await fetch(url, {
       method: "POST",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        // align with our spec: x-api-key
+        "x-api-key": apiKey,
       },
-      body: JSON.stringify({
-        tenant: {
-          id: tenant.id,
-          slug: tenant.slug,
-          plan: tenant.plan,
-          hiringMode: tenant.hiringMode,
-        },
-        job: {
-          id: job.id,
-          title: job.title,
-          description: job.description,
-          requiredSkills: job.requiredSkills,
-          experienceLevel: job.experienceLevel,
-          workMode: job.workMode,
-          hiringMode: job.hiringMode,
-        },
-        candidate: candidate
-          ? {
-              id: candidate.id,
-              fullName: candidate.fullName,
-              email: candidate.email,
-              location: candidate.location,
-              currentTitle: candidate.currentTitle,
-              currentCompany: candidate.currentCompany,
-              cvUrl: candidate.cvUrl,
-            }
-          : null,
-        application: {
-          id: application.id,
-          fullName: application.fullName,
-          email: application.email,
-          location: application.location,
-          cvUrl: application.cvUrl,
-          coverLetter: application.coverLetter,
-          githubUrl: application.githubUrl,
-          howHeard: application.howHeard,
-          source: application.source,
-        },
-        config,
-        context: {
-          trigger: "application_created",
-        },
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const bodyText = await safeReadText(res);
       console.error(
         "[scoring] Service returned non-2xx:",
-        response.status,
-        await response.text().catch(() => ""),
+        res.status,
+        bodyText,
       );
-      return {
-        score: 0,
-        reason: `Scoring service error (${response.status})`,
-        risks: [],
-        redFlags: [],
-        interviewFocus: [],
-      };
+
+      return buildNeutralResponse(
+        `Scoring service error (${res.status}); defaulting to neutral score.`,
+      );
     }
 
-    const json = (await response.json()) as SemanticScoringResponse;
+    const json = (await res.json()) as unknown;
 
-    if (typeof json.score !== "number" || !Number.isFinite(json.score)) {
-      console.error("[scoring] Invalid score payload:", json);
-      return {
-        score: 0,
-        reason: "Scoring service returned invalid payload.",
-        risks: [],
-        redFlags: [],
-        interviewFocus: [],
-      };
+    if (!isValidWireResponse(json)) {
+      console.error("[scoring] Invalid scoring response shape:", json);
+      return buildNeutralResponse(
+        "Invalid scoring response; defaulting to neutral score.",
+      );
     }
 
-    return json;
-  } catch (err) {
-    if ((err as any).name === "AbortError") {
-      console.error("[scoring] Service timed out after", timeoutMs, "ms");
-      return {
-        score: 0,
-        reason: "Scoring service timeout.",
-        risks: [],
-        redFlags: [],
-        interviewFocus: [],
-      };
+    const normalized = normalizeWireResponse(json);
+    // clamp score defensively
+    normalized.score = clampNumber(normalized.score, 0, 0, 100);
+
+    return normalized;
+  } catch (err: any) {
+    clearTimeout(timeout);
+
+    if (err?.name === "AbortError") {
+      console.error(
+        "[scoring] Scoring service request timed out after",
+        timeoutMs,
+        "ms",
+      );
+      return buildNeutralResponse(
+        "Scoring service timeout; defaulting to neutral score.",
+      );
     }
 
     console.error("[scoring] Unexpected error calling scoring service:", err);
-    return {
-      score: 0,
-      reason: "Unexpected error calling scoring service.",
-      risks: [],
-      redFlags: [],
-      interviewFocus: [],
-    };
-  } finally {
-    clearTimeout(timeout);
+    return buildNeutralResponse(
+      "Unexpected error calling scoring service; defaulting to neutral score.",
+    );
   }
 }
+
+/* ------------------------------------------------------------------------ */
+/* scoreAndPersistApplication                                               */
+/* ------------------------------------------------------------------------ */
 
 /**
  * Main hook for write-paths:
@@ -322,8 +478,7 @@ export async function scoreAndPersistApplication(
   );
 
   const tier: Tier =
-    semantic.tier ??
-    tierFromScore(score, config.thresholds);
+    semantic.tier ?? tierFromScore(score, config.thresholds);
 
   // Persist on the application itself
   await prisma.jobApplication.update({
