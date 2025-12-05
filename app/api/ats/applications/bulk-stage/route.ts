@@ -2,16 +2,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { getServerUser } from "@/lib/auth/getServerUser";
-
-export const runtime = "nodejs";
-
-function normaliseEnum(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return trimmed.toUpperCase();
-}
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -19,107 +9,125 @@ export async function POST(request: Request) {
   const jobIdRaw = formData.get("jobId");
   const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
 
+  // All visible ids for this view (we'll pass them from the pipeline UI)
+  const visibleIdsMulti = formData.getAll("visibleApplicationIds");
+  const visibleIds: string[] = [];
+  for (const v of visibleIdsMulti) {
+    if (typeof v === "string" && v.trim()) {
+      visibleIds.push(v.trim());
+    }
+  }
+
+  // Accept either applicationIds (multi) or applicationId (single)
   const idsMulti = formData.getAll("applicationIds");
   const singleId = formData.get("applicationId");
 
-  const applicationIds: string[] = [];
+  const selectAllVisibleRaw = formData.get("selectAllVisible");
+  const selectAllVisible =
+    typeof selectAllVisibleRaw === "string" &&
+    selectAllVisibleRaw === "1";
 
-  for (const v of idsMulti) {
-    if (typeof v === "string" && v.trim()) {
-      applicationIds.push(v.trim());
+  let applicationIds: string[] = [];
+
+  if (selectAllVisible && visibleIds.length > 0) {
+    // "Select all visible" overrides individual checkboxes
+    applicationIds = [...visibleIds];
+  } else {
+    for (const v of idsMulti) {
+      if (typeof v === "string" && v.trim()) {
+        applicationIds.push(v.trim());
+      }
     }
-  }
-  if (applicationIds.length === 0 && typeof singleId === "string") {
-    applicationIds.push(singleId.trim());
+    if (applicationIds.length === 0 && typeof singleId === "string") {
+      applicationIds.push(singleId.trim());
+    }
   }
 
   const stageRaw = formData.get("stage") || formData.get("newStage");
-  const newStageInput = typeof stageRaw === "string" ? stageRaw : "";
-  const newStage = normaliseEnum(newStageInput);
+  const newStage = typeof stageRaw === "string" ? stageRaw : "";
 
   if (!applicationIds.length || !newStage) {
-    const fallbackUrl = new URL(
-      jobId ? `/ats/jobs/${jobId}` : "/ats/jobs",
-      request.url,
-    );
+    const fallbackUrl = new URL("/ats/jobs", request.url);
     return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
 
   try {
     const tenant = await getResourcinTenant();
-    if (!tenant) {
-      const fallbackUrl = new URL(
-        jobId ? `/ats/jobs/${jobId}` : "/ats/jobs",
-        request.url,
-      );
-      return NextResponse.redirect(fallbackUrl, { status: 303 });
-    }
+    const tenantId = tenant?.id ?? null;
 
-    const actor = await getServerUser().catch(() => null);
-
-    // Only applications that belong to this tenant (+ optional job)
-    const applications = await prisma.jobApplication.findMany({
+    // Fetch current state so we can log previous stage/status per application
+    const apps = await prisma.jobApplication.findMany({
       where: {
         id: { in: applicationIds },
-        job: {
-          tenantId: tenant.id,
-          ...(jobId ? { id: jobId } : {}),
-        },
+        ...(jobId ? { jobId } : {}),
       },
       select: {
         id: true,
-        jobId: true,
-        candidateId: true,
         stage: true,
         status: true,
+        jobId: true,
       },
     });
 
-    for (const app of applications) {
-      await prisma.$transaction(async (tx) => {
-        const updated = await tx.jobApplication.update({
+    await Promise.all(
+      apps.map(async (app) => {
+        const updated = await prisma.jobApplication.update({
           where: { id: app.id },
           data: {
             stage: newStage,
           },
         });
 
-        // Log as ApplicationEvent
-        await tx.applicationEvent.create({
-          data: {
-            applicationId: updated.id,
-            type: "bulk_stage_change",
-            payload: {
-              previousStage: app.stage,
-              nextStage: newStage,
-              previousStatus: app.status,
-              nextStatus: app.status,
-              bulk: true,
-              tenantId: tenant.id,
-              jobId: updated.jobId,
-              candidateId: updated.candidateId,
-              actorId: actor?.id,
+        // application_events log
+        try {
+          await prisma.applicationEvent.create({
+            data: {
+              applicationId: updated.id,
+              type: "bulk_stage_update",
+              payload: {
+                previousStage: app.stage,
+                previousStatus: app.status,
+                newStage,
+                jobId: app.jobId,
+                source: "bulk_pipeline_move",
+              },
             },
-          },
-        });
+          });
+        } catch (eventErr) {
+          console.error(
+            "Bulk stage update – failed to insert ApplicationEvent:",
+            eventErr,
+          );
+        }
 
-        // Global ActivityLog
-        await tx.activityLog.create({
-          data: {
-            tenantId: tenant.id,
-            actorId: actor?.id,
-            entityType: "job_application",
-            entityId: updated.id,
-            action: "bulk_stage_change",
-            metadata: {
-              previousStage: app.stage,
-              nextStage: newStage,
-              previousStatus: app.status,
-            },
-          },
-        });
-      });
-    }
+        // activity_log log
+        if (tenantId) {
+          try {
+            await prisma.activityLog.create({
+              data: {
+                tenantId,
+                actorId: null,
+                entityType: "job_application",
+                entityId: updated.id,
+                action: "bulk_stage_update",
+                metadata: {
+                  previousStage: app.stage,
+                  previousStatus: app.status,
+                  newStage,
+                  jobId: app.jobId,
+                  source: "bulk_pipeline_move",
+                },
+              },
+            });
+          } catch (logErr) {
+            console.error(
+              "Bulk stage update – failed to insert ActivityLog:",
+              logErr,
+            );
+          }
+        }
+      }),
+    );
   } catch (err) {
     console.error("Bulk stage update error:", err);
   }
