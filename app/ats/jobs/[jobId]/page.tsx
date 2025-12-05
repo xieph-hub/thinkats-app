@@ -1,166 +1,27 @@
 // app/ats/jobs/[jobId]/page.tsx
-import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
-import ApplicationStageStatusControls from "@/components/ats/ApplicationStageStatusControls";
-import { defaultScoringConfigForPlan } from "@/lib/scoring";
+import { getScoringConfigForJob } from "@/lib/scoring/server";
+import { computeApplicationScore, type Tier } from "@/lib/scoring/compute";
 
 export const dynamic = "force-dynamic";
 
-const STAGE_ORDER = [
-  "APPLIED",
-  "SCREEN",
-  "SCREENING",
-  "SHORTLISTED",
-  "INTERVIEW",
-  "INTERVIEWING",
-  "OFFER",
-  "OFFERED",
-  "HIRED",
-  "REJECTED",
-  "WITHDRAWN",
-];
+export const metadata: Metadata = {
+  title: "ThinkATS | Job pipeline",
+  description:
+    "Pipeline view of candidates, scoring and risk flags for a specific mandate.",
+};
 
-function formatDate(value: string | Date | null | undefined) {
-  if (!value) return "";
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function titleCaseFromEnum(value?: string | null) {
-  if (!value) return "";
-  return value
-    .toString()
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatStageName(value: string | null | undefined) {
-  if (!value) return "";
-  const key = value.toUpperCase();
-  const map: Record<string, string> = {
-    APPLIED: "Applied",
-    SCREEN: "Screen",
-    SCREENING: "Screening",
-    SHORTLISTED: "Shortlisted",
-    INTERVIEW: "Interview",
-    INTERVIEWING: "Interviewing",
-    OFFER: "Offer",
-    OFFERED: "Offered",
-    HIRED: "Hired",
-    REJECTED: "Rejected",
-    WITHDRAWN: "Withdrawn",
-  };
-  if (map[key]) return map[key];
-  return titleCaseFromEnum(value);
-}
-
-function applicationStatusBadgeClass(value?: string | null) {
-  const key = (value || "").toUpperCase();
-  if (key === "PENDING") {
-    return "bg-slate-50 text-slate-700 border-slate-200";
-  }
-  if (key === "IN_PROGRESS") {
-    return "bg-blue-50 text-blue-700 border-blue-100";
-  }
-  if (key === "ON_HOLD") {
-    return "bg-amber-50 text-amber-800 border-amber-100";
-  }
-  if (key === "HIRED") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  }
-  if (key === "REJECTED" || key === "ARCHIVED") {
-    return "bg-rose-50 text-rose-700 border-rose-100";
-  }
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
-
-function normaliseJobStatus(status: string | null | undefined) {
-  return (status || "").toLowerCase();
-}
-
-type Tier = "A" | "B" | "C" | "D";
-
-function tierFromScore(
-  score: number,
-  thresholds: { A: number; B: number; C: number },
-): Tier {
-  if (score >= thresholds.A) return "A";
-  if (score >= thresholds.B) return "B";
-  if (score >= thresholds.C) return "C";
-  return "D";
-}
-
-function tierBadgeClass(tier: Tier) {
-  switch (tier) {
-    case "A":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "B":
-      return "bg-sky-50 text-sky-700 border-sky-200";
-    case "C":
-      return "bg-amber-50 text-amber-800 border-amber-200";
-    case "D":
-    default:
-      return "bg-slate-50 text-slate-500 border-slate-200";
-  }
-}
-
-interface AtsJobPageProps {
+type PageProps = {
   params: { jobId: string };
-}
+};
 
-export default async function AtsJobPage({ params }: AtsJobPageProps) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-10">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Job pipeline not available
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No default tenant configured. Check{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_ID
-          </code>{" "}
-          or{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_SLUG
-          </code>{" "}
-          in your environment.
-        </p>
-      </div>
-    );
-  }
-
-  const plan = (tenant as any).plan || "free";
-  const scoringConfig = defaultScoringConfigForPlan(plan);
-  const thresholds = scoringConfig.tierThresholds;
-  const engineLabel = scoringConfig.enableNlpBoost
-    ? "Scored with Pro/Enterprise engine"
-    : "Scored with Free engine";
-
-  const job = await prisma.job.findFirst({
-    where: {
-      id: params.jobId,
-      tenantId: tenant.id,
-    },
+export default async function AtsJobPipelinePage({ params }: PageProps) {
+  const job = await prisma.job.findUnique({
+    where: { id: params.jobId },
     include: {
       clientCompany: true,
-      applications: {
-        include: {
-          candidate: true,
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      },
     },
   });
 
@@ -168,366 +29,349 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     notFound();
   }
 
-  const applications = job.applications || [];
-  const totalApplications = applications.length;
+  const applications = await prisma.jobApplication.findMany({
+    where: { jobId: job.id },
+    include: {
+      candidate: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const inProcessCount = applications.filter((app) =>
-    ["IN_PROGRESS", "ON_HOLD"].includes((app.status || "").toUpperCase()),
-  ).length;
+  const { config } = await getScoringConfigForJob(job.id);
 
-  const hiredCount = applications.filter(
-    (app) => (app.status || "").toUpperCase() === "HIRED",
-  ).length;
+  const scoredApplications = applications.map((app) => {
+    const scored = computeApplicationScore({
+      application: app,
+      candidate: app.candidate,
+      job,
+      config,
+    });
 
-  const rejectedCount = applications.filter((app) =>
-    ["REJECTED", "ARCHIVED"].includes((app.status || "").toUpperCase()),
-  ).length;
+    return {
+      application: app,
+      candidate: app.candidate,
+      scored,
+    };
+  });
 
-  // Group applications into stages
-  const buckets = new Map<string, typeof applications>();
-  for (const app of applications) {
-    const key = (app.stage || "APPLIED").toUpperCase();
-    if (!buckets.has(key)) {
-      buckets.set(key, []);
-    }
-    buckets.get(key)!.push(app);
-  }
-
-  const knownStages = STAGE_ORDER.filter((s) => buckets.has(s));
-  const unknownStages = Array.from(buckets.keys()).filter(
-    (s) => !STAGE_ORDER.includes(s),
+  const totalCandidates = applications.length;
+  const tierCounts = scoredApplications.reduce(
+    (acc, row) => {
+      acc[row.scored.tier] += 1;
+      return acc;
+    },
+    { A: 0, B: 0, C: 0, D: 0 } as Record<Tier, number>,
   );
-
-  const orderedStages = [...knownStages, ...unknownStages];
-
-  const jobStatusLabel = titleCaseFromEnum(job.status as any);
-  const jobLocation = job.location || "Location not specified";
-  const clientName = job.clientCompany?.name || null;
-
-  const publicJobPath = job.slug
-    ? `/jobs/${encodeURIComponent(job.slug)}`
-    : `/jobs/${encodeURIComponent(job.id)}`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <Link
-            href="/ats/jobs"
-            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
-          >
-            <span className="mr-1.5">←</span>
-            Back to ATS jobs
-          </Link>
-
-          <div className="mt-3 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              ATS · Job pipeline
-            </p>
-            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
-              {job.title || "Untitled role"}
+      {/* Header / job summary */}
+      <header className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          ATS · Pipeline
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">
+              {job.title}
             </h1>
-            <p className="text-xs text-slate-600">
-              {clientName && (
-                <>
-                  <span className="font-medium">{clientName}</span>
-                  <span className="mx-1 text-slate-300">•</span>
-                </>
+            <p className="text-xs text-slate-500">
+              {job.clientCompany?.name && (
+                <span className="font-medium text-slate-700">
+                  {job.clientCompany.name}
+                </span>
               )}
-              {jobLocation}
-              {job.employmentType && (
-                <>
-                  <span className="mx-1 text-slate-300">•</span>
-                  <span>{titleCaseFromEnum(job.employmentType)}</span>
-                </>
+              {job.clientCompany?.name && (job.location || job.workMode) && (
+                <span className="mx-1.5 text-slate-300">·</span>
               )}
+              {(job.location || job.workMode) && (
+                <span>
+                  {job.location}
+                  {job.workMode ? ` · ${job.workMode}` : ""}
+                </span>
+              )}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-[11px]">
+            <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span className="font-medium text-slate-700">
+                {job.status === "open" ? "Open" : job.status}
+              </span>
+            </div>
+            <div className="rounded-full bg-slate-50 px-3 py-1 text-slate-600">
+              {totalCandidates}{" "}
+              {totalCandidates === 1 ? "candidate" : "candidates"}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Tier summary */}
+      <section className="grid gap-3 md:grid-cols-4">
+        <TierSummaryCard
+          label="Tier A"
+          description="Priority interviews"
+          count={tierCounts.A}
+          tone="emerald"
+        />
+        <TierSummaryCard
+          label="Tier B"
+          description="Strong consideration"
+          count={tierCounts.B}
+          tone="sky"
+        />
+        <TierSummaryCard
+          label="Tier C"
+          description="Consider / backup pool"
+          count={tierCounts.C}
+          tone="amber"
+        />
+        <TierSummaryCard
+          label="Tier D"
+          description="Below threshold"
+          count={tierCounts.D}
+          tone="rose"
+        />
+      </section>
+
+      {/* Pipeline table */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Candidates & scoring
+            </h2>
+            <p className="text-[11px] text-slate-500">
+              Tiers and flags are driven by your scoring settings.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex flex-wrap justify-end gap-2">
-            {job.status && (
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium ${
-                  normaliseJobStatus(job.status) === "open"
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                    : "bg-slate-50 text-slate-700 border border-slate-200"
-                }`}
-              >
-                {jobStatusLabel || "Status not set"}
-              </span>
-            )}
-            {job.visibility && (
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-700">
-                {titleCaseFromEnum(job.visibility)} visibility
-              </span>
-            )}
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700">
-              Plan:{" "}
-              <span className="ml-1 capitalize">
-                {(plan || "free").toLowerCase()}
-              </span>
-            </span>
+        {scoredApplications.length === 0 ? (
+          <div className="px-4 py-10 text-center text-xs text-slate-500">
+            No applications yet. Once candidates apply, they&apos;ll appear
+            here with tiers, risks and interview focus areas.
           </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-t border-slate-100 text-xs">
+              <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-2 text-left">Candidate</th>
+                  <th className="px-4 py-2 text-left">Tier</th>
+                  <th className="px-4 py-2 text-left">Score</th>
+                  <th className="px-4 py-2 text-left">Risks / red flags</th>
+                  <th className="px-4 py-2 text-left">Interview focus</th>
+                  <th className="px-4 py-2 text-left">Applied</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {scoredApplications.map(({ application, candidate, scored }) => (
+                  <tr key={application.id} className="align-top">
+                    <td className="px-4 py-3">
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-slate-900">
+                          {application.fullName}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {candidate?.currentTitle || "—"}
+                          {candidate?.currentCompany
+                            ? ` · ${candidate.currentCompany}`
+                            : ""}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {application.email}
+                        </p>
+                      </div>
+                    </td>
 
-          <div className="flex flex-wrap justify-end gap-2 text-[11px] text-slate-600">
-            <span>
-              {totalApplications}{" "}
-              {totalApplications === 1 ? "application" : "applications"}
-            </span>
-            <span className="text-slate-300">•</span>
-            <span>{inProcessCount} in process</span>
-            <span className="text-slate-300">•</span>
-            <span>{hiredCount} hired</span>
-            <span className="text-slate-300">•</span>
-            <span>{rejectedCount} rejected / archived</span>
-          </div>
+                    <td className="px-4 py-3">
+                      <TierBadge tier={scored.tier} />
+                    </td>
 
-          <div className="flex flex-wrap justify-end gap-2 text-[11px]">
-            <span className="text-[10px] text-slate-500">
-              {engineLabel}
-            </span>
-            <Link
-              href={publicJobPath}
-              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-[#172965] hover:bg-slate-50"
-            >
-              View public job page ↗
-            </Link>
+                    <td className="px-4 py-3">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm font-semibold text-slate-900">
+                          {scored.score}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          / 100
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <RiskBadges risks={scored.risks} redFlags={scored.redFlags} />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {scored.interviewFocus.length === 0 ? (
+                        <span className="text-[11px] text-slate-400">—</span>
+                      ) : (
+                        <ul className="space-y-1 text-[11px] text-slate-600">
+                          {scored.interviewFocus.slice(0, 2).map((item, idx) => (
+                            <li key={idx} className="line-clamp-2" title={item}>
+                              • {item}
+                            </li>
+                          ))}
+                          {scored.interviewFocus.length > 2 && (
+                            <li className="text-[10px] text-slate-400">
+                              +{scored.interviewFocus.length - 2} more focus
+                              points
+                            </li>
+                          )}
+                        </ul>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3 text-[11px] text-slate-500">
+                      {application.createdAt.toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function TierSummaryCard({
+  label,
+  description,
+  count,
+  tone,
+}: {
+  label: string;
+  description: string;
+  count: number;
+  tone: "emerald" | "sky" | "amber" | "rose";
+}) {
+  const toneMap: Record<
+    typeof tone,
+    { bg: string; text: string; badgeBg: string; badgeDot: string }
+  > = {
+    emerald: {
+      bg: "bg-emerald-50",
+      text: "text-emerald-900",
+      badgeBg: "bg-emerald-100",
+      badgeDot: "bg-emerald-500",
+    },
+    sky: {
+      bg: "bg-sky-50",
+      text: "text-sky-900",
+      badgeBg: "bg-sky-100",
+      badgeDot: "bg-sky-500",
+    },
+    amber: {
+      bg: "bg-amber-50",
+      text: "text-amber-900",
+      badgeBg: "bg-amber-100",
+      badgeDot: "bg-amber-500",
+    },
+    rose: {
+      bg: "bg-rose-50",
+      text: "text-rose-900",
+      badgeBg: "bg-rose-100",
+      badgeDot: "bg-rose-500",
+    },
+  };
+
+  const toneClasses = toneMap[tone];
+
+  return (
+    <div
+      className={`flex flex-col justify-between rounded-2xl border border-slate-100 ${toneClasses.bg} px-3 py-3`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className={`text-xs font-semibold ${toneClasses.text}`}>
+            {label}
+          </p>
+          <p className="text-[11px] text-slate-500">{description}</p>
+        </div>
+        <div
+          className={`flex h-7 min-w-[2.5rem] items-center justify-center rounded-full px-2 text-[11px] font-semibold ${toneClasses.badgeBg} ${toneClasses.text}`}
+        >
+          <span className={`mr-1 h-1.5 w-1.5 rounded-full ${toneClasses.badgeDot}`} />
+          {count}
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Stage summary pills */}
-      {totalApplications > 0 && (
-        <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600 shadow-sm">
-          {orderedStages.map((stageKey) => {
-            const stageApps = buckets.get(stageKey) || [];
-            if (stageApps.length === 0) return null;
-            return (
-              <div
-                key={stageKey}
-                className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1"
-              >
-                <span className="font-medium text-slate-800">
-                  {formatStageName(stageKey)}
-                </span>
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span>{stageApps.length}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+function TierBadge({ tier }: { tier: Tier }) {
+  const map: Record<Tier, { label: string; classes: string }> = {
+    A: {
+      label: "Tier A · Priority",
+      classes:
+        "border-emerald-200 bg-emerald-50 text-emerald-800",
+    },
+    B: {
+      label: "Tier B · Strong",
+      classes: "border-sky-200 bg-sky-50 text-sky-800",
+    },
+    C: {
+      label: "Tier C · Consider",
+      classes: "border-amber-200 bg-amber-50 text-amber-800",
+    },
+    D: {
+      label: "Tier D · Below threshold",
+      classes: "border-rose-200 bg-rose-50 text-rose-800",
+    },
+  };
 
-      {/* Pipeline list */}
-      {totalApplications === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          No applications have been received for this role yet. Once candidates
-          apply, they will appear here grouped by stage.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {orderedStages.map((stageKey) => {
-            const stageApps = buckets.get(stageKey) || [];
-            if (stageApps.length === 0) return null;
+  const { label, classes } = map[tier];
 
-            const stageLabel = formatStageName(stageKey);
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${classes}`}
+    >
+      {label}
+    </span>
+  );
+}
 
-            return (
-              <section
-                key={stageKey}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-900">
-                      {stageLabel}
-                    </h2>
-                    <p className="text-[11px] text-slate-500">
-                      {stageApps.length}{" "}
-                      {stageApps.length === 1
-                        ? "candidate in this stage"
-                        : "candidates in this stage"}
-                    </p>
-                  </div>
-                </div>
+function RiskBadges({
+  risks,
+  redFlags,
+}: {
+  risks: string[];
+  redFlags: string[];
+}) {
+  if (!risks.length && !redFlags.length) {
+    return <span className="text-[11px] text-slate-400">No obvious risks</span>;
+  }
 
-                <div className="space-y-3">
-                  {stageApps.map((app) => {
-                    const candidate = app.candidate;
-                    const name =
-                      candidate?.fullName ||
-                      app.fullName ||
-                      "Unnamed candidate";
-                    const email =
-                      candidate?.email || (app as any).email || "";
-                    const location =
-                      candidate?.location ||
-                      app.location ||
-                      "Location not set";
-                    const appliedAt = formatDate(app.createdAt);
-                    const sourceLabel = app.source || "—";
-                    const stageLabelInner = formatStageName(
-                      app.stage || "APPLIED",
-                    );
-                    const statusLabel = titleCaseFromEnum(
-                      app.status || "PENDING",
-                    );
-
-                    const candidateId = candidate?.id;
-                    const cvUrl =
-                      (app as any).cvUrl || (candidate as any)?.cvUrl || null;
-
-                    const matchScore =
-                      (app as any).matchScore ??
-                      null; // Int? from Prisma, may be null
-                    const matchReason = (app as any).matchReason || "";
-
-                    let tier: Tier | null = null;
-                    if (typeof matchScore === "number") {
-                      tier = tierFromScore(matchScore, thresholds);
-                    }
-
-                    return (
-                      <div
-                        key={app.id}
-                        className="flex items-stretch justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
-                      >
-                        {/* Left: candidate meta */}
-                        <div className="flex min-w-0 flex-1 gap-3">
-                          <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700">
-                            {name
-                              .split(" ")
-                              .filter(Boolean)
-                              .slice(0, 2)
-                              .map((part) => part[0]?.toUpperCase())
-                              .join("") || "C"}
-                          </div>
-
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="truncate text-sm font-semibold text-slate-900">
-                                {name}
-                              </span>
-                              {email && (
-                                <span className="truncate text-[11px] text-slate-500">
-                                  {email}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                              <span className="font-medium text-slate-800">
-                                {location}
-                              </span>
-                              {appliedAt && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span>Applied {appliedAt}</span>
-                                </>
-                              )}
-                              {sourceLabel !== "—" && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span>
-                                    Source:{" "}
-                                    <span className="font-medium">
-                                      {sourceLabel}
-                                    </span>
-                                  </span>
-                                </>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                              {cvUrl && (
-                                <a
-                                  href={cvUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[#172965] hover:underline"
-                                >
-                                  View CV ↗
-                                </a>
-                              )}
-                              {candidateId && (
-                                <>
-                                  {cvUrl && (
-                                    <span className="text-slate-300">•</span>
-                                  )}
-                                  <Link
-                                    href={`/ats/candidates/${candidateId}`}
-                                    className="text-[#172965] hover:underline"
-                                  >
-                                    View candidate profile
-                                  </Link>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Right: stage/status + scoring */}
-                        <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
-                          <div className="flex flex-col items-end gap-1">
-                            {/* Current state badges */}
-                            <div className="flex flex-wrap justify-end gap-2">
-                              <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
-                                {stageLabelInner}
-                              </span>
-                              <span
-                                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
-                                  app.status,
-                                )}`}
-                              >
-                                {statusLabel}
-                              </span>
-                            </div>
-
-                            {/* Scoring row */}
-                            {typeof matchScore === "number" && tier && (
-                              <div className="flex flex-wrap items-center justify-end gap-2">
-                                <span
-                                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${tierBadgeClass(
-                                    tier,
-                                  )}`}
-                                >
-                                  Tier {tier} · {matchScore}/100
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                  {engineLabel}
-                                </span>
-                                {matchReason && (
-                                  <button
-                                    type="button"
-                                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50"
-                                    title={matchReason}
-                                  >
-                                    Score breakdown
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Editable controls */}
-                          <ApplicationStageStatusControls
-                            applicationId={app.id}
-                            initialStage={app.stage || "APPLIED"}
-                            initialStatus={app.status || "PENDING"}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {redFlags.map((flag, idx) => (
+        <span
+          key={`rf-${idx}`}
+          className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700"
+          title={flag}
+        >
+          ● Red flag
+        </span>
+      ))}
+      {risks.map((risk, idx) => (
+        <span
+          key={`rk-${idx}`}
+          className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+          title={risk}
+        >
+          ● Risk
+        </span>
+      ))}
     </div>
   );
 }
