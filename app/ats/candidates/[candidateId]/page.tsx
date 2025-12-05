@@ -290,7 +290,7 @@ export default async function CandidateProfilePage({
   );
 }
 
-function TierBadge({ tier }: { tier: Tier }) {
+function TierBadge({ tier }: { tier: Tier | string }) {
   const map: Record<Tier, { label: string; classes: string }> = {
     A: {
       label: "Tier A · Priority",
@@ -311,7 +311,12 @@ function TierBadge({ tier }: { tier: Tier }) {
     },
   };
 
-  const { label, classes } = map[tier];
+  const safeTier: Tier =
+    tier === "A" || tier === "B" || tier === "C" || tier === "D"
+      ? tier
+      : "D";
+
+  const { label, classes } = map[safeTier];
 
   return (
     <span
