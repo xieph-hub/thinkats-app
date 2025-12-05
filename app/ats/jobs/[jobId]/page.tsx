@@ -42,7 +42,6 @@ export default async function AtsJobDetailPage({
   const { config } = await getScoringConfigForJob(job.id);
 
   const rows = job.applications.map((app) => {
-    // Don’t trust the shape too much – treat as any and normalise
     const scoredRaw: any = computeApplicationScore({
       application: app,
       candidate: app.candidate,
@@ -59,7 +58,7 @@ export default async function AtsJobDetailPage({
         email: app.email,
         stage: app.stage,
         status: app.status,
-        // Pass ISO string to the client component
+        // send ISO string for client-side date formatting
         createdAt: app.createdAt.toISOString(),
       },
       candidate: app.candidate,
@@ -98,20 +97,18 @@ export default async function AtsJobDetailPage({
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/ats/jobs"
-                className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
-              >
-                ← Back to all jobs
-              </Link>
-            </div>
+            <Link
+              href="/ats/jobs"
+              className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
+            >
+              ← Back to all jobs
+            </Link>
             <h1 className="mt-1 text-xl font-semibold text-slate-900">
               {job.title}
             </h1>
             <p className="text-xs text-slate-600">
               {job.clientCompany?.name ? `${job.clientCompany.name} · ` : ""}
-              {job.location || job.workMode || "Location not set"}
+              {job.location || (job as any).workMode || "Location not set"}
             </p>
           </div>
 
@@ -143,7 +140,7 @@ export default async function AtsJobDetailPage({
         </p>
       </header>
 
-      {/* Pipeline table with inline stage / status + filters */}
+      {/* Interactive pipeline table (filters + inline stage/status) */}
       <JobPipelineTable rows={rows} />
     </div>
   );
