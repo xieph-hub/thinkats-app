@@ -6,10 +6,17 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { resend } from "@/lib/resendClient";
 
 import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
+import {
+  defaultScoringConfigForPlan,
+  computeApplicationScore,
+} from "@/lib/scoring";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
-  return input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 const PUBLIC_SITE_URL =
@@ -23,322 +30,6 @@ const ATS_NOTIFICATIONS_EMAIL =
   process.env.ATS_NOTIFICATIONS_EMAIL ||
   process.env.RESOURCIN_ADMIN_EMAIL ||
   "";
-
-// ---------------------------------------------------------------------------
-// Plan-aware scoring config
-// ---------------------------------------------------------------------------
-
-type PlanKey = "free" | "trial_pro" | "pro" | "enterprise" | string;
-
-type ScoringConfig = {
-  baseScore: number;
-
-  // Location
-  locationBonus: number; // when aligned
-  locationPenalty: number; // when misaligned and not remote
-
-  // Skills
-  skillsPerSkillWeight: number; // per matched skill
-  skillsMaxBonus: number; // cap on skills contribution
-  skillsNoMatchPenalty: number;
-
-  // Compensation
-  compInRangeBonus: number;
-  compSlightAbovePenalty: number;
-  compAbovePenalty: number;
-
-  // Notice period
-  immediateBonus: number;
-  longNoticePenalty: number;
-
-  // Feature flags
-  enableNlp: boolean; // toggles deeper NLP scoring (future hook)
-};
-
-function getScoringConfigForPlan(plan: PlanKey): ScoringConfig {
-  const key = (plan || "free").toLowerCase();
-
-  // Free = simple rules, conservative weights
-  if (key === "free") {
-    return {
-      baseScore: 50,
-
-      locationBonus: 8,
-      locationPenalty: 4,
-
-      skillsPerSkillWeight: 3,
-      skillsMaxBonus: 15,
-      skillsNoMatchPenalty: 8,
-
-      compInRangeBonus: 8,
-      compSlightAbovePenalty: 4,
-      compAbovePenalty: 12,
-
-      immediateBonus: 4,
-      longNoticePenalty: 4,
-
-      enableNlp: false,
-    };
-  }
-
-  // Trial behaves like Pro for scoring
-  if (key === "trial_pro") {
-    return {
-      baseScore: 50,
-
-      locationBonus: 10,
-      locationPenalty: 5,
-
-      skillsPerSkillWeight: 4,
-      skillsMaxBonus: 20,
-      skillsNoMatchPenalty: 10,
-
-      compInRangeBonus: 10,
-      compSlightAbovePenalty: 5,
-      compAbovePenalty: 15,
-
-      immediateBonus: 5,
-      longNoticePenalty: 5,
-
-      enableNlp: true,
-    };
-  }
-
-  // Pro
-  if (key === "pro") {
-    return {
-      baseScore: 50,
-
-      locationBonus: 10,
-      locationPenalty: 5,
-
-      skillsPerSkillWeight: 4,
-      skillsMaxBonus: 22,
-      skillsNoMatchPenalty: 10,
-
-      compInRangeBonus: 10,
-      compSlightAbovePenalty: 5,
-      compAbovePenalty: 15,
-
-      immediateBonus: 5,
-      longNoticePenalty: 5,
-
-      enableNlp: true,
-    };
-  }
-
-  // Enterprise – slightly more aggressive weights, also NLP-enabled
-  if (key === "enterprise") {
-    return {
-      baseScore: 50,
-
-      locationBonus: 12,
-      locationPenalty: 6,
-
-      skillsPerSkillWeight: 5,
-      skillsMaxBonus: 25,
-      skillsNoMatchPenalty: 12,
-
-      compInRangeBonus: 12,
-      compSlightAbovePenalty: 6,
-      compAbovePenalty: 18,
-
-      immediateBonus: 6,
-      longNoticePenalty: 6,
-
-      enableNlp: true,
-    };
-  }
-
-  // Fallback
-  return getScoringConfigForPlan("free");
-}
-
-function resolveEffectivePlan(
-  plan: string | null | undefined,
-  trialEndsAt: Date | null | undefined,
-): PlanKey {
-  const base = (plan || "free").toLowerCase();
-  const now = new Date();
-
-  // Simple rule: free + active trial => trial_pro
-  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
-    return "trial_pro";
-  }
-
-  return base;
-}
-
-// ---------------------------------------------------------------------------
-// Match-scoring helpers
-// ---------------------------------------------------------------------------
-
-function parseMoneyNumber(value?: string | null): number | null {
-  if (!value) return null;
-  const cleaned = value.replace(/[^0-9.]/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
-  if (!Number.isFinite(n)) return null;
-  return n;
-}
-
-function computeMatchScoreAndReason(
-  job: any,
-  input: {
-    location?: string | null;
-    noticePeriod?: string | null;
-    currentGrossAnnual?: string | null;
-    grossAnnualExpectation?: string | null;
-    skillsText?: string | null;
-  },
-  planKey: PlanKey,
-  config: ScoringConfig,
-) {
-  let score = config.baseScore;
-  const reasons: string[] = [];
-
-  const jobLocation = (job.location ?? "").toString().toLowerCase().trim();
-  const jobLocationType = (
-    job.locationType ??
-    (job as any).location_type ??
-    ""
-  )
-    .toString()
-    .toLowerCase()
-    .trim();
-
-  const candidateLocation = (input.location ?? "")
-    .toString()
-    .toLowerCase()
-    .trim();
-
-  // 1) Location match
-  if (jobLocation) {
-    if (
-      candidateLocation &&
-      (candidateLocation.includes(jobLocation) ||
-        jobLocation.includes(candidateLocation))
-    ) {
-      score += config.locationBonus;
-      reasons.push("Location aligns with the role.");
-    } else if (jobLocationType !== "remote") {
-      score -= config.locationPenalty;
-      reasons.push("Location may not align with the role.");
-    }
-  }
-
-  // 2) Skills match based on job.requiredSkills vs free-text skillsText
-  const requiredSkills: string[] = Array.isArray(job.requiredSkills)
-    ? job.requiredSkills
-    : [];
-
-  const skillsText = (input.skillsText ?? "")
-    .toString()
-    .toLowerCase();
-
-  if (requiredSkills.length && skillsText) {
-    let matched = 0;
-
-    for (const skill of requiredSkills) {
-      const s = (skill || "").toLowerCase();
-      if (!s) continue;
-      if (skillsText.includes(s)) {
-        matched += 1;
-      }
-    }
-
-    if (matched > 0) {
-      const contribution = Math.min(
-        config.skillsMaxBonus,
-        matched * config.skillsPerSkillWeight,
-      );
-      score += contribution;
-      reasons.push(
-        `Matches ${matched} of ${requiredSkills.length} key skills.`,
-      );
-    } else {
-      score -= config.skillsNoMatchPenalty;
-      reasons.push("Key skills are not clearly mentioned in the application.");
-    }
-  }
-
-  // 3) Compensation expectations vs salary range
-  const salaryMin =
-    job.salaryMin != null ? Number(job.salaryMin) : null;
-  const salaryMax =
-    job.salaryMax != null ? Number(job.salaryMax) : null;
-
-  const expectedNum =
-    parseMoneyNumber(input.grossAnnualExpectation ?? null) ??
-    parseMoneyNumber(input.currentGrossAnnual ?? null);
-
-  if (salaryMin != null && salaryMax != null && expectedNum != null) {
-    if (expectedNum >= salaryMin && expectedNum <= salaryMax * 1.05) {
-      score += config.compInRangeBonus;
-      reasons.push("Compensation expectations sit within the target range.");
-    } else if (expectedNum > salaryMax * 1.3) {
-      score -= config.compAbovePenalty;
-      reasons.push(
-        "Compensation expectations are significantly above the range.",
-      );
-    } else if (expectedNum > salaryMax * 1.05) {
-      score -= config.compSlightAbovePenalty;
-      reasons.push(
-        "Compensation expectations are slightly above the target range.",
-      );
-    } else if (expectedNum < salaryMin * 0.8) {
-      reasons.push(
-        "Compensation expectations are below the target range (could still be workable).",
-      );
-    }
-  }
-
-  // 4) Notice period
-  const notice = (input.noticePeriod ?? "")
-    .toString()
-    .toLowerCase();
-
-  if (notice) {
-    if (
-      /\b(immediate|0 ?day|no[t]?ice:? ?none)\b/.test(notice) ||
-      /\b(asap)\b/.test(notice)
-    ) {
-      score += config.immediateBonus;
-      reasons.push("Can start immediately or with very short notice.");
-    } else if (/90|3\s*months?/.test(notice)) {
-      score -= config.longNoticePenalty;
-      reasons.push("Long notice period may delay onboarding.");
-    }
-  }
-
-  // 5) Future: deeper NLP scoring for Pro/Enterprise
-  if (config.enableNlp) {
-    // Placeholder hook – later you can:
-    // - Embed CV / cover letter text
-    // - Compare to job description / skills
-    // - Add or subtract up to e.g. ±15 points based on semantic fit
-    //
-    // For now we just leave this as a no-op so behaviour stays deterministic.
-    // e.g.
-    // const nlpBoost = await computeNlpBoost({ job, input, planKey });
-    // score += nlpBoost.delta;
-    // reasons.push(nlpBoost.reason);
-  }
-
-  // Clamp 0–100
-  if (score < 0) score = 0;
-  if (score > 100) score = 100;
-
-  const reasonText =
-    reasons.length === 0
-      ? `Automatically scored based on location, skills, compensation expectations and notice period (plan: ${planKey}).`
-      : `${reasons.join(" ")} (Scored using ${String(planKey)} rules.)`;
-
-  return {
-    score: Math.round(score),
-    reason: reasonText,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // POST /api/jobs/apply
@@ -355,7 +46,9 @@ export async function POST(req: Request) {
     const phone = (formData.get("phone") || "").toString().trim();
     const location = (formData.get("location") || "").toString().trim();
 
-    const linkedinUrl = (formData.get("linkedinUrl") || "").toString().trim();
+    const linkedinUrl = (formData.get("linkedinUrl") || "")
+      .toString()
+      .trim();
     const githubUrl = (formData.get("githubUrl") || "").toString().trim();
 
     const currentGrossAnnual = (formData.get("currentGrossAnnual") || "")
@@ -390,7 +83,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job + tenant plan for scoring
+    // 1) Load job to get tenant id + title (+ slug, comp, skills etc.)
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
@@ -399,14 +92,15 @@ export async function POST(req: Request) {
         tenantId: true,
         title: true,
         location: true,
-        visibility: true,
-        status: true,
-        // for scoring:
         locationType: true,
+        experienceLevel: true,
+        seniority: true,
         requiredSkills: true,
         salaryMin: true,
         salaryMax: true,
-        // tenant for plan
+        salaryCurrency: true,
+        visibility: true,
+        status: true,
         tenant: {
           select: {
             plan: true,
@@ -435,11 +129,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const tenantPlan = job.tenant?.plan ?? "free";
-    const tenantTrialEndsAt = job.tenant?.trialEndsAt ?? null;
-    const effectivePlan = resolveEffectivePlan(tenantPlan, tenantTrialEndsAt);
-    const scoringConfig = getScoringConfigForPlan(effectivePlan);
-
     // 2) Find or create candidate for this tenant + email
     let candidate = await prisma.candidate.findFirst({
       where: {
@@ -464,7 +153,7 @@ export async function POST(req: Request) {
         },
       });
     } else {
-      // Light touch update with fresher data
+      // Light touch update with fresher data (no scoring on name to reduce bias)
       candidate = await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
@@ -523,32 +212,47 @@ export async function POST(req: Request) {
       candidateCvUrl = applicationCvUrl;
     }
 
-    // -----------------------------------------------------------------------
-    // 4) Compute match score / reason (plan-aware)
-    // -----------------------------------------------------------------------
+    // 4) Compute bias-aware match score + tier + reason
+    const plan = job.tenant?.plan ?? "free";
+    const baseConfig = defaultScoringConfigForPlan(plan);
 
-    const skillsText =
-      ((formData.get("skills") ??
-        formData.get("keySkills") ??
-        formData.get("summary") ??
-        formData.get("coverLetter") ??
-        "") as string) || "";
+    // (Future: when you add per-tenant overrides, merge them here.)
+    const scoringResult = computeApplicationScore({
+      job: {
+        title: job.title,
+        location: job.location,
+        locationType: job.locationType,
+        experienceLevel: job.experienceLevel,
+        seniority: job.seniority,
+        requiredSkills: job.requiredSkills || [],
+        salaryMin: job.salaryMin,
+        salaryMax: job.salaryMax,
+        salaryCurrency: job.salaryCurrency,
+      },
+      candidate: candidate
+        ? {
+            location: candidate.location,
+            currentTitle: candidate.currentTitle,
+            currentCompany: candidate.currentCompany,
+          }
+        : null,
+      application: {
+        location,
+        currentGrossAnnual,
+        grossAnnualExpectation,
+        noticePeriod,
+        coverLetter,
+        screeningAnswers: null, // you can pass structured answers here later
+        howHeard,
+      },
+      config: baseConfig,
+    });
 
-    const { score: matchScore, reason: matchReason } =
-      computeMatchScoreAndReason(
-        job,
-        {
-          location,
-          noticePeriod,
-          currentGrossAnnual,
-          grossAnnualExpectation,
-          skillsText,
-        },
-        effectivePlan,
-        scoringConfig,
-      );
+    // Stored fields – DB is still the source of truth, UI derives tier from score.
+    const matchScore = scoringResult.score;
+    const matchReason = scoringResult.summary;
 
-    // 5) Create the job application (this is where `source`, `cvUrl` and match_* get saved)
+    // 5) Create the job application (including matchScore + matchReason)
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -577,7 +281,7 @@ export async function POST(req: Request) {
         stage: "APPLIED",
         status: "PENDING",
 
-        // auto-screening fields
+        // EXECUTIVE SEARCH scoring output
         matchScore,
         matchReason,
       },
