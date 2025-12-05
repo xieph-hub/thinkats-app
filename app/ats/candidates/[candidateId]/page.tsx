@@ -4,8 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import CandidateTagsEditor from "@/components/ats/candidates/CandidateTagsEditor";
-import QuickSendEmailPanel from "@/components/ats/emails/QuickSendEmailPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +14,11 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: { candidateId: string };
+  searchParams?: {
+    templateId?: string;
+    jobId?: string;
+    emailError?: string;
+  };
 };
 
 function scoreChipColor(score?: number | null) {
@@ -57,7 +60,19 @@ function derivePrimaryTier(apps: any[]): string | null {
   return Array.from(tiers)[0];
 }
 
-export default async function CandidateProfilePage({ params }: PageProps) {
+function applyTemplateTokens(text: string, replacements: Record<string, string>): string {
+  let result = text;
+  for (const [key, value] of Object.entries(replacements)) {
+    const token = `{{${key}}}`;
+    result = result.split(token).join(value);
+  }
+  return result;
+}
+
+export default async function CandidateProfilePage({
+  params,
+  searchParams,
+}: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
 
@@ -95,6 +110,26 @@ export default async function CandidateProfilePage({ params }: PageProps) {
     notFound();
   }
 
+  // Email templates for this tenant
+  const emailTemplates = await prisma.emailTemplate.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Recent emails to this candidate
+  const sentEmails = await prisma.sentEmail.findMany({
+    where: {
+      tenantId: tenant.id,
+      candidateId: candidate.id,
+    },
+    include: {
+      template: true,
+      job: true,
+    },
+    orderBy: { sentAt: "desc" },
+    take: 20,
+  });
+
   const primaryTier = derivePrimaryTier(candidate.applications);
 
   const firstSeenAt =
@@ -112,11 +147,47 @@ export default async function CandidateProfilePage({ params }: PageProps) {
       ?.map((ct) => ct.tag)
       .filter((t): t is NonNullable<typeof t> => Boolean(t)) ?? [];
 
-  const tagList = uniqueTags.map((tag) => ({
-    id: tag.id,
-    name: tag.name,
-    color: tag.color,
-  }));
+  const templateIdFromQuery = searchParams?.templateId || "";
+  const jobIdFromQuery = searchParams?.jobId || "";
+  const emailError = searchParams?.emailError;
+
+  const activeTemplate = emailTemplates.find(
+    (t) => t.id === templateIdFromQuery,
+  );
+
+  const selectedApplication =
+    candidate.applications.find((app) => app.jobId === jobIdFromQuery) ??
+    candidate.applications[0] ??
+    null;
+
+  const activeJob = selectedApplication?.job ?? null;
+
+  // Render template with tokens if one is active
+  let defaultSubject = "";
+  let defaultBody = "";
+
+  if (activeTemplate) {
+    const fullName = candidate.fullName || "";
+    const firstName =
+      fullName.trim().split(/\s+/)[0] || fullName || "there";
+
+    const replacements: Record<string, string> = {
+      candidate_name: fullName,
+      candidate_first_name: firstName,
+      candidate_email: candidate.email || "",
+      job_title: activeJob?.title || "",
+      client_name: activeJob?.clientCompany?.name || "",
+      tenant_name: tenant.name,
+      application_stage: selectedApplication?.stage || "",
+      application_status: selectedApplication?.status || "",
+    };
+
+    defaultSubject = applyTemplateTokens(
+      activeTemplate.subject,
+      replacements,
+    );
+    defaultBody = applyTemplateTokens(activeTemplate.body, replacements);
+  }
 
   return (
     <div className="flex h-full flex-1 flex-col">
@@ -200,10 +271,10 @@ export default async function CandidateProfilePage({ params }: PageProps) {
 
       {/* Main layout */}
       <main className="flex flex-1 flex-col bg-slate-50">
-        <div className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)]">
+        <div className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)]">
           {/* Left: profile + pipelines */}
           <div className="space-y-4">
-            {/* Profile */}
+            {/* Profile + tags */}
             <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -229,17 +300,13 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-slate-500">
-                    Source
-                  </dt>
+                  <dt className="text-[11px] text-slate-500">Source</dt>
                   <dd className="text-xs text-slate-800">
                     {candidate.source || "–"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-slate-500">
-                    CV
-                  </dt>
+                  <dt className="text-[11px] text-slate-500">CV</dt>
                   <dd className="text-xs text-slate-800">
                     {candidate.cvUrl ? (
                       <a
@@ -256,6 +323,50 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                   </dd>
                 </div>
               </dl>
+
+              {/* Tags */}
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-600">
+                    Tags
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {uniqueTags.length > 0 ? (
+                    uniqueTags.map((tag) => (
+                      <span
+                        key={tag.id}
+                        className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700"
+                      >
+                        {tag.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[11px] text-slate-400">
+                      No tags yet. Use the field below to add some.
+                    </span>
+                  )}
+                </div>
+
+                <form
+                  action={`/api/ats/candidates/${candidate.id}/tags`}
+                  method="POST"
+                  className="mt-2 flex flex-wrap gap-2"
+                >
+                  <input
+                    type="text"
+                    name="tagName"
+                    placeholder="Add tag…"
+                    className="h-8 min-w-[140px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+                  />
+                  <button
+                    type="submit"
+                    className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+                  >
+                    Add tag
+                  </button>
+                </form>
+              </div>
             </section>
 
             {/* Pipelines / applications */}
@@ -360,98 +471,8 @@ export default async function CandidateProfilePage({ params }: PageProps) {
             </section>
           </div>
 
-          {/* Right: tags / contact summary / quick email / notes */}
+          {/* Right: notes / email */}
           <aside className="space-y-4">
-            {/* Contact & links */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
-              <h2 className="mb-2 text-sm font-semibold text-slate-900">
-                Profile summary
-              </h2>
-              <div className="space-y-2">
-                {candidate.email && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      Email
-                    </span>
-                    <a
-                      href={`mailto:${candidate.email}`}
-                      className="truncate text-[11px] font-medium text-slate-900 hover:underline"
-                    >
-                      {candidate.email}
-                    </a>
-                  </div>
-                )}
-                {candidate.phone && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      Phone
-                    </span>
-                    <a
-                      href={`tel:${candidate.phone}`}
-                      className="truncate text-[11px] font-medium text-slate-900 hover:underline"
-                    >
-                      {candidate.phone}
-                    </a>
-                  </div>
-                )}
-                {candidate.linkedinUrl && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      LinkedIn
-                    </span>
-                    <a
-                      href={candidate.linkedinUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate text-[11px] font-medium text-slate-900 hover:underline"
-                    >
-                      View profile
-                    </a>
-                  </div>
-                )}
-                {candidate.cvUrl && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      CV
-                    </span>
-                    <a
-                      href={candidate.cvUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate text-[11px] font-medium text-slate-900 hover:underline"
-                    >
-                      Download CV
-                    </a>
-                  </div>
-                )}
-                {candidate.source && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500">
-                      Source
-                    </span>
-                    <span className="truncate text-[11px] font-medium text-slate-900">
-                      {candidate.source}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Tags editor */}
-            <CandidateTagsEditor
-              candidateId={candidate.id}
-              initialTags={tagList}
-            />
-
-            {/* Quick email to candidate */}
-            {candidate.email && (
-              <QuickSendEmailPanel
-                candidateId={candidate.id}
-                candidateName={candidate.fullName}
-                candidateEmail={candidate.email}
-              />
-            )}
-
             {/* Notes / comments */}
             <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -519,6 +540,243 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                   </button>
                 </div>
               </form>
+            </section>
+
+            {/* Email & history */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Email &amp; history
+                </h2>
+                <span className="text-[11px] text-slate-400">
+                  {sentEmails.length}{" "}
+                  {sentEmails.length === 1 ? "email" : "emails"}
+                </span>
+              </div>
+
+              {emailError && (
+                <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 p-2 text-[11px] text-rose-700">
+                  {decodeURIComponent(emailError)}
+                </div>
+              )}
+
+              {/* Templates pill row */}
+              {emailTemplates.length > 0 ? (
+                <div className="mb-3 space-y-1">
+                  <p className="text-[11px] text-slate-500">Templates</p>
+                  <div className="flex flex-wrap gap-1">
+                    {emailTemplates.map((tpl) => {
+                      const isActive = tpl.id === activeTemplate?.id;
+                      const baseHref = new URL(
+                        `/ats/candidates/${candidate.id}`,
+                        "https://dummy",
+                      );
+                      baseHref.searchParams.set("templateId", tpl.id);
+                      if (selectedApplication?.jobId) {
+                        baseHref.searchParams.set(
+                          "jobId",
+                          selectedApplication.jobId,
+                        );
+                      }
+
+                      return (
+                        <Link
+                          key={tpl.id}
+                          href={baseHref.pathname + baseHref.search}
+                          className={[
+                            "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px]",
+                            isActive
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100",
+                          ].join(" ")}
+                        >
+                          {tpl.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="mb-3 text-[11px] text-slate-400">
+                  No email templates yet. Create templates under ATS
+                  settings.
+                </p>
+              )}
+
+              {/* Compose form */}
+              <form
+                action="/api/ats/email/send"
+                method="POST"
+                className="space-y-2"
+              >
+                <input
+                  type="hidden"
+                  name="candidateId"
+                  value={candidate.id}
+                />
+                <input
+                  type="hidden"
+                  name="applicationId"
+                  value={selectedApplication?.id ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="templateId"
+                  value={activeTemplate?.id ?? ""}
+                />
+                <input
+                  type="hidden"
+                  name="redirectTo"
+                  value={`/ats/candidates/${candidate.id}${
+                    activeTemplate
+                      ? `?templateId=${activeTemplate.id}${
+                          selectedApplication?.jobId
+                            ? `&jobId=${selectedApplication.jobId}`
+                            : ""
+                        }`
+                      : ""
+                  }`}
+                />
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-500">
+                    To
+                  </label>
+                  <input
+                    type="email"
+                    name="toEmail"
+                    defaultValue={candidate.email || ""}
+                    placeholder="candidate@example.com"
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+                    required
+                  />
+                </div>
+
+                {candidate.applications.length > 0 && (
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-slate-500">
+                      Attach to job (optional)
+                    </label>
+                    <select
+                      name="jobId"
+                      defaultValue={selectedApplication?.jobId ?? ""}
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+                    >
+                      <option value="">No specific job</option>
+                      {candidate.applications.map((app) => (
+                        <option key={app.id} value={app.jobId}>
+                          {app.job?.title || "Untitled role"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-500">
+                    Subject
+                  </label>
+                  <input
+                    type="text"
+                    name="subject"
+                    defaultValue={defaultSubject}
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-500">
+                    Body
+                  </label>
+                  <textarea
+                    name="body"
+                    rows={4}
+                    defaultValue={defaultBody}
+                    className="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-[11px] text-slate-800"
+                    placeholder="Write your email…"
+                    required
+                  />
+                </div>
+
+                <p className="text-[10px] text-slate-400">
+                  In templates you can use tokens like{" "}
+                  <code className="rounded bg-slate-100 px-1">
+                    {"{{candidate_name}}"}
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-slate-100 px-1">
+                    {"{{candidate_first_name}}"}
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-slate-100 px-1">
+                    {"{{job_title}}"}
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-slate-100 px-1">
+                    {"{{client_name}}"}
+                  </code>{" "}
+                  and{" "}
+                  <code className="rounded bg-slate-100 px-1">
+                    {"{{tenant_name}}"}
+                  </code>
+                  .
+                </p>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="submit"
+                    className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
+                  >
+                    Send email
+                  </button>
+                </div>
+              </form>
+
+              {/* History */}
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Recent emails
+                </h3>
+                {sentEmails.length === 0 ? (
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    No emails sent to this candidate yet via ThinkATS.
+                  </p>
+                ) : (
+                  <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-1">
+                    {sentEmails.map((mail) => (
+                      <li
+                        key={mail.id}
+                        className="rounded-lg border border-slate-100 bg-slate-50 p-2.5"
+                      >
+                        <div className="flex items-center justify-between text-[10px] text-slate-500">
+                          <span className="line-clamp-1 font-medium text-slate-800">
+                            {mail.subject}
+                          </span>
+                          <span>{formatDate(mail.sentAt)}</span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
+                          {mail.template?.name && (
+                            <span>Template · {mail.template.name}</span>
+                          )}
+                          {mail.job && (
+                            <span>{mail.job.title}</span>
+                          )}
+                          <span>
+                            Status:{" "}
+                            <span className="font-medium">
+                              {mail.status}
+                            </span>
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">
+                          {mail.body}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </section>
           </aside>
         </div>
