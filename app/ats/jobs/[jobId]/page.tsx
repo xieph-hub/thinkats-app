@@ -23,6 +23,15 @@ type PageProps = {
   };
 };
 
+// Local helper type so TS knows tenant has a plan field
+type TenantWithPlan = {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+  plan?: string | null;
+  [key: string]: any;
+};
+
 function getTierColor(tier?: string | null) {
   if (!tier) return "bg-slate-100 text-slate-600";
   const upper = tier.toUpperCase();
@@ -44,8 +53,10 @@ export default async function JobPipelinePage({
   params,
   searchParams = {},
 }: PageProps) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) notFound();
+  const baseTenant = await getResourcinTenant();
+  if (!baseTenant) notFound();
+
+  const tenant = baseTenant as TenantWithPlan;
 
   const job = await prisma.job.findFirst({
     where: {
@@ -115,10 +126,8 @@ export default async function JobPipelinePage({
       (latestScore?.score as number | null | undefined) ??
       (app.matchScore as number | null | undefined) ??
       null;
-    const tier =
-      (latestScore?.tier as string | null | undefined) ?? null;
-    const engine =
-      (latestScore?.engine as string | null | undefined) ?? null;
+    const tier = (latestScore?.tier as string | null | undefined) ?? null;
+    const engine = (latestScore?.engine as string | null | undefined) ?? null;
 
     const decorated: DecoratedApp = {
       ...app,
@@ -199,9 +208,7 @@ export default async function JobPipelinePage({
             Jobs
           </Link>
           <span>/</span>
-          <span className="font-medium text-slate-700">
-            {job.title}
-          </span>
+          <span className="font-medium text-slate-700">{job.title}</span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
@@ -231,7 +238,7 @@ export default async function JobPipelinePage({
             <span>
               Tenant plan:{" "}
               <span className="font-medium capitalize">
-                {tenant.plan}
+                {tenant.plan ?? "free"}
               </span>
             </span>
           </div>
@@ -244,9 +251,7 @@ export default async function JobPipelinePage({
           {/* Filters */}
           <form className="flex flex-wrap items-end gap-2 text-xs" method="GET">
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
-                Search
-              </label>
+              <label className="mb-1 text-[11px] text-slate-600">Search</label>
               <input
                 type="text"
                 name="q"
@@ -257,9 +262,7 @@ export default async function JobPipelinePage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
-                Stage
-              </label>
+              <label className="mb-1 text-[11px] text-slate-600">Stage</label>
               <select
                 name="stage"
                 defaultValue={filterStage}
@@ -275,9 +278,7 @@ export default async function JobPipelinePage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
-                Status
-              </label>
+              <label className="mb-1 text-[11px] text-slate-600">Status</label>
               <select
                 name="status"
                 defaultValue={filterStatus}
@@ -294,9 +295,7 @@ export default async function JobPipelinePage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
-                Tier
-              </label>
+              <label className="mb-1 text-[11px] text-slate-600">Tier</label>
               <select
                 name="tier"
                 defaultValue={filterTier}
@@ -356,9 +355,7 @@ export default async function JobPipelinePage({
                     </span>
                     <span className="text-[11px] text-slate-400">
                       {column.apps.length}{" "}
-                      {column.apps.length === 1
-                        ? "candidate"
-                        : "candidates"}
+                      {column.apps.length === 1 ? "candidate" : "candidates"}
                     </span>
                   </div>
                 </div>
@@ -455,9 +452,7 @@ export default async function JobPipelinePage({
         <div className="border-t border-slate-200 bg-white px-4 py-2">
           <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-600">
             <div>
-              <span className="font-medium text-slate-800">
-                Bulk move
-              </span>{" "}
+              <span className="font-medium text-slate-800">Bulk move</span>{" "}
               <span className="text-slate-500">
                 Select candidates above, then move them to a new stage.
               </span>
