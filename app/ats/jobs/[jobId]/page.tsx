@@ -3,35 +3,69 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getScoringConfigForJob } from "@/lib/scoring/server";
-import { computeApplicationScore } from "@/lib/scoring/compute";
-import JobPipelineTable, {
-  JobPipelineRow,
-  TierLetter,
-} from "@/components/ats/jobs/JobPipelineTable";
+import { getResourcinTenant } from "@/lib/tenant";
+import ApplicationStageStatusInline from "@/components/ats/jobs/ApplicationStageStatusInline";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Job pipeline",
-  description:
-    "ATS job detail and candidate pipeline view with scoring tiers and CV access.",
+  description: "Pipeline view of candidates for this job.",
 };
 
-export default async function AtsJobDetailPage({
-  params,
-}: {
+type PageProps = {
   params: { jobId: string };
-}) {
-  const job = await prisma.job.findUnique({
-    where: { id: params.jobId },
+  searchParams?: {
+    q?: string;
+    stage?: string;
+    status?: string;
+    tier?: string;
+  };
+};
+
+function getTierColor(tier?: string | null) {
+  if (!tier) return "bg-slate-100 text-slate-600";
+  const upper = tier.toUpperCase();
+  if (upper === "A") return "bg-emerald-100 text-emerald-700";
+  if (upper === "B") return "bg-sky-100 text-sky-700";
+  if (upper === "C") return "bg-amber-100 text-amber-700";
+  return "bg-slate-100 text-slate-600";
+}
+
+function scoreColor(score?: number | null) {
+  if (score == null) return "bg-slate-100 text-slate-600";
+  if (score >= 80) return "bg-emerald-100 text-emerald-700";
+  if (score >= 65) return "bg-sky-100 text-sky-700";
+  if (score >= 50) return "bg-amber-100 text-amber-700";
+  return "bg-rose-100 text-rose-700";
+}
+
+export default async function JobPipelinePage({
+  params,
+  searchParams = {},
+}: PageProps) {
+  const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
+
+  const job = await prisma.job.findFirst({
+    where: {
+      id: params.jobId,
+      tenantId: tenant.id,
+    },
     include: {
       clientCompany: true,
+      stages: {
+        orderBy: { position: "asc" },
+      },
       applications: {
+        orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
+          scoringEvents: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
-        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -40,134 +74,416 @@ export default async function AtsJobDetailPage({
     notFound();
   }
 
-  const { config } = await getScoringConfigForJob(job.id);
+  const q =
+    typeof searchParams.q === "string"
+      ? searchParams.q.trim().toLowerCase()
+      : "";
+  const filterStage =
+    typeof searchParams.stage === "string" && searchParams.stage !== ""
+      ? searchParams.stage
+      : "ALL";
+  const filterStatus =
+    typeof searchParams.status === "string" && searchParams.status !== ""
+      ? searchParams.status
+      : "ALL";
+  const filterTier =
+    typeof searchParams.tier === "string" && searchParams.tier !== ""
+      ? searchParams.tier
+      : "ALL";
 
-  const rows: JobPipelineRow[] = job.applications.map((app) => {
-    const scored = computeApplicationScore({
-      application: app,
-      candidate: app.candidate,
-      job,
-      config,
-    });
+  const stageNames =
+    job.stages.length > 0
+      ? job.stages.map((s) => s.name || "UNASSIGNED")
+      : ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
 
-    const tier: TierLetter =
-      scored.tier === "A" ||
-      scored.tier === "B" ||
-      scored.tier === "C" ||
-      scored.tier === "D"
-        ? (scored.tier as TierLetter)
-        : "D";
+  const stageOptions = stageNames;
 
-    const cvUrl = app.cvUrl || app.candidate?.cvUrl || null;
-
-    return {
-      applicationId: app.id,
-      candidateId: app.candidate?.id ?? null,
-      fullName: app.fullName,
-      email: app.email,
-      currentTitle: app.candidate?.currentTitle ?? null,
-      currentCompany: app.candidate?.currentCompany ?? null,
-      stage: (app.stage as string | null) ?? null,
-      status: (app.status as string | null) ?? null,
-      tier,
-      score: scored.score ?? 0,
-      reason: scored.reason ?? "",
-      risks: Array.isArray(scored.risks) ? scored.risks : [],
-      redFlags: Array.isArray(scored.redFlags)
-        ? scored.redFlags
-        : [],
-      interviewFocus: Array.isArray(scored.interviewFocus)
-        ? scored.interviewFocus
-        : [],
-      cvUrl,
-      appliedAt: app.createdAt.toISOString(),
-    };
-  });
-
-  const tierCounts: Record<TierLetter, number> = {
-    A: 0,
-    B: 0,
-    C: 0,
-    D: 0,
+  type DecoratedApp = (typeof job.applications)[number] & {
+    _score: number | null;
+    _tier: string | null;
+    _engine: string | null;
   };
-  for (const row of rows) {
-    tierCounts[row.tier] += 1;
+
+  const columns: { name: string; apps: DecoratedApp[] }[] = stageNames.map(
+    (name) => ({ name, apps: [] }),
+  );
+  const unassigned: DecoratedApp[] = [];
+
+  for (const app of job.applications) {
+    const latestScore = app.scoringEvents[0] ?? null;
+    const score =
+      (latestScore?.score as number | null | undefined) ??
+      (app.matchScore as number | null | undefined) ??
+      null;
+    const tier =
+      (latestScore?.tier as string | null | undefined) ?? null;
+    const engine =
+      (latestScore?.engine as string | null | undefined) ?? null;
+
+    const decorated: DecoratedApp = {
+      ...app,
+      _score: score,
+      _tier: tier,
+      _engine: engine,
+    };
+
+    // search filter
+    if (q) {
+      const haystack = [
+        app.fullName,
+        app.email,
+        app.location,
+        app.linkedinUrl,
+        app.source,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(q)) continue;
+    }
+
+    // status filter
+    if (
+      filterStatus !== "ALL" &&
+      (app.status || "").toUpperCase() !== filterStatus.toUpperCase()
+    ) {
+      continue;
+    }
+
+    // tier filter
+    if (
+      filterTier !== "ALL" &&
+      (tier || "").toUpperCase() !== filterTier.toUpperCase()
+    ) {
+      continue;
+    }
+
+    const stageName = (app.stage || "APPLIED").toUpperCase();
+    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
+      continue;
+    }
+
+    const col = columns.find(
+      (c) => c.name.toUpperCase() === stageName.toUpperCase(),
+    );
+    if (col) {
+      col.apps.push(decorated);
+    } else {
+      unassigned.push(decorated);
+    }
   }
 
-  return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
-      {/* Page header */}
-      <header className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS · Job pipeline
-        </p>
+  if (unassigned.length > 0) {
+    columns.push({ name: "UNASSIGNED", apps: unassigned });
+  }
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
+  const allVisibleApplicationIds = columns.flatMap((c) =>
+    c.apps.map((a) => a.id),
+  );
+
+  const uniqueTiers = Array.from(
+    new Set(
+      job.applications
+        .flatMap((a) => a.scoringEvents)
+        .map((e) => (e?.tier as string | null | undefined) || null)
+        .filter(Boolean) as string[],
+    ),
+  ).sort();
+
+  return (
+    <div className="flex h-full flex-1 flex-col">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white px-5 py-4">
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Link href="/ats/jobs" className="hover:underline">
+            Jobs
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-slate-700">
+            {job.title}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold text-slate-900">
+            <h1 className="text-base font-semibold text-slate-900">
               {job.title}
             </h1>
-            <p className="text-xs text-slate-600">
-              {job.clientCompany?.name
-                ? `${job.clientCompany.name} · `
-                : ""}
-              {job.location || job.workMode || "Location not set"}
-            </p>
-            <p className="text-[11px] text-slate-500">
-              Pipeline view with scoring tiers, quick access to CVs
-              and deep candidate profiles. Click a candidate name to
-              open the full profile.
-            </p>
-          </div>
-
-          <div className="flex flex-col items-end gap-2 text-[11px] text-slate-600">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                Applications:{" "}
-                <span className="ml-1 font-semibold text-slate-800">
-                  {rows.length}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+              {job.clientCompany && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  {job.clientCompany.name}
                 </span>
-              </span>
-              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1">
-                A:{" "}
-                <span className="ml-1 font-semibold">
-                  {tierCounts.A}
+              )}
+              {job.location && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  {job.location}
                 </span>
-              </span>
-              <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1">
-                B:{" "}
-                <span className="ml-1 font-semibold">
-                  {tierCounts.B}
-                </span>
-              </span>
-              <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1">
-                C:{" "}
-                <span className="ml-1 font-semibold">
-                  {tierCounts.C}
-                </span>
-              </span>
-              <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1">
-                D:{" "}
-                <span className="ml-1 font-semibold">
-                  {tierCounts.D}
-                </span>
+              )}
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                {job.applications.length} applications
               </span>
             </div>
-
-            <Link
-              href={
-                job.slug ? `/jobs/${job.slug}` : `/jobs/${job.id}`
-              }
-              className="text-[11px] font-medium text-[#172965] hover:underline"
-            >
-              View public job
-            </Link>
+          </div>
+          <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
+            <span>
+              Tenant plan:{" "}
+              <span className="font-medium capitalize">
+                {tenant.plan}
+              </span>
+            </span>
           </div>
         </div>
       </header>
 
-      {/* Pipeline table (client) */}
-      <JobPipelineTable rows={rows} tierCounts={tierCounts} />
+      {/* Filters + bulk bar */}
+      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          {/* Filters */}
+          <form className="flex flex-wrap items-end gap-2 text-xs" method="GET">
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Search
+              </label>
+              <input
+                type="text"
+                name="q"
+                defaultValue={searchParams.q || ""}
+                placeholder="Name, email, location…"
+                className="h-8 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              />
+            </div>
+
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Stage
+              </label>
+              <select
+                name="stage"
+                defaultValue={filterStage}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="ALL">All</option>
+                {stageNames.map((s) => (
+                  <option key={s} value={s.toUpperCase()}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Status
+              </label>
+              <select
+                name="status"
+                defaultValue={filterStatus}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="ALL">All</option>
+                <option value="PENDING">Pending</option>
+                <option value="SCREENING">Screening</option>
+                <option value="INTERVIEW">Interview</option>
+                <option value="OFFER">Offer</option>
+                <option value="HIRED">Hired</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Tier
+              </label>
+              <select
+                name="tier"
+                defaultValue={filterTier}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="ALL">All</option>
+                {uniqueTiers.map((t) => (
+                  <option key={t} value={t.toUpperCase()}>
+                    Tier {t.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="mt-5 inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+            >
+              Apply filters
+            </button>
+          </form>
+
+          {/* Bulk info: just shows how many are visible now */}
+          <div className="flex flex-col items-end text-[11px] text-slate-500">
+            <span>
+              Visible applications:{" "}
+              <span className="font-semibold text-slate-700">
+                {allVisibleApplicationIds.length}
+              </span>
+            </span>
+            <span className="text-[10px]">
+              Use the checkboxes below + bulk move bar to update stages.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Pipeline + bulk move form */}
+      <form
+        action="/api/ats/applications/bulk-stage"
+        method="POST"
+        className="flex flex-1 flex-col overflow-hidden"
+      >
+        <input type="hidden" name="jobId" value={job.id} />
+
+        <div className="flex-1 overflow-x-auto bg-slate-50 px-4 py-4">
+          <div className="flex min-w-full gap-4">
+            {columns.map((column) => (
+              <div
+                key={column.name}
+                className="flex min-w-[260px] max-w-xs flex-1 flex-col rounded-2xl border border-slate-200 bg-slate-950/95 text-slate-50"
+              >
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-200">
+                      {column.name}
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {column.apps.length}{" "}
+                      {column.apps.length === 1
+                        ? "candidate"
+                        : "candidates"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
+                  {column.apps.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 p-3 text-center text-[11px] text-slate-500">
+                      No candidates in this stage yet.
+                    </div>
+                  )}
+
+                  {column.apps.map((app) => (
+                    <article
+                      key={app.id}
+                      className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-100"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            name="applicationIds"
+                            value={app.id}
+                            className="mt-1 h-3 w-3 rounded border-slate-500 text-slate-900"
+                          />
+                          <div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-[13px] font-semibold">
+                                {app.fullName}
+                              </span>
+                              {app._tier && (
+                                <span
+                                  className={[
+                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                    getTierColor(app._tier),
+                                  ].join(" ")}
+                                >
+                                  Tier {app._tier}
+                                </span>
+                              )}
+                              {app._score != null && (
+                                <span
+                                  className={[
+                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                    scoreColor(app._score),
+                                  ].join(" ")}
+                                >
+                                  Score {app._score}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-slate-400">
+                              {app.email}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                        {app.location && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                            {app.location}
+                          </span>
+                        )}
+                        {app.source && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                            Source: {app.source}
+                          </span>
+                        )}
+                      </div>
+
+                      <ApplicationStageStatusInline
+                        applicationId={app.id}
+                        currentStage={app.stage}
+                        currentStatus={app.status}
+                        stageOptions={stageOptions}
+                      />
+
+                      {app.matchReason && (
+                        <p className="mt-1 line-clamp-2 text-[11px] text-slate-300">
+                          {app.matchReason}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bulk move bar */}
+        <div className="border-t border-slate-200 bg-white px-4 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-600">
+            <div>
+              <span className="font-medium text-slate-800">
+                Bulk move
+              </span>{" "}
+              <span className="text-slate-500">
+                Select candidates above, then move them to a new stage.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                name="stage"
+                className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              >
+                <option value="">Select stage…</option>
+                {stageNames.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
+              >
+                Move selected
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }
