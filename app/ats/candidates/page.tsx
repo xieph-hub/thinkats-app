@@ -1,46 +1,32 @@
 // app/ats/candidates/page.tsx
-import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "ThinkATS | ATS Candidates",
-  description:
-    "Talent pool view for all candidates associated with roles in the current ThinkATS tenant.",
-};
-
-interface CandidatesPageSearchParams {
-  q?: string | string[];
-  status?: string | string[];
-  location?: string | string[];
-  source?: string | string[];
-  stage?: string | string[];
-  tenantId?: string | string[];
-}
-
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "";
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
+  return d.toLocaleDateString("en-GB", {
     day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
 }
 
 function titleCaseFromEnum(value?: string | null) {
   if (!value) return "";
   return value
+    .toString()
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatStageName(value: string) {
+function formatStageName(value?: string | null) {
+  if (!value) return "";
   const key = value.toUpperCase();
   const map: Record<string, string> = {
     APPLIED: "Applied",
@@ -59,138 +45,127 @@ function formatStageName(value: string) {
   return titleCaseFromEnum(value);
 }
 
-function applicationStatusBadgeClass(value?: string | null) {
-  const key = (value || "").toUpperCase();
-  if (key === "PENDING") {
-    return "bg-slate-50 text-slate-700 border-slate-200";
+// ---------- Plan / engine helpers ----------
+
+type PlanKey = "free" | "trial_pro" | "pro" | "enterprise" | string;
+
+function resolveEffectivePlan(
+  plan: string | null | undefined,
+  trialEndsAt: Date | null | undefined,
+): PlanKey {
+  const base = (plan || "free").toLowerCase();
+  const now = new Date();
+
+  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
+    return "trial_pro";
   }
-  if (key === "IN_PROGRESS") {
-    return "bg-blue-50 text-blue-700 border-blue-100";
-  }
-  if (key === "ON_HOLD") {
-    return "bg-amber-50 text-amber-800 border-amber-100";
-  }
-  if (key === "HIRED") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  }
-  if (key === "REJECTED" || key === "ARCHIVED") {
-    return "bg-rose-50 text-rose-700 border-rose-100";
-  }
-  return "bg-slate-50 text-slate-700 border-slate-200";
+  return base;
 }
 
-type CandidateView = {
-  id: string;
-  candidateId: string | null;
-  name: string;
-  email: string;
-  location: string;
-  primaryStage: string;
-  primaryStageKey: string;
-  primaryStatus: string;
-  primaryStatusKey: string;
-  primaryStageLabel: string;
-  primaryStatusLabel: string;
-  lastAppliedAt: Date;
-  lastAppliedJobId: string | null;
-  lastAppliedJobTitle: string | null;
-  rolesCount: number;
-  sources: string[];
-  // NEW: best match score across this candidate's applications under this tenant
-  matchScore: number | null;
-};
+function formatPlanLabel(
+  rawPlan: string | null | undefined,
+  trialEndsAt: Date | null | undefined,
+): string {
+  const base = (rawPlan || "free").toLowerCase();
+  const now = new Date();
 
-export default async function AtsCandidatesPage({
-  searchParams,
-}: {
-  searchParams?: CandidatesPageSearchParams;
-}) {
-  // -----------------------------
-  // Resolve search params
-  // -----------------------------
-  const rawQ = searchParams?.q ?? "";
-  const q =
-    Array.isArray(rawQ) && rawQ.length > 0
-      ? rawQ[0]
-      : typeof rawQ === "string"
-      ? rawQ
-      : "";
+  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
+    return "Free · Trial Pro active";
+  }
+  if (base === "pro") return "Pro";
+  if (base === "enterprise") return "Enterprise";
+  return "Free";
+}
 
-  const rawStatus = searchParams?.status ?? "all";
-  const statusFilter =
-    Array.isArray(rawStatus) && rawStatus.length > 0
-      ? rawStatus[0]
-      : typeof rawStatus === "string"
-      ? rawStatus
-      : "all";
-  const statusFilterKey = (statusFilter || "all").toLowerCase();
+function getEngineLabel(effectivePlan: PlanKey): string {
+  const p = (effectivePlan || "free").toLowerCase();
+  if (p === "enterprise") return "Enterprise scoring engine";
+  if (p === "pro" || p === "trial_pro") return "Pro scoring engine";
+  return "Standard scoring engine";
+}
 
-  const rawLocation = searchParams?.location ?? "all";
-  const locationFilter =
-    Array.isArray(rawLocation) && rawLocation.length > 0
-      ? rawLocation[0]
-      : typeof rawLocation === "string"
-      ? rawLocation
-      : "all";
-
-  const rawSource = searchParams?.source ?? "all";
-  const sourceFilter =
-    Array.isArray(rawSource) && rawSource.length > 0
-      ? rawSource[0]
-      : typeof rawSource === "string"
-      ? rawSource
-      : "all";
-
-  const rawStage = searchParams?.stage ?? "all";
-  const stageFilter =
-    Array.isArray(rawStage) && rawStage.length > 0
-      ? rawStage[0]
-      : typeof rawStage === "string"
-      ? rawStage
-      : "all";
-  const stageFilterKey = (stageFilter || "all").toUpperCase();
-
-  const rawTenant = searchParams?.tenantId ?? "";
-  const tenantParam =
-    Array.isArray(rawTenant) && rawTenant.length > 0
-      ? rawTenant[0]
-      : typeof rawTenant === "string"
-      ? rawTenant
-      : "";
-
-  const tenants = await prisma.tenant.findMany({
-    orderBy: { name: "asc" },
-  });
-
-  let selectedTenant =
-    (tenantParam &&
-      tenants.find(
-        (t) => t.id === tenantParam || (t as any).slug === tenantParam,
-      )) ||
-    (await getResourcinTenant());
-
-  if (!selectedTenant) {
-    throw new Error("No default tenant found.");
+function getMatchScoreMeta(score?: number | null) {
+  if (score == null) {
+    return {
+      label: "No score",
+      className: "border-slate-200 bg-slate-50 text-slate-500",
+    };
   }
 
-  const tenantId = selectedTenant.id;
+  if (score >= 80) {
+    return {
+      label: `${score}/100 · High match`,
+      className: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    };
+  }
 
-  // -----------------------------
-  // Load applications scoped by tenant via job → tenantId
-  // -----------------------------
-  const applications = await prisma.jobApplication.findMany({
+  if (score >= 60) {
+    return {
+      label: `${score}/100 · Medium match`,
+      className: "border-amber-100 bg-amber-50 text-amber-800",
+    };
+  }
+
+  return {
+    label: `${score}/100 · Low match`,
+    className: "border-slate-200 bg-slate-50 text-slate-600",
+  };
+}
+
+export default async function AtsCandidatesPage() {
+  const tenant = await getResourcinTenant();
+  if (!tenant) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-10">
+        <h1 className="text-xl font-semibold text-slate-900">
+          ATS candidates not available
+        </h1>
+        <p className="mt-2 text-sm text-slate-600">
+          No default tenant configured. Check{" "}
+          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
+            RESOURCIN_TENANT_ID
+          </code>{" "}
+          or{" "}
+          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
+            RESOURCIN_TENANT_SLUG
+          </code>{" "}
+          in your environment.
+        </p>
+      </div>
+    );
+  }
+
+  // Load tenant plan for header
+  const fullTenant = await prisma.tenant.findUnique({
+    where: { id: tenant.id },
+    select: {
+      name: true,
+      plan: true,
+      trialEndsAt: true,
+    },
+  });
+
+  const rawPlan = fullTenant?.plan ?? "free";
+  const trialEndsAt = fullTenant?.trialEndsAt ?? null;
+  const effectivePlan = resolveEffectivePlan(rawPlan, trialEndsAt);
+  const planLabel = formatPlanLabel(rawPlan, trialEndsAt);
+  const engineLabel = getEngineLabel(effectivePlan);
+
+  // Candidates + their applications for this tenant
+  const candidates = await prisma.candidate.findMany({
     where: {
-      job: {
-        tenantId,
-      },
+      tenantId: tenant.id,
     },
     include: {
-      candidate: true,
-      job: {
-        select: {
-          id: true,
-          title: true,
+      applications: {
+        include: {
+          job: {
+            include: {
+              clientCompany: true,
+            },
+          },
         },
+        orderBy: { createdAt: "desc" },
       },
     },
     orderBy: {
@@ -198,574 +173,225 @@ export default async function AtsCandidatesPage({
     },
   });
 
-  // -----------------------------
-  // Aggregate into candidate-level view
-  // -----------------------------
-  const candidateMap = new Map<string, CandidateView>();
+  const totalCandidates = candidates.length;
+  const allApplications = candidates.flatMap((c) => c.applications);
+  const totalApplications = allApplications.length;
 
-  for (const app of applications) {
-    const candidate = app.candidate;
-    const dbId = candidate?.id ?? null;
-
-    const key =
-      dbId ||
-      `no-id:${(app as any).email || app.id || Math.random().toString(36)}`;
-
-    const name = candidate?.fullName || app.fullName || "Unnamed candidate";
-    const email = candidate?.email || (app as any).email || "";
-
-    const location =
-      candidate?.location || app.location || "Not specified";
-
-    const stage = app.stage || "APPLIED";
-    const stageKey = stage.toUpperCase();
-    const status = app.status || "PENDING";
-    const statusKey = status.toUpperCase();
-
-    const jobTitle = app.job?.title || null;
-    const jobId = app.job?.id || null;
-
-    const appMatchScore =
-      typeof (app as any).matchScore === "number"
-        ? (app as any).matchScore
-        : null;
-
-    const existing = candidateMap.get(key);
-
-    if (!existing) {
-      candidateMap.set(key, {
-        id: key,
-        candidateId: dbId,
-        name,
-        email,
-        location,
-        primaryStage: stage,
-        primaryStageKey: stageKey,
-        primaryStatus: status,
-        primaryStatusKey: statusKey,
-        primaryStageLabel: formatStageName(stage),
-        primaryStatusLabel: titleCaseFromEnum(status),
-        lastAppliedAt: app.createdAt,
-        lastAppliedJobId: jobId,
-        lastAppliedJobTitle: jobTitle,
-        rolesCount: jobId ? 1 : 0,
-        sources: app.source ? [app.source] : [],
-        matchScore: appMatchScore,
-      });
-    } else {
-      const rolesSet = new Set<string>();
-      if (existing.rolesCount > 0 && existing.lastAppliedJobId) {
-        rolesSet.add(existing.lastAppliedJobId);
-      }
-      if (jobId) {
-        rolesSet.add(jobId);
-      }
-
-      const sourcesSet = new Set(existing.sources);
-      if (app.source) sourcesSet.add(app.source);
-
-      let bestMatchScore = existing.matchScore;
-      if (
-        typeof appMatchScore === "number" &&
-        (bestMatchScore == null || appMatchScore > bestMatchScore)
-      ) {
-        bestMatchScore = appMatchScore;
-      }
-
-      candidateMap.set(key, {
-        ...existing,
-        rolesCount: rolesSet.size,
-        sources: Array.from(sourcesSet),
-        matchScore: bestMatchScore,
-      });
-    }
-  }
-
-  const allCandidateViews = Array.from(candidateMap.values());
-
-  const now = Date.now();
-  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-
-  const totalCandidates = allCandidateViews.length;
-  const inProcessCandidates = allCandidateViews.filter((c) =>
-    ["IN_PROGRESS", "ON_HOLD"].includes(c.primaryStatusKey),
-  ).length;
-  const hiredCandidates = allCandidateViews.filter(
-    (c) => c.primaryStatusKey === "HIRED",
-  ).length;
-  const rejectedCandidates = allCandidateViews.filter((c) =>
-    ["REJECTED", "ARCHIVED"].includes(c.primaryStatusKey),
-  ).length;
-  const newLast30Days = allCandidateViews.filter((c) => {
-    return now - c.lastAppliedAt.getTime() <= THIRTY_DAYS;
-  }).length;
-
-  // Distinct locations / sources / stages for filters
-  const allLocations = Array.from(
-    new Set(
-      allCandidateViews
-        .map((c) => c.location)
-        .filter((loc) => loc && loc !== "Not specified"),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const allSources = Array.from(
-    new Set(
-      allCandidateViews
-        .flatMap((c) => c.sources)
-        .filter((s) => s && s.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
-
-  const allStages = Array.from(
-    new Set(allCandidateViews.map((c) => c.primaryStageKey)),
-  ).sort();
-
-  // -----------------------------
-  // Apply filters
-  // -----------------------------
-  let candidates = allCandidateViews.filter((c) => {
-    let ok = true;
-
-    // Status filter
-    if (statusFilterKey !== "all") {
-      if (statusFilterKey === "in_process") {
-        ok =
-          ok &&
-          (c.primaryStatusKey === "IN_PROGRESS" ||
-            c.primaryStatusKey === "ON_HOLD");
-      } else if (statusFilterKey === "hired") {
-        ok = ok && c.primaryStatusKey === "HIRED";
-      } else if (statusFilterKey === "rejected") {
-        ok =
-          ok &&
-          (c.primaryStatusKey === "REJECTED" ||
-            c.primaryStatusKey === "ARCHIVED");
-      }
-    }
-
-    // Stage filter
-    if (stageFilterKey !== "ALL" && stageFilterKey !== "ALL_STAGES") {
-      if (stageFilterKey !== "ALL") {
-        ok = ok && c.primaryStageKey === stageFilterKey;
-      }
-    }
-
-    // Location filter
-    if (locationFilter !== "all") {
-      ok = ok && c.location === locationFilter;
-    }
-
-    // Source filter
-    if (sourceFilter !== "all") {
-      ok = ok && c.sources.includes(sourceFilter);
-    }
-
-    // Search
-    if (q) {
-      const haystack = (
-        c.name +
-        " " +
-        c.email +
-        " " +
-        (c.location || "") +
-        " " +
-        (c.lastAppliedJobTitle || "")
-      ).toLowerCase();
-      ok = ok && haystack.includes(q.toLowerCase());
-    }
-
-    return ok;
-  });
-
-  const filteredCount = candidates.length;
-
-  // Sort: best matchScore first, then recency
-  candidates.sort((a, b) => {
-    const aScore = a.matchScore ?? -1;
-    const bScore = b.matchScore ?? -1;
-    if (aScore !== bScore) {
-      return bScore - aScore;
-    }
-    return b.lastAppliedAt.getTime() - a.lastAppliedAt.getTime();
-  });
-
-  const clearFiltersHref = (() => {
-    const url = new URL("/ats/candidates", "http://dummy");
-    url.searchParams.set("tenantId", tenantId);
-    return url.pathname + url.search;
-  })();
+  const scoredApps = allApplications.filter(
+    (app: any) => app.matchScore != null,
+  );
+  const avgScore =
+    scoredApps.length > 0
+      ? Math.round(
+          scoredApps.reduce((sum, app: any) => sum + Number(app.matchScore), 0) /
+            scoredApps.length,
+        )
+      : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
-      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            ATS · Candidates
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            Talent pool
-          </h1>
-          <p className="mt-1 text-xs text-slate-600">
-            All candidates who have engaged with roles under{" "}
-            <span className="font-medium text-slate-900">
-              {selectedTenant.name ??
-                (selectedTenant as any).slug ??
-                "Resourcin"}
-            </span>
-            . Use filters to focus on active pipelines, hires or rejections.
-          </p>
-        </div>
-
-        {/* Tenant selector */}
-        <form method="GET" className="hidden items-center gap-2 sm:flex">
-          {/* Preserve filters when switching tenant */}
-          {q && <input type="hidden" name="q" value={q} />}
-          {statusFilter && statusFilter !== "all" && (
-            <input type="hidden" name="status" value={statusFilter} />
-          )}
-          {locationFilter && locationFilter !== "all" && (
-            <input type="hidden" name="location" value={locationFilter} />
-          )}
-          {sourceFilter && sourceFilter !== "all" && (
-            <input type="hidden" name="source" value={sourceFilter} />
-          )}
-          {stageFilter && stageFilter !== "all" && (
-            <input type="hidden" name="stage" value={stageFilter} />
-          )}
-
-          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-            <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              Tenant
-            </span>
-            <select
-              name="tenantId"
-              defaultValue={tenantId}
-              className="border-none bg-transparent text-[11px] text-slate-900 outline-none focus:ring-0"
-            >
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name ?? (tenant as any).slug ?? tenant.id}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="text-[11px] font-medium text-[#172965] hover:underline"
-            >
-              Switch
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Total candidates
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-[#172965]">
-            {totalCandidates}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            {filteredCount !== totalCandidates
-              ? `${filteredCount} match current filters`
-              : "All time across this tenant"}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            In process
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-blue-700">
-            {inProcessCandidates}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Marked as in progress or on hold
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            Hired
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">
-            {hiredCandidates}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Across all roles under this tenant
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-            New last 30 days
-          </p>
-          <p className="mt-2 text-2xl font-semibold text-[#64C247]">
-            {newLast30Days}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            First seen in the last 30 days
-          </p>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <form
-        method="GET"
-        className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-      >
-        {/* Keep tenantId when filtering */}
-        <input type="hidden" name="tenantId" value={tenantId} />
-
-        <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="flex-1">
-            <label htmlFor="q" className="sr-only">
-              Search candidates
-            </label>
-            <div className="relative">
-              <input
-                id="q"
-                name="q"
-                type="text"
-                defaultValue={q}
-                placeholder="Search by name, email, location, role..."
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              />
-              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-[13px] text-slate-400">
-                ⌕
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 sm:w-auto">
-            {/* Status filter */}
-            <div>
-              <label htmlFor="status" className="sr-only">
-                Status filter
-              </label>
-              <select
-                id="status"
-                name="status"
-                defaultValue={statusFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All statuses</option>
-                <option value="in_process">In process</option>
-                <option value="hired">Hired</option>
-                <option value="rejected">Rejected / archived</option>
-              </select>
-            </div>
-
-            {/* Stage filter */}
-            <div>
-              <label htmlFor="stage" className="sr-only">
-                Stage filter
-              </label>
-              <select
-                id="stage"
-                name="stage"
-                defaultValue={stageFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All stages</option>
-                {allStages.map((stageKey) => (
-                  <option key={stageKey} value={stageKey}>
-                    {formatStageName(stageKey)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Location filter */}
-            <div>
-              <label htmlFor="location" className="sr-only">
-                Location filter
-              </label>
-              <select
-                id="location"
-                name="location"
-                defaultValue={locationFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All locations</option>
-                {allLocations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Source filter */}
-            <div>
-              <label htmlFor="source" className="sr-only">
-                Source filter
-              </label>
-              <select
-                id="source"
-                name="source"
-                defaultValue={sourceFilter || "all"}
-                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="all">All sources</option>
-                {allSources.map((src) => (
-                  <option key={src} value={src}>
-                    {src}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-md bg-[#172965] px-3 py-2 text-xs font-medium text-white hover:bg-[#12204d]"
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-
-        {statusFilterKey !== "all" ||
-        stageFilterKey !== "ALL" ||
-        locationFilter !== "all" ||
-        sourceFilter !== "all" ||
-        !!q ? (
           <Link
-            href={clearFiltersHref}
-            className="text-[11px] text-slate-500 hover:text-slate-800"
+            href="/ats/dashboard"
+            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
           >
-            Clear filters
+            <span className="mr-1.5">←</span>
+            Back to ATS dashboard
           </Link>
-        ) : null}
-      </form>
 
-      {/* Candidate list */}
-      {candidates.length === 0 ? (
+          <div className="mt-3 space-y-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              ATS · Talent pool
+            </p>
+            <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+              Candidates
+            </h1>
+            <p className="text-xs text-slate-600">
+              All candidates associated with{" "}
+              <span className="font-medium">
+                {fullTenant?.name || tenant.slug || "this tenant"}
+              </span>
+              .
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700">
+              Plan: {planLabel}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2 text-[11px] text-slate-600">
+            <span>
+              {totalCandidates}{" "}
+              {totalCandidates === 1 ? "candidate" : "candidates"}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span>
+              {totalApplications}{" "}
+              {totalApplications === 1 ? "application" : "applications"}
+            </span>
+            {avgScore != null && (
+              <>
+                <span className="text-slate-300">•</span>
+                <span>Avg match score: {avgScore}/100</span>
+              </>
+            )}
+          </div>
+
+          <p className="text-right text-[11px] text-slate-500">
+            Candidates are auto-ranked by match score (0–100), using the{" "}
+            <span className="font-medium text-slate-700">{engineLabel}</span>.
+          </p>
+        </div>
+      </div>
+
+      {/* Empty state */}
+      {totalCandidates === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          No candidates match the current filters. Adjust your search or remove
-          some filters to see more of the pool.
+          No candidates in your talent pool yet. Once applications start coming
+          in, you&apos;ll see candidates and their best-matching roles here.
         </div>
       ) : (
         <div className="space-y-3">
-          {candidates.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md"
-            >
-              {/* Left: candidate meta */}
-              <div className="flex min-w-0 flex-1 gap-3">
-                <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700">
-                  {c.name
-                    .split(" ")
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((part) => part[0]?.toUpperCase())
-                    .join("") || "C"}
-                </div>
+          {candidates.map((candidate) => {
+            const apps = candidate.applications || [];
+            const totalApps = apps.length;
 
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-slate-900">
-                      {c.name}
-                    </span>
-                    {c.email && (
-                      <span className="truncate text-[11px] text-slate-500">
-                        {c.email}
+            let bestApp: any = null;
+            let bestScore: number | null = null;
+
+            for (const app of apps as any[]) {
+              const s =
+                app.matchScore != null ? Number(app.matchScore) : null;
+              if (s == null) continue;
+              if (bestScore == null || s > bestScore) {
+                bestScore = s;
+                bestApp = app;
+              }
+            }
+
+            const latestApp = apps[0] || null;
+            const lastAppliedAt = latestApp?.createdAt || null;
+
+            const { label: scoreLabel, className: scoreClassName } =
+              getMatchScoreMeta(bestScore);
+
+            const bestJob = bestApp?.job;
+            const bestJobTitle =
+              bestJob?.title || (bestApp && bestApp.fullName) || null;
+            const bestClientName =
+              bestJob?.clientCompany?.name || "Resourcin client";
+
+            const primaryStage = bestApp?.stage || latestApp?.stage || "APPLIED";
+            const primaryStatus =
+              bestApp?.status || latestApp?.status || "PENDING";
+
+            return (
+              <div
+                key={candidate.id}
+                className="flex items-stretch justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+              >
+                {/* Left: avatar + identity */}
+                <div className="flex min-w-0 flex-1 gap-3">
+                  <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+                    {candidate.fullName
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((part) => part[0]?.toUpperCase())
+                      .join("") || "C"}
+                  </div>
+
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/ats/candidates/${candidate.id}`}
+                        className="truncate text-sm font-semibold text-slate-900 hover:text-[#172965] hover:underline"
+                      >
+                        {candidate.fullName}
+                      </Link>
+                      {candidate.email && (
+                        <span className="truncate text-[11px] text-slate-500">
+                          {candidate.email}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                      <span className="font-medium text-slate-800">
+                        {candidate.location || "Location not set"}
                       </span>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                    <span className="font-medium text-slate-800">
-                      {c.location || "Location not set"}
-                    </span>
-                    {c.lastAppliedJobTitle && (
-                      <>
-                        <span className="text-slate-300">•</span>
-                        <span>
-                          Last applied to{" "}
-                          <span className="font-medium">
-                            {c.lastAppliedJobTitle}
+                      {lastAppliedAt && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span>
+                            Last applied {formatDate(lastAppliedAt)}
                           </span>
-                        </span>
-                      </>
-                    )}
-                    {c.rolesCount > 1 && (
-                      <>
-                        <span className="text-slate-300">•</span>
-                        <span>{c.rolesCount} roles</span>
-                      </>
-                    )}
-                    {c.sources.length > 0 && (
-                      <>
-                        <span className="text-slate-300">•</span>
-                        <span>
-                          Source:{" "}
-                          <span className="font-medium">
-                            {c.sources[0]}
-                            {c.sources.length > 1 &&
-                              ` (+${c.sources.length - 1} more)`}
+                        </>
+                      )}
+                      {totalApps > 0 && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span>
+                            {totalApps}{" "}
+                            {totalApps === 1
+                              ? "application"
+                              : "applications"}
                           </span>
-                        </span>
-                      </>
-                    )}
-                  </div>
+                        </>
+                      )}
+                    </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                    <span>Last applied {formatDate(c.lastAppliedAt)}</span>
+                    {bestJob && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                        <span className="font-medium text-slate-800">
+                          Best match:
+                        </span>
+                        <span className="truncate">
+                          {bestJobTitle || "Untitled role"}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span>{bestClientName}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
 
-              {/* Right: stage / status and quick links */}
-              <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
-                <div className="flex flex-wrap justify-end gap-2">
-                  {typeof c.matchScore === "number" && (
-                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                      Match {c.matchScore}%
+                {/* Right: match + stage/status */}
+                <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${scoreClassName}`}
+                    >
+                      {scoreLabel}
                     </span>
-                  )}
-                  <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
-                    {formatStageName(c.primaryStage)}
-                  </span>
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
-                      c.primaryStatus,
-                    )}`}
+                    {totalApps > 0 && (
+                      <>
+                        <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
+                          {formatStageName(primaryStage)}
+                        </span>
+                        <span className="inline-flex items-center rounded-full bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
+                          {titleCaseFromEnum(primaryStatus)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  <Link
+                    href={`/ats/candidates/${candidate.id}`}
+                    className="text-[10px] font-medium text-[#172965] hover:underline"
                   >
-                    {c.primaryStatusLabel}
-                  </span>
-                </div>
-
-                <div className="flex flex-col items-end gap-1">
-                  {c.lastAppliedJobId && (
-                    <Link
-                      href={`/ats/jobs/${c.lastAppliedJobId}?tenantId=${encodeURIComponent(
-                        tenantId,
-                      )}`}
-                      className="text-[11px] font-medium text-[#172965] hover:underline"
-                    >
-                      View pipeline
-                    </Link>
-                  )}
-                  {c.candidateId && (
-                    <Link
-                      href={`/ats/candidates/${c.candidateId}?tenantId=${encodeURIComponent(
-                        tenantId,
-                      )}`}
-                      className="text-[11px] text-slate-500 hover:text-slate-800"
-                    >
-                      View candidate profile
-                    </Link>
-                  )}
+                    Open candidate profile ↗
+                  </Link>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
