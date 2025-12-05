@@ -1,5 +1,6 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getScoringConfigForJob } from "@/lib/scoring/server";
 import { computeApplicationScore } from "@/lib/scoring/compute";
@@ -9,8 +10,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "ThinkATS | Candidates",
   description:
-    "Cross-job view of candidates, scoring tiers and risk flags across your ATS.",
+    "Cross-job view of candidates, scoring tiers, risks and interview focus across your ATS.",
 };
+
+type Tier = "A" | "B" | "C" | "D";
 
 export default async function AtsCandidatesPage() {
   const applications = await prisma.jobApplication.findMany({
@@ -26,12 +29,7 @@ export default async function AtsCandidatesPage() {
     take: 100,
   });
 
-  const scoredRows: {
-    application: (typeof applications)[number];
-    candidate: (typeof applications)[number]["candidate"];
-    job: (typeof applications)[number]["job"];
-    scored: ReturnType<typeof computeApplicationScore>;
-  }[] = [];
+  const scoredRows = [];
 
   for (const app of applications) {
     const { config } = await getScoringConfigForJob(app.jobId);
@@ -43,11 +41,14 @@ export default async function AtsCandidatesPage() {
       config,
     });
 
+    const cvUrl = app.cvUrl || app.candidate?.cvUrl || null;
+
     scoredRows.push({
       application: app,
       candidate: app.candidate,
       job: app.job,
       scored,
+      cvUrl,
     });
   }
 
@@ -61,8 +62,8 @@ export default async function AtsCandidatesPage() {
           Candidate universe
         </h1>
         <p className="text-xs text-slate-600">
-          A cross-job view of candidates, their tiers, risks and interview
-          focus areas across your mandates.
+          A cross-job view of candidates, their tiers, match scores and
+          interview focus areas across your mandates.
         </p>
       </header>
 
@@ -92,97 +93,137 @@ export default async function AtsCandidatesPage() {
                   <th className="px-4 py-2 text-left">Company</th>
                   <th className="px-4 py-2 text-left">Tier</th>
                   <th className="px-4 py-2 text-left">Score</th>
+                  <th className="px-4 py-2 text-left">CV</th>
                   <th className="px-4 py-2 text-left">Risks / red flags</th>
                   <th className="px-4 py-2 text-left">Interview focus</th>
                   <th className="px-4 py-2 text-left">Applied</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {scoredRows.map(({ application, candidate, job, scored }) => (
-                  <tr key={application.id} className="align-top">
-                    <td className="px-4 py-3">
-                      <div className="space-y-0.5">
+                {scoredRows.map(
+                  ({ application, candidate, job, scored, cvUrl }) => (
+                    <tr key={application.id} className="align-top">
+                      {/* Candidate */}
+                      <td className="px-4 py-3">
+                        <div className="space-y-0.5">
+                          <Link
+                            href={`/ats/candidates/${candidate?.id ?? ""}`}
+                            className="text-xs font-medium text-[#172965] hover:underline disabled:pointer-events-none disabled:text-slate-400"
+                            aria-disabled={!candidate?.id}
+                          >
+                            {application.fullName}
+                          </Link>
+                          <p className="text-[11px] text-slate-500">
+                            {candidate?.currentTitle || "—"}
+                            {candidate?.currentCompany
+                              ? ` · ${candidate.currentCompany}`
+                              : ""}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {application.email}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Role */}
+                      <td className="px-4 py-3">
                         <p className="text-xs font-medium text-slate-900">
-                          {application.fullName}
+                          {job.title}
                         </p>
                         <p className="text-[11px] text-slate-500">
-                          {candidate?.currentTitle || "—"}
-                          {candidate?.currentCompany
-                            ? ` · ${candidate.currentCompany}`
-                            : ""}
+                          {job.location || job.workMode || "—"}
                         </p>
-                        <p className="text-[11px] text-slate-500">
-                          {application.email}
+                      </td>
+
+                      {/* Company */}
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-slate-800">
+                          {job.clientCompany?.name || "—"}
                         </p>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <p className="text-xs font-medium text-slate-900">
-                        {job.title}
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        {job.location || job.workMode || "—"}
-                      </p>
-                    </td>
+                      {/* Tier */}
+                      <td className="px-4 py-3">
+                        <TierBadge tier={scored.tier} />
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <p className="text-xs text-slate-800">
-                        {job.clientCompany?.name || "—"}
-                      </p>
-                    </td>
+                      {/* Score */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-sm font-semibold text-slate-900">
+                            {scored.score}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            / 100
+                          </span>
+                        </div>
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <TierBadge tier={scored.tier as Tier} />
-                    </td>
+                      {/* CV */}
+                      <td className="px-4 py-3">
+                        {cvUrl ? (
+                          <a
+                            href={cvUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            View CV
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            No CV on file
+                          </span>
+                        )}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {scored.score}
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          / 100
-                        </span>
-                      </div>
-                    </td>
+                      {/* Risks / red flags – currently empty until ScoringEvent is wired */}
+                      <td className="px-4 py-3">
+                        <RiskBadges
+                          risks={scored.risks}
+                          redFlags={scored.redFlags}
+                        />
+                      </td>
 
-                    <td className="px-4 py-3">
-                      <RiskBadges
-                        risks={scored.risks}
-                        redFlags={scored.redFlags}
-                      />
-                    </td>
+                      {/* Interview focus */}
+                      <td className="px-4 py-3">
+                        {scored.interviewFocus.length === 0 ? (
+                          <span className="text-[11px] text-slate-400">—</span>
+                        ) : (
+                          <ul className="space-y-1 text-[11px] text-slate-600">
+                            {scored.interviewFocus
+                              .slice(0, 2)
+                              .map((item, idx) => (
+                                <li
+                                  key={idx}
+                                  className="line-clamp-2"
+                                  title={item}
+                                >
+                                  • {item}
+                                </li>
+                              ))}
+                            {scored.interviewFocus.length > 2 && (
+                              <li className="text-[10px] text-slate-400">
+                                +
+                                {scored.interviewFocus.length - 2} more focus
+                                points
+                              </li>
+                            )}
+                          </ul>
+                        )}
+                      </td>
 
-                    <td className="px-4 py-3">
-                      {scored.interviewFocus.length === 0 ? (
-                        <span className="text-[11px] text-slate-400">—</span>
-                      ) : (
-                        <ul className="space-y-1 text-[11px] text-slate-600">
-                          {scored.interviewFocus.slice(0, 2).map((item, idx) => (
-                            <li key={idx} className="line-clamp-2" title={item}>
-                              • {item}
-                            </li>
-                          ))}
-                          {scored.interviewFocus.length > 2 && (
-                            <li className="text-[10px] text-slate-400">
-                              +{scored.interviewFocus.length - 2} more focus
-                              points
-                            </li>
-                          )}
-                        </ul>
-                      )}
-                    </td>
-
-                    <td className="px-4 py-3 text-[11px] text-slate-500">
-                      {application.createdAt.toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </td>
-                  </tr>
-                ))}
+                      {/* Applied */}
+                      <td className="px-4 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                        {application.createdAt.toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>
@@ -192,13 +233,12 @@ export default async function AtsCandidatesPage() {
   );
 }
 
-type Tier = "A" | "B" | "C" | "D";
-
 function TierBadge({ tier }: { tier: Tier }) {
   const map: Record<Tier, { label: string; classes: string }> = {
     A: {
       label: "Tier A · Priority",
-      classes: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      classes:
+        "border-emerald-200 bg-emerald-50 text-emerald-800",
     },
     B: {
       label: "Tier B · Strong",
