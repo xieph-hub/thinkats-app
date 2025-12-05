@@ -1,17 +1,15 @@
 // app/auth/reset/page.tsx
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 type Status = "idle" | "loading" | "error" | "success";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [password, setPassword] = useState("");
@@ -20,67 +18,28 @@ export default function ResetPasswordPage() {
     null,
   );
 
-  // Bootstrap: establish a recovery session from URL params, then check user
+  // Check if we have a valid "recovery" session from Supabase
   useEffect(() => {
     let cancelled = false;
 
-    async function bootstrap() {
-      try {
-        // 1) Try new-style OTP recovery: ?code=...
-        const code = searchParams.get("code");
-        const accessToken = searchParams.get("access_token");
-        const refreshToken = searchParams.get("refresh_token");
+    async function checkUser() {
+      const { data, error } = await supabaseBrowser.auth.getUser();
 
-        if (code) {
-          const { error } = await supabaseBrowser.auth.exchangeCodeForSession(
-            code,
-          );
-          if (cancelled) return;
+      if (cancelled) return;
 
-          if (error) {
-            console.error("exchangeCodeForSession error:", error);
-            setHasRecoverySession(false);
-            return;
-          }
-        } else if (accessToken && refreshToken) {
-          // 2) Fallback: older style links using access_token + refresh_token
-          const { error } = await supabaseBrowser.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (cancelled) return;
-
-          if (error) {
-            console.error("setSession error:", error);
-            setHasRecoverySession(false);
-            return;
-          }
-        }
-
-        // 3) Now check if we actually have a user
-        const { data, error } = await supabaseBrowser.auth.getUser();
-        if (cancelled) return;
-
-        if (error || !data?.user) {
-          console.error("getUser after recovery error:", error);
-          setHasRecoverySession(false);
-        } else {
-          setHasRecoverySession(true);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          console.error("Unexpected error bootstrapping reset flow:", err);
-          setHasRecoverySession(false);
-        }
+      if (error || !data?.user) {
+        setHasRecoverySession(false);
+      } else {
+        setHasRecoverySession(true);
       }
     }
 
-    bootstrap();
+    checkUser();
 
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -117,7 +76,7 @@ export default function ResetPasswordPage() {
     setTimeout(() => router.push("/login"), 1500);
   }
 
-  // While we're checking if there's a session
+  // While we're checking if there's a recovery session
   if (hasRecoverySession === null) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
@@ -128,7 +87,7 @@ export default function ResetPasswordPage() {
     );
   }
 
-  // If there's no valid recovery session
+  // No valid recovery session (expired or bad link)
   if (hasRecoverySession === false) {
     return (
       <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
@@ -218,7 +177,9 @@ export default function ResetPasswordPage() {
                 disabled={status === "loading"}
                 className="mt-2 inline-flex w-full items-center justify-center rounded-md bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 shadow-sm hover:bg-sky-400 disabled:opacity-60"
               >
-                {status === "loading" ? "Updating password…" : "Update password"}
+                {status === "loading"
+                  ? "Updating password…"
+                  : "Update password"}
               </button>
 
               {status === "error" && message && (
