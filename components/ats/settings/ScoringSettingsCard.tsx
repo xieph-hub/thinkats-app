@@ -2,55 +2,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { NormalizedScoringConfig } from "@/lib/scoring/types";
 
-type HiringMode = NormalizedScoringConfig["hiringMode"]; // "balanced" | "volume" | "executive"
-type PlanMode = "free" | "pro" | "enterprise";
-
-type CategoryWeights = {
-  coreCompetencies: number;
-  experienceQuality: number;
-  education: number;
-  achievements: number;
-  culturalFit: number;
-};
-
-type Thresholds = {
-  tierA: number;
-  tierB: number;
-  tierC: number;
-};
-
-type SkillsConfig = {
-  mustHaveSkillMatchPercent: number;
-  treatMissingMustHaveAsRedFlag: boolean;
-};
-
-type BiasConfig = {
-  anonymizeForScoring: boolean;
-  downweightEducation: boolean;
-};
-
-type NlpConfig = {
-  enableNlp: boolean;
-  nlpWeightBoost: number;
-};
-
-type ScoringConfig = {
-  weights: CategoryWeights;
-  thresholds: Thresholds;
-  skills: SkillsConfig;
-  bias: BiasConfig;
-  nlp: NlpConfig;
-};
-
-type ApiState = {
-  loading: boolean;
-  error: string | null;
-  saving: boolean;
-};
-
-const DEFAULT_CONFIG: ScoringConfig = {
+// Runtime shape only – no TypeScript types here
+const DEFAULT_CONFIG = {
   weights: {
     coreCompetencies: 30,
     experienceQuality: 25,
@@ -77,16 +31,18 @@ const DEFAULT_CONFIG: ScoringConfig = {
   },
 };
 
+const INITIAL_STATE = {
+  loading: true,
+  error: null,
+  saving: false,
+};
+
 export default function ScoringSettingsCard() {
-  const [plan, setPlan] = useState<PlanMode>("free");
-  const [hiringMode, setHiringMode] = useState<HiringMode>("balanced");
-  const [config, setConfig] = useState<ScoringConfig | null>(null);
-  const [state, setState] = useState<ApiState>({
-    loading: true,
-    error: null,
-    saving: false,
-  });
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [plan, setPlan] = useState("free"); // "free" | "pro" | "enterprise"
+  const [hiringMode, setHiringMode] = useState("balanced"); // "balanced" | "volume" | "executive"
+  const [config, setConfig] = useState(null);
+  const [state, setState] = useState(INITIAL_STATE);
+  const [saveMessage, setSaveMessage] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,50 +56,54 @@ export default function ScoringSettingsCard() {
 
         const data = await res.json().catch(() => null);
 
-        if (!res.ok || !data?.ok) {
-          throw new Error(data?.error || "Failed to load settings");
+        if (!res.ok || !data || !data.ok) {
+          throw new Error((data && data.error) || "Failed to load settings");
         }
         if (cancelled) return;
 
-        setPlan((data.plan as PlanMode) ?? "free");
+        setPlan(data.plan || "free");
+
+        const modeFromApi = data.hiringMode;
+        const allowedModes = ["balanced", "volume", "executive"];
         setHiringMode(
-          (data.hiringMode as HiringMode) ?? ("balanced" as HiringMode),
+          allowedModes.includes(modeFromApi) ? modeFromApi : "balanced",
         );
 
-        const rawConfig = (data.config ?? {}) as Partial<ScoringConfig>;
+        const rawConfig = (data.config || {});
         setConfig({
           ...DEFAULT_CONFIG,
           ...rawConfig,
           weights: {
             ...DEFAULT_CONFIG.weights,
-            ...(rawConfig.weights ?? {}),
+            ...(rawConfig.weights || {}),
           },
           thresholds: {
             ...DEFAULT_CONFIG.thresholds,
-            ...(rawConfig.thresholds ?? {}),
+            ...(rawConfig.thresholds || {}),
           },
           skills: {
             ...DEFAULT_CONFIG.skills,
-            ...(rawConfig.skills ?? {}),
+            ...(rawConfig.skills || {}),
           },
           bias: {
             ...DEFAULT_CONFIG.bias,
-            ...(rawConfig.bias ?? {}),
+            ...(rawConfig.bias || {}),
           },
           nlp: {
             ...DEFAULT_CONFIG.nlp,
-            ...(rawConfig.nlp ?? {}),
+            ...(rawConfig.nlp || {}),
           },
         });
 
         setState((s) => ({ ...s, loading: false, error: null }));
-      } catch (err: any) {
+      } catch (err) {
         console.error("Load scoring settings error:", err);
         if (cancelled) return;
         setState((s) => ({
           ...s,
           loading: false,
-          error: err?.message || "Failed to load scoring settings",
+          error:
+            (err && err.message) || "Failed to load scoring settings",
         }));
       }
     }
@@ -154,7 +114,7 @@ export default function ScoringSettingsCard() {
     };
   }, []);
 
-  async function handleSave(e: React.FormEvent) {
+  async function handleSave(e) {
     e.preventDefault();
     if (!config) return;
 
@@ -168,7 +128,6 @@ export default function ScoringSettingsCard() {
         body: JSON.stringify({
           hiringMode, // "balanced" | "volume" | "executive"
           config: {
-            // extra knobs live in tenant.scoringConfig JSON
             weights: config.weights,
             thresholds: config.thresholds,
             skills: config.skills,
@@ -179,54 +138,58 @@ export default function ScoringSettingsCard() {
       });
 
       const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to save settings");
+      if (!res.ok || !data || !data.ok) {
+        throw new Error((data && data.error) || "Failed to save settings");
       }
 
-      setPlan((data.plan as PlanMode) ?? plan);
+      setPlan(data.plan || plan);
+
+      const modeFromApi = data.hiringMode;
+      const allowedModes = ["balanced", "volume", "executive"];
       setHiringMode(
-        (data.hiringMode as HiringMode) ?? hiringMode,
+        allowedModes.includes(modeFromApi) ? modeFromApi : hiringMode,
       );
 
-      const rawConfig = (data.config ?? {}) as Partial<ScoringConfig>;
+      const rawConfig = data.config || {};
       setConfig({
         ...DEFAULT_CONFIG,
         ...rawConfig,
         weights: {
           ...DEFAULT_CONFIG.weights,
-          ...(rawConfig.weights ?? {}),
+          ...(rawConfig.weights || {}),
         },
         thresholds: {
           ...DEFAULT_CONFIG.thresholds,
-          ...(rawConfig.thresholds ?? {}),
+          ...(rawConfig.thresholds || {}),
         },
         skills: {
           ...DEFAULT_CONFIG.skills,
-          ...(rawConfig.skills ?? {}),
+          ...(rawConfig.skills || {}),
         },
         bias: {
           ...DEFAULT_CONFIG.bias,
-          ...(rawConfig.bias ?? {}),
+          ...(rawConfig.bias || {}),
         },
         nlp: {
           ...DEFAULT_CONFIG.nlp,
-          ...(rawConfig.nlp ?? {}),
+          ...(rawConfig.nlp || {}),
         },
       });
 
       setSaveMessage("Scoring settings updated");
       setState((s) => ({ ...s, saving: false }));
-    } catch (err: any) {
+    } catch (err) {
       console.error("Save scoring settings error:", err);
       setState((s) => ({
         ...s,
         saving: false,
-        error: err?.message || "Failed to save scoring settings",
+        error:
+          (err && err.message) || "Failed to save scoring settings",
       }));
     }
   }
 
-  function updateWeights(patch: Partial<CategoryWeights>) {
+  function updateWeights(patch) {
     setConfig((prev) =>
       prev
         ? {
@@ -240,7 +203,7 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateThresholds(patch: Partial<Thresholds>) {
+  function updateThresholds(patch) {
     setConfig((prev) =>
       prev
         ? {
@@ -254,7 +217,7 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateSkills(patch: Partial<SkillsConfig>) {
+  function updateSkills(patch) {
     setConfig((prev) =>
       prev
         ? {
@@ -268,7 +231,7 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateBias(patch: Partial<BiasConfig>) {
+  function updateBias(patch) {
     setConfig((prev) =>
       prev
         ? {
@@ -282,7 +245,7 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateNlp(patch: Partial<NlpConfig>) {
+  function updateNlp(patch) {
     setConfig((prev) =>
       prev
         ? {
@@ -360,9 +323,7 @@ export default function ScoringSettingsCard() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(
-                ["executive", "volume", "balanced"] as HiringMode[]
-              ).map((mode) => (
+              {["executive", "volume", "balanced"].map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -396,28 +357,29 @@ export default function ScoringSettingsCard() {
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              {(
-                [
-                  ["Core competencies", "coreCompetencies"],
-                  ["Experience quality", "experienceQuality"],
-                  ["Education", "education"],
-                  ["Achievements", "achievements"],
-                  ["Cultural fit", "culturalFit"],
-                ] as [string, keyof CategoryWeights][]
-              ).map(([label, key]) => (
-                <div key={key} className="flex items-center justify-between">
+              {[
+                { label: "Core competencies", key: "coreCompetencies" },
+                { label: "Experience quality", key: "experienceQuality" },
+                { label: "Education", key: "education" },
+                { label: "Achievements", key: "achievements" },
+                { label: "Cultural fit", key: "culturalFit" },
+              ].map((field) => (
+                <div
+                  key={field.key}
+                  className="flex items-center justify-between"
+                >
                   <label className="mr-2 text-[11px] text-slate-600">
-                    {label}
+                    {field.label}
                   </label>
                   <input
                     type="number"
                     min={0}
                     max={100}
-                    value={config.weights[key]}
+                    value={config.weights[field.key] || 0}
                     onChange={(e) =>
                       updateWeights({
-                        [key]: Number(e.target.value || 0),
-                      } as Partial<CategoryWeights>)
+                        [field.key]: Number(e.target.value || 0),
+                      })
                     }
                     className="w-20 rounded border border-slate-200 bg-white px-2 py-1 text-right text-[11px]"
                   />
@@ -449,7 +411,9 @@ export default function ScoringSettingsCard() {
                   max={100}
                   value={config.thresholds.tierA}
                   onChange={(e) =>
-                    updateThresholds({ tierA: Number(e.target.value || 0) })
+                    updateThresholds({
+                      tierA: Number(e.target.value || 0),
+                    })
                   }
                   className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px]"
                 />
@@ -464,7 +428,9 @@ export default function ScoringSettingsCard() {
                   max={100}
                   value={config.thresholds.tierB}
                   onChange={(e) =>
-                    updateThresholds({ tierB: Number(e.target.value || 0) })
+                    updateThresholds({
+                      tierB: Number(e.target.value || 0),
+                    })
                   }
                   className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px]"
                 />
@@ -479,7 +445,9 @@ export default function ScoringSettingsCard() {
                   max={100}
                   value={config.thresholds.tierC}
                   onChange={(e) =>
-                    updateThresholds({ tierC: Number(e.target.value || 0) })
+                    updateThresholds({
+                      tierC: Number(e.target.value || 0),
+                    })
                   }
                   className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px]"
                 />
@@ -544,7 +512,9 @@ export default function ScoringSettingsCard() {
                     type="checkbox"
                     checked={config.bias.anonymizeForScoring}
                     onChange={(e) =>
-                      updateBias({ anonymizeForScoring: e.target.checked })
+                      updateBias({
+                        anonymizeForScoring: e.target.checked,
+                      })
                     }
                     className="h-3 w-3 rounded border-slate-300"
                   />
@@ -556,7 +526,9 @@ export default function ScoringSettingsCard() {
                     type="checkbox"
                     checked={config.bias.downweightEducation}
                     onChange={(e) =>
-                      updateBias({ downweightEducation: e.target.checked })
+                      updateBias({
+                        downweightEducation: e.target.checked,
+                      })
                     }
                     className="h-3 w-3 rounded border-slate-300"
                   />
