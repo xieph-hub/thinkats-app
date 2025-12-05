@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const runtime = "nodejs";
 
@@ -10,181 +11,197 @@ export async function POST(
   { params }: { params: { applicationId: string } },
 ) {
   try {
-    const applicationId = params.applicationId;
-
-    if (!applicationId) {
-      return NextResponse.json(
-        { ok: false, error: "Missing application id" },
-        { status: 400 },
-      );
-    }
-
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
-        { ok: false, error: "Tenant not configured" },
+        { ok: false, error: "No tenant configured" },
         { status: 400 },
       );
     }
 
-    const body = await req.json().catch(() => null);
-    if (!body) {
+    const applicationId = params.applicationId;
+    if (!applicationId) {
       return NextResponse.json(
-        { ok: false, error: "Invalid JSON body" },
+        { ok: false, error: "Missing applicationId" },
         { status: 400 },
       );
     }
 
-    const {
-      scheduledAt,
-      durationMins,
-      type,
-      location,
-      videoUrl,
-      notes,
-      participants,
-    } = body as {
-      scheduledAt?: string;
-      durationMins?: number;
-      type?: string;
-      location?: string;
-      videoUrl?: string;
-      notes?: string;
-      participants?: { name?: string; email: string; role?: string }[];
-    };
+    const formData = await req.formData();
+
+    const scheduledAtRaw = formData.get("scheduledAt");
+    const durationMinsRaw = formData.get("durationMins");
+    const typeRaw = formData.get("type");
+    const locationRaw = formData.get("location");
+    const videoUrlRaw = formData.get("videoUrl");
+    const notesRaw = formData.get("notes");
+    const redirectToRaw = formData.get("redirectTo");
+
+    const type =
+      typeof typeRaw === "string" && typeRaw.trim()
+        ? typeRaw.trim()
+        : null;
+    const location =
+      typeof locationRaw === "string" && locationRaw.trim()
+        ? locationRaw.trim()
+        : null;
+    const videoUrl =
+      typeof videoUrlRaw === "string" && videoUrlRaw.trim()
+        ? videoUrlRaw.trim()
+        : null;
+    const notes =
+      typeof notesRaw === "string" && notesRaw.trim()
+        ? notesRaw.trim()
+        : null;
+
+    let scheduledAt: Date | null = null;
+    if (typeof scheduledAtRaw === "string" && scheduledAtRaw.trim()) {
+      // scheduledAtRaw from <input type="datetime-local"> (local time)
+      const parsed = new Date(scheduledAtRaw);
+      if (!isNaN(parsed.getTime())) {
+        scheduledAt = parsed;
+      }
+    }
 
     if (!scheduledAt) {
       return NextResponse.json(
-        { ok: false, error: "scheduledAt is required" },
+        { ok: false, error: "Scheduled date/time is required" },
         { status: 400 },
       );
     }
 
-    const scheduledDate = new Date(scheduledAt);
-    if (Number.isNaN(scheduledDate.getTime())) {
-      return NextResponse.json(
-        { ok: false, error: "scheduledAt must be a valid date" },
-        { status: 400 },
-      );
+    let durationMins: number | null = null;
+    if (typeof durationMinsRaw === "string" && durationMinsRaw.trim()) {
+      const parsed = parseInt(durationMinsRaw, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        durationMins = parsed;
+      }
     }
 
-    // Ensure the application belongs to this tenant
     const application = await prisma.jobApplication.findFirst({
-      where: {
-        id: applicationId,
-        job: {
-          tenantId: tenant.id,
-        },
-      },
+      where: { id: applicationId },
       include: {
         job: true,
       },
     });
 
-    if (!application) {
+    if (!application || !application.job) {
       return NextResponse.json(
-        { ok: false, error: "Application not found for this tenant" },
+        { ok: false, error: "Application not found" },
         { status: 404 },
       );
     }
 
+    if (application.job.tenantId !== tenant.id) {
+      return NextResponse.json(
+        { ok: false, error: "Application does not belong to this tenant" },
+        { status: 403 },
+      );
+    }
+
+    // Resolve current app user (interviewer / host) via Supabase session
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    let appUserId: string | null = null;
+    let appUserName: string | null = null;
+    let appUserEmail: string | null = null;
+
+    if (!userError && user && user.email) {
+      const email = user.email.toLowerCase();
+      appUserEmail = email;
+      appUserName =
+        (user.user_metadata as any)?.full_name ??
+        (user.user_metadata as any)?.name ??
+        null;
+
+      let appUser = await prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (!appUser) {
+        appUser = await prisma.user.create({
+          data: {
+            email,
+            fullName: appUserName,
+            globalRole: "USER",
+            isActive: true,
+          },
+        });
+      }
+
+      appUserId = appUser.id;
+    }
+
+    // Create interview
     const interview = await prisma.applicationInterview.create({
       data: {
         applicationId: application.id,
-        scheduledAt: scheduledDate,
-        durationMins:
-          typeof durationMins === "number" && durationMins > 0
-            ? durationMins
-            : null,
-        type:
-          typeof type === "string" && type.trim()
-            ? type.trim().toUpperCase()
-            : null,
-        location:
-          typeof location === "string" && location.trim()
-            ? location.trim()
-            : null,
-        videoUrl:
-          typeof videoUrl === "string" && videoUrl.trim()
-            ? videoUrl.trim()
-            : null,
-        notes:
-          typeof notes === "string" && notes.trim() ? notes.trim() : null,
+        scheduledAt,
+        type: type,
+        location: location,
+        videoUrl: videoUrl,
+        status: "SCHEDULED",
+        durationMins: durationMins,
+        notes: notes,
       },
     });
 
     // Participants
-    if (Array.isArray(participants) && participants.length > 0) {
-      const rows = participants
-        .filter((p) => p && typeof p.email === "string" && p.email.trim())
-        .map((p) => ({
-          interviewId: interview.id,
-          name:
-            (p.name && p.name.toString().trim()) ||
-            application.fullName ||
-            p.email,
-          email: p.email.toString().trim(),
-          role: p.role ? p.role.toString().trim() : "Interviewer",
-        }));
-
-      if (rows.length > 0) {
-        await prisma.interviewParticipant.createMany({ data: rows });
-      }
-    } else {
-      // At least the candidate as a participant
+    // Candidate
+    if (application.fullName || application.email) {
       await prisma.interviewParticipant.create({
         data: {
           interviewId: interview.id,
-          name: application.fullName,
-          email: application.email,
+          name: application.fullName || application.email || "Candidate",
+          email: application.email || "",
           role: "Candidate",
         },
       });
     }
 
-    // Application-level event
-    await prisma.applicationEvent.create({
-      data: {
-        applicationId: application.id,
-        type: "interview_scheduled",
-        payload: {
+    // Host / interviewer (current user)
+    if (appUserEmail) {
+      await prisma.interviewParticipant.create({
+        data: {
           interviewId: interview.id,
-          scheduledAt: scheduledDate.toISOString(),
-          type: interview.type,
-          durationMins: interview.durationMins,
+          name: appUserName || appUserEmail,
+          email: appUserEmail,
+          role: "Interviewer",
         },
-      },
-    });
+      });
+    }
 
-    // Tenant-level activity log
+    // Activity log
     await prisma.activityLog.create({
       data: {
         tenantId: tenant.id,
-        actorId: null, // TODO: wire current user id here later
+        actorId: appUserId,
         entityType: "application",
         entityId: application.id,
         action: "interview_scheduled",
         metadata: {
           interviewId: interview.id,
-          scheduledAt: scheduledDate.toISOString(),
-          type: interview.type,
+          scheduledAt: scheduledAt.toISOString(),
+          type,
+          location,
+          videoUrl,
+          durationMins,
+          hasNotes: Boolean(notes),
         },
       },
     });
 
-    return NextResponse.json(
-      {
-        ok: true,
-        interview: {
-          id: interview.id,
-          scheduledAt: interview.scheduledAt,
-          status: interview.status,
-          type: interview.type,
-          durationMins: interview.durationMins,
-        },
-      },
-      { status: 201 },
-    );
+    const redirectTo =
+      typeof redirectToRaw === "string" && redirectToRaw.trim()
+        ? redirectToRaw
+        : `/ats/candidates/${application.candidateId || ""}`;
+
+    const redirectUrl = new URL(redirectTo, req.url);
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (err) {
     console.error("Schedule interview error:", err);
     return NextResponse.json(
