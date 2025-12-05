@@ -1,135 +1,134 @@
 // app/api/ats/applications/bulk-stage/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const tenant = await getResourcinTenant();
+  if (!tenant) {
+    return NextResponse.json(
+      { ok: false, error: "No tenant configured" },
+      { status: 400 },
+    );
+  }
+
   const formData = await request.formData();
 
   const jobIdRaw = formData.get("jobId");
   const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
 
-  // All visible ids for this view (we'll pass them from the pipeline UI)
-  const visibleIdsMulti = formData.getAll("visibleApplicationIds");
-  const visibleIds: string[] = [];
-  for (const v of visibleIdsMulti) {
-    if (typeof v === "string" && v.trim()) {
-      visibleIds.push(v.trim());
-    }
-  }
-
-  // Accept either applicationIds (multi) or applicationId (single)
+  // Accept either applicationIds (multi) or applicationId
   const idsMulti = formData.getAll("applicationIds");
   const singleId = formData.get("applicationId");
 
-  const selectAllVisibleRaw = formData.get("selectAllVisible");
-  const selectAllVisible =
-    typeof selectAllVisibleRaw === "string" &&
-    selectAllVisibleRaw === "1";
+  const applicationIds: string[] = [];
 
-  let applicationIds: string[] = [];
-
-  if (selectAllVisible && visibleIds.length > 0) {
-    // "Select all visible" overrides individual checkboxes
-    applicationIds = [...visibleIds];
-  } else {
-    for (const v of idsMulti) {
-      if (typeof v === "string" && v.trim()) {
-        applicationIds.push(v.trim());
-      }
+  for (const v of idsMulti) {
+    if (typeof v === "string" && v.trim()) {
+      applicationIds.push(v.trim());
     }
-    if (applicationIds.length === 0 && typeof singleId === "string") {
-      applicationIds.push(singleId.trim());
-    }
+  }
+  if (applicationIds.length === 0 && typeof singleId === "string") {
+    applicationIds.push(singleId);
   }
 
   const stageRaw = formData.get("stage") || formData.get("newStage");
-  const newStage = typeof stageRaw === "string" ? stageRaw : "";
+  const newStage = typeof stageRaw === "string" ? stageRaw.trim() : "";
+
+  const fallbackUrl = new URL(
+    jobId ? `/ats/jobs/${jobId}` : "/ats/jobs",
+    request.url,
+  );
 
   if (!applicationIds.length || !newStage) {
-    const fallbackUrl = new URL("/ats/jobs", request.url);
     return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
 
   try {
-    const tenant = await getResourcinTenant();
-    const tenantId = tenant?.id ?? null;
-
-    // Fetch current state so we can log previous stage/status per application
-    const apps = await prisma.jobApplication.findMany({
+    // Only consider applications that belong to this tenant (and job, if provided)
+    const applications = await prisma.jobApplication.findMany({
       where: {
         id: { in: applicationIds },
-        ...(jobId ? { jobId } : {}),
+        job: {
+          tenantId: tenant.id,
+          ...(jobId ? { id: jobId } : {}),
+        },
       },
       select: {
         id: true,
+        jobId: true,
         stage: true,
         status: true,
-        jobId: true,
       },
     });
 
-    await Promise.all(
-      apps.map(async (app) => {
-        const updated = await prisma.jobApplication.update({
-          where: { id: app.id },
-          data: {
-            stage: newStage,
-          },
-        });
+    if (!applications.length) {
+      return NextResponse.redirect(fallbackUrl, { status: 303 });
+    }
 
-        // application_events log
-        try {
-          await prisma.applicationEvent.create({
-            data: {
-              applicationId: updated.id,
-              type: "bulk_stage_update",
-              payload: {
-                previousStage: app.stage,
-                previousStatus: app.status,
-                newStage,
-                jobId: app.jobId,
-                source: "bulk_pipeline_move",
-              },
-            },
-          });
-        } catch (eventErr) {
-          console.error(
-            "Bulk stage update – failed to insert ApplicationEvent:",
-            eventErr,
-          );
-        }
+    const idsToUpdate = applications.map((a) => a.id);
 
-        // activity_log log
-        if (tenantId) {
-          try {
-            await prisma.activityLog.create({
-              data: {
-                tenantId,
-                actorId: null,
-                entityType: "job_application",
-                entityId: updated.id,
-                action: "bulk_stage_update",
-                metadata: {
-                  previousStage: app.stage,
-                  previousStatus: app.status,
-                  newStage,
-                  jobId: app.jobId,
-                  source: "bulk_pipeline_move",
-                },
-              },
-            });
-          } catch (logErr) {
-            console.error(
-              "Bulk stage update – failed to insert ActivityLog:",
-              logErr,
-            );
-          }
-        }
-      }),
-    );
+    await prisma.jobApplication.updateMany({
+      where: {
+        id: { in: idsToUpdate },
+      },
+      data: {
+        stage: newStage,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Logging (best-effort)
+    const now = new Date();
+
+    // application_events
+    const appEventsData = applications.map((app) => ({
+      applicationId: app.id,
+      type: "bulk_stage_change",
+      payload: {
+        fromStage: app.stage,
+        toStage: newStage,
+        fromStatus: app.status,
+        toStatus: app.status,
+        source: "pipeline_bulk_move",
+        movedAt: now.toISOString(),
+      },
+    }));
+
+    if (appEventsData.length) {
+      await prisma.applicationEvent.createMany({
+        data: appEventsData,
+      });
+    }
+
+    // activity_log
+    const activityData = applications.map((app) => ({
+      tenantId: tenant.id,
+      actorId: null, // later we can wire this to the current user
+      entityType: "job_application",
+      entityId: app.id,
+      action: "bulk_stage_change",
+      metadata: {
+        jobId: app.jobId,
+        fromStage: app.stage,
+        toStage: newStage,
+        fromStatus: app.status,
+        toStatus: app.status,
+        batchSize: applications.length,
+        source: "pipeline_bulk_move",
+        movedAt: now.toISOString(),
+      },
+      createdAt: now,
+    }));
+
+    if (activityData.length) {
+      await prisma.activityLog.createMany({
+        data: activityData,
+      });
+    }
   } catch (err) {
     console.error("Bulk stage update error:", err);
+    // We still redirect back to the pipeline so the UI doesn't break
   }
 
   const redirectUrl = new URL(
