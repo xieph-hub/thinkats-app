@@ -1,160 +1,30 @@
 // app/ats/candidates/[candidateId]/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { getScoringConfigForJob } from "@/lib/scoring/server";
+import { computeApplicationScore } from "@/lib/scoring/compute";
 
 export const dynamic = "force-dynamic";
 
-interface CandidateProfilePageProps {
-  params: {
-    candidateId: string;
-  };
-  searchParams?: {
-    [key: string]: string | string[] | undefined;
-  };
-}
+export const metadata: Metadata = {
+  title: "ThinkATS | Candidate profile",
+  description:
+    "Detailed candidate profile with application history and scoring details.",
+};
 
-function formatDate(value: string | Date | null | undefined) {
-  if (!value) return "";
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
-}
-
-function titleCaseFromEnum(value?: string | null) {
-  if (!value) return "";
-  return value
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function formatStageName(value: string) {
-  const key = value.toUpperCase();
-  const map: Record<string, string> = {
-    APPLIED: "Applied",
-    SCREEN: "Screen",
-    SCREENING: "Screening",
-    SHORTLISTED: "Shortlisted",
-    INTERVIEW: "Interview",
-    INTERVIEWING: "Interviewing",
-    OFFER: "Offer",
-    OFFERED: "Offered",
-    HIRED: "Hired",
-    REJECTED: "Rejected",
-    WITHDRAWN: "Withdrawn",
-  };
-  if (map[key]) return map[key];
-  return titleCaseFromEnum(value);
-}
-
-function applicationStatusBadgeClass(value?: string | null) {
-  const key = (value || "").toUpperCase();
-  if (key === "PENDING") {
-    return "bg-slate-50 text-slate-700 border-slate-200";
-  }
-  if (key === "IN_PROGRESS") {
-    return "bg-blue-50 text-blue-700 border-blue-100";
-  }
-  if (key === "ON_HOLD") {
-    return "bg-amber-50 text-amber-800 border-amber-100";
-  }
-  if (key === "HIRED") {
-    return "bg-emerald-50 text-emerald-700 border-emerald-100";
-  }
-  if (key === "REJECTED" || key === "ARCHIVED") {
-    return "bg-rose-50 text-rose-700 border-rose-100";
-  }
-  return "bg-slate-50 text-slate-700 border-slate-200";
-}
+type Tier = "A" | "B" | "C" | "D";
 
 export default async function CandidateProfilePage({
   params,
-  searchParams,
-}: CandidateProfilePageProps) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-10">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Candidate profile not available
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No default tenant configured. Check{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_ID
-          </code>{" "}
-          or{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_SLUG
-          </code>{" "}
-          in your environment.
-        </p>
-      </div>
-    );
-  }
-
-  // Build "Back to candidates" URL that remembers filters
-  const backToCandidatesHref = (() => {
-    const qs = new URLSearchParams();
-
-    const tenantParam = searchParams?.tenantId;
-    const tenantIdFromQs = Array.isArray(tenantParam)
-      ? tenantParam[0]
-      : tenantParam || tenant.id;
-
-    if (tenantIdFromQs) {
-      qs.set("tenantId", tenantIdFromQs);
-    }
-
-    const paramsToCarry = [
-      "q",
-      "status",
-      "location",
-      "source",
-      "stage",
-    ] as const;
-
-    for (const key of paramsToCarry) {
-      const value = searchParams?.[key];
-      if (!value) continue;
-
-      if (Array.isArray(value)) {
-        if (value[0]) qs.set(key, value[0] as string);
-      } else {
-        qs.set(key, value as string);
-      }
-    }
-
-    const queryString = qs.toString();
-    return queryString ? `/ats/candidates?${queryString}` : "/ats/candidates";
-  })();
-
-  // Tenant-scoped candidate + applications
-  const candidate = await prisma.candidate.findFirst({
-    where: {
-      id: params.candidateId,
-      applications: {
-        some: {
-          job: {
-            tenantId: tenant.id,
-          },
-        },
-      },
-    },
+}: {
+  params: { candidateId: string };
+}) {
+  const candidate = await prisma.candidate.findUnique({
+    where: { id: params.candidateId },
     include: {
       applications: {
-        where: {
-          job: {
-            tenantId: tenant.id,
-          },
-        },
-        orderBy: { createdAt: "desc" },
         include: {
           job: {
             include: {
@@ -162,6 +32,7 @@ export default async function CandidateProfilePage({
             },
           },
         },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -170,428 +41,283 @@ export default async function CandidateProfilePage({
     notFound();
   }
 
-  const applications = candidate.applications || [];
-  const totalApplications = applications.length;
+  const applicationViews = [];
+  for (const app of candidate.applications) {
+    const { config } = await getScoringConfigForJob(app.jobId);
+    const scored = computeApplicationScore({
+      application: app,
+      candidate,
+      job: app.job,
+      config,
+    });
 
-  const primaryApplication = applications[0] || null;
-  const primaryStage = primaryApplication?.stage || "APPLIED";
-  const primaryStatus = primaryApplication?.status || "PENDING";
-  const primaryStageLabel = formatStageName(primaryStage);
-  const primaryStatusLabel = titleCaseFromEnum(primaryStatus);
+    const cvUrl = app.cvUrl || candidate.cvUrl || null;
 
-  const hiredCount = applications.filter(
-    (app) => (app.status || "").toUpperCase() === "HIRED",
-  ).length;
-
-  const rejectedCount = applications.filter((app) =>
-    ["REJECTED", "ARCHIVED"].includes((app.status || "").toUpperCase()),
-  ).length;
-
-  const inProcessCount = applications.filter((app) =>
-    ["IN_PROGRESS", "ON_HOLD"].includes((app.status || "").toUpperCase()),
-  ).length;
-
-  const lastAppliedAt = primaryApplication?.createdAt || null;
-
-  const cvUrl =
-    (candidate as any).cvUrl || primaryApplication?.cvUrl || null;
-
-  const sourcesSet = new Set<string>();
-  for (const app of applications) {
-    if (app.source) sourcesSet.add(app.source);
+    applicationViews.push({
+      application: app,
+      job: app.job,
+      scored,
+      cvUrl,
+    });
   }
-  const sources = Array.from(sourcesSet);
 
-  const name = candidate.fullName || "Unnamed candidate";
-  const email = candidate.email || "";
-  const location = candidate.location || "Location not set";
-
-  const phone =
-    (candidate as any).phone ||
-    (candidate as any).phoneNumber ||
-    "";
-  const linkedin =
-    (candidate as any).linkedinUrl ||
-    (candidate as any).linkedin ||
-    "";
-  const currentCompany =
-    (candidate as any).currentCompany ||
-    (candidate as any).employer ||
-    "";
-  const currentTitle =
-    (candidate as any).currentTitle ||
-    (candidate as any).jobTitle ||
-    "";
-  const yearsExperience =
-    (candidate as any).yearsExperience ||
-    (candidate as any).totalExperienceYears ||
+  const latestCvUrl =
+    candidate.cvUrl ||
+    applicationViews.find((v) => v.cvUrl)?.cvUrl ||
     null;
-  const summary =
-    (candidate as any).summary || (candidate as any).about || "";
+
+  const latestApp = applicationViews[0] || null;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <Link
-            href={backToCandidatesHref}
-            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
-          >
-            <span className="mr-1.5">←</span>
-            Back to ATS candidates
-          </Link>
-          <div className="mt-3 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
-              {name
-                .split(" ")
-                .filter(Boolean)
-                .slice(0, 2)
-                .map((part) => part[0]?.toUpperCase())
-                .join("") || "C"}
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                ATS · Candidate
-              </p>
-              <h1 className="mt-1 text-xl font-semibold text-slate-900">
-                {name}
-              </h1>
-              <p className="mt-0.5 text-xs text-slate-600">
-                {location}
-                {currentTitle && (
-                  <>
-                    {" · "}
-                    {currentTitle}
-                  </>
-                )}
-                {currentCompany && (
-                  <>
-                    {" @ "}
-                    {currentCompany}
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            ATS · Candidate
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900">
+            {candidate.fullName}
+          </h1>
+          <p className="text-xs text-slate-600">
+            {candidate.currentTitle || "Role not set"}
+            {candidate.currentCompany
+              ? ` · ${candidate.currentCompany}`
+              : ""}
+          </p>
+          <p className="text-[11px] text-slate-500">
+            {candidate.location || "Location not set"}
+          </p>
         </div>
 
-        <div className="flex flex-col items-end gap-2">
-          {/* Primary status */}
-          <div className="flex flex-wrap justify-end gap-2">
-            <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-700">
-              {primaryStageLabel}
-            </span>
-            <span
-              className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${applicationStatusBadgeClass(
-                primaryStatus,
-              )}`}
+        <div className="space-y-2 text-right text-[11px] text-slate-600">
+          {latestCvUrl && (
+            <a
+              href={latestCvUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-[#111c4a]"
             >
-              {primaryStatusLabel}
+              View latest CV
+            </a>
+          )}
+          {!latestCvUrl && (
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-500">
+              No CV on file
             </span>
-          </div>
-
-          {/* Summary metrics */}
-          <div className="flex flex-wrap justify-end gap-2 text-[11px] text-slate-600">
-            <span>
-              {totalApplications}{" "}
-              {totalApplications === 1 ? "application" : "applications"}
-            </span>
-            <span className="text-slate-300">•</span>
-            <span>{inProcessCount} in process</span>
-            <span className="text-slate-300">•</span>
-            <span>{hiredCount} hired</span>
-            <span className="text-slate-300">•</span>
-            <span>{rejectedCount} rejected / archived</span>
+          )}
+          <div className="space-y-0.5">
+            <p>{candidate.email}</p>
+            {candidate.phone && <p>{candidate.phone}</p>}
+            {candidate.linkedinUrl && (
+              <p>
+                <a
+                  href={candidate.linkedinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#172965] hover:underline"
+                >
+                  LinkedIn profile
+                </a>
+              </p>
+            )}
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Profile + history */}
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.5fr)_minmax(0,2fr)] md:gap-6">
-        {/* Left column: profile */}
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Candidate profile
-          </h2>
-
-          <dl className="grid grid-cols-1 gap-y-3 text-xs text-slate-700">
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                Email
-              </dt>
-              <dd className="mt-0.5">
-                {email ? (
-                  <a
-                    href={`mailto:${email}`}
-                    className="text-[#172965] hover:underline"
-                  >
-                    {email}
-                  </a>
-                ) : (
-                  <span className="text-slate-400">Not set</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                Phone
-              </dt>
-              <dd className="mt-0.5">
-                {phone ? (
-                  <span>{phone}</span>
-                ) : (
-                  <span className="text-slate-400">Not set</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                Location
-              </dt>
-              <dd className="mt-0.5">
-                {location || (
-                  <span className="text-slate-400">Not set</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                Current role
-              </dt>
-              <dd className="mt-0.5">
-                {currentTitle || currentCompany ? (
-                  <span>
-                    {currentTitle}
-                    {currentCompany && (
-                      <>
-                        {" · "}
-                        {currentCompany}
-                      </>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-slate-400">Not specified</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                Experience
-              </dt>
-              <dd className="mt-0.5">
-                {yearsExperience != null ? (
-                  <span>{yearsExperience} years</span>
-                ) : (
-                  <span className="text-slate-400">Not specified</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                LinkedIn
-              </dt>
-              <dd className="mt-0.5">
-                {linkedin ? (
-                  <a
-                    href={linkedin}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#172965] hover:underline"
-                  >
-                    View profile ↗
-                  </a>
-                ) : (
-                  <span className="text-slate-400">Not provided</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-[11px] font-medium text-slate-500">
-                CV / Resume
-              </dt>
-              <dd className="mt-0.5">
-                {cvUrl ? (
-                  <a
-                    href={cvUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#172965] hover:underline"
-                  >
-                    View CV ↗
-                  </a>
-                ) : (
-                  <span className="text-slate-400">No CV on file</span>
-                )}
-              </dd>
-            </div>
-
-            {sources.length > 0 && (
-              <div>
-                <dt className="text-[11px] font-medium text-slate-500">
-                  Sources
-                </dt>
-                <dd className="mt-1 flex flex-wrap gap-1">
-                  {sources.map((src) => (
-                    <span
-                      key={src}
-                      className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-                    >
-                      {src}
-                    </span>
-                  ))}
-                </dd>
-              </div>
-            )}
-
-            {lastAppliedAt && (
-              <div>
-                <dt className="text-[11px] font-medium text-slate-500">
-                  Last applied
-                </dt>
-                <dd className="mt-0.5">
-                  {formatDate(lastAppliedAt)}
-                </dd>
-              </div>
-            )}
-          </dl>
-
-          {summary && (
-            <div className="pt-2">
-              <h3 className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Summary / notes
-              </h3>
-              <p className="mt-1 whitespace-pre-line text-xs text-slate-800">
-                {summary}
+      {/* Latest match summary */}
+      {latestApp && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Latest application snapshot
+              </h2>
+              <p className="text-xs text-slate-600">
+                {latestApp.job.title} ·{" "}
+                {latestApp.job.clientCompany?.name || "No client set"}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Applied{" "}
+                {latestApp.application.createdAt.toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
               </p>
             </div>
-          )}
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+              <TierBadge tier={latestApp.scored.tier} />
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg font-semibold text-slate-900">
+                  {latestApp.scored.score}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  / 100 match score
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Match summary
+            </p>
+            <p className="mt-1 text-xs text-slate-700">
+              {latestApp.scored.reason}
+            </p>
+          </div>
         </section>
+      )}
 
-        {/* Right column: application history */}
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
+      {/* Application history */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-4 py-3">
+          <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">
               Application history
             </h2>
             <p className="text-[11px] text-slate-500">
-              {totalApplications === 0
-                ? "No applications recorded yet."
-                : `${totalApplications} ${
-                    totalApplications === 1
-                      ? "application"
-                      : "applications"
-                  }`}
+              {applicationViews.length} application
+              {applicationViews.length === 1 ? "" : "s"} recorded.
             </p>
           </div>
+        </div>
 
-          {totalApplications === 0 ? (
-            <p className="text-[11px] text-slate-500">
-              Once this candidate applies or is added to roles, each
-              application will appear here with stage, status and timestamps.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {applications.map((app) => {
-                const job = app.job;
-                const clientName =
-                  job?.clientCompany?.name || "Resourcin client";
-                const stageLabel = formatStageName(
-                  app.stage || "APPLIED",
-                );
-                const statusLabel = titleCaseFromEnum(
-                  app.status || "PENDING",
-                );
-                const createdLabel = formatDate(app.createdAt);
-                const sourceLabel = app.source || "—";
-
-                const compLabel =
-                  app.currentGrossAnnual && app.grossAnnualExpectation
-                    ? `${app.currentGrossAnnual} → ${app.grossAnnualExpectation}`
-                    : app.currentGrossAnnual ||
-                      app.grossAnnualExpectation ||
-                      "—";
-
-                const noticeLabel = app.noticePeriod || "—";
-
-                return (
-                  <div
-                    key={app.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] text-slate-700"
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <Link
-                            href={`/ats/jobs/${job?.id}`}
-                            className="truncate text-xs font-semibold text-slate-900 hover:text-[#172965] hover:underline"
-                          >
-                            {job?.title || "Untitled role"}
-                          </Link>
-                          <span className="text-slate-400">·</span>
-                          <span className="text-[11px] text-slate-600">
-                            {clientName}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-                          <span>Applied {createdLabel}</span>
-                          <span className="text-slate-300">•</span>
-                          <span>Source: {sourceLabel}</span>
-                          {compLabel !== "—" && (
-                            <>
-                              <span className="text-slate-300">•</span>
-                              <span>
-                                Comp (current / expected): {compLabel}
-                              </span>
-                            </>
-                          )}
-                          {noticeLabel !== "—" && (
-                            <>
-                              <span className="text-slate-300">•</span>
-                              <span>Notice: {noticeLabel}</span>
-                            </>
-                          )}
-                        </div>
+        {applicationViews.length === 0 ? (
+          <div className="px-4 py-10 text-center text-xs text-slate-500">
+            No applications recorded for this candidate.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-t border-slate-100 text-xs">
+              <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-2 text-left">Role</th>
+                  <th className="px-4 py-2 text-left">Client</th>
+                  <th className="px-4 py-2 text-left">Stage / status</th>
+                  <th className="px-4 py-2 text-left">Tier</th>
+                  <th className="px-4 py-2 text-left">Score</th>
+                  <th className="px-4 py-2 text-left">Match summary</th>
+                  <th className="px-4 py-2 text-left">CV</th>
+                  <th className="px-4 py-2 text-left">Applied</th>
+                  <th className="px-4 py-2 text-left">Open job</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {applicationViews.map(({ application, job, scored, cvUrl }) => (
+                  <tr key={application.id} className="align-top">
+                    <td className="px-4 py-3">
+                      <p className="text-xs font-medium text-slate-900">
+                        {job.title}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {job.location || job.workMode || "—"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-xs text-slate-800">
+                        {job.clientCompany?.name || "—"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-xs font-medium text-slate-900">
+                        {application.stage || "APPLIED"}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {application.status || "PENDING"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <TierBadge tier={scored.tier} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm font-semibold text-slate-900">
+                          {scored.score}
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          / 100
+                        </span>
                       </div>
-
-                      <div className="flex flex-col items-end gap-1">
-                        <div className="flex flex-wrap justify-end gap-1">
-                          <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
-                            {stageLabel}
-                          </span>
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
-                              app.status,
-                            )}`}
-                          >
-                            {statusLabel}
-                          </span>
-                        </div>
-                        {job?.id && (
-                          <Link
-                            href={`/ats/jobs/${job.id}?tenantId=${encodeURIComponent(
-                              tenant.id,
-                            )}`}
-                            className="text-[10px] font-medium text-[#172965] hover:underline"
-                          >
-                            View job pipeline
-                          </Link>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p
+                        className="max-w-xs text-[11px] text-slate-600 line-clamp-3"
+                        title={scored.reason}
+                      >
+                        {scored.reason}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {cvUrl ? (
+                        <a
+                          href={cvUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                        >
+                          View CV
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">
+                          No CV
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                      {application.createdAt.toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/ats/jobs/${job.id}`}
+                        className="text-[11px] font-medium text-[#172965] hover:underline"
+                      >
+                        View pipeline
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+function TierBadge({ tier }: { tier: Tier }) {
+  const map: Record<Tier, { label: string; classes: string }> = {
+    A: {
+      label: "Tier A · Priority",
+      classes:
+        "border-emerald-200 bg-emerald-50 text-emerald-800",
+    },
+    B: {
+      label: "Tier B · Strong",
+      classes: "border-sky-200 bg-sky-50 text-sky-800",
+    },
+    C: {
+      label: "Tier C · Consider",
+      classes: "border-amber-200 bg-amber-50 text-amber-800",
+    },
+    D: {
+      label: "Tier D · Below threshold",
+      classes: "border-rose-200 bg-rose-50 text-rose-800",
+    },
+  };
+
+  const { label, classes } = map[tier];
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${classes}`}
+    >
+      {label}
+    </span>
   );
 }
