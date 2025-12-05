@@ -1,15 +1,13 @@
 // lib/scoring/compute.ts
-import type { Candidate, Job, JobApplication } from "@prisma/client";
-import type {
-  NormalizedScoringConfig,
-  ScoredApplicationView,
-  Tier,
-} from "./types";
+// Pure JS version – no TypeScript-only syntax.
 
-function tierFromScore(
-  score: number,
-  thresholds: NormalizedScoringConfig["thresholds"],
-): Tier {
+/**
+ * Derive tier letter from score + thresholds.
+ */
+function tierFromScore(score, thresholds) {
+  if (!thresholds) {
+    return "D";
+  }
   if (score >= thresholds.tierA) return "A";
   if (score >= thresholds.tierB) return "B";
   if (score >= thresholds.tierC) return "C";
@@ -22,12 +20,7 @@ function tierFromScore(
  *
  * No heuristics here – all heavy lifting is done by the external engine.
  */
-export function computeApplicationScore(args: {
-  application: JobApplication;
-  candidate: Candidate | null;
-  job: Job;
-  config: NormalizedScoringConfig;
-}): ScoredApplicationView {
+export function computeApplicationScore(args) {
   const { application, config } = args;
 
   const rawScore =
@@ -36,7 +29,11 @@ export function computeApplicationScore(args: {
       : 0;
 
   const score = Math.min(100, Math.max(0, rawScore));
-  const tier = tierFromScore(score, config.thresholds);
+  const thresholds = config && config.thresholds
+    ? config.thresholds
+    : { tierA: 80, tierB: 65, tierC: 50 };
+
+  const tier = tierFromScore(score, thresholds);
 
   const reason =
     application.matchReason ??
@@ -47,7 +44,7 @@ export function computeApplicationScore(args: {
   return {
     score,
     tier,
-    risks: [],          // will be populated from ScoringEvent later
+    risks: [],          // will be filled once you read ScoringEvent
     redFlags: [],
     interviewFocus: [],
     reason,
