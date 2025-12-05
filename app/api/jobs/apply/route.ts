@@ -25,6 +25,151 @@ const ATS_NOTIFICATIONS_EMAIL =
   "";
 
 // ---------------------------------------------------------------------------
+// Plan-aware scoring config
+// ---------------------------------------------------------------------------
+
+type PlanKey = "free" | "trial_pro" | "pro" | "enterprise" | string;
+
+type ScoringConfig = {
+  baseScore: number;
+
+  // Location
+  locationBonus: number; // when aligned
+  locationPenalty: number; // when misaligned and not remote
+
+  // Skills
+  skillsPerSkillWeight: number; // per matched skill
+  skillsMaxBonus: number; // cap on skills contribution
+  skillsNoMatchPenalty: number;
+
+  // Compensation
+  compInRangeBonus: number;
+  compSlightAbovePenalty: number;
+  compAbovePenalty: number;
+
+  // Notice period
+  immediateBonus: number;
+  longNoticePenalty: number;
+
+  // Feature flags
+  enableNlp: boolean; // toggles deeper NLP scoring (future hook)
+};
+
+function getScoringConfigForPlan(plan: PlanKey): ScoringConfig {
+  const key = (plan || "free").toLowerCase();
+
+  // Free = simple rules, conservative weights
+  if (key === "free") {
+    return {
+      baseScore: 50,
+
+      locationBonus: 8,
+      locationPenalty: 4,
+
+      skillsPerSkillWeight: 3,
+      skillsMaxBonus: 15,
+      skillsNoMatchPenalty: 8,
+
+      compInRangeBonus: 8,
+      compSlightAbovePenalty: 4,
+      compAbovePenalty: 12,
+
+      immediateBonus: 4,
+      longNoticePenalty: 4,
+
+      enableNlp: false,
+    };
+  }
+
+  // Trial behaves like Pro for scoring
+  if (key === "trial_pro") {
+    return {
+      baseScore: 50,
+
+      locationBonus: 10,
+      locationPenalty: 5,
+
+      skillsPerSkillWeight: 4,
+      skillsMaxBonus: 20,
+      skillsNoMatchPenalty: 10,
+
+      compInRangeBonus: 10,
+      compSlightAbovePenalty: 5,
+      compAbovePenalty: 15,
+
+      immediateBonus: 5,
+      longNoticePenalty: 5,
+
+      enableNlp: true,
+    };
+  }
+
+  // Pro
+  if (key === "pro") {
+    return {
+      baseScore: 50,
+
+      locationBonus: 10,
+      locationPenalty: 5,
+
+      skillsPerSkillWeight: 4,
+      skillsMaxBonus: 22,
+      skillsNoMatchPenalty: 10,
+
+      compInRangeBonus: 10,
+      compSlightAbovePenalty: 5,
+      compAbovePenalty: 15,
+
+      immediateBonus: 5,
+      longNoticePenalty: 5,
+
+      enableNlp: true,
+    };
+  }
+
+  // Enterprise – slightly more aggressive weights, also NLP-enabled
+  if (key === "enterprise") {
+    return {
+      baseScore: 50,
+
+      locationBonus: 12,
+      locationPenalty: 6,
+
+      skillsPerSkillWeight: 5,
+      skillsMaxBonus: 25,
+      skillsNoMatchPenalty: 12,
+
+      compInRangeBonus: 12,
+      compSlightAbovePenalty: 6,
+      compAbovePenalty: 18,
+
+      immediateBonus: 6,
+      longNoticePenalty: 6,
+
+      enableNlp: true,
+    };
+  }
+
+  // Fallback
+  return getScoringConfigForPlan("free");
+}
+
+function resolveEffectivePlan(
+  plan: string | null | undefined,
+  trialEndsAt: Date | null | undefined,
+): PlanKey {
+  const base = (plan || "free").toLowerCase();
+  const now = new Date();
+
+  // Simple rule: free + active trial => trial_pro
+  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
+    return "trial_pro";
+  }
+
+  return base;
+}
+
+// ---------------------------------------------------------------------------
 // Match-scoring helpers
 // ---------------------------------------------------------------------------
 
@@ -46,8 +191,10 @@ function computeMatchScoreAndReason(
     grossAnnualExpectation?: string | null;
     skillsText?: string | null;
   },
+  planKey: PlanKey,
+  config: ScoringConfig,
 ) {
-  let score = 50; // baseline
+  let score = config.baseScore;
   const reasons: string[] = [];
 
   const jobLocation = (job.location ?? "").toString().toLowerCase().trim();
@@ -72,10 +219,10 @@ function computeMatchScoreAndReason(
       (candidateLocation.includes(jobLocation) ||
         jobLocation.includes(candidateLocation))
     ) {
-      score += 10;
+      score += config.locationBonus;
       reasons.push("Location aligns with the role.");
     } else if (jobLocationType !== "remote") {
-      score -= 5;
+      score -= config.locationPenalty;
       reasons.push("Location may not align with the role.");
     }
   }
@@ -101,13 +248,16 @@ function computeMatchScoreAndReason(
     }
 
     if (matched > 0) {
-      const contribution = Math.min(20, matched * 4); // up to +20
+      const contribution = Math.min(
+        config.skillsMaxBonus,
+        matched * config.skillsPerSkillWeight,
+      );
       score += contribution;
       reasons.push(
         `Matches ${matched} of ${requiredSkills.length} key skills.`,
       );
     } else {
-      score -= 10;
+      score -= config.skillsNoMatchPenalty;
       reasons.push("Key skills are not clearly mentioned in the application.");
     }
   }
@@ -124,15 +274,15 @@ function computeMatchScoreAndReason(
 
   if (salaryMin != null && salaryMax != null && expectedNum != null) {
     if (expectedNum >= salaryMin && expectedNum <= salaryMax * 1.05) {
-      score += 10;
+      score += config.compInRangeBonus;
       reasons.push("Compensation expectations sit within the target range.");
     } else if (expectedNum > salaryMax * 1.3) {
-      score -= 15;
+      score -= config.compAbovePenalty;
       reasons.push(
         "Compensation expectations are significantly above the range.",
       );
     } else if (expectedNum > salaryMax * 1.05) {
-      score -= 5;
+      score -= config.compSlightAbovePenalty;
       reasons.push(
         "Compensation expectations are slightly above the target range.",
       );
@@ -153,12 +303,26 @@ function computeMatchScoreAndReason(
       /\b(immediate|0 ?day|no[t]?ice:? ?none)\b/.test(notice) ||
       /\b(asap)\b/.test(notice)
     ) {
-      score += 5;
+      score += config.immediateBonus;
       reasons.push("Can start immediately or with very short notice.");
     } else if (/90|3\s*months?/.test(notice)) {
-      score -= 5;
+      score -= config.longNoticePenalty;
       reasons.push("Long notice period may delay onboarding.");
     }
+  }
+
+  // 5) Future: deeper NLP scoring for Pro/Enterprise
+  if (config.enableNlp) {
+    // Placeholder hook – later you can:
+    // - Embed CV / cover letter text
+    // - Compare to job description / skills
+    // - Add or subtract up to e.g. ±15 points based on semantic fit
+    //
+    // For now we just leave this as a no-op so behaviour stays deterministic.
+    // e.g.
+    // const nlpBoost = await computeNlpBoost({ job, input, planKey });
+    // score += nlpBoost.delta;
+    // reasons.push(nlpBoost.reason);
   }
 
   // Clamp 0–100
@@ -167,8 +331,8 @@ function computeMatchScoreAndReason(
 
   const reasonText =
     reasons.length === 0
-      ? "Automatically scored based on location, skills, compensation expectations and notice period."
-      : reasons.join(" ");
+      ? `Automatically scored based on location, skills, compensation expectations and notice period (plan: ${planKey}).`
+      : `${reasons.join(" ")} (Scored using ${String(planKey)} rules.)`;
 
   return {
     score: Math.round(score),
@@ -226,7 +390,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job to get tenant id + title (+ slug for nice URLs, plus fields for scoring)
+    // 1) Load job + tenant plan for scoring
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
@@ -242,6 +406,13 @@ export async function POST(req: Request) {
         requiredSkills: true,
         salaryMin: true,
         salaryMax: true,
+        // tenant for plan
+        tenant: {
+          select: {
+            plan: true,
+            trialEndsAt: true,
+          },
+        },
       },
     });
 
@@ -263,6 +434,11 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    const tenantPlan = job.tenant?.plan ?? "free";
+    const tenantTrialEndsAt = job.tenant?.trialEndsAt ?? null;
+    const effectivePlan = resolveEffectivePlan(tenantPlan, tenantTrialEndsAt);
+    const scoringConfig = getScoringConfigForPlan(effectivePlan);
 
     // 2) Find or create candidate for this tenant + email
     let candidate = await prisma.candidate.findFirst({
@@ -348,7 +524,7 @@ export async function POST(req: Request) {
     }
 
     // -----------------------------------------------------------------------
-    // 4) Compute match score / reason
+    // 4) Compute match score / reason (plan-aware)
     // -----------------------------------------------------------------------
 
     const skillsText =
@@ -359,13 +535,18 @@ export async function POST(req: Request) {
         "") as string) || "";
 
     const { score: matchScore, reason: matchReason } =
-      computeMatchScoreAndReason(job, {
-        location,
-        noticePeriod,
-        currentGrossAnnual,
-        grossAnnualExpectation,
-        skillsText,
-      });
+      computeMatchScoreAndReason(
+        job,
+        {
+          location,
+          noticePeriod,
+          currentGrossAnnual,
+          grossAnnualExpectation,
+          skillsText,
+        },
+        effectivePlan,
+        scoringConfig,
+      );
 
     // 5) Create the job application (this is where `source`, `cvUrl` and match_* get saved)
     const application = await prisma.jobApplication.create({
