@@ -2,9 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { getServerUser } from "@/lib/auth/getServerUser";
-
-export const runtime = "nodejs";
 
 function normaliseEnum(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -15,33 +12,10 @@ function normaliseEnum(value: unknown): string | undefined {
 
 export async function POST(req: NextRequest) {
   try {
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
-      return NextResponse.json(
-        { ok: false, error: "No tenant configured" },
-        { status: 400 },
-      );
-    }
-
-    const contentType = req.headers.get("content-type") || "";
-    let payload: any = {};
-
-    if (contentType.includes("application/json")) {
-      payload = await req.json().catch(() => ({}));
-    } else {
-      const formData = await req.formData().catch(() => null);
-      if (formData) {
-        payload = {
-          applicationId: formData.get("applicationId") ?? undefined,
-          stage: formData.get("stage") ?? undefined,
-          status: formData.get("status") ?? undefined,
-        };
-      }
-    }
-
-    const applicationId = (payload.applicationId as string | undefined)?.trim();
-    const stageInput = payload.stage as string | undefined;
-    const statusInput = payload.status as string | undefined;
+    const body = await req.json();
+    const applicationId = body.applicationId as string | undefined;
+    const stageInput = body.stage as string | undefined;
+    const statusInput = body.status as string | undefined;
 
     if (!applicationId) {
       return NextResponse.json(
@@ -50,6 +24,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const tenant = await getResourcinTenant();
+    if (!tenant) {
+      return NextResponse.json(
+        { ok: false, error: "No tenant configured" },
+        { status: 400 },
+      );
+    }
+
+    // Ensure the application belongs to the current tenant
     const application = await prisma.jobApplication.findFirst({
       where: {
         id: applicationId,
@@ -59,11 +42,9 @@ export async function POST(req: NextRequest) {
       },
       select: {
         id: true,
-        jobId: true,
-        candidateId: true,
         stage: true,
         status: true,
-        statusChangedAt: true,
+        jobId: true,
       },
     });
 
@@ -78,64 +59,67 @@ export async function POST(req: NextRequest) {
       normaliseEnum(stageInput) ||
       (application.stage as string | undefined) ||
       "APPLIED";
-
     const nextStatus =
       normaliseEnum(statusInput) ||
       (application.status as string | undefined) ||
       "PENDING";
 
-    const actor = await getServerUser().catch(() => null);
+    const updated = await prisma.jobApplication.update({
+      where: { id: application.id },
+      data: {
+        stage: nextStage,
+        status: nextStatus,
+      },
+    });
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedApp = await tx.jobApplication.update({
-        where: { id: application.id },
+    // --- Logging: application_events ---
+    try {
+      await prisma.applicationEvent.create({
         data: {
-          stage: nextStage,
-          status: nextStatus,
-          statusChangedAt:
-            application.status !== nextStatus
-              ? new Date()
-              : application.statusChangedAt,
-        },
-      });
-
-      // ApplicationEvent for timeline — log tenant/job/etc INSIDE payload
-      await tx.applicationEvent.create({
-        data: {
-          applicationId: updatedApp.id,
-          type: "stage_status_change",
+          applicationId: updated.id,
+          type: "stage_status_update",
           payload: {
             previousStage: application.stage,
-            nextStage,
             previousStatus: application.status,
+            nextStage,
             nextStatus,
-            tenantId: tenant.id,
-            jobId: updatedApp.jobId,
-            candidateId: updatedApp.candidateId,
-            actorId: actor?.id,
+            jobId: application.jobId,
+            source: "inline_pipeline",
           },
         },
       });
+    } catch (eventErr) {
+      console.error(
+        "Update application stage – failed to insert ApplicationEvent:",
+        eventErr,
+      );
+    }
 
-      // ActivityLog for global audit
-      await tx.activityLog.create({
+    // --- Logging: activity_log ---
+    try {
+      await prisma.activityLog.create({
         data: {
           tenantId: tenant.id,
-          actorId: actor?.id,
+          actorId: null, // can be wired to an authenticated user later
           entityType: "job_application",
-          entityId: updatedApp.id,
-          action: "stage_status_change",
+          entityId: updated.id,
+          action: "stage_status_update",
           metadata: {
             previousStage: application.stage,
-            nextStage,
             previousStatus: application.status,
+            nextStage,
             nextStatus,
+            jobId: application.jobId,
+            source: "inline_pipeline",
           },
         },
       });
-
-      return updatedApp;
-    });
+    } catch (logErr) {
+      console.error(
+        "Update application stage – failed to insert ActivityLog:",
+        logErr,
+      );
+    }
 
     return NextResponse.json({
       ok: true,
