@@ -23,13 +23,13 @@ model Tenant {
   trialEndsAt         DateTime?   @map("trial_ends_at") @db.Timestamptz(6)
 
   // Scoring + hiring configuration
-  hiringMode          String      @map("hiring_mode") @default("balanced") // volume | executive | balanced
-  scoringConfig       Json?       @map("scoring_config")                  // tenant-level weights/thresholds
+  hiringMode    String    @map("hiring_mode") @default("balanced") // volume | executive | balanced
+  scoringConfig Json?     @map("scoring_config")                   // tenant-level weights/thresholds
 
-  internalNotes       String?     @map("notes")
-  logoUrl             String?     @map("logo_url")
-  createdAt           DateTime    @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime    @map("updated_at") @default(now()) @db.Timestamptz(6)
+  internalNotes String?   @map("notes")
+  logoUrl       String?   @map("logo_url")
+  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   // Relations
   jobs               Job[]
@@ -44,11 +44,54 @@ model Tenant {
   sentEmails         SentEmail[]
   userTenantRoles    UserTenantRole[]
   tags               Tag[]
-
-  // NEW: scoring audit trail
   scoringEvents      ScoringEvent[]
+  // NEW
+  savedViews         SavedView[]
+  subscription       TenantSubscription?
 
   @@map("tenants")
+}
+
+// --------------------------------------------------------------------------
+// PLANS & SUBSCRIPTIONS
+// --------------------------------------------------------------------------
+
+model Plan {
+  id                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key                String               @unique                    // "free", "pro", "enterprise"
+  name               String
+  description        String?
+  maxSeats           Int?      @map("max_seats")
+  maxOpenJobs        Int?      @map("max_open_jobs")
+  maxTenants         Int?      @map("max_tenants")
+  enableNlp          Boolean   @map("enable_nlp") @default(false)
+  enableReports      Boolean   @map("enable_reports") @default(false)
+  enableClientPortals Boolean  @map("enable_client_portals") @default(false)
+  createdAt          DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  subscriptions TenantSubscription[]
+
+  @@map("plans")
+}
+
+model TenantSubscription {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  planId            String   @map("plan_id") @db.Uuid
+  status            String   @map("status") @default("trialing")  // trialing | active | past_due | canceled
+  currentPeriodEnd  DateTime? @map("current_period_end") @db.Timestamptz(6)
+  billingProvider   String?  @map("billing_provider")
+  billingCustomerId String?  @map("billing_customer_id")
+  createdAt         DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  @@map("tenant_subscriptions")
+  @@index([tenantId], map: "idx_tenant_subscriptions_tenant")
+  @@unique([tenantId], map: "uq_tenant_subscriptions_tenant")
 }
 
 // --------------------------------------------------------------------------
@@ -66,7 +109,12 @@ model User {
   updatedAt    DateTime         @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   userTenantRoles UserTenantRole[]
-  loginOtps       LoginOtp[]      // OTP records for this user
+  loginOtps       LoginOtp[]
+  savedViews      SavedView[]
+  sentEmails      SentEmail[]
+  activityLogs    ActivityLog[]
+  applicationEvents ApplicationEvent[]
+  applicationInterviews ApplicationInterview[]
 
   @@map("users")
 }
@@ -101,6 +149,29 @@ model LoginOtp {
 
   @@map("login_otps")
   @@index([userId, consumed, expiresAt], map: "idx_login_otps_user_active")
+}
+
+// --------------------------------------------------------------------------
+// SAVED VIEWS
+// --------------------------------------------------------------------------
+
+model SavedView {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  scope     String   // "jobs" | "job_pipeline" | "candidates"
+  scopeId   String?  @map("scope_id") @db.Uuid
+  name      String
+  filters   Json?    @map("filters")
+  sort      Json?    @map("sort")
+  isDefault Boolean  @map("is_default") @default(false)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id])
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("saved_views")
+  @@index([tenantId, userId, scope], map: "idx_saved_views_tenant_user_scope")
 }
 
 // --------------------------------------------------------------------------
@@ -180,17 +251,17 @@ model Job {
   screeningSchema    Json?     @map("screening_schema")
 
   // Scoring overrides per job
-  hiringMode        String?   @map("hiring_mode")         // override tenant.hiring_mode if set
-  scoringOverrides  Json?     @map("scoring_overrides")   // per-job tweaks to weights/thresholds
+  hiringMode       String? @map("hiring_mode")       // override tenant.hiring_mode if set
+  scoringOverrides Json?   @map("scoring_overrides") // per-job tweaks to weights/thresholds
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
   applications  JobApplication[]
   stages        JobStage[]
   sentEmails    SentEmail[]
-
-  // NEW: scoring audit trail
   scoringEvents ScoringEvent[]
+  applicationEvents ApplicationEvent[]
+  interviews    ApplicationInterview[]
 
   @@map("jobs")
 }
@@ -219,6 +290,8 @@ model Candidate {
   tags         CandidateTag[]
   notes        Note[]
   sentEmails   SentEmail[]
+  applicationEvents ApplicationEvent[]
+  interviews   ApplicationInterview[]
 
   @@map("candidates")
 }
@@ -289,19 +362,25 @@ model JobApplication {
   statusChangedAt        DateTime? @map("status_changed_at") @db.Timestamptz(6)
 
   // For auto-screening / ranking
-  matchScore             Int?      @map("match_score")   // e.g. 0–100
-  matchReason            String?   @map("match_reason")  // short explanation / rationale
+  matchScore   Int?     @map("match_score")   // e.g. 0–100
+  matchReason  String?  @map("match_reason")  // short explanation / rationale
+
+  // NEW: scoring meta for richer breakdowns
+  lastScoredAt      DateTime? @map("last_scored_at") @db.Timestamptz(6)
+  lastScoringEngine String?   @map("last_scoring_engine")
+  lastScoringMeta   Json?     @map("last_scoring_meta") // full breakdown JSON
 
   job        Job                 @relation(fields: [jobId], references: [id])
   candidate  Candidate?          @relation(fields: [candidateId], references: [id])
   events     ApplicationEvent[]
   interviews ApplicationInterview[]
   notes      Note[]
-
-  // NEW: scoring audit trail
   scoringEvents ScoringEvent[]
+  sentEmails   SentEmail[]
 
   @@map("job_applications")
+  @@index([jobId, stage, status], map: "idx_job_applications_job_stage_status")
+  @@index([candidateId], map: "idx_job_applications_candidate")
 }
 
 model ApplicationEvent {
@@ -311,9 +390,20 @@ model ApplicationEvent {
   payload       Json?     @map("payload")
   createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
 
+  // NEW: richer context for timelines / audit
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  jobId       String?  @map("job_id") @db.Uuid
+  candidateId String?  @map("candidate_id") @db.Uuid
+  createdById String?  @map("created_by_id") @db.Uuid
+
   application JobApplication @relation(fields: [applicationId], references: [id])
+  tenant      Tenant?        @relation(fields: [tenantId], references: [id])
+  job         Job?           @relation(fields: [jobId], references: [id])
+  candidate   Candidate?     @relation(fields: [candidateId], references: [id])
+  createdBy   User?          @relation(fields: [createdById], references: [id])
 
   @@map("application_events")
+  @@index([applicationId], map: "idx_application_events_application")
 }
 
 // Richer interview model tied to an application
@@ -330,10 +420,21 @@ model ApplicationInterview {
   createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  application  JobApplication       @relation(fields: [applicationId], references: [id])
+  // NEW: richer context for analytics & permissions
+  tenantId    String? @map("tenant_id") @db.Uuid
+  jobId       String? @map("job_id") @db.Uuid
+  candidateId String? @map("candidate_id") @db.Uuid
+  createdById String? @map("created_by_id") @db.Uuid
+
+  application JobApplication       @relation(fields: [applicationId], references: [id])
+  tenant      Tenant?              @relation(fields: [tenantId], references: [id])
+  job         Job?                 @relation(fields: [jobId], references: [id])
+  candidate   Candidate?           @relation(fields: [candidateId], references: [id])
+  createdBy   User?                @relation(fields: [createdById], references: [id])
   participants InterviewParticipant[]
 
   @@map("application_interviews")
+  @@index([applicationId], map: "idx_application_interviews_application")
 }
 
 model InterviewParticipant {
@@ -352,7 +453,7 @@ model InterviewParticipant {
 }
 
 // --------------------------------------------------------------------------
-// CAREER SITE SETTINGS
+// JOB STAGES
 // --------------------------------------------------------------------------
 
 model JobStage {
@@ -413,6 +514,9 @@ model EmailTemplate {
   createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
+  // NEW: keyed templates (e.g. "interview_invite", "offer", "rejection")
+  key String? @map("key")
+
   tenant     Tenant      @relation(fields: [tenantId], references: [id])
   sentEmails SentEmail[]
 
@@ -434,10 +538,15 @@ model SentEmail {
   createdById       String?     @map("created_by") @db.Uuid
   sentAt            DateTime    @map("sent_at") @default(now()) @db.Timestamptz(6)
 
-  tenant    Tenant         @relation(fields: [tenantId], references: [id])
-  template  EmailTemplate? @relation(fields: [templateId], references: [id])
-  candidate Candidate?     @relation(fields: [candidateId], references: [id])
-  job       Job?           @relation(fields: [jobId], references: [id])
+  // NEW: tie emails directly to a specific application
+  applicationId String? @map("application_id") @db.Uuid
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  template    EmailTemplate?  @relation(fields: [templateId], references: [id])
+  candidate   Candidate?      @relation(fields: [candidateId], references: [id])
+  job         Job?            @relation(fields: [jobId], references: [id])
+  createdBy   User?           @relation(fields: [createdById], references: [id])
+  application JobApplication? @relation(fields: [applicationId], references: [id])
 
   @@map("sent_emails")
 }
@@ -476,6 +585,7 @@ model ActivityLog {
   createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+  actor  User?  @relation(fields: [actorId], references: [id])
 
   @@map("activity_log")
 }
