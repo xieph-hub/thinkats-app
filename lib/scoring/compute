@@ -1,234 +1,55 @@
 // lib/scoring/compute.ts
-import type { Job, JobApplication, Candidate } from "@prisma/client";
-import type { NormalizedScoringConfig } from "./config";
+import type { Candidate, Job, JobApplication } from "@prisma/client";
+import type {
+  NormalizedScoringConfig,
+  ScoredApplicationView,
+  Tier,
+} from "./types";
 
-export type Tier = "A" | "B" | "C" | "D";
+function tierFromScore(
+  score: number,
+  thresholds: NormalizedScoringConfig["thresholds"],
+): Tier {
+  if (score >= thresholds.tierA) return "A";
+  if (score >= thresholds.tierB) return "B";
+  if (score >= thresholds.tierC) return "C";
+  return "D";
+}
 
-export type ScoredApplicationView = {
-  score: number;        // 0–100
-  tier: Tier;          // A/B/C/D
-  risks: string[];     // yellow flags
-  redFlags: string[];  // serious concerns
-  interviewFocus: string[]; // prompts for interviewers
-  reason: string;      // summary string you can persist into matchReason
-};
-
+/**
+ * Lightweight view function: read matchScore/matchReason from DB
+ * and give the UI a consistent object to render.
+ *
+ * No heuristics here – all heavy lifting is done by the external engine.
+ */
 export function computeApplicationScore(args: {
   application: JobApplication;
   candidate: Candidate | null;
   job: Job;
   config: NormalizedScoringConfig;
 }): ScoredApplicationView {
-  const { application, candidate, job, config } = args;
-  const { normalizedWeights, thresholds, skills, bias } = config;
+  const { application, config } = args;
 
-  // -------------------------------------------------------------
-  // 1) Core competencies: crude match of requiredSkills to text
-  // -------------------------------------------------------------
-  const requiredSkills = job.requiredSkills || [];
+  const rawScore =
+    typeof application.matchScore === "number"
+      ? application.matchScore
+      : 0;
 
-  const textBlob =
-    (
-      [
-        application.coverLetter,
-        application.portfolioUrl,
-        candidate?.currentTitle,
-        candidate?.currentCompany,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-    ) || "";
+  const score = Math.min(100, Math.max(0, rawScore));
+  const tier = tierFromScore(score, config.thresholds);
 
-  let matchedSkills = 0;
-  for (const skill of requiredSkills) {
-    if (!skill) continue;
-    const s = skill.toLowerCase();
-    if (s && textBlob.includes(s)) {
-      matchedSkills++;
-    }
-  }
-
-  const totalSkills = requiredSkills.length;
-  const mustHavePercent =
-    totalSkills > 0 ? Math.round((matchedSkills / totalSkills) * 100) : 0;
-
-  let coreCompetenciesScore = totalSkills === 0 ? 60 : mustHavePercent;
-  if (coreCompetenciesScore > 100) coreCompetenciesScore = 100;
-
-  // -------------------------------------------------------------
-  // 2) Experience quality (rough heuristic from title/level)
-  // -------------------------------------------------------------
-  const expLevel = (job.experienceLevel || "").toLowerCase();
-  const title = (candidate?.currentTitle || "").toLowerCase();
-
-  let experienceQualityScore = 50;
-  const seniorSignals = ["head", "lead", "director", "vp", "chief", "cxo", "senior", "sr"];
-  const midSignals = ["manager", "associate", "specialist"];
-  const juniorSignals = ["intern", "assistant", "graduate", "trainee"];
-
-  const hasSeniorSignal = seniorSignals.some((s) => title.includes(s));
-  const hasMidSignal = midSignals.some((s) => title.includes(s));
-  const hasJuniorSignal = juniorSignals.some((s) => title.includes(s));
-
-  if (expLevel === "senior" || expLevel === "lead" || expLevel === "executive") {
-    experienceQualityScore = hasSeniorSignal ? 85 : hasMidSignal ? 65 : 45;
-  } else if (expLevel === "mid" || expLevel === "mid-level") {
-    experienceQualityScore = hasSeniorSignal
-      ? 80
-      : hasMidSignal
-      ? 70
-      : hasJuniorSignal
-      ? 55
-      : 50;
-  } else if (expLevel === "junior" || expLevel === "entry") {
-    experienceQualityScore = hasJuniorSignal ? 80 : 60;
-  } else {
-    experienceQualityScore = hasSeniorSignal
-      ? 80
-      : hasMidSignal
-      ? 65
-      : hasJuniorSignal
-      ? 55
-      : 50;
-  }
-
-  // -------------------------------------------------------------
-  // 3) Education (placeholder, de-emphasised)
-  // -------------------------------------------------------------
-  let educationScore = bias.downweightEducation ? 55 : 65;
-
-  // -------------------------------------------------------------
-  // 4) Achievements – look for numbers / % / revenue language
-  // -------------------------------------------------------------
-  const coverLower = (application.coverLetter || "").toLowerCase();
-  const hasNumbers = /\d/.test(coverLower);
-  const hasPercent = coverLower.includes("%");
-  const hasRevenueWords =
-    coverLower.includes("revenue") ||
-    coverLower.includes("growth") ||
-    coverLower.includes("pipeline") ||
-    coverLower.includes("gmv") ||
-    coverLower.includes("profit") ||
-    coverLower.includes("margin");
-
-  let achievementsScore = 40;
-  if (hasNumbers) achievementsScore += 15;
-  if (hasPercent) achievementsScore += 15;
-  if (hasRevenueWords) achievementsScore += 15;
-  if (achievementsScore > 95) achievementsScore = 95;
-
-  // -------------------------------------------------------------
-  // 5) Cultural fit – location & work mode
-  // -------------------------------------------------------------
-  const jobLocation = (job.location || "").toLowerCase();
-  const jobWorkMode = (job.workMode || job.locationType || "").toLowerCase();
-  const candidateLocation = (
-    application.location ||
-    candidate?.location ||
-    ""
-  ).toLowerCase();
-
-  let culturalFitScore = 55;
-  const isRemoteJob = jobWorkMode.includes("remote") || jobLocation.includes("remote");
-  const sameLocation =
-    !!candidateLocation &&
-    !!jobLocation &&
-    (candidateLocation.includes(jobLocation) || jobLocation.includes(candidateLocation));
-
-  if (isRemoteJob) {
-    culturalFitScore = 70;
-  } else if (sameLocation) {
-    culturalFitScore = 80;
-  } else if (candidateLocation && jobLocation) {
-    culturalFitScore = 60;
-  }
-
-  // -------------------------------------------------------------
-  // 6) Weighted total (0–100)
-  // -------------------------------------------------------------
-  const weightedScore =
-    coreCompetenciesScore * normalizedWeights.coreCompetencies +
-    experienceQualityScore * normalizedWeights.experienceQuality +
-    educationScore * normalizedWeights.education +
-    achievementsScore * normalizedWeights.achievements +
-    culturalFitScore * normalizedWeights.culturalFit;
-
-  let finalScore = Math.round(weightedScore);
-
-  // Small boost for strong must-have coverage
-  if (mustHavePercent >= skills.mustHaveSkillMatchPercent + 15) {
-    finalScore = Math.min(100, finalScore + 5);
-  }
-
-  // -------------------------------------------------------------
-  // 7) Tier classification
-  // -------------------------------------------------------------
-  const { tierA, tierB, tierC } = thresholds;
-  let tier: Tier;
-  if (finalScore >= tierA) tier = "A";
-  else if (finalScore >= tierB) tier = "B";
-  else if (finalScore >= tierC) tier = "C";
-  else tier = "D";
-
-  // -------------------------------------------------------------
-  // 8) Risks, red flags & interview focus
-  // -------------------------------------------------------------
-  const risks: string[] = [];
-  const redFlags: string[] = [];
-  const interviewFocus: string[] = [];
-
-  if (totalSkills > 0) {
-    if (mustHavePercent < skills.mustHaveSkillMatchPercent) {
-      const msg = `Missing must-have skills (${mustHavePercent}% of required skills matched).`;
-      if (skills.treatMissingMustHaveAsRedFlag) {
-        redFlags.push(msg);
-      } else {
-        risks.push(msg);
-      }
-      interviewFocus.push("Validate depth on the core must-have skills.");
-    } else if (mustHavePercent < 100) {
-      risks.push(`Some must-have skills partially matched (${mustHavePercent}%).`);
-      interviewFocus.push("Clarify proficiency on partially matched skills.");
-    }
-  }
-
-  if (!isRemoteJob && !sameLocation && candidateLocation && jobLocation) {
-    risks.push("Location misalignment vs role location.");
-    interviewFocus.push("Discuss relocation, hybrid expectations and time zones.");
-  }
-
-  if (!hasNumbers && !hasPercent) {
-    risks.push("Limited quantifiable achievements visible.");
-    interviewFocus.push("Probe for concrete outcomes and metrics delivered.");
-  }
-
-  if (finalScore < tierC) {
-    redFlags.push("Overall profile below configured threshold for this role.");
-  }
-
-  const reasonParts: string[] = [];
-  reasonParts.push(
-    `Core ~${coreCompetenciesScore}/100, Experience ~${experienceQualityScore}/100, Education ~${educationScore}/100, Achievements ~${achievementsScore}/100, Cultural fit ~${culturalFitScore}/100.`,
-  );
-  if (totalSkills > 0) {
-    reasonParts.push(
-      `Matched ${matchedSkills}/${totalSkills} required skills (${mustHavePercent}%).`,
-    );
-  }
-  if (risks.length) {
-    reasonParts.push(`Risks: ${risks.join(" | ")}`);
-  }
-  if (redFlags.length) {
-    reasonParts.push(`Red flags: ${redFlags.join(" | ")}`);
-  }
+  const reason =
+    application.matchReason ??
+    (score === 0
+      ? "No semantic score has been recorded for this candidate yet."
+      : "Scored by semantic CV/JD engine.");
 
   return {
-    score: finalScore,
+    score,
     tier,
-    risks,
-    redFlags,
-    interviewFocus,
-    reason: reasonParts.join(" "),
+    risks: [],          // can be filled once you persist risks per application
+    redFlags: [],
+    interviewFocus: [],
+    reason,
   };
 }
