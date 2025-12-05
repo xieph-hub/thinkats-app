@@ -17,33 +17,6 @@ export const metadata: Metadata = {
 
 type Tier = "A" | "B" | "C" | "D";
 
-type PipelineRow = {
-  application: {
-    id: string;
-    fullName: string;
-    email: string;
-    stage: string | null;
-    status: string | null;
-    createdAt: string; // ISO string
-  };
-  candidate: {
-    id: string;
-    currentTitle: string | null;
-    currentCompany: string | null;
-  } | null;
-  scored: {
-    score: number;
-    tier: Tier | string;
-    reason: string;
-    risks: string[];
-    redFlags: string[];
-    interviewFocus: string[];
-    engine?: string;
-    engineVersion?: string;
-  };
-  cvUrl: string | null;
-};
-
 export default async function AtsJobDetailPage({
   params,
 }: {
@@ -68,8 +41,9 @@ export default async function AtsJobDetailPage({
 
   const { config } = await getScoringConfigForJob(job.id);
 
-  const rows: PipelineRow[] = job.applications.map((app) => {
-    const scored = computeApplicationScore({
+  const rows = job.applications.map((app) => {
+    // Don’t trust the shape too much – treat as any and normalise
+    const scoredRaw: any = computeApplicationScore({
       application: app,
       candidate: app.candidate,
       job,
@@ -83,74 +57,64 @@ export default async function AtsJobDetailPage({
         id: app.id,
         fullName: app.fullName,
         email: app.email,
-        stage: app.stage ?? null,
-        status: app.status ?? null,
+        stage: app.stage,
+        status: app.status,
+        // Pass ISO string to the client component
         createdAt: app.createdAt.toISOString(),
       },
-      candidate: app.candidate
-        ? {
-            id: app.candidate.id,
-            currentTitle: app.candidate.currentTitle,
-            currentCompany: app.candidate.currentCompany,
-          }
-        : null,
+      candidate: app.candidate,
       scored: {
-        score: scored.score,
-        tier: scored.tier,
-        reason: scored.reason,
-        risks: scored.risks ?? [],
-        redFlags: scored.redFlags ?? [],
-        interviewFocus: scored.interviewFocus ?? [],
-        engine: scored.engine,
-        engineVersion: scored.engineVersion,
+        score:
+          typeof scoredRaw.score === "number" ? scoredRaw.score : 0,
+        tier: (scoredRaw.tier ?? "D") as string,
+        reason: scoredRaw.reason ?? "",
+        risks: (scoredRaw.risks ?? []) as string[],
+        redFlags: (scoredRaw.redFlags ?? []) as string[],
+        interviewFocus: (scoredRaw.interviewFocus ?? []) as string[],
       },
       cvUrl,
     };
   });
 
-  const tierCounts: Record<Tier, number> = {
-    A: 0,
-    B: 0,
-    C: 0,
-    D: 0,
-  };
-
-  for (const row of rows) {
-    const t = String(row.scored.tier || "D").toUpperCase() as Tier | string;
-    if (t === "A" || t === "B" || t === "C" || t === "D") {
-      tierCounts[t] += 1;
-    } else {
-      tierCounts.D += 1;
-    }
-  }
+  const tierCounts = rows.reduce(
+    (acc, row) => {
+      const t = String(row.scored.tier || "D").toUpperCase() as Tier;
+      if (t === "A" || t === "B" || t === "C" || t === "D") {
+        acc[t] += 1;
+      } else {
+        acc.D += 1;
+      }
+      return acc;
+    },
+    { A: 0, B: 0, C: 0, D: 0 } as Record<Tier, number>,
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
+      {/* Header */}
       <header className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           ATS · Job pipeline
         </p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-[#172965]">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/ats/jobs"
+                className="text-[11px] text-slate-500 hover:text-slate-700 hover:underline"
+              >
+                ← Back to all jobs
+              </Link>
+            </div>
+            <h1 className="mt-1 text-xl font-semibold text-slate-900">
               {job.title}
             </h1>
             <p className="text-xs text-slate-600">
               {job.clientCompany?.name ? `${job.clientCompany.name} · ` : ""}
               {job.location || job.workMode || "Location not set"}
             </p>
-            {job.slug && (
-              <p className="mt-1 text-[11px] text-slate-500">
-                Public link:{" "}
-                <Link
-                  href={job.slug ? `/jobs/${job.slug}` : `/jobs/${job.id}`}
-                  className="text-[#172965] underline underline-offset-4"
-                >
-                  View public job
-                </Link>
-              </p>
-            )}
           </div>
+
           <div className="flex flex-wrap items-end gap-2 text-[11px] text-slate-500">
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
               Applications:{" "}
@@ -172,12 +136,14 @@ export default async function AtsJobDetailPage({
             </span>
           </div>
         </div>
+
         <p className="text-[11px] text-slate-500">
-          Filter by tier, stage and risk. Update stage and status inline as you
-          move candidates through this mandate.
+          Pipeline view with scoring tiers, quick access to CVs and deep
+          candidate profiles. Click a candidate name to open the full profile.
         </p>
       </header>
 
+      {/* Pipeline table with inline stage / status + filters */}
       <JobPipelineTable rows={rows} />
     </div>
   );
