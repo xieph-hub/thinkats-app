@@ -1,19 +1,7 @@
 // lib/scoring/server.ts
 import { prisma } from "@/lib/prisma";
-import type {
-  Candidate,
-  Job,
-  JobApplication,
-  Tenant,
-} from "@prisma/client";
-import type {
-  NormalizedScoringConfig,
-  SemanticScoringResponse,
-  ScoredApplicationView,
-  Tier,
-} from "./types";
 
-const DEFAULT_SCORING_CONFIG: NormalizedScoringConfig = {
+const DEFAULT_SCORING_CONFIG = {
   hiringMode: "balanced",
   thresholds: {
     tierA: 80,
@@ -35,28 +23,23 @@ const DEFAULT_TIMEOUT_MS = 5000;
 /* Helpers                                                                  */
 /* ------------------------------------------------------------------------ */
 
-function clampNumber(
-  value: unknown,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
+function clampNumber(value, fallback, min, max) {
   const n =
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, n));
 }
 
-function normalizeScoringConfig(raw: any): NormalizedScoringConfig {
-  const hiringModeRaw = raw?.hiringMode;
-  const hiringMode: NormalizedScoringConfig["hiringMode"] =
+function normalizeScoringConfig(raw) {
+  const hiringModeRaw = raw && raw.hiringMode;
+  const hiringMode =
     hiringModeRaw === "volume" ||
     hiringModeRaw === "executive" ||
     hiringModeRaw === "balanced"
       ? hiringModeRaw
       : "balanced";
 
-  const thresholdsRaw = raw?.thresholds ?? {};
-  const weightsRaw = raw?.weights ?? {};
+  const thresholdsRaw = (raw && raw.thresholds) || {};
+  const weightsRaw = (raw && raw.weights) || {};
 
   return {
     hiringMode,
@@ -85,19 +68,13 @@ function normalizeScoringConfig(raw: any): NormalizedScoringConfig {
   };
 }
 
-export function mergeScoringConfig(opts: {
-  tenantConfig: any;
-  jobOverrides: any;
-  tenantHiringMode: string | null;
-  jobHiringMode: string | null;
-}): NormalizedScoringConfig {
-  const base: any = {
+export function mergeScoringConfig(opts) {
+  const base = {
     ...DEFAULT_SCORING_CONFIG,
-    ...(opts.tenantConfig ?? {}),
-    ...(opts.jobOverrides ?? {}),
+    ...(opts.tenantConfig || {}),
+    ...(opts.jobOverrides || {}),
   };
 
-  // Let job override hiringMode > tenant > default
   const hiringMode =
     opts.jobHiringMode || opts.tenantHiringMode || base.hiringMode;
 
@@ -107,11 +84,7 @@ export function mergeScoringConfig(opts: {
   });
 }
 
-export async function getScoringConfigForJob(jobId: string): Promise<{
-  job: Job & { tenant: Tenant };
-  tenant: Tenant;
-  config: NormalizedScoringConfig;
-}> {
+export async function getScoringConfigForJob(jobId) {
   const job = await prisma.job.findUnique({
     where: { id: jobId },
     include: {
@@ -126,104 +99,23 @@ export async function getScoringConfigForJob(jobId: string): Promise<{
   const tenant = job.tenant;
 
   const config = mergeScoringConfig({
-    tenantConfig: (tenant.scoringConfig as any) ?? null,
-    jobOverrides: (job.scoringOverrides as any) ?? null,
-    tenantHiringMode: tenant.hiringMode ?? null,
-    jobHiringMode: job.hiringMode ?? null,
+    tenantConfig: tenant.scoringConfig || null,
+    jobOverrides: job.scoringOverrides || null,
+    tenantHiringMode: tenant.hiringMode || null,
+    jobHiringMode: job.hiringMode || null,
   });
 
   return { job, tenant, config };
 }
 
-function tierFromScore(
-  score: number,
-  thresholds: NormalizedScoringConfig["thresholds"],
-): Tier {
+function tierFromScore(score, thresholds) {
   if (score >= thresholds.tierA) return "A";
   if (score >= thresholds.tierB) return "B";
   if (score >= thresholds.tierC) return "C";
   return "D";
 }
 
-/* ------------------------------------------------------------------------ */
-/* Scoring service wire types                                               */
-/* ------------------------------------------------------------------------ */
-
-type TenantPayload = {
-  id: string;
-  slug: string;
-  plan: string;
-  hiringMode: NormalizedScoringConfig["hiringMode"];
-};
-
-type JobPayload = {
-  id: string;
-  title: string;
-  description?: string | null;
-  requiredSkills: string[];
-  experienceLevel?: string | null;
-  workMode?: string | null;
-  location?: string | null;
-  department?: string | null;
-  clientName?: string | null;
-  hiringMode?: NormalizedScoringConfig["hiringMode"] | null;
-};
-
-type CandidatePayload = {
-  id?: string;
-  fullName?: string;
-  email?: string;
-  location?: string | null;
-  currentTitle?: string | null;
-  currentCompany?: string | null;
-  linkedinUrl?: string | null;
-  githubUrl?: string | null;
-  portfolioUrl?: string | null;
-  cvUrl?: string | null;
-};
-
-type ApplicationPayload = {
-  id: string;
-  fullName: string;
-  email: string;
-  location?: string | null;
-  source?: string | null;
-  howHeard?: string | null;
-  coverLetter?: string | null;
-  cvUrl?: string | null;
-  githubUrl?: string | null;
-  portfolioUrl?: string | null;
-  noticePeriod?: string | null;
-  grossAnnualExpectation?: number | null;
-  currentGrossAnnual?: number | null;
-};
-
-type ScoringContext = {
-  trigger: "application_created" | "manual_rescore" | "batch_rescore";
-  jobExternalRef?: string | null;
-};
-
-type ScoreApplicationRequest = {
-  tenant: TenantPayload;
-  job: JobPayload;
-  candidate?: CandidatePayload;
-  application: ApplicationPayload;
-  config: NormalizedScoringConfig;
-  context?: ScoringContext;
-};
-
-type ScoreApplicationResponseWire = {
-  score: number;
-  tier?: Tier;
-  reason: string;
-  risks?: string[];
-  redFlags?: string[];
-  interviewFocus?: string[];
-  engine?: string;
-  engineVersion?: string;
-};
-
-function buildNeutralResponse(reason: string): SemanticScoringResponse {
+function buildNeutralResponse(reason) {
   return {
     score: 0,
     reason,
@@ -235,16 +127,14 @@ function buildNeutralResponse(reason: string): SemanticScoringResponse {
   };
 }
 
-function isValidWireResponse(json: any): json is ScoreApplicationResponseWire {
+function isValidWireResponse(json) {
   if (!json || typeof json !== "object") return false;
   if (typeof json.score !== "number") return false;
   if (typeof json.reason !== "string") return false;
   return true;
 }
 
-function normalizeWireResponse(
-  wire: ScoreApplicationResponseWire,
-): SemanticScoringResponse {
+function normalizeWireResponse(wire) {
   return {
     score:
       typeof wire.score === "number" && Number.isFinite(wire.score)
@@ -259,12 +149,12 @@ function normalizeWireResponse(
     interviewFocus: Array.isArray(wire.interviewFocus)
       ? wire.interviewFocus.filter(Boolean)
       : [],
-    engine: wire.engine ?? "semantic-external",
-    engineVersion: wire.engineVersion ?? "v1",
+    engine: wire.engine || "semantic-external",
+    engineVersion: wire.engineVersion || "v1",
   };
 }
 
-async function safeReadText(res: Response): Promise<string | undefined> {
+async function safeReadText(res) {
   try {
     return await res.text();
   } catch {
@@ -276,19 +166,13 @@ async function safeReadText(res: Response): Promise<string | undefined> {
 /* Concrete callScoringService                                              */
 /* ------------------------------------------------------------------------ */
 
-async function callScoringService(opts: {
-  tenant: Tenant;
-  job: Job;
-  candidate: Candidate | null;
-  application: JobApplication;
-  config: NormalizedScoringConfig;
-}): Promise<SemanticScoringResponse> {
+async function callScoringService(opts) {
   const { tenant, job, candidate, application, config } = opts;
 
   const url = process.env.SCORING_SERVICE_URL;
   const apiKey = process.env.SCORING_SERVICE_API_KEY;
   const timeoutMs =
-    Number.parseInt(process.env.SCORING_SERVICE_TIMEOUT_MS ?? "", 10) ||
+    parseInt(process.env.SCORING_SERVICE_TIMEOUT_MS || "", 10) ||
     DEFAULT_TIMEOUT_MS;
 
   if (!url || !apiKey) {
@@ -300,14 +184,12 @@ async function callScoringService(opts: {
     );
   }
 
-  const payload: ScoreApplicationRequest = {
+  const payload = {
     tenant: {
       id: tenant.id,
       slug: tenant.slug,
       plan: tenant.plan,
-      hiringMode:
-        (tenant.hiringMode as NormalizedScoringConfig["hiringMode"]) ||
-        config.hiringMode,
+      hiringMode: tenant.hiringMode || config.hiringMode,
     },
     job: {
       id: job.id,
@@ -316,44 +198,42 @@ async function callScoringService(opts: {
       requiredSkills: Array.isArray(job.requiredSkills)
         ? job.requiredSkills
         : [],
-      experienceLevel: (job as any).experienceLevel ?? null,
-      workMode: (job as any).workMode ?? null,
-      location: (job as any).location ?? null,
-      department: (job as any).department ?? null,
-      clientName: (job as any).aboutClient ?? null,
-      hiringMode:
-        (job.hiringMode as NormalizedScoringConfig["hiringMode"]) ||
-        tenant.hiringMode ||
-        config.hiringMode,
+      experienceLevel: job.experienceLevel || null,
+      workMode: job.workMode || null,
+      location: job.location || null,
+      department: job.department || null,
+      clientName: job.aboutClient || null,
+      hiringMode: job.hiringMode || tenant.hiringMode || config.hiringMode,
     },
     candidate: candidate
       ? {
           id: candidate.id,
           fullName: candidate.fullName,
           email: candidate.email,
-          location: candidate.location,
-          currentTitle: candidate.currentTitle ?? null,
-          currentCompany: candidate.currentCompany ?? null,
-          linkedinUrl: (candidate as any).linkedinUrl ?? null,
-          githubUrl: (candidate as any).githubUrl ?? null,
-          portfolioUrl: (candidate as any).portfolioUrl ?? null,
-          cvUrl: candidate.cvUrl ?? null,
+          location: candidate.location || null,
+          currentTitle: candidate.currentTitle || null,
+          currentCompany: candidate.currentCompany || null,
+          linkedinUrl: candidate.linkedinUrl || null,
+          cvUrl: candidate.cvUrl || null,
         }
       : undefined,
     application: {
       id: application.id,
       fullName: application.fullName,
       email: application.email,
-      location: application.location ?? null,
-      source: application.source ?? null,
-      howHeard: application.howHeard ?? null,
-      coverLetter: application.coverLetter ?? null,
-      cvUrl: application.cvUrl ?? candidate?.cvUrl ?? null,
-      githubUrl: (application as any).githubUrl ?? null,
-      portfolioUrl: (application as any).portfolioUrl ?? null,
-      noticePeriod: application.noticePeriod ?? null,
-      grossAnnualExpectation: application.grossAnnualExpectation ?? null,
-      currentGrossAnnual: application.currentGrossAnnual ?? null,
+      location: application.location || null,
+      source: application.source || null,
+      howHeard: application.howHeard || null,
+      coverLetter: application.coverLetter || null,
+      cvUrl:
+        application.cvUrl ||
+        (candidate && candidate.cvUrl) ||
+        null,
+      githubUrl: application.githubUrl || null,
+      portfolioUrl: application.portfolioUrl || null,
+      noticePeriod: application.noticePeriod || null,
+      grossAnnualExpectation: application.grossAnnualExpectation || null,
+      currentGrossAnnual: application.currentGrossAnnual || null,
     },
     config,
     context: {
@@ -365,14 +245,11 @@ async function callScoringService(opts: {
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const startedAt = Date.now();
-
     const res = await fetch(url, {
       method: "POST",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        // spec: use x-api-key for auth
         "x-api-key": apiKey,
       },
       body: JSON.stringify(payload),
@@ -393,7 +270,7 @@ async function callScoringService(opts: {
       );
     }
 
-    const json = (await res.json()) as unknown;
+    const json = await res.json();
 
     if (!isValidWireResponse(json)) {
       console.error("[scoring] Invalid scoring response shape:", json);
@@ -403,14 +280,13 @@ async function callScoringService(opts: {
     }
 
     const normalized = normalizeWireResponse(json);
-    // clamp defensively
     normalized.score = clampNumber(normalized.score, 0, 0, 100);
 
     return normalized;
-  } catch (err: any) {
+  } catch (err) {
     clearTimeout(timeout);
 
-    if (err?.name === "AbortError") {
+    if (err && err.name === "AbortError") {
       console.error(
         "[scoring] Scoring service request timed out after",
         timeoutMs,
@@ -432,9 +308,7 @@ async function callScoringService(opts: {
 /* scoreAndPersistApplication                                               */
 /* ------------------------------------------------------------------------ */
 
-export async function scoreAndPersistApplication(
-  applicationId: string,
-): Promise<ScoredApplicationView | null> {
+export async function scoreAndPersistApplication(applicationId) {
   const application = await prisma.jobApplication.findUnique({
     where: { id: applicationId },
     include: {
@@ -467,18 +341,16 @@ export async function scoreAndPersistApplication(
   });
 
   const score = Math.round(
-    Math.min(100, Math.max(0, semantic.score ?? 0)),
+    Math.min(100, Math.max(0, semantic.score || 0)),
   );
-
-  const tier: Tier =
-    semantic.tier ?? tierFromScore(score, config.thresholds);
+  const tier = semantic.tier || tierFromScore(score, config.thresholds);
 
   await prisma.jobApplication.update({
     where: { id: application.id },
     data: {
       matchScore: score,
       matchReason:
-        semantic.reason ??
+        semantic.reason ||
         "Scored by semantic CV/JD engine.",
     },
   });
@@ -493,27 +365,27 @@ export async function scoreAndPersistApplication(
       mode: config.hiringMode,
       score,
       tier,
-      configSnapshot: config as any,
+      configSnapshot: config,
       inputSummary: {
-        hasCv: Boolean(application.cvUrl || candidate?.cvUrl),
+        hasCv: Boolean(application.cvUrl || (candidate && candidate.cvUrl)),
         hasCoverLetter: Boolean(application.coverLetter),
-        jobRequiredSkills: job.requiredSkills ?? [],
-        source: application.source ?? null,
+        jobRequiredSkills: job.requiredSkills || [],
+        source: application.source || null,
       },
-      reason: semantic.reason ?? null,
-      risks: semantic.risks ?? [],
-      redFlags: semantic.redFlags ?? [],
+      reason: semantic.reason || null,
+      risks: semantic.risks || [],
+      redFlags: semantic.redFlags || [],
     },
   });
 
   return {
     score,
     tier,
-    risks: semantic.risks ?? [],
-    redFlags: semantic.redFlags ?? [],
-    interviewFocus: semantic.interviewFocus ?? [],
+    risks: semantic.risks || [],
+    redFlags: semantic.redFlags || [],
+    interviewFocus: semantic.interviewFocus || [],
     reason:
-      semantic.reason ??
+      semantic.reason ||
       "Scored by semantic CV/JD engine.",
   };
 }
