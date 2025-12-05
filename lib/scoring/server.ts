@@ -1,7 +1,19 @@
 // lib/scoring/server.ts
 import { prisma } from "@/lib/prisma";
+import type {
+  Candidate,
+  Job,
+  JobApplication,
+  Tenant,
+} from "@prisma/client";
+import type {
+  NormalizedScoringConfig,
+  SemanticScoringResponse,
+  ScoredApplicationView,
+  Tier,
+} from "./types";
 
-const DEFAULT_SCORING_CONFIG = {
+const DEFAULT_SCORING_CONFIG: NormalizedScoringConfig = {
   hiringMode: "balanced",
   thresholds: {
     tierA: 80,
@@ -17,29 +29,28 @@ const DEFAULT_SCORING_CONFIG = {
   },
 };
 
-const DEFAULT_TIMEOUT_MS = 5000;
-
-/* ------------------------------------------------------------------------ */
-/* Helpers                                                                  */
-/* ------------------------------------------------------------------------ */
-
-function clampNumber(value, fallback, min, max) {
+function clampNumber(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   const n =
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, n));
 }
 
-function normalizeScoringConfig(raw) {
-  const hiringModeRaw = raw && raw.hiringMode;
-  const hiringMode =
+function normalizeScoringConfig(raw: any): NormalizedScoringConfig {
+  const hiringModeRaw = raw?.hiringMode;
+  const hiringMode: NormalizedScoringConfig["hiringMode"] =
     hiringModeRaw === "volume" ||
     hiringModeRaw === "executive" ||
     hiringModeRaw === "balanced"
       ? hiringModeRaw
       : "balanced";
 
-  const thresholdsRaw = (raw && raw.thresholds) || {};
-  const weightsRaw = (raw && raw.weights) || {};
+  const thresholdsRaw = raw?.thresholds ?? {};
+  const weightsRaw = raw?.weights ?? {};
 
   return {
     hiringMode,
@@ -68,13 +79,19 @@ function normalizeScoringConfig(raw) {
   };
 }
 
-export function mergeScoringConfig(opts) {
-  const base = {
+export function mergeScoringConfig(opts: {
+  tenantConfig: any;
+  jobOverrides: any;
+  tenantHiringMode: string | null;
+  jobHiringMode: string | null;
+}: NormalizedScoringConfig): NormalizedScoringConfig {
+  const base: any = {
     ...DEFAULT_SCORING_CONFIG,
-    ...(opts.tenantConfig || {}),
-    ...(opts.jobOverrides || {}),
+    ...(opts.tenantConfig ?? {}),
+    ...(opts.jobOverrides ?? {}),
   };
 
+  // Let job override hiringMode > tenant > default
   const hiringMode =
     opts.jobHiringMode || opts.tenantHiringMode || base.hiringMode;
 
@@ -84,7 +101,11 @@ export function mergeScoringConfig(opts) {
   });
 }
 
-export async function getScoringConfigForJob(jobId) {
+export async function getScoringConfigForJob(jobId: string): Promise<{
+  job: Job & { tenant: Tenant };
+  tenant: Tenant;
+  config: NormalizedScoringConfig;
+}> {
   const job = await prisma.job.findUnique({
     where: { id: jobId },
     include: {
@@ -99,216 +120,186 @@ export async function getScoringConfigForJob(jobId) {
   const tenant = job.tenant;
 
   const config = mergeScoringConfig({
-    tenantConfig: tenant.scoringConfig || null,
-    jobOverrides: job.scoringOverrides || null,
-    tenantHiringMode: tenant.hiringMode || null,
-    jobHiringMode: job.hiringMode || null,
-  });
+    tenantConfig: (tenant.scoringConfig as any) ?? null,
+    jobOverrides: (job.scoringOverrides as any) ?? null,
+    tenantHiringMode: tenant.hiringMode ?? null,
+    jobHiringMode: job.hiringMode ?? null,
+  } as any);
 
   return { job, tenant, config };
 }
 
-function tierFromScore(score, thresholds) {
+function tierFromScore(
+  score: number,
+  thresholds: NormalizedScoringConfig["thresholds"],
+): Tier {
   if (score >= thresholds.tierA) return "A";
   if (score >= thresholds.tierB) return "B";
   if (score >= thresholds.tierC) return "C";
   return "D";
 }
 
-function buildNeutralResponse(reason) {
-  return {
-    score: 0,
-    reason,
-    risks: [],
-    redFlags: [],
-    interviewFocus: [],
-    engine: "semantic-external",
-    engineVersion: "unavailable",
-  };
-}
-
-function isValidWireResponse(json) {
-  if (!json || typeof json !== "object") return false;
-  if (typeof json.score !== "number") return false;
-  if (typeof json.reason !== "string") return false;
-  return true;
-}
-
-function normalizeWireResponse(wire) {
-  return {
-    score:
-      typeof wire.score === "number" && Number.isFinite(wire.score)
-        ? wire.score
-        : 0,
-    tier: wire.tier,
-    reason: wire.reason,
-    risks: Array.isArray(wire.risks) ? wire.risks.filter(Boolean) : [],
-    redFlags: Array.isArray(wire.redFlags)
-      ? wire.redFlags.filter(Boolean)
-      : [],
-    interviewFocus: Array.isArray(wire.interviewFocus)
-      ? wire.interviewFocus.filter(Boolean)
-      : [],
-    engine: wire.engine || "semantic-external",
-    engineVersion: wire.engineVersion || "v1",
-  };
-}
-
-async function safeReadText(res) {
-  try {
-    return await res.text();
-  } catch {
-    return undefined;
-  }
-}
-
-/* ------------------------------------------------------------------------ */
-/* Concrete callScoringService                                              */
-/* ------------------------------------------------------------------------ */
-
-async function callScoringService(opts) {
+async function callScoringService(opts: {
+  tenant: Tenant;
+  job: Job;
+  candidate: Candidate | null;
+  application: JobApplication;
+  config: NormalizedScoringConfig;
+}): Promise<SemanticScoringResponse> {
   const { tenant, job, candidate, application, config } = opts;
 
   const url = process.env.SCORING_SERVICE_URL;
   const apiKey = process.env.SCORING_SERVICE_API_KEY;
-  const timeoutMs =
-    parseInt(process.env.SCORING_SERVICE_TIMEOUT_MS || "", 10) ||
-    DEFAULT_TIMEOUT_MS;
 
   if (!url || !apiKey) {
     console.warn(
       "[scoring] SCORING_SERVICE_URL or SCORING_SERVICE_API_KEY not configured – returning neutral score.",
     );
-    return buildNeutralResponse(
-      "Scoring service not configured; defaulting to neutral score.",
-    );
+    const fallback: SemanticScoringResponse = {
+      score: 0,
+      reason: "Scoring service not configured.",
+      risks: [],
+      redFlags: [],
+      interviewFocus: [],
+      engine: "semantic-external",
+      engineVersion: "v1",
+    };
+    return fallback;
   }
 
-  const payload = {
-    tenant: {
-      id: tenant.id,
-      slug: tenant.slug,
-      plan: tenant.plan,
-      hiringMode: tenant.hiringMode || config.hiringMode,
-    },
-    job: {
-      id: job.id,
-      title: job.title,
-      description: job.description,
-      requiredSkills: Array.isArray(job.requiredSkills)
-        ? job.requiredSkills
-        : [],
-      experienceLevel: job.experienceLevel || null,
-      workMode: job.workMode || null,
-      location: job.location || null,
-      department: job.department || null,
-      clientName: job.aboutClient || null,
-      hiringMode: job.hiringMode || tenant.hiringMode || config.hiringMode,
-    },
-    candidate: candidate
-      ? {
-          id: candidate.id,
-          fullName: candidate.fullName,
-          email: candidate.email,
-          location: candidate.location || null,
-          currentTitle: candidate.currentTitle || null,
-          currentCompany: candidate.currentCompany || null,
-          linkedinUrl: candidate.linkedinUrl || null,
-          cvUrl: candidate.cvUrl || null,
-        }
-      : undefined,
-    application: {
-      id: application.id,
-      fullName: application.fullName,
-      email: application.email,
-      location: application.location || null,
-      source: application.source || null,
-      howHeard: application.howHeard || null,
-      coverLetter: application.coverLetter || null,
-      cvUrl:
-        application.cvUrl ||
-        (candidate && candidate.cvUrl) ||
-        null,
-      githubUrl: application.githubUrl || null,
-      portfolioUrl: application.portfolioUrl || null,
-      noticePeriod: application.noticePeriod || null,
-      grossAnnualExpectation: application.grossAnnualExpectation || null,
-      currentGrossAnnual: application.currentGrossAnnual || null,
-    },
-    config,
-    context: {
-      trigger: "application_created",
-    },
-  };
-
   const controller = new AbortController();
+  const timeoutMs = Number(process.env.SCORING_SERVICE_TIMEOUT_MS ?? "5000");
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
+        Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        tenant: {
+          id: tenant.id,
+          slug: tenant.slug,
+          plan: tenant.plan,
+          hiringMode: tenant.hiringMode,
+        },
+        job: {
+          id: job.id,
+          title: job.title,
+          description: job.description,
+          requiredSkills: job.requiredSkills,
+          experienceLevel: job.experienceLevel,
+          workMode: job.workMode,
+          hiringMode: job.hiringMode,
+        },
+        candidate: candidate
+          ? {
+              id: candidate.id,
+              fullName: candidate.fullName,
+              email: candidate.email,
+              location: candidate.location,
+              currentTitle: candidate.currentTitle,
+              currentCompany: candidate.currentCompany,
+              cvUrl: candidate.cvUrl,
+            }
+          : null,
+        application: {
+          id: application.id,
+          fullName: application.fullName,
+          email: application.email,
+          location: application.location,
+          cvUrl: application.cvUrl,
+          coverLetter: application.coverLetter,
+          githubUrl: application.githubUrl,
+          howHeard: application.howHeard,
+          source: application.source,
+        },
+        config,
+        context: {
+          trigger: "application_created",
+        },
+      }),
     });
 
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      const bodyText = await safeReadText(res);
+    if (!response.ok) {
       console.error(
         "[scoring] Service returned non-2xx:",
-        res.status,
-        bodyText,
+        response.status,
+        await response.text().catch(() => ""),
       );
-
-      return buildNeutralResponse(
-        `Scoring service error (${res.status}); defaulting to neutral score.`,
-      );
+      const fallback: SemanticScoringResponse = {
+        score: 0,
+        reason: `Scoring service error (${response.status})`,
+        risks: [],
+        redFlags: [],
+        interviewFocus: [],
+        engine: "semantic-external",
+        engineVersion: "v1",
+      };
+      return fallback;
     }
 
-    const json = await res.json();
+    const json = (await response.json()) as SemanticScoringResponse;
 
-    if (!isValidWireResponse(json)) {
-      console.error("[scoring] Invalid scoring response shape:", json);
-      return buildNeutralResponse(
-        "Invalid scoring response; defaulting to neutral score.",
-      );
+    if (typeof json.score !== "number" || !Number.isFinite(json.score)) {
+      console.error("[scoring] Invalid score payload:", json);
+      const fallback: SemanticScoringResponse = {
+        score: 0,
+        reason: "Scoring service returned invalid payload.",
+        risks: [],
+        redFlags: [],
+        interviewFocus: [],
+        engine: "semantic-external",
+        engineVersion: "v1",
+      };
+      return fallback;
     }
 
-    const normalized = normalizeWireResponse(json);
-    normalized.score = clampNumber(normalized.score, 0, 0, 100);
-
-    return normalized;
+    return json;
   } catch (err) {
-    clearTimeout(timeout);
-
-    if (err && err.name === "AbortError") {
-      console.error(
-        "[scoring] Scoring service request timed out after",
-        timeoutMs,
-        "ms",
-      );
-      return buildNeutralResponse(
-        "Scoring service timeout; defaulting to neutral score.",
-      );
+    if ((err as any).name === "AbortError") {
+      console.error("[scoring] Service timed out after", timeoutMs, "ms");
+      const fallback: SemanticScoringResponse = {
+        score: 0,
+        reason: "Scoring service timeout.",
+        risks: [],
+        redFlags: [],
+        interviewFocus: [],
+        engine: "semantic-external",
+        engineVersion: "v1",
+      };
+      return fallback;
     }
 
     console.error("[scoring] Unexpected error calling scoring service:", err);
-    return buildNeutralResponse(
-      "Unexpected error calling scoring service; defaulting to neutral score.",
-    );
+    const fallback: SemanticScoringResponse = {
+      score: 0,
+      reason: "Unexpected error calling scoring service.",
+      risks: [],
+      redFlags: [],
+      interviewFocus: [],
+      engine: "semantic-external",
+      engineVersion: "v1",
+    };
+    return fallback;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
-/* ------------------------------------------------------------------------ */
-/* scoreAndPersistApplication                                               */
-/* ------------------------------------------------------------------------ */
-
-export async function scoreAndPersistApplication(applicationId) {
+/**
+ * Main hook for write-paths:
+ * - Calls external scoring service
+ * - Updates job_applications.match_score / match_reason
+ * - Writes a scoring_events row for audit
+ * - Returns a normalized ScoredApplicationView shape for callers (if needed)
+ */
+export async function scoreAndPersistApplication(
+  applicationId: string,
+): Promise<ScoredApplicationView | null> {
   const application = await prisma.jobApplication.findUnique({
     where: { id: applicationId },
     include: {
@@ -332,7 +323,7 @@ export async function scoreAndPersistApplication(applicationId) {
 
   const { config } = await getScoringConfigForJob(job.id);
 
-  const semantic = await callScoringService({
+  const semantic: SemanticScoringResponse = await callScoringService({
     tenant,
     job,
     candidate,
@@ -341,20 +332,25 @@ export async function scoreAndPersistApplication(applicationId) {
   });
 
   const score = Math.round(
-    Math.min(100, Math.max(0, semantic.score || 0)),
+    Math.min(100, Math.max(0, semantic.score ?? 0)),
   );
-  const tier = semantic.tier || tierFromScore(score, config.thresholds);
 
+  const tier: Tier =
+    (semantic.tier as Tier | undefined) ??
+    tierFromScore(score, config.thresholds);
+
+  // Persist on the application itself
   await prisma.jobApplication.update({
     where: { id: application.id },
     data: {
       matchScore: score,
       matchReason:
-        semantic.reason ||
+        semantic.reason ??
         "Scored by semantic CV/JD engine.",
     },
   });
 
+  // Write audit event
   await prisma.scoringEvent.create({
     data: {
       tenantId: tenant.id,
@@ -365,27 +361,29 @@ export async function scoreAndPersistApplication(applicationId) {
       mode: config.hiringMode,
       score,
       tier,
-      configSnapshot: config,
+      configSnapshot: config as any,
       inputSummary: {
-        hasCv: Boolean(application.cvUrl || (candidate && candidate.cvUrl)),
+        hasCv: Boolean(application.cvUrl || candidate?.cvUrl),
         hasCoverLetter: Boolean(application.coverLetter),
-        jobRequiredSkills: job.requiredSkills || [],
-        source: application.source || null,
+        jobRequiredSkills: job.requiredSkills ?? [],
+        source: application.source ?? null,
       },
-      reason: semantic.reason || null,
-      risks: semantic.risks || [],
-      redFlags: semantic.redFlags || [],
+      reason: semantic.reason ?? null,
+      risks: semantic.risks ?? [],
+      redFlags: semantic.redFlags ?? [],
     },
   });
 
-  return {
+  const view: ScoredApplicationView = {
     score,
     tier,
-    risks: semantic.risks || [],
-    redFlags: semantic.redFlags || [],
-    interviewFocus: semantic.interviewFocus || [],
+    risks: semantic.risks ?? [],
+    redFlags: semantic.redFlags ?? [],
+    interviewFocus: semantic.interviewFocus ?? [],
     reason:
-      semantic.reason ||
+      semantic.reason ??
       "Scored by semantic CV/JD engine.",
   };
+
+  return view;
 }
