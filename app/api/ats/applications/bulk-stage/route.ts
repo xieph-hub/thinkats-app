@@ -1,6 +1,17 @@
 // app/api/ats/applications/bulk-stage/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
+import { getServerUser } from "@/lib/auth/getServerUser";
+
+export const runtime = "nodejs";
+
+function normaliseEnum(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toUpperCase();
+}
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -8,7 +19,6 @@ export async function POST(request: Request) {
   const jobIdRaw = formData.get("jobId");
   const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
 
-  // Accept either applicationIds (multi) or applicationId
   const idsMulti = formData.getAll("applicationIds");
   const singleId = formData.get("applicationId");
 
@@ -20,27 +30,94 @@ export async function POST(request: Request) {
     }
   }
   if (applicationIds.length === 0 && typeof singleId === "string") {
-    applicationIds.push(singleId);
+    applicationIds.push(singleId.trim());
   }
 
   const stageRaw = formData.get("stage") || formData.get("newStage");
-  const newStage = typeof stageRaw === "string" ? stageRaw : "";
+  const newStageInput = typeof stageRaw === "string" ? stageRaw : "";
+  const newStage = normaliseEnum(newStageInput);
 
   if (!applicationIds.length || !newStage) {
-    const fallbackUrl = new URL("/ats/jobs", request.url);
+    const fallbackUrl = new URL(
+      jobId ? `/ats/jobs/${jobId}` : "/ats/jobs",
+      request.url,
+    );
     return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
 
   try {
-    await prisma.jobApplication.updateMany({
+    const tenant = await getResourcinTenant();
+    if (!tenant) {
+      const fallbackUrl = new URL(
+        jobId ? `/ats/jobs/${jobId}` : "/ats/jobs",
+        request.url,
+      );
+      return NextResponse.redirect(fallbackUrl, { status: 303 });
+    }
+
+    const actor = await getServerUser().catch(() => null);
+
+    // Only applications that belong to this tenant (+ optional job)
+    const applications = await prisma.jobApplication.findMany({
       where: {
         id: { in: applicationIds },
-        ...(jobId ? { jobId } : {}),
+        job: {
+          tenantId: tenant.id,
+          ...(jobId ? { id: jobId } : {}),
+        },
       },
-      data: {
-        stage: newStage,
+      select: {
+        id: true,
+        jobId: true,
+        candidateId: true,
+        stage: true,
+        status: true,
       },
     });
+
+    for (const app of applications) {
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.jobApplication.update({
+          where: { id: app.id },
+          data: {
+            stage: newStage,
+          },
+        });
+
+        await tx.applicationEvent.create({
+          data: {
+            applicationId: updated.id,
+            type: "bulk_stage_change",
+            tenantId: tenant.id,
+            jobId: updated.jobId,
+            candidateId: updated.candidateId,
+            createdById: actor?.id,
+            payload: {
+              previousStage: app.stage,
+              nextStage: newStage,
+              previousStatus: app.status,
+              // status unchanged here
+              bulk: true,
+            },
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            tenantId: tenant.id,
+            actorId: actor?.id,
+            entityType: "job_application",
+            entityId: updated.id,
+            action: "bulk_stage_change",
+            metadata: {
+              previousStage: app.stage,
+              nextStage: newStage,
+              previousStatus: app.status,
+            },
+          },
+        });
+      });
+    }
   } catch (err) {
     console.error("Bulk stage update error:", err);
   }
