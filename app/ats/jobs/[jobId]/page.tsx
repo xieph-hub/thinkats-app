@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import ApplicationStageStatusControls from "@/components/ats/ApplicationStageStatusControls";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +84,73 @@ function normaliseJobStatus(status: string | null | undefined) {
   return (status || "").toLowerCase();
 }
 
+// ---------- Plan / engine helpers ----------
+
+type PlanKey = "free" | "trial_pro" | "pro" | "enterprise" | string;
+
+function resolveEffectivePlan(
+  plan: string | null | undefined,
+  trialEndsAt: Date | null | undefined,
+): PlanKey {
+  const base = (plan || "free").toLowerCase();
+  const now = new Date();
+
+  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
+    return "trial_pro";
+  }
+  return base;
+}
+
+function formatPlanLabel(
+  rawPlan: string | null | undefined,
+  trialEndsAt: Date | null | undefined,
+): string {
+  const base = (rawPlan || "free").toLowerCase();
+  const now = new Date();
+
+  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
+    return "Free · Trial Pro active";
+  }
+  if (base === "pro") return "Pro";
+  if (base === "enterprise") return "Enterprise";
+  return "Free";
+}
+
+function getEngineLabel(effectivePlan: PlanKey): string {
+  const p = (effectivePlan || "free").toLowerCase();
+  if (p === "enterprise") return "Enterprise scoring engine";
+  if (p === "pro" || p === "trial_pro") return "Pro scoring engine";
+  return "Standard scoring engine";
+}
+
+function getMatchScoreMeta(score?: number | null) {
+  if (score == null) {
+    return {
+      label: "No score",
+      className: "border-slate-200 bg-slate-50 text-slate-500",
+    };
+  }
+
+  if (score >= 80) {
+    return {
+      label: `${score}/100 · High match`,
+      className: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    };
+  }
+
+  if (score >= 60) {
+    return {
+      label: `${score}/100 · Medium match`,
+      className: "border-amber-100 bg-amber-50 text-amber-800",
+    };
+  }
+
+  return {
+    label: `${score}/100 · Low match`,
+    className: "border-slate-200 bg-slate-50 text-slate-600",
+  };
+}
+
 interface AtsJobPageProps {
   params: { jobId: string };
 }
@@ -119,6 +185,12 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     },
     include: {
       clientCompany: true,
+      tenant: {
+        select: {
+          plan: true,
+          trialEndsAt: true,
+        },
+      },
       applications: {
         include: {
           candidate: true,
@@ -164,7 +236,6 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
   const unknownStages = Array.from(buckets.keys()).filter(
     (s) => !STAGE_ORDER.includes(s),
   );
-
   const orderedStages = [...knownStages, ...unknownStages];
 
   const jobStatusLabel = titleCaseFromEnum(job.status as any);
@@ -174,6 +245,12 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
   const publicJobPath = job.slug
     ? `/jobs/${encodeURIComponent(job.slug)}`
     : `/jobs/${encodeURIComponent(job.id)}`;
+
+  const rawPlan = job.tenant?.plan ?? "free";
+  const trialEndsAt = job.tenant?.trialEndsAt ?? null;
+  const effectivePlan = resolveEffectivePlan(rawPlan, trialEndsAt);
+  const planLabel = formatPlanLabel(rawPlan, trialEndsAt);
+  const engineLabel = getEngineLabel(effectivePlan);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
@@ -215,6 +292,7 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
 
         <div className="flex flex-col items-end gap-2">
           <div className="flex flex-wrap justify-end gap-2">
+            {/* Job status */}
             {job.status && (
               <span
                 className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium ${
@@ -226,11 +304,16 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                 {jobStatusLabel || "Status not set"}
               </span>
             )}
+            {/* Visibility */}
             {job.visibility && (
               <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-700">
                 {titleCaseFromEnum(job.visibility)} visibility
               </span>
             )}
+            {/* Plan */}
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700">
+              Plan: {planLabel}
+            </span>
           </div>
 
           <div className="flex flex-wrap justify-end gap-2 text-[11px] text-slate-600">
@@ -246,7 +329,7 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
             <span>{rejectedCount} rejected / archived</span>
           </div>
 
-          <div className="flex flex-wrap justify-end gap-2 text-[11px]">
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
             <Link
               href={publicJobPath}
               className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-[#172965] hover:bg-slate-50"
@@ -254,6 +337,11 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
               View public job page ↗
             </Link>
           </div>
+
+          <p className="text-right text-[11px] text-slate-500">
+            Applications are auto-ranked by match score (0–100), scored with the{" "}
+            <span className="font-medium text-slate-700">{engineLabel}</span>.
+          </p>
         </div>
       </div>
 
@@ -334,19 +422,16 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                       app.status || "PENDING",
                     );
 
-                    const matchScore =
-                      typeof (app as any).matchScore === "number"
-                        ? (app as any).matchScore
-                        : null;
-                    const matchReason =
-                      (app as any).matchReason &&
-                      typeof (app as any).matchReason === "string"
-                        ? (app as any).matchReason
-                        : null;
-
                     const candidateId = candidate?.id;
                     const cvUrl =
                       (app as any).cvUrl || (candidate as any)?.cvUrl || null;
+
+                    const score =
+                      (app as any).matchScore != null
+                        ? Number((app as any).matchScore)
+                        : null;
+                    const { label: scoreLabel, className: scoreClassName } =
+                      getMatchScoreMeta(Number.isFinite(score) ? score : null);
 
                     return (
                       <div
@@ -427,15 +512,10 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                           </div>
                         </div>
 
-                        {/* Right: stage/status controls + match info */}
+                        {/* Right: stage/status + score */}
                         <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
                           {/* Current state badges */}
                           <div className="flex flex-wrap justify-end gap-2">
-                            {typeof matchScore === "number" && (
-                              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                                Match {matchScore}%
-                              </span>
-                            )}
                             <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
                               {stageLabelInner}
                             </span>
@@ -446,20 +526,14 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                             >
                               {statusLabel}
                             </span>
+                            <span
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${scoreClassName}`}
+                            >
+                              {scoreLabel}
+                            </span>
                           </div>
 
-                          {/* Editable controls */}
-                          <ApplicationStageStatusControls
-                            applicationId={app.id}
-                            initialStage={app.stage || "APPLIED"}
-                            initialStatus={app.status || "PENDING"}
-                          />
-
-                          {matchReason && (
-                            <p className="max-w-xs pt-1 text-right text-[10px] text-slate-500">
-                              {matchReason}
-                            </p>
-                          )}
+                          {/* No inline editing here – only display score/stage/status */}
                         </div>
                       </div>
                     );
