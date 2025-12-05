@@ -1,25 +1,21 @@
 // app/ats/settings/page.tsx
 import type { Metadata } from "next";
 import ScoringSettingsCard from "@/components/ats/settings/ScoringSettingsCard";
-import { getServerUser } from "@/lib/auth/getServerUser"; // <- adjust path if different
-import { isEnterpriseAdmin } from "@/lib/officialEmail";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Settings",
   description: "Configure your ATS workspace, accounts and security.",
 };
 
-export default async function AtsSettingsPage() {
-  // Get current app user (Supabase / auth)
-  const { user } = await getServerUser().catch(() => ({ user: null as any }));
-
-  const canEditScoring = !!user && isEnterpriseAdmin(user);
-
+export default function AtsSettingsPage() {
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 lg:px-8">
       {/* Page header */}
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          ATS · Settings
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
           Settings
         </h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -106,8 +102,8 @@ export default async function AtsSettingsPage() {
             </div>
           </section>
 
-          {/* Scoring & bias settings – now gets canEditScoring */}
-          <ScoringSettingsCard canEditScoring={canEditScoring} />
+          {/* Scoring & bias settings (NLP / semantic matching lives here) */}
+          <ScoringSettingsCard />
 
           {/* Notifications */}
           <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -115,10 +111,6 @@ export default async function AtsSettingsPage() {
               <h2 className="text-sm font-semibold text-slate-900">
                 Email & notifications
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Control how ThinkATS keeps your team up to date. The toggles are
-                UI-only for now.
-              </p>
             </div>
 
             <div className="space-y-4">
@@ -264,9 +256,7 @@ export default async function AtsSettingsPage() {
   );
 }
 
-/**
- * Small presentational helpers to keep the page tidy.
- */
+/** Presentational helpers */
 
 function NotificationRow({
   title,
