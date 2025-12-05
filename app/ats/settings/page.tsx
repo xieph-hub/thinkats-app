@@ -1,13 +1,20 @@
 // app/ats/settings/page.tsx
 import type { Metadata } from "next";
 import ScoringSettingsCard from "@/components/ats/settings/ScoringSettingsCard";
+import { getServerUser } from "@/lib/auth/getServerUser"; // <- adjust path if different
+import { isEnterpriseAdmin } from "@/lib/officialEmail";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Settings",
   description: "Configure your ATS workspace, accounts and security.",
 };
 
-export default function AtsSettingsPage() {
+export default async function AtsSettingsPage() {
+  // Get current app user (Supabase / auth)
+  const { user } = await getServerUser().catch(() => ({ user: null as any }));
+
+  const canEditScoring = !!user && isEnterpriseAdmin(user);
+
   return (
     <div className="space-y-8">
       {/* Page header */}
@@ -99,8 +106,8 @@ export default function AtsSettingsPage() {
             </div>
           </section>
 
-          {/* NEW: Scoring & bias settings */}
-          <ScoringSettingsCard />
+          {/* Scoring & bias settings – now gets canEditScoring */}
+          <ScoringSettingsCard canEditScoring={canEditScoring} />
 
           {/* Notifications */}
           <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
