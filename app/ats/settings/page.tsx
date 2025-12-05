@@ -1,5 +1,6 @@
 // app/ats/settings/page.tsx
 import type { Metadata } from "next";
+import ScoringSettingsCard from "@/components/ats/settings/ScoringSettingsCard";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Settings",
@@ -58,7 +59,8 @@ export default function AtsSettingsPage() {
                 </label>
                 <div className="flex rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
                   <span className="truncate">
-                    resourcin.thinkats.com / <span className="font-medium">ats</span>
+                    resourcin.thinkats.com /{" "}
+                    <span className="font-medium">ats</span>
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400">
@@ -96,6 +98,9 @@ export default function AtsSettingsPage() {
               </div>
             </div>
           </section>
+
+          {/* NEW: Scoring & bias settings */}
+          <ScoringSettingsCard />
 
           {/* Notifications */}
           <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
