@@ -11,6 +11,7 @@ export type TenantRow = {
   primaryContactEmail: string | null;
   internalNotes: string | null;
   logoUrl: string | null;
+  plan: string;            // 👈 NEW: expose plan on the typed row
   createdAt: string;
   updatedAt: string;
 
@@ -18,6 +19,7 @@ export type TenantRow = {
   primary_contact_email?: string | null;
   notes?: string | null;
   logo_url?: string | null;
+  plan_raw?: string | null; // optional legacy mirror if you ever need it
   created_at?: string;
   updated_at?: string;
 };
@@ -42,6 +44,7 @@ export async function getResourcinTenant(): Promise<TenantRow> {
       primary_contact_email,
       notes,
       logo_url,
+      plan,
       created_at,
       updated_at
     `,
@@ -69,6 +72,7 @@ export async function getResourcinTenant(): Promise<TenantRow> {
     primaryContactEmail: raw.primary_contact_email ?? null,
     internalNotes: raw.notes ?? null,
     logoUrl: raw.logo_url ?? null,
+    plan: raw.plan ?? "free", // 👈 default if null / missing
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
 
@@ -76,6 +80,7 @@ export async function getResourcinTenant(): Promise<TenantRow> {
     primary_contact_email: raw.primary_contact_email ?? null,
     notes: raw.notes ?? null,
     logo_url: raw.logo_url ?? null,
+    plan_raw: raw.plan ?? null,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
