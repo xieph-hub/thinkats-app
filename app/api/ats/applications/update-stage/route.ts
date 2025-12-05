@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Ensure the application belongs to the current tenant
+    // Ensure application belongs to this tenant and capture current values
     const application = await prisma.jobApplication.findFirst({
       where: {
         id: applicationId,
@@ -42,9 +42,10 @@ export async function POST(req: NextRequest) {
       },
       select: {
         id: true,
+        jobId: true,
         stage: true,
         status: true,
-        jobId: true,
+        statusChangedAt: true,
       },
     });
 
@@ -59,74 +60,100 @@ export async function POST(req: NextRequest) {
       normaliseEnum(stageInput) ||
       (application.stage as string | undefined) ||
       "APPLIED";
+
     const nextStatus =
       normaliseEnum(statusInput) ||
       (application.status as string | undefined) ||
       "PENDING";
+
+    // If nothing changes, just return current state
+    if (
+      nextStage === application.stage &&
+      nextStatus === application.status
+    ) {
+      return NextResponse.json({
+        ok: true,
+        applicationId: application.id,
+        stage: application.stage,
+        status: application.status,
+        unchanged: true,
+      });
+    }
+
+    const now = new Date();
 
     const updated = await prisma.jobApplication.update({
       where: { id: application.id },
       data: {
         stage: nextStage,
         status: nextStatus,
+        statusChangedAt:
+          nextStatus !== application.status
+            ? now
+            : application.statusChangedAt ?? now,
+        updatedAt: now,
+      },
+      select: {
+        id: true,
+        jobId: true,
+        stage: true,
+        status: true,
       },
     });
 
-    // --- Logging: application_events ---
-    try {
-      await prisma.applicationEvent.create({
+    // Fire-and-forget logging
+    const loggingOps: Promise<unknown>[] = [];
+
+    // Application-level event
+    loggingOps.push(
+      prisma.applicationEvent.create({
         data: {
-          applicationId: updated.id,
-          type: "stage_status_update",
+          applicationId: application.id,
+          type: "stage_status_change",
           payload: {
-            previousStage: application.stage,
-            previousStatus: application.status,
-            nextStage,
-            nextStatus,
-            jobId: application.jobId,
+            fromStage: application.stage,
+            toStage: nextStage,
+            fromStatus: application.status,
+            toStatus: nextStatus,
             source: "inline_pipeline",
           },
         },
-      });
-    } catch (eventErr) {
-      console.error(
-        "Update application stage – failed to insert ApplicationEvent:",
-        eventErr,
-      );
-    }
+      }),
+    );
 
-    // --- Logging: activity_log ---
-    try {
-      await prisma.activityLog.create({
+    // Tenant-level audit log
+    loggingOps.push(
+      prisma.activityLog.create({
         data: {
           tenantId: tenant.id,
-          actorId: null, // can be wired to an authenticated user later
+          actorId: null, // can be wired to a user later
           entityType: "job_application",
-          entityId: updated.id,
-          action: "stage_status_update",
+          entityId: application.id,
+          action: "stage_status_change",
           metadata: {
-            previousStage: application.stage,
-            previousStatus: application.status,
-            nextStage,
-            nextStatus,
             jobId: application.jobId,
+            fromStage: application.stage,
+            toStage: nextStage,
+            fromStatus: application.status,
+            toStatus: nextStatus,
             source: "inline_pipeline",
           },
         },
-      });
-    } catch (logErr) {
-      console.error(
-        "Update application stage – failed to insert ActivityLog:",
-        logErr,
-      );
-    }
+      }),
+    );
 
-    return NextResponse.json({
-      ok: true,
-      applicationId: updated.id,
-      stage: updated.stage,
-      status: updated.status,
-    });
+    // Don't block user on logging; just avoid unhandled rejections
+    await Promise.allSettled(loggingOps);
+
+    return NextResponse.json(
+      {
+        ok: true,
+        applicationId: updated.id,
+        stage: updated.stage,
+        status: updated.status,
+      },
+      { status: 200 },
+    );
   } catch (err) {
     console.error("Update application stage error:", err);
     return NextResponse.json(
