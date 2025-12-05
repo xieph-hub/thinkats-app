@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import ApplicationStageStatusControls from "@/components/ats/ApplicationStageStatusControls";
+import { defaultScoringConfigForPlan } from "@/lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -84,71 +86,30 @@ function normaliseJobStatus(status: string | null | undefined) {
   return (status || "").toLowerCase();
 }
 
-// ---------- Plan / engine helpers ----------
+type Tier = "A" | "B" | "C" | "D";
 
-type PlanKey = "free" | "trial_pro" | "pro" | "enterprise" | string;
-
-function resolveEffectivePlan(
-  plan: string | null | undefined,
-  trialEndsAt: Date | null | undefined,
-): PlanKey {
-  const base = (plan || "free").toLowerCase();
-  const now = new Date();
-
-  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
-    return "trial_pro";
-  }
-  return base;
+function tierFromScore(
+  score: number,
+  thresholds: { A: number; B: number; C: number },
+): Tier {
+  if (score >= thresholds.A) return "A";
+  if (score >= thresholds.B) return "B";
+  if (score >= thresholds.C) return "C";
+  return "D";
 }
 
-function formatPlanLabel(
-  rawPlan: string | null | undefined,
-  trialEndsAt: Date | null | undefined,
-): string {
-  const base = (rawPlan || "free").toLowerCase();
-  const now = new Date();
-
-  if (base === "free" && trialEndsAt && trialEndsAt.getTime() > now.getTime()) {
-    return "Free · Trial Pro active";
+function tierBadgeClass(tier: Tier) {
+  switch (tier) {
+    case "A":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "B":
+      return "bg-sky-50 text-sky-700 border-sky-200";
+    case "C":
+      return "bg-amber-50 text-amber-800 border-amber-200";
+    case "D":
+    default:
+      return "bg-slate-50 text-slate-500 border-slate-200";
   }
-  if (base === "pro") return "Pro";
-  if (base === "enterprise") return "Enterprise";
-  return "Free";
-}
-
-function getEngineLabel(effectivePlan: PlanKey): string {
-  const p = (effectivePlan || "free").toLowerCase();
-  if (p === "enterprise") return "Enterprise scoring engine";
-  if (p === "pro" || p === "trial_pro") return "Pro scoring engine";
-  return "Standard scoring engine";
-}
-
-function getMatchScoreMeta(score?: number | null) {
-  if (score == null) {
-    return {
-      label: "No score",
-      className: "border-slate-200 bg-slate-50 text-slate-500",
-    };
-  }
-
-  if (score >= 80) {
-    return {
-      label: `${score}/100 · High match`,
-      className: "border-emerald-100 bg-emerald-50 text-emerald-700",
-    };
-  }
-
-  if (score >= 60) {
-    return {
-      label: `${score}/100 · Medium match`,
-      className: "border-amber-100 bg-amber-50 text-amber-800",
-    };
-  }
-
-  return {
-    label: `${score}/100 · Low match`,
-    className: "border-slate-200 bg-slate-50 text-slate-600",
-  };
 }
 
 interface AtsJobPageProps {
@@ -178,6 +139,13 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     );
   }
 
+  const plan = (tenant as any).plan || "free";
+  const scoringConfig = defaultScoringConfigForPlan(plan);
+  const thresholds = scoringConfig.tierThresholds;
+  const engineLabel = scoringConfig.enableNlpBoost
+    ? "Scored with Pro/Enterprise engine"
+    : "Scored with Free engine";
+
   const job = await prisma.job.findFirst({
     where: {
       id: params.jobId,
@@ -185,12 +153,6 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     },
     include: {
       clientCompany: true,
-      tenant: {
-        select: {
-          plan: true,
-          trialEndsAt: true,
-        },
-      },
       applications: {
         include: {
           candidate: true,
@@ -231,11 +193,11 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
     buckets.get(key)!.push(app);
   }
 
-  // Ensure stable stage order, add "Other" bucket at the end if needed
   const knownStages = STAGE_ORDER.filter((s) => buckets.has(s));
   const unknownStages = Array.from(buckets.keys()).filter(
     (s) => !STAGE_ORDER.includes(s),
   );
+
   const orderedStages = [...knownStages, ...unknownStages];
 
   const jobStatusLabel = titleCaseFromEnum(job.status as any);
@@ -245,12 +207,6 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
   const publicJobPath = job.slug
     ? `/jobs/${encodeURIComponent(job.slug)}`
     : `/jobs/${encodeURIComponent(job.id)}`;
-
-  const rawPlan = job.tenant?.plan ?? "free";
-  const trialEndsAt = job.tenant?.trialEndsAt ?? null;
-  const effectivePlan = resolveEffectivePlan(rawPlan, trialEndsAt);
-  const planLabel = formatPlanLabel(rawPlan, trialEndsAt);
-  const engineLabel = getEngineLabel(effectivePlan);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
@@ -292,7 +248,6 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
 
         <div className="flex flex-col items-end gap-2">
           <div className="flex flex-wrap justify-end gap-2">
-            {/* Job status */}
             {job.status && (
               <span
                 className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium ${
@@ -304,15 +259,16 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                 {jobStatusLabel || "Status not set"}
               </span>
             )}
-            {/* Visibility */}
             {job.visibility && (
               <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-700">
                 {titleCaseFromEnum(job.visibility)} visibility
               </span>
             )}
-            {/* Plan */}
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700">
-              Plan: {planLabel}
+              Plan:{" "}
+              <span className="ml-1 capitalize">
+                {(plan || "free").toLowerCase()}
+              </span>
             </span>
           </div>
 
@@ -329,7 +285,10 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
             <span>{rejectedCount} rejected / archived</span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+          <div className="flex flex-wrap justify-end gap-2 text-[11px]">
+            <span className="text-[10px] text-slate-500">
+              {engineLabel}
+            </span>
             <Link
               href={publicJobPath}
               className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-[#172965] hover:bg-slate-50"
@@ -337,11 +296,6 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
               View public job page ↗
             </Link>
           </div>
-
-          <p className="text-right text-[11px] text-slate-500">
-            Applications are auto-ranked by match score (0–100), scored with the{" "}
-            <span className="font-medium text-slate-700">{engineLabel}</span>.
-          </p>
         </div>
       </div>
 
@@ -426,12 +380,15 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                     const cvUrl =
                       (app as any).cvUrl || (candidate as any)?.cvUrl || null;
 
-                    const score =
-                      (app as any).matchScore != null
-                        ? Number((app as any).matchScore)
-                        : null;
-                    const { label: scoreLabel, className: scoreClassName } =
-                      getMatchScoreMeta(Number.isFinite(score) ? score : null);
+                    const matchScore =
+                      (app as any).matchScore ??
+                      null; // Int? from Prisma, may be null
+                    const matchReason = (app as any).matchReason || "";
+
+                    let tier: Tier | null = null;
+                    if (typeof matchScore === "number") {
+                      tier = tierFromScore(matchScore, thresholds);
+                    }
 
                     return (
                       <div
@@ -512,28 +469,55 @@ export default async function AtsJobPage({ params }: AtsJobPageProps) {
                           </div>
                         </div>
 
-                        {/* Right: stage/status + score */}
+                        {/* Right: stage/status + scoring */}
                         <div className="flex shrink-0 flex-col items-end justify-between gap-2 text-right text-[11px] text-slate-600">
-                          {/* Current state badges */}
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
-                              {stageLabelInner}
-                            </span>
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
-                                app.status,
-                              )}`}
-                            >
-                              {statusLabel}
-                            </span>
-                            <span
-                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${scoreClassName}`}
-                            >
-                              {scoreLabel}
-                            </span>
+                          <div className="flex flex-col items-end gap-1">
+                            {/* Current state badges */}
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[10px] font-medium text-slate-700">
+                                {stageLabelInner}
+                              </span>
+                              <span
+                                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${applicationStatusBadgeClass(
+                                  app.status,
+                                )}`}
+                              >
+                                {statusLabel}
+                              </span>
+                            </div>
+
+                            {/* Scoring row */}
+                            {typeof matchScore === "number" && tier && (
+                              <div className="flex flex-wrap items-center justify-end gap-2">
+                                <span
+                                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${tierBadgeClass(
+                                    tier,
+                                  )}`}
+                                >
+                                  Tier {tier} · {matchScore}/100
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {engineLabel}
+                                </span>
+                                {matchReason && (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50"
+                                    title={matchReason}
+                                  >
+                                    Score breakdown
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
 
-                          {/* No inline editing here – only display score/stage/status */}
+                          {/* Editable controls */}
+                          <ApplicationStageStatusControls
+                            applicationId={app.id}
+                            initialStage={app.stage || "APPLIED"}
+                            initialStatus={app.status || "PENDING"}
+                          />
                         </div>
                       </div>
                     );
