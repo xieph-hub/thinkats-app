@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import ApplicationStageStatusInline from "@/components/ats/jobs/ApplicationStageStatusInline";
+import ApplicationScheduleInterviewButton from "@/components/ats/jobs/ApplicationScheduleInterviewButton";
 
 export const dynamic = "force-dynamic";
 
@@ -21,15 +22,6 @@ type PageProps = {
     status?: string;
     tier?: string;
   };
-};
-
-// Local helper type so TS knows tenant has a plan field
-type TenantWithPlan = {
-  id: string;
-  name?: string | null;
-  slug?: string | null;
-  plan?: string | null;
-  [key: string]: any;
 };
 
 function getTierColor(tier?: string | null) {
@@ -49,14 +41,22 @@ function scoreColor(score?: number | null) {
   return "bg-rose-100 text-rose-700";
 }
 
+function formatInterviewDate(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const date = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 export default async function JobPipelinePage({
   params,
   searchParams = {},
 }: PageProps) {
-  const baseTenant = await getResourcinTenant();
-  if (!baseTenant) notFound();
-
-  const tenant = baseTenant as TenantWithPlan;
+  const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
 
   const job = await prisma.job.findFirst({
     where: {
@@ -75,6 +75,9 @@ export default async function JobPipelinePage({
           scoringEvents: {
             orderBy: { createdAt: "desc" },
             take: 1,
+          },
+          interviews: {
+            orderBy: { scheduledAt: "asc" },
           },
         },
       },
@@ -237,9 +240,7 @@ export default async function JobPipelinePage({
           <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
             <span>
               Tenant plan:{" "}
-              <span className="font-medium capitalize">
-                {tenant.plan ?? "free"}
-              </span>
+              <span className="font-medium capitalize">{tenant.plan}</span>
             </span>
           </div>
         </div>
@@ -340,14 +341,6 @@ export default async function JobPipelinePage({
         className="flex flex-1 flex-col overflow-hidden"
       >
         <input type="hidden" name="jobId" value={job.id} />
-        {allVisibleApplicationIds.map((id) => (
-          <input
-            key={id}
-            type="hidden"
-            name="visibleApplicationIds"
-            value={id}
-          />
-        ))}
 
         <div className="flex-1 overflow-x-auto bg-slate-50 px-4 py-4">
           <div className="flex min-w-full gap-4">
@@ -375,95 +368,100 @@ export default async function JobPipelinePage({
                     </div>
                   )}
 
-                  {column.apps.map((app) => (
-                    <article
-                      key={app.id}
-                      className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-100"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            name="applicationIds"
-                            value={app.id}
-                            className="mt-1 h-3 w-3 rounded border-slate-500 text-slate-900"
-                          />
-                          <div>
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="text-[13px] font-semibold">
-                                {app.fullName}
-                              </span>
-                              {app._tier && (
-                                <span
-                                  className={[
-                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                    getTierColor(app._tier),
-                                  ].join(" ")}
-                                >
-                                  Tier {app._tier}
+                  {column.apps.map((app) => {
+                    const nextInterview =
+                      app.interviews?.find(
+                        (i) => i.status === "SCHEDULED",
+                      ) || null;
+
+                    return (
+                      <article
+                        key={app.id}
+                        className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-100"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              name="applicationIds"
+                              value={app.id}
+                              className="mt-1 h-3 w-3 rounded border-slate-500 text-slate-900"
+                            />
+                            <div>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-[13px] font-semibold">
+                                  {app.fullName}
                                 </span>
-                              )}
-                              {app._score != null && (
-                                <span
-                                  className={[
-                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                                    scoreColor(app._score),
-                                  ].join(" ")}
-                                >
-                                  Score {app._score}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 text-[11px] text-slate-400">
-                              {app.email}
+                                {app._tier && (
+                                  <span
+                                    className={[
+                                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                      getTierColor(app._tier),
+                                    ].join(" ")}
+                                  >
+                                    Tier {app._tier}
+                                  </span>
+                                )}
+                                {app._score != null && (
+                                  <span
+                                    className={[
+                                      "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                      scoreColor(app._score),
+                                    ].join(" ")}
+                                  >
+                                    Score {app._score}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-slate-400">
+                                {app.email}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                        {app.location && (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                            {app.location}
-                          </span>
-                        )}
-                        {app.source && (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-                            Source: {app.source}
-                          </span>
-                        )}
-                      </div>
-
-                      <ApplicationStageStatusInline
-                        applicationId={app.id}
-                        currentStage={app.stage}
-                        currentStatus={app.status}
-                        stageOptions={stageOptions}
-                      />
-
-                      {app._score != null && (
-                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                          <div
-                            className="h-full rounded-full bg-emerald-500"
-                            style={{
-                              width: `${Math.max(
-                                0,
-                                Math.min(100, app._score),
-                              )}%`,
-                            }}
-                          />
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                          {app.location && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                              {app.location}
+                            </span>
+                          )}
+                          {app.source && (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                              Source: {app.source}
+                            </span>
+                          )}
+                          {nextInterview && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-200">
+                              Next interview:{" "}
+                              {formatInterviewDate(nextInterview.scheduledAt)}
+                            </span>
+                          )}
                         </div>
-                      )}
 
-                      {app.matchReason && (
-                        <p className="mt-1 line-clamp-2 text-[11px] text-slate-300">
-                          {app.matchReason}
-                        </p>
-                      )}
-                    </article>
-                  ))}
+                        <ApplicationStageStatusInline
+                          applicationId={app.id}
+                          currentStage={app.stage}
+                          currentStatus={app.status}
+                          stageOptions={stageOptions}
+                        />
+
+                        <ApplicationScheduleInterviewButton
+                          applicationId={app.id}
+                          candidateName={app.fullName}
+                          candidateEmail={app.email}
+                        />
+
+                        {app.matchReason && (
+                          <p className="mt-1 line-clamp-2 text-[11px] text-slate-300">
+                            {app.matchReason}
+                          </p>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -473,26 +471,11 @@ export default async function JobPipelinePage({
         {/* Bulk move bar */}
         <div className="border-t border-slate-200 bg-white px-4 py-2">
           <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-600">
-            <div className="space-y-1">
-              <div>
-                <span className="font-medium text-slate-800">Bulk move</span>{" "}
-                <span className="text-slate-500">
-                  Select candidates above, then move them to a new stage.
-                </span>
-              </div>
-              <label className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                <input
-                  type="checkbox"
-                  name="selectAllVisible"
-                  value="1"
-                  className="h-3 w-3 rounded border-slate-300"
-                />
-                Apply to all{" "}
-                <span className="font-semibold text-slate-800">
-                  {allVisibleApplicationIds.length}
-                </span>{" "}
-                visible candidates in this view
-              </label>
+            <div>
+              <span className="font-medium text-slate-800">Bulk move</span>{" "}
+              <span className="text-slate-500">
+                Select candidates above, then move them to a new stage.
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
