@@ -340,6 +340,14 @@ export default async function JobPipelinePage({
         className="flex flex-1 flex-col overflow-hidden"
       >
         <input type="hidden" name="jobId" value={job.id} />
+        {allVisibleApplicationIds.map((id) => (
+          <input
+            key={id}
+            type="hidden"
+            name="visibleApplicationIds"
+            value={id}
+          />
+        ))}
 
         <div className="flex-1 overflow-x-auto bg-slate-50 px-4 py-4">
           <div className="flex min-w-full gap-4">
@@ -435,6 +443,20 @@ export default async function JobPipelinePage({
                         stageOptions={stageOptions}
                       />
 
+                      {app._score != null && (
+                        <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-emerald-500"
+                            style={{
+                              width: `${Math.max(
+                                0,
+                                Math.min(100, app._score),
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      )}
+
                       {app.matchReason && (
                         <p className="mt-1 line-clamp-2 text-[11px] text-slate-300">
                           {app.matchReason}
@@ -451,11 +473,26 @@ export default async function JobPipelinePage({
         {/* Bulk move bar */}
         <div className="border-t border-slate-200 bg-white px-4 py-2">
           <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-600">
-            <div>
-              <span className="font-medium text-slate-800">Bulk move</span>{" "}
-              <span className="text-slate-500">
-                Select candidates above, then move them to a new stage.
-              </span>
+            <div className="space-y-1">
+              <div>
+                <span className="font-medium text-slate-800">Bulk move</span>{" "}
+                <span className="text-slate-500">
+                  Select candidates above, then move them to a new stage.
+                </span>
+              </div>
+              <label className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                <input
+                  type="checkbox"
+                  name="selectAllVisible"
+                  value="1"
+                  className="h-3 w-3 rounded border-slate-300"
+                />
+                Apply to all{" "}
+                <span className="font-semibold text-slate-800">
+                  {allVisibleApplicationIds.length}
+                </span>{" "}
+                visible candidates in this view
+              </label>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <select
