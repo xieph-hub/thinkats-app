@@ -84,7 +84,7 @@ export function mergeScoringConfig(opts: {
   jobOverrides: any;
   tenantHiringMode: string | null;
   jobHiringMode: string | null;
-}: NormalizedScoringConfig): NormalizedScoringConfig {
+}): NormalizedScoringConfig {
   const base: any = {
     ...DEFAULT_SCORING_CONFIG,
     ...(opts.tenantConfig ?? {}),
@@ -124,7 +124,7 @@ export async function getScoringConfigForJob(jobId: string): Promise<{
     jobOverrides: (job.scoringOverrides as any) ?? null,
     tenantHiringMode: tenant.hiringMode ?? null,
     jobHiringMode: job.hiringMode ?? null,
-  } as any);
+  });
 
   return { job, tenant, config };
 }
