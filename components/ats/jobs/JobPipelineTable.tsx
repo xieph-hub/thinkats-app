@@ -127,7 +127,7 @@ export default function JobPipelineTable({ rows }: { rows: PipelineRow[] }) {
             </h2>
             <p className="text-[11px] text-slate-500">
               Newest applications appear first. Use filters to slice this
-              pipeline by tier, stage and risk.
+              pipeline by tier, stage and status.
             </p>
           </div>
 
@@ -177,7 +177,7 @@ export default function JobPipelineTable({ rows }: { rows: PipelineRow[] }) {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by name, email, company"
+                placeholder="Search name, email, company"
                 className="w-48 bg-transparent text-[11px] text-slate-700 outline-none placeholder:text-slate-400"
               />
             </div>
