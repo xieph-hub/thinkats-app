@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getScoringConfigForJob } from "@/lib/scoring/server";
-import { computeApplicationScore, type Tier } from "@/lib/scoring/compute";
+import { computeApplicationScore } from "@/lib/scoring/compute";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,12 @@ export default async function AtsCandidatesPage() {
     take: 100,
   });
 
-  const scoredRows = [];
+  const scoredRows: {
+    application: (typeof applications)[number];
+    candidate: (typeof applications)[number]["candidate"];
+    job: (typeof applications)[number]["job"];
+    scored: ReturnType<typeof computeApplicationScore>;
+  }[] = [];
 
   for (const app of applications) {
     const { config } = await getScoringConfigForJob(app.jobId);
@@ -128,7 +133,7 @@ export default async function AtsCandidatesPage() {
                     </td>
 
                     <td className="px-4 py-3">
-                      <TierBadge tier={scored.tier} />
+                      <TierBadge tier={scored.tier as Tier} />
                     </td>
 
                     <td className="px-4 py-3">
@@ -143,7 +148,10 @@ export default async function AtsCandidatesPage() {
                     </td>
 
                     <td className="px-4 py-3">
-                      <RiskBadges risks={scored.risks} redFlags={scored.redFlags} />
+                      <RiskBadges
+                        risks={scored.risks}
+                        redFlags={scored.redFlags}
+                      />
                     </td>
 
                     <td className="px-4 py-3">
@@ -190,8 +198,7 @@ function TierBadge({ tier }: { tier: Tier }) {
   const map: Record<Tier, { label: string; classes: string }> = {
     A: {
       label: "Tier A · Priority",
-      classes:
-        "border-emerald-200 bg-emerald-50 text-emerald-800",
+      classes: "border-emerald-200 bg-emerald-50 text-emerald-800",
     },
     B: {
       label: "Tier B · Strong",
