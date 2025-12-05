@@ -49,8 +49,8 @@ model Tenant {
   scoringEvents ScoringEvent[]
 
   // search / views / analytics
-  savedViews          SavedView[]
-  analyticsSnapshots  AnalyticsSnapshot[]
+  savedViews         SavedView[]
+  analyticsSnapshots AnalyticsSnapshot[]
 
   @@map("tenants")
 }
@@ -71,6 +71,9 @@ model User {
 
   userTenantRoles UserTenantRole[]
   loginOtps       LoginOtp[]      // OTP records for this user
+
+  // NEW: back-relation for SavedView.owner
+  savedViews      SavedView[]
 
   @@map("users")
 }
@@ -195,8 +198,8 @@ model Job {
   // scoring audit trail
   scoringEvents ScoringEvent[]
 
-  // analytics snapshots (optional, one-way relation in AnalyticsSnapshot)
-  // analyticsSnapshots AnalyticsSnapshot[]  // you can add this later if you want back-rel
+  // NEW: back-relation for AnalyticsSnapshot.job
+  analyticsSnapshots AnalyticsSnapshot[]
 
   @@map("jobs")
 }
