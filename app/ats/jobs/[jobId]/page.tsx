@@ -3,25 +3,36 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getScoringConfigForJob } from "@/lib/scoring/server";
-import { computeApplicationScore, type Tier } from "@/lib/scoring/compute";
+import { computeApplicationScore } from "@/lib/scoring/compute";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Job pipeline",
   description:
-    "Pipeline view of candidates, scoring and risk flags for a specific mandate.",
+    "ATS pipeline view of applications, tiers and risk flags for a specific role.",
 };
 
 type PageProps = {
-  params: { jobId: string };
+  params: {
+    jobId: string;
+  };
 };
 
 export default async function AtsJobPipelinePage({ params }: PageProps) {
   const job = await prisma.job.findUnique({
     where: { id: params.jobId },
     include: {
+      tenant: true,
       clientCompany: true,
+      applications: {
+        include: {
+          candidate: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
     },
   });
 
@@ -29,130 +40,99 @@ export default async function AtsJobPipelinePage({ params }: PageProps) {
     notFound();
   }
 
-  const applications = await prisma.jobApplication.findMany({
-    where: { jobId: job.id },
-    include: {
-      candidate: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
   const { config } = await getScoringConfigForJob(job.id);
 
-  const scoredApplications = applications.map((app) => {
+  const rows = job.applications.map((application) => {
     const scored = computeApplicationScore({
-      application: app,
-      candidate: app.candidate,
+      application,
+      candidate: application.candidate,
       job,
       config,
     });
 
     return {
-      application: app,
-      candidate: app.candidate,
+      application,
+      candidate: application.candidate,
       scored,
     };
   });
 
-  const totalCandidates = applications.length;
-  const tierCounts = scoredApplications.reduce(
-    (acc, row) => {
-      acc[row.scored.tier] += 1;
-      return acc;
-    },
-    { A: 0, B: 0, C: 0, D: 0 } as Record<Tier, number>,
-  );
-
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Header / job summary */}
-      <header className="space-y-2">
+      <header className="space-y-3 border-b border-slate-100 pb-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS · Pipeline
+          ATS · Job pipeline
         </p>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
             <h1 className="text-xl font-semibold text-slate-900">
               {job.title}
             </h1>
-            <p className="text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               {job.clientCompany?.name && (
-                <span className="font-medium text-slate-700">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                   {job.clientCompany.name}
                 </span>
               )}
-              {job.clientCompany?.name && (job.location || job.workMode) && (
-                <span className="mx-1.5 text-slate-300">·</span>
-              )}
-              {(job.location || job.workMode) && (
-                <span>
+              {job.location && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
                   {job.location}
-                  {job.workMode ? ` · ${job.workMode}` : ""}
                 </span>
               )}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-[11px]">
-            <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span className="font-medium text-slate-700">
-                {job.status === "open" ? "Open" : job.status}
+              {job.workMode && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 capitalize">
+                  {job.workMode.toLowerCase()}
+                </span>
+              )}
+              {job.experienceLevel && (
+                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 capitalize">
+                  {job.experienceLevel.toLowerCase()}
+                </span>
+              )}
+              <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                {job.status?.toUpperCase() || "OPEN"}
               </span>
             </div>
-            <div className="rounded-full bg-slate-50 px-3 py-1 text-slate-600">
-              {totalCandidates}{" "}
-              {totalCandidates === 1 ? "candidate" : "candidates"}
-            </div>
+          </div>
+          <div className="space-y-1 text-right text-[11px] text-slate-500">
+            <p>
+              Applications:{" "}
+              <span className="font-semibold text-slate-900">
+                {job.applications.length}
+              </span>
+            </p>
+            <p>
+              Hiring mode:{" "}
+              <span className="font-semibold text-slate-900 capitalize">
+                {config.hiringMode}
+              </span>
+            </p>
+            <p className="text-[10px]">
+              Tier thresholds: A ≥ {config.thresholds.tierA}, B ≥{" "}
+              {config.thresholds.tierB}, C ≥ {config.thresholds.tierC}
+            </p>
           </div>
         </div>
       </header>
-
-      {/* Tier summary */}
-      <section className="grid gap-3 md:grid-cols-4">
-        <TierSummaryCard
-          label="Tier A"
-          description="Priority interviews"
-          count={tierCounts.A}
-          tone="emerald"
-        />
-        <TierSummaryCard
-          label="Tier B"
-          description="Strong consideration"
-          count={tierCounts.B}
-          tone="sky"
-        />
-        <TierSummaryCard
-          label="Tier C"
-          description="Consider / backup pool"
-          count={tierCounts.C}
-          tone="amber"
-        />
-        <TierSummaryCard
-          label="Tier D"
-          description="Below threshold"
-          count={tierCounts.D}
-          tone="rose"
-        />
-      </section>
 
       {/* Pipeline table */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 px-4 py-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">
-              Candidates & scoring
+              Pipeline · {job.applications.length}{" "}
+              {job.applications.length === 1 ? "application" : "applications"}
             </h2>
             <p className="text-[11px] text-slate-500">
-              Tiers and flags are driven by your scoring settings.
+              Scored by the semantic CV/JD engine with bias-aware tiering.
             </p>
           </div>
         </div>
 
-        {scoredApplications.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="px-4 py-10 text-center text-xs text-slate-500">
-            No applications yet. Once candidates apply, they&apos;ll appear
-            here with tiers, risks and interview focus areas.
+            No applications yet for this role.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -160,37 +140,55 @@ export default async function AtsJobPipelinePage({ params }: PageProps) {
               <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-2 text-left">Candidate</th>
+                  <th className="px-4 py-2 text-left">Profile</th>
                   <th className="px-4 py-2 text-left">Tier</th>
                   <th className="px-4 py-2 text-left">Score</th>
                   <th className="px-4 py-2 text-left">Risks / red flags</th>
-                  <th className="px-4 py-2 text-left">Interview focus</th>
+                  <th className="px-4 py-2 text-left">Reason</th>
                   <th className="px-4 py-2 text-left">Applied</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {scoredApplications.map(({ application, candidate, scored }) => (
+                {rows.map(({ application, candidate, scored }) => (
                   <tr key={application.id} className="align-top">
+                    {/* Candidate / email */}
                     <td className="px-4 py-3">
                       <div className="space-y-0.5">
                         <p className="text-xs font-medium text-slate-900">
                           {application.fullName}
                         </p>
                         <p className="text-[11px] text-slate-500">
-                          {candidate?.currentTitle || "—"}
-                          {candidate?.currentCompany
-                            ? ` · ${candidate.currentCompany}`
-                            : ""}
-                        </p>
-                        <p className="text-[11px] text-slate-500">
                           {application.email}
                         </p>
+                        {application.location && (
+                          <p className="text-[11px] text-slate-400">
+                            {application.location}
+                          </p>
+                        )}
                       </div>
                     </td>
 
+                    {/* Current role / company */}
                     <td className="px-4 py-3">
-                      <TierBadge tier={scored.tier} />
+                      <p className="text-xs text-slate-900">
+                        {candidate?.currentTitle || "—"}
+                        {candidate?.currentCompany
+                          ? ` · ${candidate.currentCompany}`
+                          : ""}
+                      </p>
+                      {candidate?.location && (
+                        <p className="text-[11px] text-slate-500">
+                          {candidate.location}
+                        </p>
+                      )}
                     </td>
 
+                    {/* Tier pill */}
+                    <td className="px-4 py-3">
+                      <TierBadge tier={scored.tier as Tier} />
+                    </td>
+
+                    {/* Score */}
                     <td className="px-4 py-3">
                       <div className="flex items-baseline gap-1">
                         <span className="text-sm font-semibold text-slate-900">
@@ -202,30 +200,25 @@ export default async function AtsJobPipelinePage({ params }: PageProps) {
                       </div>
                     </td>
 
+                    {/* Risks / red flags */}
                     <td className="px-4 py-3">
-                      <RiskBadges risks={scored.risks} redFlags={scored.redFlags} />
+                      <RiskBadges
+                        risks={scored.risks}
+                        redFlags={scored.redFlags}
+                      />
                     </td>
 
+                    {/* Reason / short explanation */}
                     <td className="px-4 py-3">
-                      {scored.interviewFocus.length === 0 ? (
-                        <span className="text-[11px] text-slate-400">—</span>
-                      ) : (
-                        <ul className="space-y-1 text-[11px] text-slate-600">
-                          {scored.interviewFocus.slice(0, 2).map((item, idx) => (
-                            <li key={idx} className="line-clamp-2" title={item}>
-                              • {item}
-                            </li>
-                          ))}
-                          {scored.interviewFocus.length > 2 && (
-                            <li className="text-[10px] text-slate-400">
-                              +{scored.interviewFocus.length - 2} more focus
-                              points
-                            </li>
-                          )}
-                        </ul>
-                      )}
+                      <p
+                        className="max-w-xs text-[11px] text-slate-600 line-clamp-3"
+                        title={scored.reason}
+                      >
+                        {scored.reason}
+                      </p>
                     </td>
 
+                    {/* Applied date */}
                     <td className="px-4 py-3 text-[11px] text-slate-500">
                       {application.createdAt.toLocaleDateString("en-GB", {
                         day: "2-digit",
@@ -244,77 +237,13 @@ export default async function AtsJobPipelinePage({ params }: PageProps) {
   );
 }
 
-function TierSummaryCard({
-  label,
-  description,
-  count,
-  tone,
-}: {
-  label: string;
-  description: string;
-  count: number;
-  tone: "emerald" | "sky" | "amber" | "rose";
-}) {
-  const toneMap: Record<
-    typeof tone,
-    { bg: string; text: string; badgeBg: string; badgeDot: string }
-  > = {
-    emerald: {
-      bg: "bg-emerald-50",
-      text: "text-emerald-900",
-      badgeBg: "bg-emerald-100",
-      badgeDot: "bg-emerald-500",
-    },
-    sky: {
-      bg: "bg-sky-50",
-      text: "text-sky-900",
-      badgeBg: "bg-sky-100",
-      badgeDot: "bg-sky-500",
-    },
-    amber: {
-      bg: "bg-amber-50",
-      text: "text-amber-900",
-      badgeBg: "bg-amber-100",
-      badgeDot: "bg-amber-500",
-    },
-    rose: {
-      bg: "bg-rose-50",
-      text: "text-rose-900",
-      badgeBg: "bg-rose-100",
-      badgeDot: "bg-rose-500",
-    },
-  };
-
-  const toneClasses = toneMap[tone];
-
-  return (
-    <div
-      className={`flex flex-col justify-between rounded-2xl border border-slate-100 ${toneClasses.bg} px-3 py-3`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className={`text-xs font-semibold ${toneClasses.text}`}>
-            {label}
-          </p>
-          <p className="text-[11px] text-slate-500">{description}</p>
-        </div>
-        <div
-          className={`flex h-7 min-w-[2.5rem] items-center justify-center rounded-full px-2 text-[11px] font-semibold ${toneClasses.badgeBg} ${toneClasses.text}`}
-        >
-          <span className={`mr-1 h-1.5 w-1.5 rounded-full ${toneClasses.badgeDot}`} />
-          {count}
-        </div>
-      </div>
-    </div>
-  );
-}
+type Tier = "A" | "B" | "C" | "D";
 
 function TierBadge({ tier }: { tier: Tier }) {
   const map: Record<Tier, { label: string; classes: string }> = {
     A: {
       label: "Tier A · Priority",
-      classes:
-        "border-emerald-200 bg-emerald-50 text-emerald-800",
+      classes: "border-emerald-200 bg-emerald-50 text-emerald-800",
     },
     B: {
       label: "Tier B · Strong",
