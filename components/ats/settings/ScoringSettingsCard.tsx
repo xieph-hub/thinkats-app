@@ -33,16 +33,29 @@ const DEFAULT_CONFIG = {
 
 const INITIAL_STATE = {
   loading: true,
-  error: null,
+  error: null as string | null,
   saving: false,
 };
 
-export default function ScoringSettingsCard() {
+type ScoringSettingsCardProps = {
+  /**
+   * When true, this user is allowed to edit full scoring config
+   * including NLP / semantic matching, even if the plan is "free".
+   * Pass this as true for your super admin Gmail.
+   */
+  canEditScoring?: boolean;
+};
+
+export default function ScoringSettingsCard({
+  canEditScoring = false,
+}: ScoringSettingsCardProps) {
   const [plan, setPlan] = useState("free"); // "free" | "pro" | "enterprise"
   const [hiringMode, setHiringMode] = useState("balanced"); // "balanced" | "volume" | "executive"
-  const [config, setConfig] = useState(null);
+  const [config, setConfig] = useState<any>(null);
   const [state, setState] = useState(INITIAL_STATE);
-  const [saveMessage, setSaveMessage] = useState(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const isSuperAdmin = !!canEditScoring;
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +82,7 @@ export default function ScoringSettingsCard() {
           allowedModes.includes(modeFromApi) ? modeFromApi : "balanced",
         );
 
-        const rawConfig = (data.config || {});
+        const rawConfig = data.config || {};
         setConfig({
           ...DEFAULT_CONFIG,
           ...rawConfig,
@@ -96,7 +109,7 @@ export default function ScoringSettingsCard() {
         });
 
         setState((s) => ({ ...s, loading: false, error: null }));
-      } catch (err) {
+      } catch (err: any) {
         console.error("Load scoring settings error:", err);
         if (cancelled) return;
         setState((s) => ({
@@ -114,7 +127,7 @@ export default function ScoringSettingsCard() {
     };
   }, []);
 
-  async function handleSave(e) {
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!config) return;
 
@@ -178,7 +191,7 @@ export default function ScoringSettingsCard() {
 
       setSaveMessage("Scoring settings updated");
       setState((s) => ({ ...s, saving: false }));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Save scoring settings error:", err);
       setState((s) => ({
         ...s,
@@ -189,8 +202,8 @@ export default function ScoringSettingsCard() {
     }
   }
 
-  function updateWeights(patch) {
-    setConfig((prev) =>
+  function updateWeights(patch: Record<string, number>) {
+    setConfig((prev: any) =>
       prev
         ? {
             ...prev,
@@ -203,8 +216,8 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateThresholds(patch) {
-    setConfig((prev) =>
+  function updateThresholds(patch: Record<string, number>) {
+    setConfig((prev: any) =>
       prev
         ? {
             ...prev,
@@ -217,8 +230,8 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateSkills(patch) {
-    setConfig((prev) =>
+  function updateSkills(patch: Record<string, any>) {
+    setConfig((prev: any) =>
       prev
         ? {
             ...prev,
@@ -231,8 +244,8 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateBias(patch) {
-    setConfig((prev) =>
+  function updateBias(patch: Record<string, any>) {
+    setConfig((prev: any) =>
       prev
         ? {
             ...prev,
@@ -245,8 +258,8 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  function updateNlp(patch) {
-    setConfig((prev) =>
+  function updateNlp(patch: Record<string, any>) {
+    setConfig((prev: any) =>
       prev
         ? {
             ...prev,
@@ -259,7 +272,12 @@ export default function ScoringSettingsCard() {
     );
   }
 
-  const readOnlyNlp = plan === "free";
+  /**
+   * NLP is read-only when:
+   * - Plan is "free" AND user is NOT a super admin.
+   * Super admin (canEditScoring = true) can edit NLP even on "free" plan.
+   */
+  const readOnlyNlp = plan === "free" && !isSuperAdmin;
 
   return (
     <form
@@ -283,8 +301,11 @@ export default function ScoringSettingsCard() {
               {plan === "free" ? "Free" : plan}
             </span>
           </span>
-          {plan === "free" && (
+          {plan === "free" && !isSuperAdmin && (
             <span>Advanced NLP controls reserved for Pro / Enterprise.</span>
+          )}
+          {plan === "free" && isSuperAdmin && (
+            <span>Advanced NLP controls unlocked for workspace admin.</span>
           )}
         </div>
       </div>
@@ -550,7 +571,11 @@ export default function ScoringSettingsCard() {
                 </p>
               </div>
               <div className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">
-                {plan === "free" ? "Pro / Enterprise only" : "Available"}
+                {readOnlyNlp
+                  ? "Pro / Enterprise only"
+                  : plan === "free" && isSuperAdmin
+                  ? "Unlocked for workspace admin"
+                  : "Available"}
               </div>
             </div>
 
@@ -559,10 +584,10 @@ export default function ScoringSettingsCard() {
                 <input
                   type="checkbox"
                   disabled={readOnlyNlp}
-                  checked={config.nlp.enableNlp && !readOnlyNlp}
+                  checked={config.nlp.enableNlp}
                   onChange={(e) =>
                     updateNlp({
-                      enableNlp: readOnlyNlp ? false : e.target.checked,
+                      enableNlp: readOnlyNlp ? config.nlp.enableNlp : e.target.checked,
                     })
                   }
                   className="h-3 w-3 rounded border-slate-300 disabled:opacity-40"
