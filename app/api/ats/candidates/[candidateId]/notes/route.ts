@@ -11,18 +11,18 @@ export async function POST(
   { params }: { params: { candidateId: string } },
 ) {
   try {
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
-      return NextResponse.json(
-        { ok: false, error: "No tenant configured" },
-        { status: 400 },
-      );
-    }
-
     const candidateId = params.candidateId;
     if (!candidateId) {
       return NextResponse.json(
         { ok: false, error: "Missing candidateId" },
+        { status: 400 },
+      );
+    }
+
+    const tenant = await getResourcinTenant();
+    if (!tenant) {
+      return NextResponse.json(
+        { ok: false, error: "No tenant configured" },
         { status: 400 },
       );
     }
@@ -33,21 +33,49 @@ export async function POST(
       typeof noteBodyRaw === "string" ? noteBodyRaw.trim() : "";
 
     if (!noteBody) {
+      const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
+      return NextResponse.redirect(redirectUrl, { status: 303 });
+    }
+
+    // Optional future: allow binding to a specific application
+    const applicationIdRaw = formData.get("applicationId");
+    const applicationId =
+      typeof applicationIdRaw === "string" && applicationIdRaw.trim()
+        ? applicationIdRaw.trim()
+        : null;
+
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user || !user.email) {
       return NextResponse.json(
-        { ok: false, error: "Note body is required" },
-        { status: 400 },
+        { ok: false, error: "Unauthenticated" },
+        { status: 401 },
       );
     }
 
+    const email = user.email.toLowerCase();
+
+    // Ensure we have an app-level User record
+    const appUser = await prisma.user.upsert({
+      where: { email },
+      update: { isActive: true },
+      create: {
+        email,
+        fullName: user.user_metadata?.full_name ?? null,
+        globalRole: "USER",
+      },
+    });
+
+    // Sanity check candidate belongs to this tenant
     const candidate = await prisma.candidate.findFirst({
       where: {
         id: candidateId,
         tenantId: tenant.id,
       },
-      select: {
-        id: true,
-        tenantId: true,
-      },
+      select: { id: true },
     });
 
     if (!candidate) {
@@ -57,76 +85,55 @@ export async function POST(
       );
     }
 
-    // Resolve current app user via Supabase session
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user || !user.email) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthenticated" },
-        { status: 401 },
-      );
-    }
-
-    const email = user.email.toLowerCase();
-
-    let appUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!appUser) {
-      appUser = await prisma.user.create({
-        data: {
-          email,
-          fullName:
-            (user.user_metadata as any)?.full_name ??
-            (user.user_metadata as any)?.name ??
-            null,
-          globalRole: "USER",
-          isActive: true,
+    // Optional: if applicationId is provided, ensure it belongs to same tenant
+    let validatedApplicationId: string | null = null;
+    if (applicationId) {
+      const app = await prisma.jobApplication.findFirst({
+        where: {
+          id: applicationId,
+          job: {
+            tenantId: tenant.id,
+          },
         },
+        select: { id: true },
       });
+      if (app) {
+        validatedApplicationId = app.id;
+      }
     }
 
     const note = await prisma.note.create({
       data: {
-        tenantId: candidate.tenantId,
+        tenantId: tenant.id,
         candidateId: candidate.id,
-        applicationId: null,
+        applicationId: validatedApplicationId,
         authorId: appUser.id,
         noteType: "general",
         body: noteBody,
-        isPrivate: true,
+        isPrivate: true, // internal-only by default
       },
     });
 
-    // Audit log (best-effort)
     await prisma.activityLog.create({
       data: {
-        tenantId: candidate.tenantId,
+        tenantId: tenant.id,
         actorId: appUser.id,
         entityType: "candidate",
         entityId: candidate.id,
         action: "note_created",
         metadata: {
           noteId: note.id,
-          length: noteBody.length,
+          applicationId: validatedApplicationId,
         },
       },
     });
 
-    const redirectUrl = new URL(
-      `/ats/candidates/${candidate.id}`,
-      req.url,
-    );
+    const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
     return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (err) {
-    console.error("Create candidate note error:", err);
+    console.error("Candidate notes POST error:", err);
     return NextResponse.json(
-      { ok: false, error: "Unexpected error creating note" },
+      { ok: false, error: "Unexpected error adding note" },
       { status: 500 },
     );
   }
