@@ -17,7 +17,7 @@ const mainNav: NavItem[] = [
 
 const secondaryNavBase: NavItem[] = [
   { href: "/ats/settings", label: "Settings" },
-  // "Plans" will be appended at runtime for super-admins
+  // "Plans" is appended at runtime for super-admins
 ];
 
 function isActive(pathname: string | null, href: string) {
@@ -37,19 +37,23 @@ export default function AtsSidebar() {
 
     async function loadRole() {
       try {
-        // Piggyback on scoring settings API which already returns isSuperAdmin
-        const res = await fetch("/api/ats/settings/scoring", {
+        const res = await fetch("/api/ats/auth/me", {
           method: "GET",
+          cache: "no-store",
         });
-        const data = await res.json().catch(() => null);
 
+        const data = await res.json().catch(() => null);
         if (cancelled) return;
 
-        if (res.ok && data && data.ok && typeof data.isSuperAdmin === "boolean") {
-          setIsSuperAdmin(data.isSuperAdmin);
+        if (res.ok && data && data.ok && data.isSuperAdmin) {
+          setIsSuperAdmin(true);
+        } else {
+          setIsSuperAdmin(false);
         }
-      } catch {
-        // Fail quietly – sidebar still works, just without Plans
+      } catch (err) {
+        if (!cancelled) {
+          setIsSuperAdmin(false);
+        }
       }
     }
 
@@ -62,7 +66,7 @@ export default function AtsSidebar() {
   const secondaryNav: NavItem[] = isSuperAdmin
     ? [
         ...secondaryNavBase,
-        { href: "/ats/admin/plans", label: "Plans" }, // manual upgrade/downgrade UI
+        { href: "/ats/admin/plans", label: "Plans" }, // only for super admin
       ]
     : secondaryNavBase;
 
