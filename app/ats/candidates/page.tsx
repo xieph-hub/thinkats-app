@@ -29,10 +29,17 @@ export default async function AtsCandidatesPage() {
     take: 100,
   });
 
-  const scoredRows = [];
+  // Cache scoring config per job to avoid N+1
+  const jobIds = Array.from(new Set(applications.map((app) => app.jobId)));
+  const configByJobId = new Map<string, any>();
 
-  for (const app of applications) {
-    const { config } = await getScoringConfigForJob(app.jobId);
+  for (const jobId of jobIds) {
+    const { config } = await getScoringConfigForJob(jobId);
+    configByJobId.set(jobId, config);
+  }
+
+  const scoredRows = applications.map((app) => {
+    const config = configByJobId.get(app.jobId);
 
     const scored = computeApplicationScore({
       application: app,
@@ -43,14 +50,14 @@ export default async function AtsCandidatesPage() {
 
     const cvUrl = app.cvUrl || app.candidate?.cvUrl || null;
 
-    scoredRows.push({
+    return {
       application: app,
       candidate: app.candidate,
       job: app.job,
       scored,
       cvUrl,
-    });
-  }
+    };
+  });
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
@@ -90,7 +97,7 @@ export default async function AtsCandidatesPage() {
                 <tr>
                   <th className="px-4 py-2 text-left">Candidate</th>
                   <th className="px-4 py-2 text-left">Role</th>
-                  <th className="px-4 py-2 text-left">Company</th>
+                  <th className="px-4 py-2 text-left">Client</th>
                   <th className="px-4 py-2 text-left">Tier</th>
                   <th className="px-4 py-2 text-left">Score</th>
                   <th className="px-4 py-2 text-left">CV</th>
@@ -140,7 +147,7 @@ export default async function AtsCandidatesPage() {
                         </p>
                       </td>
 
-                      {/* Company */}
+                      {/* Client */}
                       <td className="px-4 py-3">
                         <p className="text-xs text-slate-800">
                           {job.clientCompany?.name || "—"}
