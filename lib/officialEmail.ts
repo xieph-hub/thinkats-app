@@ -13,16 +13,20 @@ function parseList(envValue: string | undefined | null): string[] {
     .filter(Boolean);
 }
 
-// e.g. THINKATS_OFFICIAL_DOMAINS = "resourcin.com, thinkats.com"
-// e.g. THINKATS_OVERRIDE_EMAILS = "resourcinhumancapitaladvisors@gmail.com"
+// Examples:
+// THINKATS_OFFICIAL_DOMAINS = "resourcin.com, thinkats.com"
+// THINKATS_OVERRIDE_EMAILS = "resourcinhumancapitaladvisors@gmail.com"
+// THINKATS_ENTERPRISE_ADMINS = "resourcinhumancapitaladvisors@gmail.com"
 const OFFICIAL_DOMAINS = parseList(process.env.THINKATS_OFFICIAL_DOMAINS);
 const OVERRIDE_EMAILS = parseList(process.env.THINKATS_OVERRIDE_EMAILS);
+const ENTERPRISE_ADMINS = parseList(process.env.THINKATS_ENTERPRISE_ADMINS);
 
 export function isOfficialUser(user: BasicUser | null): boolean {
   const email = user?.email?.toLowerCase?.() ?? "";
   if (!email) return false;
 
-  // 1) Explicit overrides (your Gmail etc.)
+  // 1) Enterprise + explicit overrides are always treated as official
+  if (ENTERPRISE_ADMINS.includes(email)) return true;
   if (OVERRIDE_EMAILS.includes(email)) return true;
 
   // 2) Domain-based rule
@@ -35,4 +39,17 @@ export function isOfficialUser(user: BasicUser | null): boolean {
   }
 
   return OFFICIAL_DOMAINS.includes(domain);
+}
+
+export function isEnterpriseAdmin(user: BasicUser | null): boolean {
+  const email = user?.email?.toLowerCase?.() ?? "";
+  if (!email) return false;
+
+  // Explicit list of super-admin emails
+  if (ENTERPRISE_ADMINS.includes(email)) return true;
+
+  // You can also treat override emails as enterprise if you like
+  if (OVERRIDE_EMAILS.includes(email)) return true;
+
+  return false;
 }
