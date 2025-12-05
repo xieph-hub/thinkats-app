@@ -99,20 +99,20 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // ApplicationEvent for timeline
+      // ApplicationEvent for timeline — log tenant/job/etc INSIDE payload
       await tx.applicationEvent.create({
         data: {
           applicationId: updatedApp.id,
           type: "stage_status_change",
-          tenantId: tenant.id,
-          jobId: updatedApp.jobId,
-          candidateId: updatedApp.candidateId,
-          createdById: actor?.id,
           payload: {
             previousStage: application.stage,
             nextStage,
             previousStatus: application.status,
             nextStatus,
+            tenantId: tenant.id,
+            jobId: updatedApp.jobId,
+            candidateId: updatedApp.candidateId,
+            actorId: actor?.id,
           },
         },
       });
