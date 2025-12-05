@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { getServerUser } from "@/lib/auth/getServerUser";
+
+export const runtime = "nodejs";
 
 function normaliseEnum(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -12,18 +15,6 @@ function normaliseEnum(value: unknown): string | undefined {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const applicationId = body.applicationId as string | undefined;
-    const stageInput = body.stage as string | undefined;
-    const statusInput = body.status as string | undefined;
-
-    if (!applicationId) {
-      return NextResponse.json(
-        { ok: false, error: "Missing applicationId" },
-        { status: 400 },
-      );
-    }
-
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -32,7 +23,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Ensure the application belongs to the current tenant
+    const contentType = req.headers.get("content-type") || "";
+    let payload: any = {};
+
+    if (contentType.includes("application/json")) {
+      payload = await req.json().catch(() => ({}));
+    } else {
+      const formData = await req.formData().catch(() => null);
+      if (formData) {
+        payload = {
+          applicationId: formData.get("applicationId") ?? undefined,
+          stage: formData.get("stage") ?? undefined,
+          status: formData.get("status") ?? undefined,
+        };
+      }
+    }
+
+    const applicationId = (payload.applicationId as string | undefined)?.trim();
+    const stageInput = payload.stage as string | undefined;
+    const statusInput = payload.status as string | undefined;
+
+    if (!applicationId) {
+      return NextResponse.json(
+        { ok: false, error: "Missing applicationId" },
+        { status: 400 },
+      );
+    }
+
     const application = await prisma.jobApplication.findFirst({
       where: {
         id: applicationId,
@@ -42,8 +59,11 @@ export async function POST(req: NextRequest) {
       },
       select: {
         id: true,
+        jobId: true,
+        candidateId: true,
         stage: true,
         status: true,
+        statusChangedAt: true,
       },
     });
 
@@ -55,18 +75,66 @@ export async function POST(req: NextRequest) {
     }
 
     const nextStage =
-      normaliseEnum(stageInput) || (application.stage as string | undefined) || "APPLIED";
+      normaliseEnum(stageInput) ||
+      (application.stage as string | undefined) ||
+      "APPLIED";
+
     const nextStatus =
       normaliseEnum(statusInput) ||
       (application.status as string | undefined) ||
       "PENDING";
 
-    const updated = await prisma.jobApplication.update({
-      where: { id: application.id },
-      data: {
-        stage: nextStage,
-        status: nextStatus,
-      },
+    const actor = await getServerUser().catch(() => null);
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedApp = await tx.jobApplication.update({
+        where: { id: application.id },
+        data: {
+          stage: nextStage,
+          status: nextStatus,
+          statusChangedAt:
+            application.status !== nextStatus
+              ? new Date()
+              : application.statusChangedAt,
+        },
+      });
+
+      // ApplicationEvent for timeline
+      await tx.applicationEvent.create({
+        data: {
+          applicationId: updatedApp.id,
+          type: "stage_status_change",
+          tenantId: tenant.id,
+          jobId: updatedApp.jobId,
+          candidateId: updatedApp.candidateId,
+          createdById: actor?.id,
+          payload: {
+            previousStage: application.stage,
+            nextStage,
+            previousStatus: application.status,
+            nextStatus,
+          },
+        },
+      });
+
+      // ActivityLog for global audit
+      await tx.activityLog.create({
+        data: {
+          tenantId: tenant.id,
+          actorId: actor?.id,
+          entityType: "job_application",
+          entityId: updatedApp.id,
+          action: "stage_status_change",
+          metadata: {
+            previousStage: application.stage,
+            nextStage,
+            previousStatus: application.status,
+            nextStatus,
+          },
+        },
+      });
+
+      return updatedApp;
     });
 
     return NextResponse.json({
