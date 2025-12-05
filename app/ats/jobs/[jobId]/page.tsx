@@ -58,6 +58,22 @@ export default async function AtsJobDetailPage({
     };
   });
 
+  const tierCounts: Record<Tier, number> = {
+    A: 0,
+    B: 0,
+    C: 0,
+    D: 0,
+  };
+
+  for (const row of rows) {
+    const t = row.scored.tier;
+    if (t === "A" || t === "B" || t === "C" || t === "D") {
+      tierCounts[t] += 1;
+    } else {
+      tierCounts.D += 1;
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       <header className="space-y-2">
@@ -76,24 +92,30 @@ export default async function AtsJobDetailPage({
               {job.location || job.workMode || "Location not set"}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+          <div className="flex flex-wrap items-end gap-2 text-[11px] text-slate-500">
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              Status:{" "}
-              <span className="ml-1 font-medium capitalize">
-                {job.status || "open"}
+              Applications:{" "}
+              <span className="ml-1 font-semibold text-slate-800">
+                {rows.length}
               </span>
             </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              Visibility:{" "}
-              <span className="ml-1 font-medium capitalize">
-                {job.visibility || "public"}
-              </span>
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1">
+              A: <span className="ml-1 font-semibold">{tierCounts.A}</span>
+            </span>
+            <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1">
+              B: <span className="ml-1 font-semibold">{tierCounts.B}</span>
+            </span>
+            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1">
+              C: <span className="ml-1 font-semibold">{tierCounts.C}</span>
+            </span>
+            <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1">
+              D: <span className="ml-1 font-semibold">{tierCounts.D}</span>
             </span>
           </div>
         </div>
         <p className="text-[11px] text-slate-500">
           Pipeline view with scoring tiers, quick access to CVs and deep
-          candidate profiles.
+          candidate profiles. Click a candidate name to open the full profile.
         </p>
       </header>
 
@@ -124,6 +146,8 @@ export default async function AtsJobDetailPage({
                   <th className="px-4 py-2 text-left">Tier</th>
                   <th className="px-4 py-2 text-left">Score</th>
                   <th className="px-4 py-2 text-left">Match summary</th>
+                  <th className="px-4 py-2 text-left">Risks / red flags</th>
+                  <th className="px-4 py-2 text-left">Interview focus</th>
                   <th className="px-4 py-2 text-left">CV</th>
                   <th className="px-4 py-2 text-left">Applied</th>
                 </tr>
@@ -193,6 +217,35 @@ export default async function AtsJobDetailPage({
                       >
                         {scored.reason}
                       </p>
+                    </td>
+
+                    {/* Risks / red flags */}
+                    <td className="px-4 py-3">
+                      <RiskBadges
+                        risks={scored.risks}
+                        redFlags={scored.redFlags}
+                      />
+                    </td>
+
+                    {/* Interview focus */}
+                    <td className="px-4 py-3">
+                      {scored.interviewFocus.length === 0 ? (
+                        <span className="text-[11px] text-slate-400">—</span>
+                      ) : (
+                        <ul className="space-y-1 text-[11px] text-slate-600">
+                          {scored.interviewFocus.slice(0, 2).map((item, idx) => (
+                            <li key={idx} className="line-clamp-2" title={item}>
+                              • {item}
+                            </li>
+                          ))}
+                          {scored.interviewFocus.length > 2 && (
+                            <li className="text-[10px] text-slate-400">
+                              +{scored.interviewFocus.length - 2} more focus
+                              points
+                            </li>
+                          )}
+                        </ul>
+                      )}
                     </td>
 
                     {/* CV */}
@@ -266,5 +319,40 @@ function TierBadge({ tier }: { tier: Tier | string }) {
     >
       {label}
     </span>
+  );
+}
+
+function RiskBadges({
+  risks,
+  redFlags,
+}: {
+  risks: string[];
+  redFlags: string[];
+}) {
+  if (!risks.length && !redFlags.length) {
+    return <span className="text-[11px] text-slate-400">No obvious risks</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {redFlags.map((flag, idx) => (
+        <span
+          key={`rf-${idx}`}
+          className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-700"
+          title={flag}
+        >
+          ● Red flag
+        </span>
+      ))}
+      {risks.map((risk, idx) => (
+        <span
+          key={`rk-${idx}`}
+          className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800"
+          title={risk}
+        >
+          ● Risk
+        </span>
+      ))}
+    </div>
   );
 }
