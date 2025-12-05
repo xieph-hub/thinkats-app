@@ -25,6 +25,158 @@ const ATS_NOTIFICATIONS_EMAIL =
   "";
 
 // ---------------------------------------------------------------------------
+// Match-scoring helpers
+// ---------------------------------------------------------------------------
+
+function parseMoneyNumber(value?: string | null): number | null {
+  if (!value) return null;
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function computeMatchScoreAndReason(
+  job: any,
+  input: {
+    location?: string | null;
+    noticePeriod?: string | null;
+    currentGrossAnnual?: string | null;
+    grossAnnualExpectation?: string | null;
+    skillsText?: string | null;
+  },
+) {
+  let score = 50; // baseline
+  const reasons: string[] = [];
+
+  const jobLocation = (job.location ?? "").toString().toLowerCase().trim();
+  const jobLocationType = (
+    job.locationType ??
+    (job as any).location_type ??
+    ""
+  )
+    .toString()
+    .toLowerCase()
+    .trim();
+
+  const candidateLocation = (input.location ?? "")
+    .toString()
+    .toLowerCase()
+    .trim();
+
+  // 1) Location match
+  if (jobLocation) {
+    if (
+      candidateLocation &&
+      (candidateLocation.includes(jobLocation) ||
+        jobLocation.includes(candidateLocation))
+    ) {
+      score += 10;
+      reasons.push("Location aligns with the role.");
+    } else if (jobLocationType !== "remote") {
+      score -= 5;
+      reasons.push("Location may not align with the role.");
+    }
+  }
+
+  // 2) Skills match based on job.requiredSkills vs free-text skillsText
+  const requiredSkills: string[] = Array.isArray(job.requiredSkills)
+    ? job.requiredSkills
+    : [];
+
+  const skillsText = (input.skillsText ?? "")
+    .toString()
+    .toLowerCase();
+
+  if (requiredSkills.length && skillsText) {
+    let matched = 0;
+
+    for (const skill of requiredSkills) {
+      const s = (skill || "").toLowerCase();
+      if (!s) continue;
+      if (skillsText.includes(s)) {
+        matched += 1;
+      }
+    }
+
+    if (matched > 0) {
+      const contribution = Math.min(20, matched * 4); // up to +20
+      score += contribution;
+      reasons.push(
+        `Matches ${matched} of ${requiredSkills.length} key skills.`,
+      );
+    } else {
+      score -= 10;
+      reasons.push("Key skills are not clearly mentioned in the application.");
+    }
+  }
+
+  // 3) Compensation expectations vs salary range
+  const salaryMin =
+    job.salaryMin != null ? Number(job.salaryMin) : null;
+  const salaryMax =
+    job.salaryMax != null ? Number(job.salaryMax) : null;
+
+  const expectedNum =
+    parseMoneyNumber(input.grossAnnualExpectation ?? null) ??
+    parseMoneyNumber(input.currentGrossAnnual ?? null);
+
+  if (salaryMin != null && salaryMax != null && expectedNum != null) {
+    if (expectedNum >= salaryMin && expectedNum <= salaryMax * 1.05) {
+      score += 10;
+      reasons.push("Compensation expectations sit within the target range.");
+    } else if (expectedNum > salaryMax * 1.3) {
+      score -= 15;
+      reasons.push(
+        "Compensation expectations are significantly above the range.",
+      );
+    } else if (expectedNum > salaryMax * 1.05) {
+      score -= 5;
+      reasons.push(
+        "Compensation expectations are slightly above the target range.",
+      );
+    } else if (expectedNum < salaryMin * 0.8) {
+      reasons.push(
+        "Compensation expectations are below the target range (could still be workable).",
+      );
+    }
+  }
+
+  // 4) Notice period
+  const notice = (input.noticePeriod ?? "")
+    .toString()
+    .toLowerCase();
+
+  if (notice) {
+    if (
+      /\b(immediate|0 ?day|no[t]?ice:? ?none)\b/.test(notice) ||
+      /\b(asap)\b/.test(notice)
+    ) {
+      score += 5;
+      reasons.push("Can start immediately or with very short notice.");
+    } else if (/90|3\s*months?/.test(notice)) {
+      score -= 5;
+      reasons.push("Long notice period may delay onboarding.");
+    }
+  }
+
+  // Clamp 0–100
+  if (score < 0) score = 0;
+  if (score > 100) score = 100;
+
+  const reasonText =
+    reasons.length === 0
+      ? "Automatically scored based on location, skills, compensation expectations and notice period."
+      : reasons.join(" ");
+
+  return {
+    score: Math.round(score),
+    reason: reasonText,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/jobs/apply
 // ---------------------------------------------------------------------------
 
@@ -74,7 +226,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job to get tenant id + title (+ slug for nice URLs)
+    // 1) Load job to get tenant id + title (+ slug for nice URLs, plus fields for scoring)
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
@@ -85,6 +237,11 @@ export async function POST(req: Request) {
         location: true,
         visibility: true,
         status: true,
+        // for scoring:
+        locationType: true,
+        requiredSkills: true,
+        salaryMin: true,
+        salaryMax: true,
       },
     });
 
@@ -190,7 +347,27 @@ export async function POST(req: Request) {
       candidateCvUrl = applicationCvUrl;
     }
 
-    // 4) Create the job application (this is where `source` + `cvUrl` get saved)
+    // -----------------------------------------------------------------------
+    // 4) Compute match score / reason
+    // -----------------------------------------------------------------------
+
+    const skillsText =
+      ((formData.get("skills") ??
+        formData.get("keySkills") ??
+        formData.get("summary") ??
+        formData.get("coverLetter") ??
+        "") as string) || "";
+
+    const { score: matchScore, reason: matchReason } =
+      computeMatchScoreAndReason(job, {
+        location,
+        noticePeriod,
+        currentGrossAnnual,
+        grossAnnualExpectation,
+        skillsText,
+      });
+
+    // 5) Create the job application (this is where `source`, `cvUrl` and match_* get saved)
     const application = await prisma.jobApplication.create({
       data: {
         jobId: job.id,
@@ -218,11 +395,15 @@ export async function POST(req: Request) {
         // sensible defaults
         stage: "APPLIED",
         status: "PENDING",
+
+        // auto-screening fields
+        matchScore,
+        matchReason,
       },
     });
 
     // -----------------------------------------------------------------------
-    // 5) Fire emails via Resend – CANDIDATE ONLY
+    // 6) Fire emails via Resend – CANDIDATE ONLY
     // -----------------------------------------------------------------------
     try {
       const jobTitle = job.title;
