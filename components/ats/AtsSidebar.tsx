@@ -3,7 +3,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 
 type NavItem = { href: string; label: string };
 
@@ -13,12 +12,10 @@ const mainNav: NavItem[] = [
   { href: "/ats/candidates", label: "Candidates" },
   { href: "/ats/clients", label: "Clients" },
   { href: "/ats/tenants", label: "Tenants" },
+  { href: "/ats/analytics", label: "Analytics" }, // 👈 NEW
 ];
 
-const secondaryNavBase: NavItem[] = [
-  { href: "/ats/settings", label: "Settings" },
-  // "Plans" is appended at runtime for super-admins
-];
+const secondaryNav: NavItem[] = [{ href: "/ats/settings", label: "Settings" }];
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
@@ -30,45 +27,6 @@ function isActive(pathname: string | null, href: string) {
 
 export default function AtsSidebar() {
   const pathname = usePathname();
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadRole() {
-      try {
-        const res = await fetch("/api/ats/auth/me", {
-          method: "GET",
-          cache: "no-store",
-        });
-
-        const data = await res.json().catch(() => null);
-        if (cancelled) return;
-
-        if (res.ok && data && data.ok && data.isSuperAdmin) {
-          setIsSuperAdmin(true);
-        } else {
-          setIsSuperAdmin(false);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setIsSuperAdmin(false);
-        }
-      }
-    }
-
-    loadRole();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const secondaryNav: NavItem[] = isSuperAdmin
-    ? [
-        ...secondaryNavBase,
-        { href: "/ats/admin/plans", label: "Plans" }, // only for super admin
-      ]
-    : secondaryNavBase;
 
   return (
     <aside className="hidden w-60 shrink-0 border-r border-slate-200 bg-slate-950 text-slate-50 md:flex md:flex-col">
@@ -81,7 +39,9 @@ export default function AtsSidebar() {
           <div className="text-[11px] uppercase tracking-wide text-slate-400">
             ThinkATS
           </div>
-          <div className="text-sm font-semibold text-white">ATS workspace</div>
+          <div className="text-sm font-semibold text-white">
+            ATS workspace
+          </div>
         </div>
       </div>
 
