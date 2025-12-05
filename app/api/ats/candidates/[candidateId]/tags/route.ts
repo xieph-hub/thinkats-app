@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const runtime = "nodejs";
 
@@ -10,14 +11,6 @@ export async function POST(
   { params }: { params: { candidateId: string } },
 ) {
   try {
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
-      return NextResponse.json(
-        { ok: false, error: "No tenant configured" },
-        { status: 400 },
-      );
-    }
-
     const candidateId = params.candidateId;
     if (!candidateId) {
       return NextResponse.json(
@@ -26,37 +19,68 @@ export async function POST(
       );
     }
 
-    const formData = await req.formData();
-    const tagNameRaw = formData.get("tagName");
-    const tagName =
-      typeof tagNameRaw === "string" ? tagNameRaw.trim() : "";
+    const tenant = await getResourcinTenant();
+    if (!tenant) {
+      return NextResponse.json(
+        { ok: false, error: "No tenant configured" },
+        { status: 400 },
+      );
+    }
 
-    const redirectUrl = new URL(
-      `/ats/candidates/${candidateId}`,
-      req.url,
-    );
+    const formData = await req.formData();
+    const rawTagName = formData.get("tagName");
+    const tagName =
+      typeof rawTagName === "string" ? rawTagName.trim() : "";
 
     if (!tagName) {
-      // Nothing to add – just bounce back to profile
+      // Nothing to do — bounce back to candidate page.
+      const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
       return NextResponse.redirect(redirectUrl, { status: 303 });
     }
 
+    // Ensure caller is an authenticated app user (for audit later if needed)
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user || !user.email) {
+      return NextResponse.json(
+        { ok: false, error: "Unauthenticated" },
+        { status: 401 },
+      );
+    }
+
+    const email = user.email.toLowerCase();
+
+    // Make sure we have an app-level User record for this email
+    const appUser = await prisma.user.upsert({
+      where: { email },
+      update: { isActive: true },
+      create: {
+        email,
+        fullName: user.user_metadata?.full_name ?? null,
+        globalRole: "USER",
+      },
+    });
+
+    // Sanity check candidate belongs to this tenant
     const candidate = await prisma.candidate.findFirst({
       where: {
         id: candidateId,
         tenantId: tenant.id,
       },
-      select: {
-        id: true,
-        tenantId: true,
-      },
+      select: { id: true },
     });
 
     if (!candidate) {
-      return NextResponse.redirect(redirectUrl, { status: 303 });
+      return NextResponse.json(
+        { ok: false, error: "Candidate not found for this tenant" },
+        { status: 404 },
+      );
     }
 
-    // Find or create tag for this tenant
+    // Find or create Tag for this tenant
     let tag = await prisma.tag.findFirst({
       where: {
         tenantId: tenant.id,
@@ -69,11 +93,12 @@ export async function POST(
         data: {
           tenantId: tenant.id,
           name: tagName,
+          // you can later add color logic here if you like
         },
       });
     }
 
-    // Check if candidate already has this tag
+    // Attach tag to candidate if not already attached
     const existing = await prisma.candidateTag.findFirst({
       where: {
         tenantId: tenant.id,
@@ -91,11 +116,11 @@ export async function POST(
         },
       });
 
-      // Audit log (optional / best-effort)
+      // Optional: log to ActivityLog for audit trail
       await prisma.activityLog.create({
         data: {
           tenantId: tenant.id,
-          actorId: null,
+          actorId: appUser.id,
           entityType: "candidate",
           entityId: candidate.id,
           action: "tag_added",
@@ -107,14 +132,13 @@ export async function POST(
       });
     }
 
+    const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
     return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (err) {
-    console.error("Add candidate tag error:", err);
-    // On failure, still go back to profile so UI isn't stuck
-    const fallback = new URL(
-      `/ats/candidates/${params.candidateId}`,
-      req.url,
+    console.error("Candidate tags POST error:", err);
+    return NextResponse.json(
+      { ok: false, error: "Unexpected error adding tag" },
+      { status: 500 },
     );
-    return NextResponse.redirect(fallback, { status: 303 });
   }
 }
