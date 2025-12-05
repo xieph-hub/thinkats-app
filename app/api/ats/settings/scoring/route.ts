@@ -1,61 +1,52 @@
 // app/api/ats/settings/scoring/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { isOfficialUser, isSuperAdminUser } from "@/lib/officialEmail";
 
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
-import {
-  mergeScoringConfig,
-  type HiringMode,
-  type ScoringConfig,
-} from "@/lib/scoring/config";
+export const runtime = "nodejs";
 
-type UpdatePayload = {
-  hiringMode?: HiringMode;
-  config?: Partial<ScoringConfig>;
-};
+type Plan = "free" | "pro" | "enterprise";
 
-export async function GET(_req: Request) {
+const WORKSPACE_SLUG =
+  process.env.THINKATS_WORKSPACE_SLUG || "resourcin";
+
+export async function GET(_req: NextRequest) {
   try {
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
-      return NextResponse.json(
-        { ok: false, error: "No default tenant configured" },
-        { status: 400 },
-      );
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const isSuperAdmin = isSuperAdminUser(user || null);
+
+    // Load row from Supabase
+    const { data, error } = await supabaseAdmin
+      .from("ats_scoring_settings")
+      .select("plan, hiring_mode, config")
+      .eq("workspace_slug", WORKSPACE_SLUG)
+      .maybeSingle();
+
+    if (error) {
+      console.error("GET scoring settings – Supabase error:", error);
     }
 
-    const freshTenant = await prisma.tenant.findUnique({
-      where: { id: tenant.id },
-      select: {
-        id: true,
-        plan: true,
-        hiringMode: true,
-        scoringConfig: true,
-      },
-    });
+    const planFromDb = (data?.plan as Plan | null) ?? null;
+    const plan: Plan =
+      planFromDb || (isSuperAdmin ? "enterprise" : "free");
 
-    if (!freshTenant) {
-      return NextResponse.json(
-        { ok: false, error: "Tenant not found" },
-        { status: 404 },
-      );
-    }
-
-    const merged = mergeScoringConfig({
-      mode: freshTenant.hiringMode,
-      plan: freshTenant.plan,
-      tenantConfig: freshTenant.scoringConfig,
-    });
+    const hiringMode = data?.hiring_mode || "balanced";
+    const rawConfig = (data?.config as any) || {};
 
     return NextResponse.json({
       ok: true,
-      tenantId: freshTenant.id,
-      plan: merged.plan,
-      hiringMode: merged.mode,
-      config: merged,
+      plan,
+      hiringMode,
+      config: rawConfig,
+      isSuperAdmin,
     });
   } catch (err) {
-    console.error("GET /api/ats/settings/scoring error:", err);
+    console.error("GET scoring settings – unexpected error:", err);
     return NextResponse.json(
       { ok: false, error: "Failed to load scoring settings" },
       { status: 500 },
@@ -63,52 +54,82 @@ export async function GET(_req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
+    const body = await req.json().catch(() => ({}));
+    const requestedHiringMode =
+      (body.hiringMode as string | undefined) || "balanced";
+    const incomingConfig = (body.config as any) || {};
+    const requestedPlan = body.plan as Plan | undefined; // optional – only super-admin can set
+
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user || !isOfficialUser(user)) {
       return NextResponse.json(
-        { ok: false, error: "No default tenant configured" },
-        { status: 400 },
+        { ok: false, error: "Not authorised" },
+        { status: 403 },
       );
     }
 
-    const body = (await req.json()) as UpdatePayload;
+    const isSuperAdmin = isSuperAdminUser(user);
 
-    const hiringMode = body.hiringMode || undefined;
-    const config = body.config || undefined;
+    // Only super-admin can actually change the plan
+    let planToPersist: Plan | undefined;
+    if (
+      isSuperAdmin &&
+      requestedPlan &&
+      ["free", "pro", "enterprise"].includes(requestedPlan)
+    ) {
+      planToPersist = requestedPlan;
+    }
 
-    const updated = await prisma.tenant.update({
-      where: { id: tenant.id },
-      data: {
-        ...(hiringMode ? { hiringMode } : {}),
-        ...(config ? { scoringConfig: config as any } : {}),
-      },
-      select: {
-        id: true,
-        plan: true,
-        hiringMode: true,
-        scoringConfig: true,
-      },
-    });
+    // Upsert row
+    const upsertPayload: any = {
+      workspace_slug: WORKSPACE_SLUG,
+      hiring_mode: requestedHiringMode,
+      config: incomingConfig,
+      updated_at: new Date().toISOString(),
+    };
 
-    const merged = mergeScoringConfig({
-      mode: updated.hiringMode,
-      plan: updated.plan,
-      tenantConfig: updated.scoringConfig,
-    });
+    if (planToPersist) {
+      upsertPayload.plan = planToPersist;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("ats_scoring_settings")
+      .upsert(upsertPayload, {
+        onConflict: "workspace_slug",
+      })
+      .select("plan, hiring_mode, config")
+      .maybeSingle();
+
+    if (error || !data) {
+      console.error("POST scoring settings – Supabase error:", error);
+      return NextResponse.json(
+        { ok: false, error: "Failed to save scoring settings" },
+        { status: 500 },
+      );
+    }
+
+    const plan: Plan =
+      (data.plan as Plan | null) ||
+      (isSuperAdmin ? "enterprise" : "free");
 
     return NextResponse.json({
       ok: true,
-      tenantId: updated.id,
-      plan: merged.plan,
-      hiringMode: merged.mode,
-      config: merged,
+      plan,
+      hiringMode: data.hiring_mode || "balanced",
+      config: data.config || {},
+      isSuperAdmin,
     });
   } catch (err) {
-    console.error("POST /api/ats/settings/scoring error:", err);
+    console.error("POST scoring settings – unexpected error:", err);
     return NextResponse.json(
-      { ok: false, error: "Failed to update scoring settings" },
+      { ok: false, error: "Failed to save scoring settings" },
       { status: 500 },
     );
   }
