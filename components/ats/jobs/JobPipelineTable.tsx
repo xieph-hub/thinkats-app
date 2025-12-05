@@ -27,8 +27,6 @@ type PipelineRow = {
     risks: string[];
     redFlags: string[];
     interviewFocus: string[];
-    engine?: string;
-    engineVersion?: string;
   };
   cvUrl: string | null;
 };
@@ -100,7 +98,6 @@ export default function JobPipelineTable({ rows }: { rows: PipelineRow[] }) {
     );
 
     try {
-      // Use your existing Prisma + tenant-aware endpoint
       await fetch("/api/ats/applications/update-stage", {
         method: "POST",
         headers: {
@@ -114,7 +111,6 @@ export default function JobPipelineTable({ rows }: { rows: PipelineRow[] }) {
       });
     } catch (err) {
       console.error("Failed to update stage/status", err);
-      // You can later add a toast + rollback if you want
     } finally {
       setSavingId(null);
     }
