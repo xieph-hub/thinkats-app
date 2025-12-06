@@ -96,16 +96,14 @@ export async function POST(
     const salaryMin = parseDecimal(formData.get("salaryMin"));
     const salaryMax = parseDecimal(formData.get("salaryMax"));
 
-    const salaryVisible =
-      formData.get("salaryVisible") === "on";
+    const salaryVisible = formData.get("salaryVisible") === "on";
 
     const visibilityMode = getStr("visibilityMode") || "public";
     const isInternal = visibilityMode === "internal";
     const visibility = isInternal ? "internal" : "public";
     const internalOnly = isInternal;
 
-    const confidential =
-      formData.get("confidential") === "on";
+    const confidential = formData.get("confidential") === "on";
 
     const clientCompanyIdRaw = getStr("clientCompanyId");
     const clientCompanyId = clientCompanyIdRaw || null;
@@ -150,36 +148,87 @@ export async function POST(
       }
     }
 
-    await prisma.job.update({
-      where: { id: jobId },
-      data: {
-        title,
-        department,
-        location,
-        locationType,
-        employmentType,
-        experienceLevel,
-        workMode,
-        shortDescription,
-        overview,
-        aboutClient,
-        responsibilities,
-        requirements,
-        benefits,
-        salaryCurrency,
-        salaryMin,
-        salaryMax,
-        salaryVisible,
-        status,
-        visibility,
-        internalOnly,
-        confidential,
-        externalId,
-        clientCompanyId,
-        tags,
-        requiredSkills,
-        slug: finalSlug,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.job.update({
+        where: { id: jobId },
+        data: {
+          title,
+          department,
+          location,
+          locationType,
+          employmentType,
+          experienceLevel,
+          workMode,
+          shortDescription,
+          overview,
+          aboutClient,
+          responsibilities,
+          requirements,
+          benefits,
+          salaryCurrency,
+          salaryMin,
+          salaryMax,
+          salaryVisible,
+          status,
+          visibility,
+          internalOnly,
+          confidential,
+          externalId,
+          clientCompanyId,
+          tags,
+          requiredSkills,
+          slug: finalSlug,
+        },
+      });
+
+      // Rebuild JobSkill from requiredSkills
+      await tx.jobSkill.deleteMany({
+        where: {
+          jobId,
+          tenantId: existingJob.tenantId,
+        },
+      });
+
+      for (const nameRaw of requiredSkills) {
+        const name = nameRaw.trim();
+        if (!name) continue;
+
+        const skillSlug = name
+          .toLowerCase()
+          .replace(/['"]/g, "")
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+        const existingSkill = await tx.skill.findFirst({
+          where: {
+            OR: [
+              { tenantId: existingJob.tenantId, slug: skillSlug },
+              { tenantId: null, slug: skillSlug },
+            ],
+          },
+        });
+
+        const skill =
+          existingSkill ??
+          (await tx.skill.create({
+            data: {
+              tenantId: existingJob.tenantId,
+              name,
+              slug: skillSlug,
+              isGlobal: false,
+            },
+          }));
+
+        await tx.jobSkill.create({
+          data: {
+            tenantId: existingJob.tenantId,
+            jobId,
+            skillId: skill.id,
+            required: true,
+            importance: 3,
+          },
+        });
+      }
     });
 
     const redirectUrl = new URL(`/ats/jobs/${jobId}`, req.url);
