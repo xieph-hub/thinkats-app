@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     if (!tenant) {
       return NextResponse.json(
         { error: "No default tenant configured." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return NextResponse.json(
         { error: "Invalid JSON body." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -33,14 +33,14 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(jobIds) || jobIds.length === 0) {
       return NextResponse.json(
         { error: "jobIds must be a non-empty array." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!action || !["publish", "unpublish", "close", "delete"].includes(action)) {
       return NextResponse.json(
         { error: "Invalid or missing action." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         data: {
           status: "open",
           visibility: "public",
+          isPublished: true,
         },
       });
     } else if (action === "unpublish") {
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
         where: jobWhere,
         data: {
           visibility: "internal",
+          isPublished: false,
         },
       });
     } else if (action === "close") {
@@ -70,6 +72,7 @@ export async function POST(req: NextRequest) {
         where: jobWhere,
         data: {
           status: "closed",
+          isPublished: false,
         },
       });
     } else if (action === "delete") {
@@ -113,6 +116,7 @@ export async function POST(req: NextRequest) {
         id: true,
         status: true,
         visibility: true,
+        isPublished: true,
       },
     });
 
@@ -124,7 +128,7 @@ export async function POST(req: NextRequest) {
     console.error("POST /api/ats/jobs/bulk-actions error", error);
     return NextResponse.json(
       { error: "Failed to run bulk action." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
