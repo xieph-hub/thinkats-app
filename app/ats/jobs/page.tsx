@@ -1,9 +1,10 @@
 // app/ats/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import JobsTable from "./JobsTable";
+import AtsJobsTable, { AtsJobRow } from "./AtsJobsTable";
 
 export const dynamic = "force-dynamic";
 
@@ -22,20 +23,6 @@ type PageProps = {
   searchParams?: JobsPageSearchParams;
 };
 
-type JobRow = {
-  id: string;
-  title: string;
-  slug: string | null;
-  location: string | null;
-  function: string | null;
-  employmentType: string | null;
-  seniority: string | null;
-  isPublished: boolean;
-  createdAt: string; // ISO
-  clientName: string | null;
-  applicationsCount: number;
-};
-
 function firstString(value?: string | string[]): string {
   if (Array.isArray(value)) return value[0] || "";
   return value || "";
@@ -43,6 +30,7 @@ function firstString(value?: string | string[]): string {
 
 export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
 
   const filterQ = firstString(searchParams.q).trim();
   const rawStatus = firstString(searchParams.status).trim().toUpperCase();
@@ -61,7 +49,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
     where.OR = [
       { title: { contains: filterQ, mode: "insensitive" } },
       { location: { contains: filterQ, mode: "insensitive" } },
-      { function: { contains: filterQ, mode: "insensitive" } },
+      { department: { contains: filterQ, mode: "insensitive" } },
       {
         clientCompany: {
           name: { contains: filterQ, mode: "insensitive" },
@@ -71,9 +59,15 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   }
 
   if (filterStatus === "PUBLISHED") {
-    where.isPublished = true;
+    // canonical “published” definition: open + public
+    where.status = "open";
+    where.visibility = "public";
   } else if (filterStatus === "UNPUBLISHED") {
-    where.isPublished = false;
+    // everything that is NOT open+public
+    where.OR = [
+      { status: { not: "open" } },
+      { visibility: { not: "public" } },
+    ];
   }
 
   const [totalJobs, jobsRaw] = await Promise.all([
@@ -90,22 +84,38 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
     }),
   ]);
 
-  const jobs: JobRow[] = jobsRaw.map((job) => ({
-    id: job.id,
-    title: job.title,
-    slug: job.slug ?? null,
-    location: job.location ?? null,
-    function: (job as any).function ?? null,
-    employmentType: (job as any).employmentType ?? null,
-    seniority: (job as any).seniority ?? null,
-    isPublished: job.isPublished,
-    createdAt: job.createdAt.toISOString(),
-    clientName: job.clientCompany?.name ?? null,
-    applicationsCount: job._count.applications ?? 0,
-  }));
+  const jobs: AtsJobRow[] = jobsRaw.map((job) => {
+    const anyJob = job as any;
+
+    const workMode = anyJob.workMode ?? anyJob.locationType ?? null;
+    const experienceLevel =
+      anyJob.experienceLevel ?? anyJob.seniority ?? null;
+
+    const status: string = anyJob.status ?? (job.isPublished ? "open" : "draft");
+    const visibility: string =
+      anyJob.visibility ?? (job.isPublished ? "public" : "internal");
+
+    return {
+      id: job.id,
+      title: job.title,
+      clientName: job.clientCompany?.name ?? "",
+      location: job.location ?? null,
+      workMode,
+      employmentType: anyJob.employmentType ?? null,
+      experienceLevel,
+      status,
+      visibility,
+      applicationsCount: job._count.applications ?? 0,
+      createdAt: job.createdAt.toISOString(),
+    };
+  });
 
   const visibleJobs = jobs.length;
-  const publishedJobs = jobs.filter((j) => j.isPublished).length;
+  const publishedJobs = jobs.filter(
+    (j) =>
+      j.status.toLowerCase() === "open" &&
+      j.visibility.toLowerCase() === "public",
+  ).length;
 
   return (
     <div className="flex h-full flex-1 flex-col">
@@ -195,7 +205,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
         </section>
 
         {/* Jobs table + bulk actions */}
-        <JobsTable jobs={jobs} />
+        <AtsJobsTable initialJobs={jobs} />
       </main>
     </div>
   );
