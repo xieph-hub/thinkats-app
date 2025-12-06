@@ -77,7 +77,6 @@ export default async function AtsTenantsPage({
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
-  // 🔐 Every ATS workspace page should be behind OTP
   await ensureOtpVerified("/ats/tenants");
 
   const tenants: Tenant[] = await prisma.tenant.findMany({
@@ -88,10 +87,10 @@ export default async function AtsTenantsPage({
 
   const totalTenants = tenants.length;
   const activeTenants = tenants.filter(
-    (t) => normaliseStatus((t as any).status) === "active",
+    (t) => normaliseStatus(t.status as any) === "active",
   ).length;
   const trialTenants = tenants.filter(
-    (t) => normaliseStatus((t as any).status) === "trial",
+    (t) => normaliseStatus(t.status as any) === "trial",
   ).length;
 
   const created = searchParams.created === "1";
@@ -128,9 +127,9 @@ export default async function AtsTenantsPage({
               Workspaces (tenants)
             </h1>
             <p className="mt-0.5 max-w-xl text-[11px] text-slate-500">
-              Each tenant is a separate ATS workspace. Use this page to create
-              and maintain client workspaces, capture basic KYC details and
-              jump into their jobs and clients in one click.
+              Each tenant is a separate ATS workspace. Use this page to manage
+              client workspaces, capture basic KYC details and jump into jobs,
+              clients and careers configuration.
             </p>
           </div>
 
@@ -164,8 +163,8 @@ export default async function AtsTenantsPage({
             )}
             {updated && (
               <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] text-sky-800">
-                Workspace details updated. Logo, status and contact information
-                are now in sync.
+                Workspace details updated. Logo, KYC and contact information are
+                now in sync.
               </div>
             )}
             {errorCode && (
@@ -179,7 +178,7 @@ export default async function AtsTenantsPage({
         )}
 
         {/* Top row: stats + create/edit form */}
-        <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.3fr)]">
+        <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.4fr)]">
           {/* Stats card */}
           <section className="rounded-2xl border border-slate-200 bg-white p-4 text-[11px] shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">
@@ -216,19 +215,19 @@ export default async function AtsTenantsPage({
 
               <div className="rounded-xl bg-slate-50 px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  KYC essentials
+                  KYC coverage
                 </p>
                 <p className="mt-1 text-sm font-semibold text-slate-900">
-                  Primary contact + status
+                  RC / TIN / country on workspace
                 </p>
                 <p className="text-[10px] text-slate-500">
-                  Enough for basic client KYC &amp; compliance on this screen.
+                  Enough for basic client compliance on this screen.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* Create / edit workspace form (includes basic KYC fields) */}
+          {/* Create / edit workspace form */}
           <section className="rounded-2xl border border-slate-200 bg-white p-4 text-[11px] shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
@@ -238,8 +237,9 @@ export default async function AtsTenantsPage({
                     : "Create a new workspace"}
                 </h2>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Treat each workspace as a separate client account. Name, URL
-                  slug, logo and primary contact are your basic KYC layer here.
+                  Treat each workspace as a separate client account. Name, slug,
+                  logo and KYC details stay here – candidates never see this
+                  screen.
                 </p>
               </div>
               {isEditing && editingTenant && (
@@ -255,7 +255,7 @@ export default async function AtsTenantsPage({
               method="POST"
               action="/ats/tenants/new"
               encType="multipart/form-data"
-              className="mt-3 space-y-3 text-[13px]"
+              className="mt-3 space-y-4 text-[13px]"
             >
               {isEditing && editingTenant && (
                 <input
@@ -265,7 +265,7 @@ export default async function AtsTenantsPage({
                 />
               )}
 
-              {/* Top row: basic identity + slug */}
+              {/* Identity + slug */}
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
                 <div className="space-y-1">
                   <label
@@ -308,7 +308,7 @@ export default async function AtsTenantsPage({
                 </div>
               </div>
 
-              {/* KYC-ish: status + primary contact email */}
+              {/* Status + primary contact */}
               <div className="grid gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                 <div className="space-y-1">
                   <label
@@ -320,9 +320,7 @@ export default async function AtsTenantsPage({
                   <select
                     id="tenant-status"
                     name="status"
-                    defaultValue={
-                      (editingTenant?.status as string | null) ?? "active"
-                    }
+                    defaultValue={editingTenant?.status ?? "active"}
                     className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                   >
                     <option value="active">Active</option>
@@ -347,77 +345,168 @@ export default async function AtsTenantsPage({
                     id="tenant-primary-contact"
                     name="primaryContactEmail"
                     type="email"
-                    defaultValue={
-                      (editingTenant as any)?.primaryContactEmail ?? ""
-                    }
+                    defaultValue={editingTenant?.primaryContactEmail ?? ""}
                     placeholder="ops@acmepartners.com"
                     className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                   />
                   <p className="mt-1 text-[10px] text-slate-500">
-                    Used as the main contact for ATS notices and basic KYC
-                    records.
+                    Used as the main contact for ATS notices and KYC records.
                   </p>
                 </div>
               </div>
 
-              {/* Logo upload + preview */}
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              {/* KYC block: RC, TIN, website, industry */}
+              <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label
-                    htmlFor="tenant-logo"
+                    htmlFor="tenant-rc"
                     className="text-xs font-medium text-slate-700"
                   >
-                    Workspace logo
+                    Registration / RC number
                   </label>
                   <input
-                    id="tenant-logo"
-                    name="logo"
-                    type="file"
-                    accept="image/*"
-                    className="block w-full cursor-pointer rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 file:mr-2 file:rounded-md file:border-0 file:bg-[#172965] file:px-2.5 file:py-1 file:text-[11px] file:font-semibold file:text-white hover:border-slate-300"
+                    id="tenant-rc"
+                    name="registrationNumber"
+                    defaultValue={editingTenant?.registrationNumber ?? ""}
+                    placeholder="RC 1234567"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                   />
                   <p className="mt-1 text-[10px] text-slate-500">
-                    PNG, JPG or SVG. A square logo works best in workspace
-                    lists and careers pages.
+                    Company registration number (CAC / RC or equivalent).
                   </p>
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-slate-700">
-                    Logo preview
+                  <label
+                    htmlFor="tenant-tin"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Tax ID / TIN
+                  </label>
+                  <input
+                    id="tenant-tin"
+                    name="taxId"
+                    defaultValue={editingTenant?.taxId ?? ""}
+                    placeholder="e.g. TIN 01234567-0001"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Local TIN, VAT ID or equivalent for compliance.
                   </p>
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    {editingTenant?.logoUrl ? (
-                      <div className="relative h-9 w-9 overflow-hidden rounded-md border border-slate-200 bg-white">
-                        <Image
-                          src={editingTenant.logoUrl as any}
-                          alt={`${editingTenant.name || editingTenant.slug || "Tenant"} logo`}
-                          width={36}
-                          height={36}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-200 text-[11px] font-semibold text-slate-700">
-                        {(editingTenant?.name ||
-                          editingTenant?.slug ||
-                          "T")!
-                          .charAt(0)
-                          .toUpperCase()}
-                      </div>
-                    )}
-                    <div className="flex flex-col text-[10px] text-slate-500">
-                      <span>
-                        We&apos;ll always show either the uploaded logo or a
-                        clean initial avatar.
-                      </span>
-                      <span>
-                        This keeps the workspace list and careers pages looking
-                        consistent.
-                      </span>
-                    </div>
-                  </div>
                 </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="tenant-industry"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Industry
+                  </label>
+                  <input
+                    id="tenant-industry"
+                    name="industry"
+                    defaultValue={editingTenant?.industry ?? ""}
+                    placeholder="Fintech, Healthcare, Retail…"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="tenant-website"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Website (optional)
+                  </label>
+                  <input
+                    id="tenant-website"
+                    name="websiteUrl"
+                    type="url"
+                    defaultValue={editingTenant?.websiteUrl ?? ""}
+                    placeholder="https://acmepartners.com"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+
+              {/* Location / address */}
+              <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="tenant-country"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Country
+                  </label>
+                  <input
+                    id="tenant-country"
+                    name="country"
+                    defaultValue={editingTenant?.country ?? ""}
+                    placeholder="Nigeria"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="tenant-state"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    State / region
+                  </label>
+                  <input
+                    id="tenant-state"
+                    name="state"
+                    defaultValue={editingTenant?.state ?? ""}
+                    placeholder="Lagos"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="tenant-city"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    City
+                  </label>
+                  <input
+                    id="tenant-city"
+                    name="city"
+                    defaultValue={editingTenant?.city ?? ""}
+                    placeholder="Ikeja"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="tenant-address1"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Address (line 1)
+                </label>
+                <input
+                  id="tenant-address1"
+                  name="addressLine1"
+                  defaultValue={editingTenant?.addressLine1 ?? ""}
+                  placeholder="Office 12, XYZ Towers"
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+                <label
+                  htmlFor="tenant-address2"
+                  className="mt-2 block text-xs font-medium text-slate-700"
+                >
+                  Address (line 2)
+                </label>
+                <input
+                  id="tenant-address2"
+                  name="addressLine2"
+                  defaultValue={editingTenant?.addressLine2 ?? ""}
+                  placeholder="Street, estate or additional directions"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
               </div>
 
               {/* Actions */}
@@ -449,9 +538,8 @@ export default async function AtsTenantsPage({
                 Existing workspaces
               </h2>
               <p className="mt-0.5 text-[11px] text-slate-500">
-                This is your internal client / workspace registry. Use the
-                actions on the right to jump into jobs, clients and careers
-                configuration.
+                Internal registry of client workspaces. KYC details here are
+                for your team only – candidates never see them.
               </p>
             </div>
           </div>
@@ -474,7 +562,7 @@ export default async function AtsTenantsPage({
                     <th className="px-3 py-2">Workspace</th>
                     <th className="px-3 py-2">Primary contact</th>
                     <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Slug</th>
+                    <th className="px-3 py-2">KYC snapshot</th>
                     <th className="px-3 py-2">ID</th>
                     <th className="px-3 py-2">Created</th>
                     <th className="px-3 py-2 text-right">Shortcuts</th>
@@ -488,15 +576,21 @@ export default async function AtsTenantsPage({
                       (label?.toString?.().charAt(0).toUpperCase() as string) ||
                       "T";
 
-                    const statusLabel = getStatusLabel(
-                      (tenant as any).status,
-                    );
+                    const statusLabel = getStatusLabel(tenant.status as any);
                     const statusClasses = getStatusClasses(
-                      (tenant as any).status,
+                      tenant.status as any,
                     );
 
                     const isDefault =
                       String(tenant.id) === String(defaultTenant.id);
+
+                    const kycBits = [
+                      tenant.registrationNumber
+                        ? `RC: ${tenant.registrationNumber}`
+                        : null,
+                      tenant.taxId ? `TIN: ${tenant.taxId}` : null,
+                      tenant.country || null,
+                    ].filter(Boolean);
 
                     return (
                       <tr key={tenant.id}>
@@ -523,9 +617,7 @@ export default async function AtsTenantsPage({
                                 {label}
                               </span>
                               <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                                {tenant.slug && (
-                                  <span>{tenant.slug}</span>
-                                )}
+                                {tenant.slug && <span>{tenant.slug}</span>}
                                 {isDefault && (
                                   <>
                                     <span className="text-slate-300">•</span>
@@ -541,10 +633,19 @@ export default async function AtsTenantsPage({
 
                         {/* Primary contact */}
                         <td className="align-top px-3 py-2">
-                          {(tenant as any).primaryContactEmail ? (
-                            <span className="text-[11px] text-slate-700">
-                              {(tenant as any).primaryContactEmail}
-                            </span>
+                          {tenant.primaryContactEmail ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[11px] text-slate-700">
+                                {tenant.primaryContactEmail}
+                              </span>
+                              {(tenant.city || tenant.state) && (
+                                <span className="text-[10px] text-slate-500">
+                                  {[tenant.city, tenant.state]
+                                    .filter(Boolean)
+                                    .join(", ")}
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-[10px] italic text-slate-400">
                               No primary contact set
@@ -562,11 +663,31 @@ export default async function AtsTenantsPage({
                           </span>
                         </td>
 
-                        {/* Slug */}
+                        {/* KYC snapshot */}
                         <td className="align-top px-3 py-2">
-                          <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                            {tenant.slug || "—"}
-                          </span>
+                          {kycBits.length === 0 ? (
+                            <span className="text-[10px] text-slate-400">
+                              No KYC details yet
+                            </span>
+                          ) : (
+                            <div className="flex flex-col gap-0.5 text-[10px] text-slate-600">
+                              {tenant.registrationNumber && (
+                                <span>
+                                  <span className="font-medium">RC: </span>
+                                  {tenant.registrationNumber}
+                                </span>
+                              )}
+                              {tenant.taxId && (
+                                <span>
+                                  <span className="font-medium">TIN: </span>
+                                  {tenant.taxId}
+                                </span>
+                              )}
+                              {tenant.country && (
+                                <span>{tenant.country}</span>
+                              )}
+                            </div>
+                          )}
                         </td>
 
                         {/* ID */}
