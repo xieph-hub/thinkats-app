@@ -1,16 +1,83 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-::root {
+/* ------------------------------------------------------------------ */
+/* Brand tokens                                                       */
+/* ------------------------------------------------------------------ */
+:root {
+  /* Resourcin palette (still useful for legacy pages) */
   --rcn-blue: #172965;
-  --rcn-yellow: #FFC000;
-  --rcn-dark-green: #306B34;
-  --rcn-light-green: #64C247;
+  --rcn-yellow: #ffc000;
+  --rcn-dark-green: #306b34;
+  --rcn-light-green: #64c247;
+
+  /* ThinkATS core palette */
+  --ta-deep-indigo: #111827;   /* Primary brand base, headings, chrome */
+  --ta-electric-blue: #2563eb; /* Primary CTAs, highlights, active states */
+  --ta-soft-sky: #e5f0ff;      /* Light cards, hero backgrounds, pills */
+  --ta-slate-grey: #4b5563;    /* Body text, secondary labels */
+  --ta-cloud-grey: #e5e7eb;    /* Borders, dividers, subtle backgrounds */
+  --ta-surface-white: #f9fafb; /* Base surfaces, app background */
+  --ta-accent-green: #22c55e;  /* Success states, positive tags, metrics */
+  --ta-accent-amber: #facc15;  /* Warnings, attention flags */
+  --ta-error-red: #ef4444;     /* Errors, destructive actions */
 }
 
-html { scroll-behavior: smooth; }
-:focus-visible { outline: 3px solid #FFC107; outline-offset: 3px; border-radius: 8px; }
-.img-fallback { background: linear-gradient(135deg, rgba(10,102,194,.08), rgba(16,185,129,.08)); }
-.nav-active { color: #0A66C2; font-weight: 600; }
+/* ------------------------------------------------------------------ */
+/* Global behaviour                                                   */
+/* ------------------------------------------------------------------ */
+
+/* Smooth scroll on-page anchors (/product, /career-sites etc.) */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus styles that play nicely with the brand and a11y */
+:focus-visible {
+  outline: 3px solid var(--ta-accent-amber);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Let Tailwind handle most typography; no need to override body here */
+
+/* ------------------------------------------------------------------ */
+/* Utility classes                                                    */
+/* ------------------------------------------------------------------ */
+
+/* Soft gradient background for image / logo fallbacks */
+.img-fallback {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 102, 194, 0.08),
+    rgba(16, 185, 129, 0.08)
+  );
+}
+
+/* Legacy helper for marking active nav links (if used anywhere) */
+.nav-active {
+  color: var(--ta-electric-blue);
+  font-weight: 600;
+}
+
+/* Optional: desktop scrollbar polish (kept subtle) */
+@media (min-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #f3f4f6;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+}
