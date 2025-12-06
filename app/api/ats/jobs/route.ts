@@ -169,9 +169,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Derived published flag to keep legacy fields in sync
-    const isPublished = status === "open" && visibility === "public";
-
     // ----- Create job -----
     const job = await prisma.job.create({
       data: {
@@ -212,7 +209,6 @@ export async function POST(req: NextRequest) {
         visibility,
         internalOnly,
         confidential,
-        isPublished,
 
         // Compensation
         salaryMin,
