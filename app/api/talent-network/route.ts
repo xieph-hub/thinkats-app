@@ -105,7 +105,7 @@ export async function POST(req: Request) {
           currentTitle: body.currentTitle?.trim() || candidate.currentTitle,
           currentCompany:
             body.currentCompany?.trim() || candidate.currentCompany,
-          // Do not erase an existing richer source – just backfill if empty
+          // Backfill source if missing, but don’t overwrite richer info
           source: candidate.source ?? "talent_network",
         },
       });
@@ -146,15 +146,15 @@ export async function POST(req: Request) {
           },
         });
       } else if (skill.tenantId === tenant.id && skill.name !== name) {
-        // Keep local display-name fresh for tenant-scoped skills
+        // Keep local display-name fresh
         await prisma.skill.update({
           where: { id: skill.id },
           data: { name },
         });
       }
 
-      // We *read* proficiency / yearsExperience for future use, but
-      // don't persist them yet because they aren't in the Prisma model.
+      // We read proficiency / yearsExperience but don't persist them yet
+      // because CandidateSkill currently only has tenantId / candidateId / skillId / source.
       // const proficiency = ...
       // const yearsExperience = ...
 
@@ -185,20 +185,17 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------------
-    // 3) Tag candidate with a SOURCE tag (kind = "SOURCE")
+    // 3) Tag candidate with a SOURCE-ish tag (tenantId + name)
     // -------------------------------------------------------------------
     const rawSourceLabel = body.sourceLabel || "Talent Network";
     const sourceLabel = rawSourceLabel.trim();
 
     if (sourceLabel) {
-      // Avoid composite-unique helper; just find or create manually
+      // Simple find-or-create on (tenantId, name)
       let sourceTag = await prisma.tag.findFirst({
         where: {
           tenantId: tenant.id,
           name: sourceLabel,
-          // If Tag.kind exists as an enum/string, this is fine. If not, you can
-          // drop `kind` from this filter and from the create() below.
-          kind: "SOURCE" as any,
         },
       });
 
@@ -207,9 +204,7 @@ export async function POST(req: Request) {
           data: {
             tenantId: tenant.id,
             name: sourceLabel,
-            kind: "SOURCE" as any,
-            color: "#2563EB",
-            isSystem: true,
+            color: "#2563EB", // soft blue
           },
         });
       }
