@@ -14,7 +14,7 @@ const PUBLIC_SITE_URL =
 
 type PostBody = {
   applicationId: string;
-  scheduledAt: string; // ISO string from the client
+  scheduledAt: string; // ISO string
   durationMins?: number;
   type?: string;
   location?: string | null;
@@ -22,6 +22,7 @@ type PostBody = {
   notes?: string | null;
   organiserName?: string | null;
   organiserEmail?: string | null;
+  inviterOrgName?: string | null;
   attendees?: {
     name?: string;
     email: string;
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
       notes,
       organiserName,
       organiserEmail,
+      inviterOrgName,
       attendees = [],
     } = body;
 
@@ -126,7 +128,8 @@ export async function POST(req: NextRequest) {
     }
 
     const jobTitle = job.title || "Untitled role";
-    const clientName = job.clientCompany?.name;
+    const clientName = job.clientCompany?.name || null;
+    const orgLabel = inviterOrgName || clientName || null;
 
     // 1) Persist interview record
     const interview = await prisma.applicationInterview.create({
@@ -138,21 +141,19 @@ export async function POST(req: NextRequest) {
         location: location || null,
         videoUrl: videoUrl || null,
         notes: notes || null,
-        status: "SCHEDULED" as any, // ensure iv.status is set
       },
     });
 
-    // 2) Optional participants (interviewers, observers, etc.)
-    if (attendees && attendees.length > 0) {
+    // 2) Optional participants
+    const cleanedAttendees = (attendees || []).filter((p) => p.email);
+    if (cleanedAttendees.length > 0) {
       await prisma.interviewParticipant.createMany({
-        data: attendees
-          .filter((p) => p.email)
-          .map((p) => ({
-            interviewId: interview.id,
-            name: p.name || p.email,
-            email: p.email,
-            role: p.role || "Interviewer",
-          })),
+        data: cleanedAttendees.map((p) => ({
+          interviewId: interview.id,
+          name: p.name || p.email,
+          email: p.email,
+          role: p.role || "Interviewer",
+        })),
       });
     }
 
@@ -162,60 +163,61 @@ export async function POST(req: NextRequest) {
       description:
         notes ||
         `Interview for ${jobTitle}${
-          clientName ? ` at ${clientName}` : ""
+          orgLabel ? ` at ${orgLabel}` : clientName ? ` at ${clientName}` : ""
         }`,
       start,
       end,
       organizer: {
-        name: organiserName || "ThinkATS",
-        email:
-          organiserEmail ||
-          "no-reply@mail.resourcin.com",
+        name: organiserName || orgLabel || "ThinkATS",
+        email: organiserEmail || "no-reply@mail.resourcin.com",
       },
       attendees: [
         {
           name: candidateName,
           email: candidateEmail,
         },
-        ...attendees
-          .filter((p) => p.email)
-          .map((p) => ({
-            name: p.name || p.email,
-            email: p.email,
-          })),
+        ...cleanedAttendees.map((p) => ({
+          name: p.name || p.email,
+          email: p.email,
+        })),
       ],
       location: videoUrl || location || undefined,
     });
 
     const interviewDateLabel = formatInterviewDateRange(start, end);
 
-    // 4) Send invite to candidate (and optionally CC interviewers)
+    // 4) Send invite email
     const to: string[] = [candidateEmail];
-    const cc: string[] = attendees
+    const cc: string[] = cleanedAttendees
       .map((p) => p.email)
       .filter((email) => !!email);
+
+    const subjectBase = `Interview scheduled – ${jobTitle}`;
+    const subject = orgLabel
+      ? `${orgLabel} · ${subjectBase}`
+      : subjectBase;
 
     await resend.emails.send({
       from: RESEND_FROM_EMAIL,
       to,
       cc: cc.length > 0 ? cc : undefined,
-      subject: `Interview scheduled – ${jobTitle}`,
+      subject,
       react: InterviewInviteEmail({
         candidateName,
         jobTitle,
         interviewDate: interviewDateLabel,
         interviewType: type,
-        location,
-        videoUrl,
+        location: location || null,
+        videoUrl: videoUrl || null,
         notes,
-        organiserName,
+        organiserName: organiserName || null,
+        organisationName: orgLabel,
         dashboardUrl: `${PUBLIC_SITE_URL}/ats/jobs/${job.id}`,
       }),
       attachments: [
         {
           filename: "interview.ics",
           content: ics,
-          // contentType: "text/calendar",
         },
       ],
     });
