@@ -1,949 +1,603 @@
-// app/ats/jobs/new/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
-type SelectOption = {
-  value: string;
-  label: string;
+export const metadata: Metadata = {
+  title: "ThinkATS | Create job",
+  description:
+    "Create a new role, attach it to a client and control how it appears across your ATS and career sites.",
 };
 
-type OptionGroup = {
-  label: string;
-  options: SelectOption[];
-};
-
-// -----------------------------
-// Global-style job function taxonomy
-// (inspired by O*NET / ISCO-style clusters)
-// Stored in Job.department
-// -----------------------------
-const JOB_FUNCTION_GROUPS: OptionGroup[] = [
-  {
-    label: "Leadership & General Management",
-    options: [
-      {
-        value: "executive_leadership",
-        label: "Executive Leadership (CEO, MD, Country Manager)",
-      },
-      {
-        value: "general_management",
-        label: "General Management / Business Unit Head",
-      },
-      {
-        value: "strategy_corporate_dev",
-        label: "Strategy & Corporate Development",
-      },
-      {
-        value: "project_program_management",
-        label: "Project / Program Management",
-      },
-      {
-        value: "operations_management",
-        label: "Operations Management",
-      },
-    ],
-  },
-  {
-    label: "Sales, Commercial & Growth",
-    options: [
-      {
-        value: "sales_business_development",
-        label: "Sales & Business Development",
-      },
-      {
-        value: "account_management_cs",
-        label: "Account Management & Customer Success",
-      },
-      {
-        value: "partnerships_alliances",
-        label: "Partnerships & Alliances",
-      },
-      {
-        value: "revenue_operations",
-        label: "Revenue Operations (RevOps)",
-      },
-      {
-        value: "pre_sales_solutions",
-        label: "Pre-sales & Solutions Consulting",
-      },
-    ],
-  },
-  {
-    label: "Marketing, Brand & Communications",
-    options: [
-      { value: "growth_marketing", label: "Growth / Performance Marketing" },
-      { value: "brand_marketing", label: "Brand Marketing & Communications" },
-      { value: "product_marketing", label: "Product Marketing" },
-      { value: "content_social_media", label: "Content & Social Media" },
-      { value: "pr_corporate_comms", label: "PR & Corporate Communications" },
-    ],
-  },
-  {
-    label: "Product, Design & User Experience",
-    options: [
-      { value: "product_management", label: "Product Management" },
-      { value: "product_ownership", label: "Product Owner / Business Analyst" },
-      { value: "ux_ui_design", label: "UX / UI Design" },
-      { value: "service_design", label: "Service Design" },
-      { value: "research_insights", label: "User Research & Insights" },
-    ],
-  },
-  {
-    label: "Engineering, Data & Technology",
-    options: [
-      {
-        value: "software_engineering",
-        label: "Software Engineering / Development",
-      },
-      { value: "data_science_ml", label: "Data Science & Machine Learning" },
-      { value: "data_analytics", label: "Data Analytics / BI" },
-      {
-        value: "devops_platform",
-        label: "DevOps / SRE / Platform Engineering",
-      },
-      {
-        value: "cloud_infrastructure",
-        label: "Cloud & Infrastructure Engineering",
-      },
-      { value: "it_support", label: "IT Support & Helpdesk" },
-      { value: "cybersecurity", label: "Cybersecurity" },
-      { value: "qa_testing", label: "QA & Test Engineering" },
-    ],
-  },
-  {
-    label: "People, HR & Talent",
-    options: [
-      { value: "people_hr", label: "People / HR Generalist" },
-      {
-        value: "talent_acquisition",
-        label: "Talent Acquisition / Recruitment",
-      },
-      { value: "people_operations", label: "People Operations" },
-      {
-        value: "learning_development",
-        label: "Learning & Development / Talent Management",
-      },
-      { value: "compensation_benefits", label: "Compensation & Benefits" },
-    ],
-  },
-  {
-    label: "Finance, Risk & Legal",
-    options: [
-      { value: "finance_accounting", label: "Finance & Accounting" },
-      {
-        value: "financial_planning_analysis",
-        label: "Financial Planning & Analysis (FP&A)",
-      },
-      { value: "audit_control", label: "Audit, Controls & Reporting" },
-      { value: "risk_compliance", label: "Risk & Compliance" },
-      {
-        value: "legal_corporate_secretariat",
-        label: "Legal & Corporate Secretariat",
-      },
-      { value: "treasury_investments", label: "Treasury & Investments" },
-    ],
-  },
-  {
-    label: "Real Estate, Property & Facilities",
-    options: [
-      {
-        value: "real_estate_investments",
-        label: "Real Estate Investments & Advisory",
-      },
-      {
-        value: "real_estate_development",
-        label: "Real Estate Development / Projects",
-      },
-      {
-        value: "estate_agency_leasing",
-        label: "Estate Agency, Sales & Leasing",
-      },
-      {
-        value: "property_facilities_management",
-        label: "Property & Facilities Management",
-      },
-      {
-        value: "valuation_asset_management",
-        label: "Valuation & Asset Management",
-      },
-    ],
-  },
-  {
-    label: "Operations, Supply Chain & Logistics",
-    options: [
-      {
-        value: "business_operations",
-        label: "Business / Process Operations",
-      },
-      {
-        value: "supply_chain_procurement",
-        label: "Supply Chain & Procurement",
-      },
-      {
-        value: "logistics_fulfilment",
-        label: "Logistics, Fulfilment & Fleet",
-      },
-      {
-        value: "manufacturing_production",
-        label: "Manufacturing & Production",
-      },
-      {
-        value: "quality_assurance_ops",
-        label: "Quality Assurance & Control (Operations)",
-      },
-    ],
-  },
-  {
-    label: "Customer Support, Service & Experience",
-    options: [
-      {
-        value: "customer_support",
-        label: "Customer Support / Service",
-      },
-      {
-        value: "contact_centre_bpo",
-        label: "Contact Centre / BPO Operations",
-      },
-      {
-        value: "service_delivery",
-        label: "Service Delivery & Implementation",
-      },
-    ],
-  },
-  {
-    label: "Creative, Media & Content",
-    options: [
-      {
-        value: "creative_direction",
-        label: "Creative Direction & Brand Studio",
-      },
-      {
-        value: "graphic_motion_design",
-        label: "Graphic & Motion Design",
-      },
-      {
-        value: "video_photo_content",
-        label: "Video, Photography & Multimedia",
-      },
-      {
-        value: "copywriting_editing",
-        label: "Copywriting & Editorial",
-      },
-    ],
-  },
-  {
-    label: "Healthcare, Life Sciences & Social Impact",
-    options: [
-      { value: "clinical_medical", label: "Clinical & Medical Practice" },
-      {
-        value: "nursing_allied_health",
-        label: "Nursing & Allied Health",
-      },
-      { value: "public_health", label: "Public Health & Health Programs" },
-      {
-        value: "pharmaceutical_biotech",
-        label: "Pharmaceutical & Biotech",
-      },
-      {
-        value: "social_impact_nonprofit",
-        label: "Social Impact & Non-profit Programs",
-      },
-    ],
-  },
-  {
-    label: "Education, Training & Research",
-    options: [
-      { value: "teaching_education", label: "Teaching & Education" },
-      {
-        value: "corporate_training",
-        label: "Corporate Training & Facilitation",
-      },
-      { value: "academic_research", label: "Academic & Applied Research" },
-      { value: "edtech_product_ops", label: "EdTech Product & Operations" },
-    ],
-  },
-  {
-    label: "Admin, Office & Support",
-    options: [
-      {
-        value: "executive_assistant",
-        label: "Executive Assistant & EA Support",
-      },
-      { value: "office_admin", label: "Office Administration & Front Desk" },
-      { value: "general_support_staff", label: "General Support Staff" },
-    ],
-  },
-  {
-    label: "Other / Multi-disciplinary",
-    options: [
-      {
-        value: "multi_disciplinary",
-        label: "Multi-disciplinary / Hybrid Role",
-      },
-      {
-        value: "other_specify_in_summary",
-        label: "Other – described in role summary",
-      },
-    ],
-  },
-];
-
-// -----------------------------
-// Work mode, employment type, experience, currency
-// -----------------------------
-const WORK_MODE_OPTIONS: SelectOption[] = [
-  { value: "", label: "Select work mode" },
-  { value: "onsite", label: "Onsite" },
-  { value: "hybrid", label: "Hybrid" },
-  { value: "remote", label: "Remote" },
-  { value: "field_based", label: "Field-based" },
-];
-
-const EMPLOYMENT_TYPE_OPTIONS: SelectOption[] = [
-  { value: "", label: "Select employment type" },
-  { value: "full_time", label: "Full-time" },
-  { value: "part_time", label: "Part-time" },
-  { value: "contract", label: "Contract" },
-  { value: "temporary", label: "Temporary" },
-  { value: "internship", label: "Internship" },
-  { value: "consulting", label: "Consulting / Advisory" },
-];
-
-const EXPERIENCE_LEVEL_OPTIONS: SelectOption[] = [
-  { value: "", label: "Select experience level" },
-  { value: "entry", label: "Entry level / Graduate" },
-  { value: "junior", label: "Junior (1–3 years)" },
-  { value: "mid", label: "Mid-level (3–7 years)" },
-  { value: "senior", label: "Senior (7–12 years)" },
-  { value: "lead_principal", label: "Lead / Principal" },
-  { value: "manager_head", label: "Manager / Head of" },
-  { value: "director_vp", label: "Director / VP" },
-  { value: "c_level_partner", label: "C-level / Partner" },
-];
-
-const CURRENCY_OPTIONS: SelectOption[] = [
-  { value: "NGN", label: "NGN – Nigerian Naira" },
-  { value: "USD", label: "USD – US Dollar" },
-  { value: "EUR", label: "EUR – Euro" },
-  { value: "GBP", label: "GBP – British Pound" },
-  { value: "KES", label: "KES – Kenyan Shilling" },
-  { value: "ZAR", label: "ZAR – South African Rand" },
-  { value: "GHS", label: "GHS – Ghanaian Cedi" },
-];
-
-// -----------------------------
-// Location – detailed suggestions + free text
-// -----------------------------
-const LOCATION_GROUPS: OptionGroup[] = [
-  {
-    label: "Nigeria",
-    options: [
-      { value: "Lagos, Nigeria", label: "Lagos, Nigeria" },
-      { value: "Abuja, Nigeria", label: "Abuja, Nigeria" },
-      { value: "Port Harcourt, Nigeria", label: "Port Harcourt, Nigeria" },
-      { value: "Nigeria – Remote", label: "Nigeria – Remote" },
-      {
-        value: "Nigeria – Multiple locations",
-        label: "Nigeria – Multiple locations",
-      },
-    ],
-  },
-  {
-    label: "Africa (key hubs)",
-    options: [
-      { value: "Nairobi, Kenya", label: "Nairobi, Kenya" },
-      { value: "Accra, Ghana", label: "Accra, Ghana" },
-      {
-        value: "Johannesburg, South Africa",
-        label: "Johannesburg, South Africa",
-      },
-      { value: "Cape Town, South Africa", label: "Cape Town, South Africa" },
-      { value: "Cairo, Egypt", label: "Cairo, Egypt" },
-      { value: "Africa – Remote", label: "Africa – Remote" },
-    ],
-  },
-  {
-    label: "Europe & Middle East",
-    options: [
-      { value: "London, United Kingdom", label: "London, United Kingdom" },
-      { value: "Berlin, Germany", label: "Berlin, Germany" },
-      { value: "Amsterdam, Netherlands", label: "Amsterdam, Netherlands" },
-      { value: "Dubai, UAE", label: "Dubai, United Arab Emirates" },
-      { value: "Europe – Remote", label: "Europe – Remote" },
-    ],
-  },
-  {
-    label: "Americas & Global",
-    options: [
-      { value: "New York, United States", label: "New York, United States" },
-      { value: "Toronto, Canada", label: "Toronto, Canada" },
-      { value: "São Paulo, Brazil", label: "São Paulo, Brazil" },
-      { value: "Americas – Remote", label: "Americas – Remote" },
-      {
-        value: "Global – Remote / Distributed",
-        label: "Global – Remote / Distributed",
-      },
-    ],
-  },
-];
-
-// -----------------------------
-// Country / Region – structured for reporting
-// (can later be mapped to ISO or regions in the DB)
-// -----------------------------
-const COUNTRY_REGION_OPTIONS: SelectOption[] = [
-  { value: "", label: "Select country / region" },
-  // Core current / likely markets
-  { value: "nigeria", label: "Nigeria" },
-  { value: "ghana", label: "Ghana" },
-  { value: "kenya", label: "Kenya" },
-  { value: "south_africa", label: "South Africa" },
-  { value: "egypt", label: "Egypt" },
-  // Wider regions
-  { value: "west_africa", label: "West Africa (multi-country)" },
-  { value: "east_africa", label: "East Africa (multi-country)" },
-  { value: "southern_africa", label: "Southern Africa (multi-country)" },
-  { value: "north_africa", label: "North Africa (multi-country)" },
-  { value: "uk", label: "United Kingdom" },
-  { value: "europe_other", label: "Europe – other" },
-  { value: "usa", label: "United States" },
-  { value: "canada", label: "Canada" },
-  { value: "middle_east", label: "Middle East" },
-  { value: "global_remote", label: "Global remote / distributed" },
-  { value: "other", label: "Other – specify in location" },
-];
-
-// -----------------------------
-// Page
-// -----------------------------
 export default async function NewJobPage() {
   const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
 
-  if (!tenant) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Create job
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No default tenant configured. Please ensure{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_ID
-          </code>{" "}
-          or{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_SLUG
-          </code>{" "}
-          are set.
-        </p>
-      </div>
-    );
-  }
+  const clientCompanies = await prisma.clientCompany.findMany({
+    where: { tenantId: tenant.id },
+    orderBy: { name: "asc" },
+  });
 
-  const [clientCompanies, users] = await Promise.all([
-    prisma.clientCompany.findMany({
-      where: { tenantId: tenant.id },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-      },
-    }),
-    prisma.user.findMany({
-      where: {
-        userTenantRoles: {
-          some: { tenantId: tenant.id },
-        },
-      },
-      orderBy: [{ fullName: "asc" }, { email: "asc" }],
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-      },
-    }),
-  ]);
+  const hasClients = clientCompanies.length > 0;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 lg:px-0">
+    <div className="flex h-full flex-1 flex-col">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <Link
-            href="/ats/jobs"
-            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
-          >
-            <span className="mr-1.5">←</span>
-            Back to ATS jobs
+      <header className="border-b border-slate-200 bg-white px-5 py-4">
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Link href="/ats/jobs" className="hover:underline">
+            ATS
           </Link>
-          <h1 className="mt-3 text-2xl font-semibold text-slate-900">
-            Create a new role
-          </h1>
-          <p className="mt-1 text-xs text-slate-600">
-            Capture the essentials once. ThinkATS will reuse this across
-            the careers page, pipelines and client reporting.
-          </p>
+          <span>/</span>
+          <Link href="/ats/jobs" className="hover:underline">
+            Jobs
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-slate-700">New job</span>
         </div>
 
-        <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] text-slate-700">
-          Tenant:{" "}
-          <span className="font-medium">
-            {tenant.slug || tenant.name || "resourcin"}
-          </span>
-        </div>
-      </div>
-
-      <form
-        action="/api/ats/jobs"
-        method="POST"
-        className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
-      >
-        {/* Role shell */}
-        <section className="grid gap-4 border-b border-slate-100 pb-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)] sm:gap-6">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Job title *
-              </label>
-              <input
-                type="text"
-                name="title"
-                required
-                placeholder="e.g. General Manager, Real Estate Operations"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Short pitch / teaser
-              </label>
-              <textarea
-                name="shortDescription"
-                rows={2}
-                placeholder="One or two sentences you’d use to pitch this role to a candidate."
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-xl bg-slate-50/70 p-3 text-[11px] text-slate-600">
-            <p className="font-semibold text-slate-900">
-              Publishing tips
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-base font-semibold text-slate-900">
+              Create new job
+            </h1>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Set up a new mandate, attach it to a client and decide whether it
+              goes live on your career site or stays internal.
             </p>
-            <ul className="mt-1 list-disc space-y-1 pl-4">
-              <li>Use clear, market-aligned job titles.</li>
-              <li>Keep the short pitch under 250 characters.</li>
-              <li>
-                Add salary bands when possible – it improves quality and
-                response rates.
-              </li>
-            </ul>
           </div>
-        </section>
 
-        {/* Client, ownership & structure */}
-        <section className="grid gap-4 border-b border-slate-100 pb-4 sm:grid-cols-3 sm:gap-6">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Client company
-              </label>
-              <select
-                name="clientCompanyId"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                <option value="">Resourcin / internal role</option>
-                {clientCompanies.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
+            <span className="font-medium text-slate-800">
+              {tenant.name}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              New role · ATS workspace
+            </span>
+            <Link
+              href="/ats/jobs"
+              className="mt-2 inline-flex h-8 items-center rounded-full border border-slate-200 bg-white px-4 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel &amp; go back
+            </Link>
+          </div>
+        </div>
+      </header>
 
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Owner / recruiter
-              </label>
-              <select
-                name="hiringManagerId"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                <option value="">Unassigned</option>
-                {users.map((user) => {
-                  const label = user.fullName
-                    ? `${user.fullName}${
-                        user.email ? ` (${user.email})` : ""
-                      }`
-                    : user.email ?? "Unknown user";
+      {/* Main form */}
+      <main className="flex flex-1 flex-col bg-slate-50 px-5 py-4">
+        <form
+          action="/api/ats/jobs"
+          method="POST"
+          encType="multipart/form-data"
+          className="grid gap-4 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)]"
+        >
+          {/* Left column – role definition */}
+          <div className="space-y-4">
+            {/* Role basics & client */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Role basics
+                </h2>
+                <span className="text-[10px] text-slate-400">
+                  Title is required · everything else can be refined later
+                </span>
+              </div>
 
-                  return (
-                    <option key={user.id} value={user.id}>
-                      {label}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Job title <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="title"
+                    required
+                    placeholder="e.g. Head of Growth, Senior Product Manager"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Client company
+                  </label>
+                  <select
+                    name="clientCompanyId"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    defaultValue=""
+                  >
+                    <option value="">
+                      {hasClients
+                        ? "Unassigned / internal role"
+                        : "No clients yet – internal role"}
                     </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {/* Location: free text with smart suggestions */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Location
-              </label>
-              <input
-                type="text"
-                name="location"
-                list="location-suggestions"
-                placeholder="e.g. Lagos, Nigeria"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-              <datalist id="location-suggestions">
-                {LOCATION_GROUPS.flatMap((group) =>
-                  group.options.map((opt) => (
-                    <option
-                      key={`${group.label}-${opt.value}`}
-                      value={opt.value}
-                    >
-                      {opt.label}
-                    </option>
-                  )),
-                )}
-              </datalist>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Start typing a city/country. Suggestions cover common hubs, but
-                you can enter any location and we&apos;ll store it as-is.
-              </p>
-            </div>
-
-            {/* Country / region – structured for reporting */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Country / region (for reporting)
-              </label>
-              <select
-                name="countryRegion"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                {COUNTRY_REGION_OPTIONS.map((opt) => (
-                  <option key={opt.value || "empty"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Used for dashboards and reporting. Location can stay very
-                specific; this keeps your analytics clean.
-              </p>
-            </div>
-
-            {/* Work mode (stored as workMode, can be mirrored in API if needed) */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Work mode
-              </label>
-              <select
-                name="workMode"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                {WORK_MODE_OPTIONS.map((opt) => (
-                  <option key={opt.value || "empty"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {/* Employment type */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Employment type
-              </label>
-              <select
-                name="employmentType"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value || "empty"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Experience level */}
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Experience level
-              </label>
-              <select
-                name="experienceLevel"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                {EXPERIENCE_LEVEL_OPTIONS.map((opt) => (
-                  <option key={opt.value || "empty"} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </section>
-
-        {/* Function & salary */}
-        <section className="grid gap-4 border-b border-slate-100 pb-4 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)] sm:gap-6">
-          {/* Function cluster */}
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Role function / discipline
-              </label>
-              <select
-                name="department"
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                defaultValue=""
-              >
-                <option value="">Select function</option>
-                {JOB_FUNCTION_GROUPS.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                    {clientCompanies.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
                       </option>
                     ))}
-                  </optgroup>
-                ))}
-              </select>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Stored as{" "}
-                <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
-                  department
-                </code>{" "}
-                on the job record. Used for reporting and search.
-              </p>
-            </div>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Department / function
+                  </label>
+                  <input
+                    type="text"
+                    name="department"
+                    placeholder="e.g. Product, Engineering, Finance"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Employment type
+                  </label>
+                  <select
+                    name="employmentType"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    defaultValue=""
+                  >
+                    <option value="">Not specified</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Temporary">Temporary</option>
+                    <option value="Internship">Internship</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Experience level
+                  </label>
+                  <select
+                    name="experienceLevel"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    defaultValue=""
+                  >
+                    <option value="">Not specified</option>
+                    <option value="Junior">Junior</option>
+                    <option value="Mid-level">Mid-level</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Lead">Lead</option>
+                    <option value="Director+">Director+</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    name="location"
+                    placeholder="e.g. Lagos, Nigeria · London, UK"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Work mode
+                  </label>
+                  <select
+                    name="workMode"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    defaultValue=""
+                  >
+                    <option value="">Not specified</option>
+                    <option value="Onsite">Onsite</option>
+                    <option value="Hybrid">Hybrid</option>
+                    <option value="Remote">Remote</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Min. years of experience
+                  </label>
+                  <input
+                    type="number"
+                    name="yearsExperienceMin"
+                    min={0}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    placeholder="e.g. 3"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Max. years of experience
+                  </label>
+                  <input
+                    type="number"
+                    name="yearsExperienceMax"
+                    min={0}
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    placeholder="e.g. 7"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Narrative & requirements */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Description &amp; requirements
+                </h2>
+                <span className="text-[10px] text-slate-400">
+                  Use clear headings and bullet points – we&apos;ll render this
+                  on the public job page.
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Short summary
+                  </label>
+                  <textarea
+                    name="shortDescription"
+                    rows={2}
+                    placeholder="One or two lines that capture the essence of the role."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Role overview
+                  </label>
+                  <textarea
+                    name="overview"
+                    rows={4}
+                    placeholder="High-level narrative: what this team does, where this role fits, what success looks like in 12–18 months."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                      Key responsibilities
+                    </label>
+                    <textarea
+                      name="responsibilities"
+                      rows={4}
+                      placeholder="- Own X\n- Lead Y\n- Partner with Z"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                      Requirements / experience
+                    </label>
+                    <textarea
+                      name="requirements"
+                      rows={4}
+                      placeholder="- X+ years in...\n- Strong experience with...\n- Comfortable working in..."
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                      Benefits &amp; perks
+                    </label>
+                    <textarea
+                      name="benefits"
+                      rows={3}
+                      placeholder="- Competitive salary\n- Health insurance\n- Hybrid work..."
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                      About the client
+                    </label>
+                    <textarea
+                      name="aboutClient"
+                      rows={3}
+                      placeholder="One paragraph describing the company, market and mission."
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Skills, tags & education */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Skills, tags &amp; education
+                </h2>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Tags
+                  </label>
+                  <textarea
+                    name="tags"
+                    rows={3}
+                    placeholder="Comma or line separated labels. e.g. fintech, Nigeria, remote, exec-search"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Required skills
+                  </label>
+                  <textarea
+                    name="requiredSkills"
+                    rows={3}
+                    placeholder="Comma or line separated. e.g. SQL, stakeholder management, B2B SaaS..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Education (level)
+                  </label>
+                  <input
+                    type="text"
+                    name="educationRequired"
+                    placeholder="e.g. Bachelor&apos;s, Master&apos;s, not required"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Field of study
+                  </label>
+                  <input
+                    type="text"
+                    name="educationField"
+                    placeholder="e.g. Computer Science, Business, any relevant field"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+            </section>
           </div>
 
-          {/* Compensation */}
-          <div className="space-y-3 rounded-xl bg-slate-50/70 p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Compensation band
-            </p>
+          {/* Right column – compensation & visibility */}
+          <div className="space-y-4">
+            {/* Compensation */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Compensation
+                </h2>
+                <span className="text-[10px] text-slate-400">
+                  Optional but useful for candidate trust
+                </span>
+              </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <div className="col-span-1">
-                <label className="block text-[10px] text-slate-500">
-                  Currency
+              <div className="space-y-3">
+                <div className="grid grid-cols-[0.9fr_1.1fr] gap-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                      Currency
+                    </label>
+                    <select
+                      name="salaryCurrency"
+                      defaultValue="NGN"
+                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900"
+                    >
+                      <option value="NGN">NGN</option>
+                      <option value="USD">USD</option>
+                      <option value="KES">KES</option>
+                      <option value="ZAR">ZAR</option>
+                      <option value="GBP">GBP</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                        Salary min
+                      </label>
+                      <input
+                        type="text"
+                        name="salaryMin"
+                        inputMode="numeric"
+                        placeholder="e.g. 10,000,000"
+                        className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                        Salary max
+                      </label>
+                      <input
+                        type="text"
+                        name="salaryMax"
+                        inputMode="numeric"
+                        placeholder="e.g. 15,000,000"
+                        className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <label className="mt-1 inline-flex items-center gap-2 text-[11px] text-slate-600">
+                  <input
+                    type="checkbox"
+                    name="salaryVisible"
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                  />
+                  <span>
+                    Show this salary range on public job pages and career
+                    sites.
+                  </span>
                 </label>
-                <select
-                  name="salaryCurrency"
-                  defaultValue="NGN"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
+              </div>
+            </section>
+
+            {/* Visibility & publishing */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Visibility &amp; publishing
+                </h2>
+              </div>
+
+              <div className="space-y-4">
+                {/* Status */}
+                <div>
+                  <div className="mb-1 text-[11px] font-medium text-slate-600">
+                    Status
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <input
+                        type="radio"
+                        name="status"
+                        value="draft"
+                        defaultChecked
+                        className="mt-0.5 h-3.5 w-3.5 border-slate-300 text-slate-900 focus:ring-slate-500"
+                      />
+                      <div>
+                        <div className="text-[11px] font-semibold text-slate-800">
+                          Draft
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Save the role for internal review. Not visible on
+                          career sites yet.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <input
+                        type="radio"
+                        name="status"
+                        value="open"
+                        className="mt-0.5 h-3.5 w-3.5 border-emerald-500 text-emerald-700 focus:ring-emerald-500"
+                      />
+                      <div>
+                        <div className="text-[11px] font-semibold text-emerald-800">
+                          Open
+                        </div>
+                        <div className="text-[10px] text-emerald-700/80">
+                          Actively hiring. When combined with public visibility,
+                          candidates can apply.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <input
+                        type="radio"
+                        name="status"
+                        value="closed"
+                        className="mt-0.5 h-3.5 w-3.5 border-slate-300 text-slate-900 focus:ring-slate-500"
+                      />
+                      <div>
+                        <div className="text-[11px] font-semibold text-slate-800">
+                          Closed
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Role is no longer active but pipelines and history are
+                          kept in the ATS.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Visibility */}
+                <div>
+                  <div className="mb-1 text-[11px] font-medium text-slate-600">
+                    Candidate-facing visibility
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="flex items-start gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="public"
+                        defaultChecked
+                        className="mt-0.5 h-3.5 w-3.5 border-indigo-500 text-indigo-700 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <div className="text-[11px] font-semibold text-indigo-800">
+                          Public
+                        </div>
+                        <div className="text-[10px] text-indigo-700/80">
+                          Role appears on your career site (where enabled) and
+                          can receive applications.
+                        </div>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="internal"
+                        className="mt-0.5 h-3.5 w-3.5 border-slate-300 text-slate-900 focus:ring-slate-500"
+                      />
+                      <div>
+                        <div className="text-[11px] font-semibold text-slate-800">
+                          Internal
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Only visible inside ThinkATS. Useful for stealth or
+                          confidential searches.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Optional manual slug */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-slate-600">
+                    Internal slug (optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="slug"
+                    placeholder="If left blank, we&apos;ll generate one from the title."
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[11px] text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                <p className="max-w-xs text-[10px] text-slate-500">
+                  You can always change status, visibility and copy later from
+                  the job&apos;s ATS view.
+                </p>
+                <button
+                  type="submit"
+                  className="inline-flex h-9 items-center rounded-full bg-slate-900 px-5 text-[11px] font-semibold text-white hover:bg-slate-800"
                 >
-                  {CURRENCY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  Create job
+                </button>
               </div>
-
-              <div className="col-span-1">
-                <label className="block text-[10px] text-slate-500">
-                  Min (annual)
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  name="salaryMin"
-                  placeholder="e.g. 10000000"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                />
-              </div>
-
-              <div className="col-span-1">
-                <label className="block text-[10px] text-slate-500">
-                  Max (annual)
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  name="salaryMax"
-                  placeholder="e.g. 18000000"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[13px] text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-                />
-              </div>
-            </div>
-
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                id="salaryVisible"
-                name="salaryVisible"
-                type="checkbox"
-                className="h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-              />
-              <label
-                htmlFor="salaryVisible"
-                className="text-[11px] text-slate-600"
-              >
-                Show this band on the public job page
-              </label>
-            </div>
+            </section>
           </div>
-        </section>
-
-        {/* Narrative blocks */}
-        <section className="grid gap-4 border-b border-slate-100 pb-4 sm:grid-cols-2 sm:gap-6">
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Role overview
-              </label>
-              <textarea
-                name="overview"
-                rows={4}
-                placeholder="2–3 short paragraphs summarising the mission, scope and key outcomes for this role."
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                About the client
-              </label>
-              <textarea
-                name="aboutClient"
-                rows={4}
-                placeholder="Short description of the client, sector, funding stage and context."
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Responsibilities
-              </label>
-              <textarea
-                name="responsibilities"
-                rows={4}
-                placeholder={`Use bullet-style lines, e.g.\n• Lead the X function across Y markets\n• Own revenue targets for Z business unit\n• Build and manage a team of ...`}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Requirements
-              </label>
-              <textarea
-                name="requirements"
-                rows={4}
-                placeholder={`Bullet-style lines for experience, skills and must-haves.`}
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Benefits
-              </label>
-              <textarea
-                name="benefits"
-                rows={3}
-                placeholder="Optional: benefits, perks, bonus structures or equity."
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Status & publishing */}
-        <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Status
-              </label>
-              <select
-                name="status"
-                defaultValue="draft"
-                className="mt-1 block rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="draft">Draft – don’t publish yet</option>
-                <option value="open">Open – live on careers site</option>
-                <option value="closed">Closed</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Visibility
-              </label>
-              <select
-                name="visibility"
-                defaultValue="public"
-                className="mt-1 block rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[13px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:ring-1 focus:ring-[#172965]"
-              >
-                <option value="public">Public – visible on Resourcin.com</option>
-                <option value="internal">Internal – ATS only</option>
-              </select>
-            </div>
-
-            <div className="mt-3 flex flex-col gap-1 sm:mt-6">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  name="internalOnly"
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-                />
-                <span>Internal mandate only (not for public careers site)</span>
-              </label>
-
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  name="confidential"
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
-                />
-                <span>Confidential client name on public page</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3">
-            <button
-              type="submit"
-              name="status"
-              value="draft"
-              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:border-[#172965] hover:text-[#172965]"
-            >
-              Save as draft
-            </button>
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c45]"
-            >
-              Publish role
-            </button>
-          </div>
-        </section>
-      </form>
+        </form>
+      </main>
     </div>
   );
 }
