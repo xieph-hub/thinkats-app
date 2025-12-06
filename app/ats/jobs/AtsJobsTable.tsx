@@ -154,7 +154,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
 
       const data: {
         ok: boolean;
-        updatedJobs?: { id: string; status: string; visibility: string }[];
+        updatedJobs?: { id: string; status: string; visibility: string; isPublished?: boolean }[];
         deletedIds?: string[];
       } = await res.json();
 
@@ -285,12 +285,15 @@ export default function AtsJobsTable({ initialJobs }: Props) {
           <tbody>
             {jobs.map((job) => {
               const selected = selectedIds.includes(job.id);
-
               const typeLabel = formatEmploymentType(job.employmentType);
               const levelLabel = formatExperienceLevel(job.experienceLevel);
               const workModeLabel = formatWorkMode(job.workMode);
               const statusLabel = formatStatus(job.status);
               const visibilityLabel = formatVisibility(job.visibility);
+
+              const isPublished =
+                job.status.toLowerCase() === "open" &&
+                job.visibility.toLowerCase() === "public";
 
               return (
                 <tr
@@ -319,7 +322,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                   </td>
                   <td className="px-3 py-2 align-top">
                     <span className="text-[11px] text-slate-700">
-                      {job.clientName}
+                      {job.clientName || "—"}
                     </span>
                   </td>
                   <td className="px-3 py-2 align-top">
@@ -345,9 +348,9 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                   <td className="px-3 py-2 align-top">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        job.status === "open"
+                        job.status.toLowerCase() === "open"
                           ? "bg-emerald-50 text-emerald-800"
-                          : job.status === "draft"
+                          : job.status.toLowerCase() === "draft"
                           ? "bg-slate-50 text-slate-700"
                           : "bg-amber-50 text-amber-800"
                       }`}
@@ -358,7 +361,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                   <td className="px-3 py-2 align-top">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        job.visibility === "public"
+                        job.visibility.toLowerCase() === "public"
                           ? "bg-sky-50 text-sky-800"
                           : "bg-slate-50 text-slate-700"
                       }`}
@@ -384,14 +387,25 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                       >
                         Open
                       </Link>
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => runBulkAction("unpublish", [job.id])}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-                      >
-                        Unpublish
-                      </button>
+                      {isPublished ? (
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => runBulkAction("unpublish", [job.id])}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-700 hover:border-slate-300 hover:bg-slate-100"
+                        >
+                          Unpublish
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isSubmitting}
+                          onClick={() => runBulkAction("publish", [job.id])}
+                          className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
+                        >
+                          Publish
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={isSubmitting}
