@@ -6,41 +6,51 @@ import { useState } from "react";
 type TenantLogoProps = {
   src: string | null;
   label: string;
+  size?: "sm" | "md";
 };
 
-function getInitials(label: string): string {
-  const parts = label.trim().split(/\s+/);
-  if (parts.length === 0) return "";
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-  return (
-    (parts[0][0] || "").toUpperCase() +
-    (parts[1][0] || "").toUpperCase()
-  );
-}
+export default function TenantLogo({
+  src,
+  label,
+  size = "md",
+}: TenantLogoProps) {
+  const [hasError, setHasError] = useState(false);
 
-export default function TenantLogo({ src, label }: TenantLogoProps) {
-  const [failed, setFailed] = useState(false);
-  const initials = getInitials(label || "T");
+  const initials =
+    label
+      ?.trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "?";
 
-  const showFallback = !src || failed;
+  const boxClasses =
+    size === "sm"
+      ? "h-7 w-7 text-[10px]"
+      : "h-9 w-9 text-xs";
 
-  if (showFallback) {
+  // Fallback: initials badge
+  if (!src || hasError) {
     return (
-      <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-[11px] font-semibold text-white">
+      <div
+        className={`flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 font-semibold text-slate-600 ${boxClasses}`}
+      >
         {initials}
       </div>
     );
   }
 
+  // Normal path: show logo image (any domain, no Next image config issues)
   return (
-    <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white ring-1 ring-slate-200">
+    <div
+      className={`flex items-center justify-center rounded-lg border border-slate-200 bg-white ${boxClasses}`}
+    >
       <img
         src={src}
         alt={`${label} logo`}
-        className="h-8 w-8 object-contain"
-        onError={() => setFailed(true)}
+        className="max-h-full max-w-full object-contain"
+        loading="lazy"
+        onError={() => setHasError(true)}
       />
     </div>
   );
