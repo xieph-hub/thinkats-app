@@ -1,10 +1,9 @@
-// app/ats/jobs/AtsJobsTable.tsx
 "use client";
 
-import * as React from "react";
+import { useState, useMemo, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-// Shape of the jobs passed from the server page
 export type AtsJobRow = {
   id: string;
   title: string;
@@ -25,404 +24,403 @@ type Props = {
 
 type BulkAction = "publish" | "unpublish" | "close" | "delete";
 
-function titleCaseFromEnum(value?: string | null) {
-  if (!value) return "";
-  return value
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+function formatDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
 }
 
-function formatEmploymentType(value?: string | null) {
-  if (!value) return "";
-  const map: Record<string, string> = {
-    full_time: "Full Time",
-    part_time: "Part Time",
-    contract: "Contract",
-    temporary: "Temporary",
-    internship: "Internship",
-    consulting: "Consulting / Advisory",
-  };
-  const key = value.toLowerCase();
-  return map[key] || titleCaseFromEnum(value);
+function statusChipColor(status: string, visibility: string) {
+  const s = (status || "").toLowerCase();
+  const v = (visibility || "").toLowerCase();
+
+  // Canonical: open + public = "live" role
+  if (s === "open" && v === "public") {
+    return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  }
+  // Open but not fully public (internal / private search)
+  if (s === "open" && v !== "public") {
+    return "bg-sky-50 text-sky-700 border-sky-100";
+  }
+  // Closed roles
+  if (s === "closed") {
+    return "bg-slate-100 text-slate-700 border-slate-200";
+  }
+  // Draft / anything else
+  return "bg-amber-50 text-amber-700 border-amber-100";
 }
 
-function formatExperienceLevel(value?: string | null) {
-  if (!value) return "";
-  const map: Record<string, string> = {
-    entry: "Entry level / Graduate",
-    junior: "Junior (1–3 years)",
-    mid: "Mid-level (3–7 years)",
-    senior: "Senior (7–12 years)",
-    lead_principal: "Lead / Principal",
-    manager_head: "Manager / Head of",
-    director_vp: "Director / VP",
-    c_level_partner: "C-level / Partner",
-  };
-  const key = value.toLowerCase();
-  return map[key] || titleCaseFromEnum(value);
-}
-
-function formatWorkMode(value?: string | null) {
-  if (!value) return "";
-  const map: Record<string, string> = {
-    onsite: "Onsite",
-    hybrid: "Hybrid",
-    remote: "Remote",
-    field_based: "Field-based",
-  };
-  const key = value.toLowerCase();
-  return map[key] || titleCaseFromEnum(value);
-}
-
-function formatStatus(value?: string | null) {
-  if (!value) return "";
-  const key = value.toLowerCase();
-  if (key === "open") return "Open";
-  if (key === "draft") return "Draft";
-  if (key === "closed") return "Closed";
-  return titleCaseFromEnum(value);
-}
-
-function formatVisibility(value?: string | null) {
-  if (!value) return "";
-  const key = value.toLowerCase();
-  if (key === "public") return "Public";
-  if (key === "internal") return "Internal";
-  return titleCaseFromEnum(value);
-}
-
-function formatDate(value: string | Date) {
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
+function visibilityChipColor(visibility: string) {
+  const v = (visibility || "").toLowerCase();
+  if (v === "public") {
+    return "bg-indigo-50 text-indigo-700 border-indigo-100";
+  }
+  return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
 export default function AtsJobsTable({ initialJobs }: Props) {
-  const [jobs, setJobs] = React.useState<AtsJobRow[]>(initialJobs);
-  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const router = useRouter();
+  const [jobs, setJobs] = useState<AtsJobRow[]>(initialJobs);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isPending, startTransition] = useTransition();
+  const [submittingAction, setSubmittingAction] = useState<BulkAction | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
 
-  const toggleSelection = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
+  const allSelected = useMemo(() => {
+    if (!jobs.length) return false;
+    return jobs.every((j) => selectedIds.has(j.id));
+  }, [jobs, selectedIds]);
 
-  const allSelected = jobs.length > 0 && selectedIds.length === jobs.length;
+  const selectedCount = selectedIds.size;
 
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(jobs.map((j) => j.id));
-    }
-  };
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (prev.size === jobs.length) {
+        return new Set();
+      }
+      return new Set(jobs.map((j) => j.id));
+    });
+  }
 
-  async function runBulkAction(action: BulkAction, ids?: string[]) {
-    const jobIds = ids && ids.length > 0 ? ids : selectedIds;
-    if (jobIds.length === 0) return;
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
-    if (action === "delete") {
-      const ok = window.confirm(
-        jobIds.length === 1
-          ? "Delete this role and its associated applications? This cannot easily be undone."
-          : `Delete ${jobIds.length} roles and their associated applications?`,
-      );
-      if (!ok) return;
-    }
+  async function runBulkAction(action: BulkAction) {
+    if (!selectedIds.size) return;
 
-    setIsSubmitting(true);
+    setError(null);
+    setSubmittingAction(action);
+
     try {
       const res = await fetch("/api/ats/jobs/bulk-actions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ jobIds, action }),
+        body: JSON.stringify({
+          jobIds: Array.from(selectedIds),
+          action,
+        }),
       });
 
-      if (!res.ok) {
-        console.error(await res.text());
-        alert("Something went wrong applying the action to selected roles.");
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        const message =
+          data?.error ||
+          "Something went wrong while running the bulk action.";
+        setError(message);
         return;
       }
 
-      const data: {
-        ok: boolean;
-        updatedJobs?: { id: string; status: string; visibility: string; isPublished?: boolean }[];
-        deletedIds?: string[];
-      } = await res.json();
+      setJobs((prev) => {
+        if (action === "delete") {
+          const deletedIds: string[] = data.deletedIds || [];
+          const deletedSet = new Set(deletedIds);
+          return prev.filter((job) => !deletedSet.has(job.id));
+        }
 
-      if (action === "delete") {
-        setJobs((prev) => prev.filter((job) => !jobIds.includes(job.id)));
-        setSelectedIds((prev) => prev.filter((id) => !jobIds.includes(id)));
-      } else if (data.updatedJobs && data.updatedJobs.length > 0) {
-        setJobs((prev) =>
-          prev.map((job) => {
-            const updated = data.updatedJobs!.find((u) => u.id === job.id);
-            if (!updated) return job;
-            return {
-              ...job,
-              status: updated.status,
-              visibility: updated.visibility,
-            };
-          }),
+        const updatedJobs: { id: string; status: string; visibility: string }[] =
+          data.updatedJobs || [];
+
+        const updatesById = new Map(
+          updatedJobs.map((j) => [
+            j.id,
+            { status: j.status, visibility: j.visibility },
+          ]),
         );
-      }
+
+        return prev.map((job) => {
+          const update = updatesById.get(job.id);
+          if (!update) return job;
+          return {
+            ...job,
+            status: update.status ?? job.status,
+            visibility: update.visibility ?? job.visibility,
+          };
+        });
+      });
+
+      setSelectedIds(new Set());
+
+      startTransition(() => {
+        router.refresh();
+      });
     } catch (err) {
-      console.error(err);
-      alert("Unexpected error running bulk action.");
+      console.error("Bulk action failed", err);
+      setError("Something went wrong while running the bulk action.");
     } finally {
-      setIsSubmitting(false);
+      setSubmittingAction(null);
     }
   }
 
-  if (jobs.length === 0) {
+  if (!jobs.length) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
-        <p>No roles yet for this tenant.</p>
-        <p className="mt-1 text-xs text-slate-500">
-          Use{" "}
+      <section className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-10 text-center">
+        <h2 className="text-sm font-semibold text-slate-900">
+          No jobs found in this view
+        </h2>
+        <p className="mt-1 max-w-md text-[11px] text-slate-500">
+          Adjust your filters or create a new role to start building your ATS
+          pipeline. Published roles will automatically appear on your career
+          site where enabled.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+          <Link
+            href="/ats/jobs"
+            className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-white px-4 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Reset filters
+          </Link>
           <Link
             href="/ats/jobs/new"
-            className="font-semibold text-[#172965] hover:underline"
+            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
           >
-            “New role”
-          </Link>{" "}
-          to create your first mandate.
-        </p>
-      </div>
+            + Create job
+          </Link>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      {/* Bulk action bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[11px] text-slate-600">
-          {selectedIds.length > 0 ? (
-            <span className="font-medium text-slate-900">
-              {selectedIds.length} selected
+    <section className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-white">
+      {/* Bulk actions bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-2.5 text-[11px] text-slate-600">
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+            />
+            <span className="font-medium">
+              {selectedCount ? `${selectedCount} selected` : "Select jobs"}
             </span>
-          ) : (
-            <span>
-              {jobs.length} role{jobs.length === 1 ? "" : "s"}
-            </span>
-          )}
+          </label>
+          <span className="hidden text-[10px] text-slate-400 sm:inline">
+            Use the controls on the right to publish, unpublish, close or delete
+            selected roles.
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          {selectedIds.length > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => runBulkAction("publish")}
-                disabled={isSubmitting}
-                className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-medium text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
-              >
-                Publish
-              </button>
-              <button
-                type="button"
-                onClick={() => runBulkAction("unpublish")}
-                disabled={isSubmitting}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-              >
-                Unpublish
-              </button>
-              <button
-                type="button"
-                onClick={() => runBulkAction("close")}
-                disabled={isSubmitting}
-                className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800 hover:border-amber-300 hover:bg-amber-100"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => runBulkAction("delete")}
-                disabled={isSubmitting}
-                className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 font-medium text-rose-800 hover:border-rose-300 hover:bg-rose-100"
-              >
-                Delete
-              </button>
-            </>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {error && (
+            <span className="mr-2 text-[10px] text-rose-600">
+              {error}
+            </span>
           )}
+          <button
+            type="button"
+            disabled={
+              !selectedCount ||
+              isPending ||
+              submittingAction === "publish"
+            }
+            onClick={() => runBulkAction("publish")}
+            className="inline-flex h-7 items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+          >
+            Publish
+          </button>
+          <button
+            type="button"
+            disabled={
+              !selectedCount ||
+              isPending ||
+              submittingAction === "unpublish"
+            }
+            onClick={() => runBulkAction("unpublish")}
+            className="inline-flex h-7 items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+          >
+            Unpublish
+          </button>
+          <button
+            type="button"
+            disabled={!selectedCount || isPending || submittingAction === "close"}
+            onClick={() => runBulkAction("close")}
+            className="inline-flex h-7 items-center rounded-full border border-amber-200 bg-amber-50 px-3 text-[10px] font-semibold text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            disabled={
+              !selectedCount ||
+              isPending ||
+              submittingAction === "delete"
+            }
+            onClick={() => {
+              if (
+                typeof window !== "undefined" &&
+                !window.confirm(
+                  "Delete selected jobs and their applications? This cannot be undone.",
+                )
+              ) {
+                return;
+              }
+              runBulkAction("delete");
+            }}
+            className="inline-flex h-7 items-center rounded-full border border-rose-200 bg-rose-50 px-3 text-[10px] font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+          >
+            Delete
+          </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-[11px] text-slate-700">
-          <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-3 py-2">
+      <div className="min-h-0 flex-1 overflow-x-auto">
+        <table className="min-w-full border-separate border-spacing-0 text-[11px] text-slate-700">
+          <thead>
+            <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+              <th className="sticky left-0 z-10 w-8 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left">
                 <input
                   type="checkbox"
-                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                   checked={allSelected}
                   onChange={toggleSelectAll}
                 />
               </th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Client</th>
-              <th className="px-3 py-2">Location</th>
-              <th className="px-3 py-2">Work mode</th>
-              <th className="px-3 py-2">Type</th>
-              <th className="px-3 py-2">Level</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Visibility</th>
-              <th className="px-3 py-2">Apps</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2" />
+              <th className="border-b border-slate-200 px-3 py-2 text-left">
+                Role
+              </th>
+              <th className="border-b border-slate-200 px-3 py-2 text-left">
+                Location &amp; type
+              </th>
+              <th className="border-b border-slate-200 px-3 py-2 text-left">
+                Experience
+              </th>
+              <th className="border-b border-slate-200 px-3 py-2 text-left">
+                Applications
+              </th>
+              <th className="border-b border-slate-200 px-3 py-2 text-left">
+                Status
+              </th>
+              <th className="border-b border-slate-200 px-3 py-2 text-left">
+                Visibility
+              </th>
+              <th className="border-b border-slate-200 px-3 py-2 text-right">
+                Created
+              </th>
             </tr>
           </thead>
           <tbody>
-            {jobs.map((job) => {
-              const selected = selectedIds.includes(job.id);
-              const typeLabel = formatEmploymentType(job.employmentType);
-              const levelLabel = formatExperienceLevel(job.experienceLevel);
-              const workModeLabel = formatWorkMode(job.workMode);
-              const statusLabel = formatStatus(job.status);
-              const visibilityLabel = formatVisibility(job.visibility);
-
-              const isPublished =
-                job.status.toLowerCase() === "open" &&
-                job.visibility.toLowerCase() === "public";
+            {jobs.map((job, idx) => {
+              const selected = selectedIds.has(job.id);
+              const borderClass =
+                idx === jobs.length - 1 ? "" : "border-b border-slate-100";
 
               return (
                 <tr
                   key={job.id}
-                  className={`border-b border-slate-100 last:border-0 ${
-                    selected ? "bg-slate-50/80" : "bg-white"
-                  }`}
+                  className={`group bg-white hover:bg-slate-50/80 ${borderClass}`}
                 >
-                  <td className="px-3 py-2 align-top">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2 align-top group-hover:bg-slate-50/80">
                     <input
                       type="checkbox"
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#172965] focus:ring-[#172965]"
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                       checked={selected}
-                      onChange={() => toggleSelection(job.id)}
+                      onChange={() => toggleRow(job.id)}
                     />
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <div className="flex flex-col">
-                      <Link
-                        href={`/ats/jobs/${job.id}`}
-                        className="text-xs font-semibold text-slate-900 hover:text-[#172965] hover:underline"
-                      >
-                        {job.title}
-                      </Link>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/ats/jobs/${job.id}`}
+                          className="truncate text-[12px] font-semibold text-slate-900 hover:underline"
+                        >
+                          {job.title || "Untitled role"}
+                        </Link>
+                        {job.clientName && (
+                          <span className="truncate text-[10px] text-slate-500">
+                            · {job.clientName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+                        {job.workMode && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5">
+                            {job.workMode}
+                          </span>
+                        )}
+                        {job.employmentType && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5">
+                            {job.employmentType}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
-                      {job.clientName || "—"}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-slate-800">
+                        {job.location || "—"}
+                      </span>
+                      {job.workMode && (
+                        <span className="text-[10px] text-slate-500">
+                          {job.workMode}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <span className="text-[11px] text-slate-800">
+                      {job.experienceLevel || "—"}
                     </span>
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
-                      {job.location || "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
-                      {workModeLabel || "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
-                      {typeLabel || "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
-                      {levelLabel || "—"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        job.status.toLowerCase() === "open"
-                          ? "bg-emerald-50 text-emerald-800"
-                          : job.status.toLowerCase() === "draft"
-                          ? "bg-slate-50 text-slate-700"
-                          : "bg-amber-50 text-amber-800"
-                      }`}
-                    >
-                      {statusLabel}
+                    <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-700">
+                      {job.applicationsCount}{" "}
+                      {job.applicationsCount === 1
+                        ? "candidate"
+                        : "candidates"}
                     </span>
                   </td>
                   <td className="px-3 py-2 align-top">
                     <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        job.visibility.toLowerCase() === "public"
-                          ? "bg-sky-50 text-sky-800"
-                          : "bg-slate-50 text-slate-700"
-                      }`}
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusChipColor(
+                        job.status,
+                        job.visibility,
+                      )}`}
                     >
-                      {visibilityLabel}
+                      {job.status
+                        ? job.status.charAt(0).toUpperCase() +
+                          job.status.slice(1)
+                        : "—"}
                     </span>
                   </td>
                   <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
-                      {job.applicationsCount}
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${visibilityChipColor(
+                        job.visibility,
+                      )}`}
+                    >
+                      {(job.visibility || "—")
+                        .charAt(0)
+                        .toUpperCase() +
+                        (job.visibility || "—").slice(1)}
                     </span>
                   </td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="text-[11px] text-slate-700">
+                  <td className="px-3 py-2 align-top text-right">
+                    <span className="text-[10px] text-slate-500">
                       {formatDate(job.createdAt)}
                     </span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                      <Link
-                        href={`/ats/jobs/${job.id}`}
-                        className="font-semibold text-[#172965] hover:underline"
-                      >
-                        Open
-                      </Link>
-                      {isPublished ? (
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => runBulkAction("unpublish", [job.id])}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-700 hover:border-slate-300 hover:bg-slate-100"
-                        >
-                          Unpublish
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => runBulkAction("publish", [job.id])}
-                          className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100"
-                        >
-                          Publish
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => runBulkAction("close", [job.id])}
-                        className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800 hover:border-amber-300 hover:bg-amber-100"
-                      >
-                        Close
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isSubmitting}
-                        onClick={() => runBulkAction("delete", [job.id])}
-                        className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] text-rose-800 hover:border-rose-300 hover:bg-rose-100"
-                      >
-                        Delete
-                      </button>
-                    </div>
                   </td>
                 </tr>
               );
@@ -430,6 +428,14 @@ export default function AtsJobsTable({ initialJobs }: Props) {
           </tbody>
         </table>
       </div>
-    </div>
+
+      {/* Footer hint */}
+      <div className="border-t border-slate-200 px-4 py-2.5 text-[10px] text-slate-400">
+        <span>
+          Need a richer view? Open any role to manage its stages, candidates and
+          client-facing pipeline.
+        </span>
+      </div>
+    </section>
   );
 }
