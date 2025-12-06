@@ -219,7 +219,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const uniqueSources = (() => {
     const set = new Set<string>();
     for (const c of candidates) {
-      if (c.source) set.add(c.source.trim().toLowerCase());
+      if ((c as any).source) set.add((c as any).source.trim().toLowerCase());
       for (const app of c.applications as any[]) {
         if (app.source) set.add((app.source as string).trim().toLowerCase());
       }
