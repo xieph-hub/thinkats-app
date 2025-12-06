@@ -75,11 +75,11 @@ function normalizeScoringConfig(raw: any): NormalizedScoringConfig {
 }
 
 export function mergeScoringConfig(opts: {
-  tenantConfig: any;
-  jobOverrides: any;
-  tenantHiringMode: string | null;
-  jobHiringMode: string | null;
-}: NormalizedScoringConfig | any): NormalizedScoringConfig {
+  tenantConfig?: any;
+  jobOverrides?: any;
+  tenantHiringMode?: string | null;
+  jobHiringMode?: string | null;
+}): NormalizedScoringConfig {
   const base: any = {
     ...DEFAULT_SCORING_CONFIG,
     ...(opts.tenantConfig ?? {}),
