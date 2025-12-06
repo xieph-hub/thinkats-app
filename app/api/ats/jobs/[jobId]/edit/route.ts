@@ -1,279 +1,254 @@
-import { NextResponse } from "next/server";
+// app/api/ats/jobs/[jobId]/edit/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Generic slug helper for both jobs and skills
+type EditJobPayload = {
+  title?: string;
+  department?: string | null;
+  location?: string | null;
+  employmentType?: string | null;
+  seniority?: string | null;
+  description?: string | null;
+  overview?: string | null;
+  aboutClient?: string | null;
+  responsibilities?: string | null;
+  requirements?: string | null;
+  benefits?: string | null;
+  locationType?: string | null;
+  experienceLevel?: string | null;
+  yearsExperienceMin?: number | null;
+  yearsExperienceMax?: number | null;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  salaryVisible?: boolean | null;
+  status?: string;
+  visibility?: string;
+  clientCompanyId?: string | null;
+
+  // Array of skill names coming from the form
+  requiredSkills?: string[];
+};
+
 function slugify(raw: string): string {
   return raw
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/(^-|-$)+/g, "");
 }
 
-function parseDecimal(value: FormDataEntryValue | null): any {
-  if (!value || typeof value !== "string") return null;
-  const cleaned = value.trim().replace(/,/g, "");
-  if (!cleaned) return null;
-  const num = Number(cleaned);
-  if (Number.isNaN(num)) return null;
-  return num as any;
-}
-
-function parseCsv(input: string | null): string[] {
-  if (!input) return [];
-  return input
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+function normaliseSkillName(raw: string): string {
+  return raw.trim().toLowerCase();
 }
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { jobId: string } },
 ) {
   try {
     const jobId = params.jobId;
 
-    if (!jobId) {
-      return NextResponse.json(
-        { success: false, error: "Missing jobId." },
-        { status: 400 },
-      );
-    }
-
     const existingJob = await prisma.job.findUnique({
       where: { id: jobId },
+      include: {
+        skills: true, // JobSkill rows
+      },
     });
 
     if (!existingJob) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Job not found.",
-        },
+        { ok: false, error: "Job not found" },
         { status: 404 },
       );
     }
 
-    const formData = await req.formData();
-
-    const getStr = (key: string): string | null => {
-      const v = formData.get(key);
-      if (typeof v !== "string") return null;
-      const trimmed = v.trim();
-      return trimmed.length ? trimmed : null;
-    };
-
-    const title = getStr("title");
-    if (!title) {
+    const body = (await req.json().catch(() => null)) as EditJobPayload | null;
+    if (!body || typeof body !== "object") {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Job title is required.",
-        },
+        { ok: false, error: "Invalid JSON body." },
         { status: 400 },
       );
     }
 
-    const department = getStr("department");
-    const location = getStr("location");
-    const locationType = getStr("locationType");
-    const employmentType = getStr("employmentType");
-    const experienceLevel = getStr("experienceLevel");
-    const workMode = getStr("workMode");
-    const shortDescription = getStr("shortDescription");
-    const overview = getStr("overview");
-    const aboutClient = getStr("aboutClient");
-    const responsibilities = getStr("responsibilities");
-    const requirements = getStr("requirements");
-    const benefits = getStr("benefits");
-    const salaryCurrency = getStr("salaryCurrency");
-    const externalId = getStr("externalId");
+    const {
+      title,
+      department,
+      location,
+      employmentType,
+      seniority,
+      description,
+      overview,
+      aboutClient,
+      responsibilities,
+      requirements,
+      benefits,
+      locationType,
+      experienceLevel,
+      yearsExperienceMin,
+      yearsExperienceMax,
+      salaryMin,
+      salaryMax,
+      salaryCurrency,
+      salaryVisible,
+      status,
+      visibility,
+      clientCompanyId,
+      requiredSkills,
+    } = body;
 
-    const statusRaw = getStr("status");
-    const status = statusRaw || (existingJob as any).status || "open";
+    const data: any = {};
 
-    const salaryMin = parseDecimal(formData.get("salaryMin"));
-    const salaryMax = parseDecimal(formData.get("salaryMax"));
-
-    const salaryVisible = formData.get("salaryVisible") === "on";
-
-    const visibilityMode = getStr("visibilityMode") || "public";
-    const isInternal = visibilityMode === "internal";
-    const visibility = isInternal ? "internal" : "public";
-    const internalOnly = isInternal;
-
-    const confidential = formData.get("confidential") === "on";
-
-    const clientCompanyIdRaw = getStr("clientCompanyId");
-    const clientCompanyId = clientCompanyIdRaw || null;
-
-    const tags = parseCsv(getStr("tags"));
-    const requiredSkills = parseCsv(getStr("requiredSkills"));
-
-    const slugFieldRaw = formData.get("slug");
-    const slugField = typeof slugFieldRaw === "string" ? slugFieldRaw.trim() : "";
-    let finalSlug = existingJob.slug as string | null;
-
-    if (slugField === "") {
-      // Explicitly clear slug
-      finalSlug = null;
-    } else if (slugField.length > 0) {
-      const baseSlug = slugify(slugField);
-      if (baseSlug) {
-        let candidateSlug = baseSlug;
-        let suffix = 1;
-
-        while (true) {
-          const collision = await prisma.job.findFirst({
-            where: {
-              tenantId: existingJob.tenantId,
-              slug: candidateSlug,
-              NOT: { id: existingJob.id },
-            },
-          });
-
-          if (!collision) {
-            finalSlug = candidateSlug;
-            break;
-          }
-
-          suffix += 1;
-          candidateSlug = `${baseSlug}-${suffix}`;
-        }
-      } else {
-        finalSlug = null;
-      }
+    if (typeof title === "string" && title.trim()) {
+      data.title = title.trim();
+      // keep slug aligned if changed
+      data.slug = slugify(title);
     }
 
-    // -------------------------------------------------------------------
-    // 1) Update the Job record (string arrays stay as source-of-truth)
-    // -------------------------------------------------------------------
-    await prisma.job.update({
+    if (department !== undefined) data.department = department;
+    if (location !== undefined) data.location = location;
+    if (employmentType !== undefined) data.employmentType = employmentType;
+    if (seniority !== undefined) data.seniority = seniority;
+    if (description !== undefined) data.description = description;
+    if (overview !== undefined) data.overview = overview;
+    if (aboutClient !== undefined) data.aboutClient = aboutClient;
+    if (responsibilities !== undefined) data.responsibilities = responsibilities;
+    if (requirements !== undefined) data.requirements = requirements;
+    if (benefits !== undefined) data.benefits = benefits;
+    if (locationType !== undefined) data.locationType = locationType;
+    if (experienceLevel !== undefined) data.experienceLevel = experienceLevel;
+    if (yearsExperienceMin !== undefined)
+      data.yearsExperienceMin = yearsExperienceMin;
+    if (yearsExperienceMax !== undefined)
+      data.yearsExperienceMax = yearsExperienceMax;
+
+    if (salaryMin !== undefined && salaryMin !== null) {
+      data.salaryMin = salaryMin;
+    }
+    if (salaryMax !== undefined && salaryMax !== null) {
+      data.salaryMax = salaryMax;
+    }
+    if (salaryCurrency !== undefined) data.salaryCurrency = salaryCurrency;
+    if (salaryVisible !== undefined && salaryVisible !== null) {
+      data.salaryVisible = salaryVisible;
+    }
+
+    if (status !== undefined) data.status = status;
+    if (visibility !== undefined) data.visibility = visibility;
+    if (clientCompanyId !== undefined) data.clientCompanyId = clientCompanyId;
+
+    // 1) Update core job fields
+    const updatedJob = await prisma.job.update({
       where: { id: jobId },
-      data: {
-        title,
-        department,
-        location,
-        locationType,
-        employmentType,
-        experienceLevel,
-        workMode,
-        shortDescription,
-        overview,
-        aboutClient,
-        responsibilities,
-        requirements,
-        benefits,
-        salaryCurrency,
-        salaryMin,
-        salaryMax,
-        salaryVisible,
-        status,
-        visibility,
-        internalOnly,
-        confidential,
-        externalId,
-        clientCompanyId,
-        tags,
-        requiredSkills,
-        slug: finalSlug,
-      },
+      data,
     });
 
-    // -------------------------------------------------------------------
-    // 2) Synchronise JobSkill with requiredSkills[]
-    //    - For each requiredSkill string, ensure there is a Skill row.
-    //    - Then attach JobSkill rows for this job.
-    // -------------------------------------------------------------------
+    // 2) Map required skill names -> Skills + JobSkill rows
+    const incomingSkillNames: string[] = Array.isArray(requiredSkills)
+      ? requiredSkills
+          .filter((s) => typeof s === "string")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
-    const tenantId = existingJob.tenantId;
+    if (incomingSkillNames.length > 0) {
+      const normalizedToSkillId = new Map<string, string>();
 
-    // Normalise to a deduplicated list of skill names
-    const normalizedSkillNames = Array.from(
-      new Set(
-        requiredSkills
-          .map((name) => name.trim())
-          .filter((name) => name.length > 0),
-      ),
-    );
+      for (const name of incomingSkillNames) {
+        const normalizedName = normaliseSkillName(name);
+        if (!normalizedName) continue;
 
-    if (normalizedSkillNames.length > 0) {
-      // 2a) Look up or create Skill rows for each name
-      const skillRecords: { id: string }[] = [];
+        // avoid duplicate work within this payload
+        if (normalizedToSkillId.has(normalizedName)) continue;
 
-      for (const name of normalizedSkillNames) {
         const skillSlug = slugify(name);
-        if (!skillSlug) continue;
 
-        // Try to reuse an existing tenant-specific or global skill
-        const existingSkill = await prisma.skill.findFirst({
+        let skill = await prisma.skill.findFirst({
           where: {
             OR: [
-              { tenantId, slug: skillSlug },
-              { tenantId: null, slug: skillSlug },
+              {
+                tenantId: existingJob.tenantId,
+                normalizedName,
+              },
+              {
+                tenantId: null,
+                normalizedName,
+              },
             ],
           },
-          select: { id: true },
         });
 
-        if (existingSkill) {
-          skillRecords.push({ id: existingSkill.id });
-        } else {
-          const created = await prisma.skill.create({
+        if (!skill) {
+          // Create tenant-scoped skill with normalizedName
+          skill = await prisma.skill.create({
             data: {
-              tenantId,           // tenant-scoped skill
+              tenantId: existingJob.tenantId,
               name,
+              normalizedName,
               slug: skillSlug,
+              category: null,
+              description: null,
               externalSource: null,
               externalId: null,
-              description: null,
-              category: null,
+              isGlobal: false,
             },
-            select: { id: true },
           });
-          skillRecords.push({ id: created.id });
+        } else if (
+          skill.tenantId === existingJob.tenantId &&
+          skill.name !== name
+        ) {
+          // Keep local display-name fresh for tenant-scoped skills
+          await prisma.skill.update({
+            where: { id: skill.id },
+            data: { name },
+          });
         }
+
+        normalizedToSkillId.set(normalizedName, skill.id);
       }
 
-      // 2b) Wipe existing JobSkill rows for this job and recreate
+      // Replace JobSkill rows for this job
       await prisma.jobSkill.deleteMany({
         where: {
-          tenantId,
-          jobId,
+          tenantId: existingJob.tenantId,
+          jobId: existingJob.id,
         },
       });
 
-      if (skillRecords.length > 0) {
+      const jobSkillData = Array.from(normalizedToSkillId.values()).map(
+        (skillId) => ({
+          tenantId: existingJob.tenantId,
+          jobId: existingJob.id,
+          skillId,
+          importance: 3,
+          isRequired: true,
+        }),
+      );
+
+      if (jobSkillData.length > 0) {
         await prisma.jobSkill.createMany({
-          data: skillRecords.map((skill) => ({
-            tenantId,
-            jobId,
-            skillId: skill.id,
-            importance: null,
-            isRequired: true,
-          })),
+          data: jobSkillData,
+          skipDuplicates: true,
         });
       }
-    } else {
-      // If no requiredSkills, clear JobSkill entries for this job
-      await prisma.jobSkill.deleteMany({
-        where: {
-          tenantId,
-          jobId,
+
+      // keep the denormalized text array in sync too
+      await prisma.job.update({
+        where: { id: existingJob.id },
+        data: {
+          requiredSkills: incomingSkillNames,
         },
       });
     }
 
-    const redirectUrl = new URL(`/ats/jobs/${jobId}`, req.url);
-    return NextResponse.redirect(redirectUrl);
+    return NextResponse.json({
+      ok: true,
+      jobId: updatedJob.id,
+    });
   } catch (err) {
     console.error("POST /api/ats/jobs/[jobId]/edit error", err);
     return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to update job.",
-      },
+      { ok: false, error: "Failed to update job." },
       { status: 500 },
     );
   }
