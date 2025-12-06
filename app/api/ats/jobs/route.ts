@@ -1,4 +1,3 @@
-// app/api/ats/jobs/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
@@ -63,7 +62,10 @@ export async function POST(req: NextRequest) {
 
     // ----- Core relations / ownership -----
     const clientCompanyId = toStringOrNull(formData.get("clientCompanyId"));
-    const hiringManagerId = toStringOrNull(formData.get("hiringManagerId"));
+
+    const hiringManagerId = toStringOrNull(
+      formData.get("hiringManagerId"),
+    );
 
     // ----- Basic classification -----
     const location = toStringOrNull(formData.get("location"));
@@ -71,9 +73,13 @@ export async function POST(req: NextRequest) {
     // We label this as “Work mode” in the UI
     const workMode = toStringOrNull(formData.get("workMode"));
 
-    const employmentType = toStringOrNull(formData.get("employmentType"));
+    const employmentType = toStringOrNull(
+      formData.get("employmentType"),
+    );
 
-    const experienceLevel = toStringOrNull(formData.get("experienceLevel"));
+    const experienceLevel = toStringOrNull(
+      formData.get("experienceLevel"),
+    );
 
     const yearsExperienceMin = parseNumberValue(
       formData.get("yearsExperienceMin"),
@@ -86,22 +92,32 @@ export async function POST(req: NextRequest) {
     const department = toStringOrNull(formData.get("department"));
 
     // ----- Narrative fields -----
-    const shortDescription = toStringOrNull(formData.get("shortDescription"));
+    const shortDescription = toStringOrNull(
+      formData.get("shortDescription"),
+    );
     const overview = toStringOrNull(formData.get("overview"));
     const aboutClient = toStringOrNull(formData.get("aboutClient"));
-    const responsibilities = toStringOrNull(formData.get("responsibilities"));
-    const requirements = toStringOrNull(formData.get("requirements"));
+    const responsibilities = toStringOrNull(
+      formData.get("responsibilities"),
+    );
+    const requirements = toStringOrNull(
+      formData.get("requirements"),
+    );
     const benefits = toStringOrNull(formData.get("benefits"));
 
     // ----- Education -----
     const educationRequired = toStringOrNull(
       formData.get("educationRequired"),
     );
-    const educationField = toStringOrNull(formData.get("educationField"));
+    const educationField = toStringOrNull(
+      formData.get("educationField"),
+    );
 
     // ----- Tags & skills (String[]) -----
     const tagsRaw = toStringOrNull(formData.get("tags"));
-    const requiredSkillsRaw = toStringOrNull(formData.get("requiredSkills"));
+    const requiredSkillsRaw = toStringOrNull(
+      formData.get("requiredSkills"),
+    );
 
     const tags = parseStringList(tagsRaw);
     const requiredSkills = parseStringList(requiredSkillsRaw);
@@ -152,7 +168,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ----- Create job -----
+    // -------------------------------------------------------------------
+    // 1) Create job
+    // -------------------------------------------------------------------
     const job = await prisma.job.create({
       data: {
         tenantId: tenant.id,
@@ -183,7 +201,7 @@ export async function POST(req: NextRequest) {
         educationRequired,
         educationField,
 
-        // Arrays (legacy string fields)
+        // Arrays
         tags,
         requiredSkills,
 
@@ -204,57 +222,66 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // ----- NEW: hydrate JobSkill from requiredSkills -----
-    if (requiredSkills.length > 0) {
-      for (const nameRaw of requiredSkills) {
-        const name = nameRaw.trim();
-        if (!name) continue;
+    // -------------------------------------------------------------------
+    // 2) Synchronise JobSkill with requiredSkills[]
+    //    (mirror of what we do in the edit route)
+    // -------------------------------------------------------------------
+    const tenantId = tenant.id;
 
-        const skillSlug = name
-          .toLowerCase()
-          .replace(/['"]/g, "")
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
+    const normalizedSkillNames = Array.from(
+      new Set(
+        requiredSkills
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0),
+      ),
+    );
 
-        // Prefer tenant-specific skill, fall back to global if present
+    if (normalizedSkillNames.length > 0) {
+      const skillRecords: { id: string }[] = [];
+
+      for (const name of normalizedSkillNames) {
+        const skillSlug = slugify(name);
+        if (!skillSlug) continue;
+
+        // Reuse tenant-specific or global (tenantId = null) skills
         const existingSkill = await prisma.skill.findFirst({
           where: {
             OR: [
-              { tenantId: tenant.id, slug: skillSlug },
+              { tenantId, slug: skillSlug },
               { tenantId: null, slug: skillSlug },
             ],
           },
+          select: { id: true },
         });
 
-        const skill =
-          existingSkill ??
-          (await prisma.skill.create({
+        if (existingSkill) {
+          skillRecords.push({ id: existingSkill.id });
+        } else {
+          const created = await prisma.skill.create({
             data: {
-              tenantId: tenant.id,
+              tenantId, // tenant-scoped skill
               name,
               slug: skillSlug,
               category: null,
-              isGlobal: false,
+              description: null,
               externalSource: null,
               externalId: null,
             },
-          }));
+            select: { id: true },
+          });
+          skillRecords.push({ id: created.id });
+        }
+      }
 
-        await prisma.jobSkill.upsert({
-          where: {
-            jobId_skillId: {
-              jobId: job.id,
-              skillId: skill.id,
-            },
-          },
-          create: {
-            tenantId: tenant.id,
+      if (skillRecords.length > 0) {
+        await prisma.jobSkill.createMany({
+          data: skillRecords.map((skill) => ({
+            tenantId,
             jobId: job.id,
             skillId: skill.id,
-            required: true,
-            importance: 3,
-          },
-          update: {},
+            importance: null,
+            isRequired: true,
+          })),
         });
       }
     }
