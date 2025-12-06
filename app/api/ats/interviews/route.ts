@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
         location: location || null,
         videoUrl: videoUrl || null,
         notes: notes || null,
+        status: "SCHEDULED" as any, // ensure iv.status is set
       },
     });
 
@@ -214,7 +215,7 @@ export async function POST(req: NextRequest) {
         {
           filename: "interview.ics",
           content: ics,
-          // contentType: "text/calendar", // use this if your Resend version supports it
+          // contentType: "text/calendar",
         },
       ],
     });
