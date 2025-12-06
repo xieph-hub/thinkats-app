@@ -3,262 +3,200 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import JobsTable from "./JobsTable";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Jobs",
   description:
-    "Admin view of all open and draft roles managed under the current ThinkATS tenant.",
+    "Workspace-wide view of open and draft roles, with bulk actions and publishing controls.",
 };
 
-export default async function AtsJobsPage() {
-  // Single-tenant for now (Resourcin)
+type JobsPageSearchParams = {
+  q?: string | string[];
+  status?: string | string[];
+};
+
+type PageProps = {
+  searchParams?: JobsPageSearchParams;
+};
+
+type JobRow = {
+  id: string;
+  title: string;
+  slug: string | null;
+  location: string | null;
+  function: string | null;
+  employmentType: string | null;
+  seniority: string | null;
+  isPublished: boolean;
+  createdAt: string; // ISO
+  clientName: string | null;
+  applicationsCount: number;
+};
+
+function firstString(value?: string | string[]): string {
+  if (Array.isArray(value)) return value[0] || "";
+  return value || "";
+}
+
+export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
 
-  const jobs = await prisma.job.findMany({
-    where: {
-      tenantId: tenant.id,
-    },
-    include: {
-      clientCompany: true,
-      applications: {
-        select: {
-          id: true,
-          createdAt: true,
-          matchScore: true,
-        },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 100,
-  });
+  const filterQ = firstString(searchParams.q).trim();
+  const rawStatus = firstString(searchParams.status).trim().toUpperCase();
+  const filterStatus =
+    rawStatus === "PUBLISHED" || rawStatus === "UNPUBLISHED"
+      ? rawStatus
+      : "ALL";
 
-  // For the client filter dropdown
-  const uniqueClients = Array.from(
-    new Map(
-      jobs
-        .filter((j) => j.clientCompany)
-        .map((j) => [j.clientCompany!.id, j.clientCompany!]),
-    ).values(),
-  );
+  const baseWhere: any = {
+    tenantId: tenant.id,
+  };
+
+  const where: any = { ...baseWhere };
+
+  if (filterQ) {
+    where.OR = [
+      { title: { contains: filterQ, mode: "insensitive" } },
+      { location: { contains: filterQ, mode: "insensitive" } },
+      { function: { contains: filterQ, mode: "insensitive" } },
+      {
+        clientCompany: {
+          name: { contains: filterQ, mode: "insensitive" },
+        },
+      },
+    ];
+  }
+
+  if (filterStatus === "PUBLISHED") {
+    where.isPublished = true;
+  } else if (filterStatus === "UNPUBLISHED") {
+    where.isPublished = false;
+  }
+
+  const [totalJobs, jobsRaw] = await Promise.all([
+    prisma.job.count({ where: baseWhere }),
+    prisma.job.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        clientCompany: true,
+        _count: {
+          select: { applications: true },
+        },
+      },
+    }),
+  ]);
+
+  const jobs: JobRow[] = jobsRaw.map((job) => ({
+    id: job.id,
+    title: job.title,
+    slug: job.slug ?? null,
+    location: job.location ?? null,
+    function: (job as any).function ?? null,
+    employmentType: (job as any).employmentType ?? null,
+    seniority: (job as any).seniority ?? null,
+    isPublished: job.isPublished,
+    createdAt: job.createdAt.toISOString(),
+    clientName: job.clientCompany?.name ?? null,
+    applicationsCount: job._count.applications ?? 0,
+  }));
+
+  const visibleJobs = jobs.length;
+  const publishedJobs = jobs.filter((j) => j.isPublished).length;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
-      {/* Page header */}
-      <header className="space-y-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS · Jobs
-        </p>
+    <div className="flex h-full flex-1 flex-col">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white px-5 py-4">
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Link href="/ats/jobs" className="hover:underline">
+            ATS
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-slate-700">Jobs</span>
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-1.5">
-            <h1 className="text-xl font-semibold text-[#172965]">
-              Job mandates
+          <div>
+            <h1 className="text-base font-semibold text-slate-900">
+              Jobs
             </h1>
-            <p className="text-xs text-slate-600">
-              Overview of open, draft and closed roles under the{" "}
-              <span className="font-medium">{tenant.name}</span> tenant.
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              All open and draft roles in this workspace. Search, filter
+              and manage publishing directly from here.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              Jobs:{" "}
-              <span className="ml-1 font-semibold text-slate-800">
-                {jobs.length}
-              </span>
+          <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
+            <span className="font-medium text-slate-800">
+              {tenant.name}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {visibleJobs} of {totalJobs} jobs visible ·{" "}
+              <span className="font-semibold text-emerald-700">
+                {publishedJobs}
+              </span>{" "}
+              published
             </span>
             <Link
               href="/ats/jobs/new"
-              className="inline-flex items-center rounded-full bg-[#172965] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#111c4a]"
+              className="mt-2 inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
             >
-              + New job
+              + Create job
             </Link>
           </div>
         </div>
       </header>
 
-      {/* Jobs table card */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {/* Card header with filters */}
-        <div className="border-b border-slate-100 px-4 py-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Latest jobs
-              </h2>
-              <p className="text-[11px] text-slate-500">
-                Showing up to 100 most recently created roles.
-              </p>
-            </div>
+      {/* Filters + table */}
+      <main className="flex flex-1 flex-col bg-slate-50 px-5 py-4">
+        {/* Filters row */}
+        <section className="mb-3 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
+          <form className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              name="q"
+              defaultValue={filterQ}
+              placeholder="Search by title, client, location…"
+              className="h-8 min-w-[220px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            />
+            <select
+              name="status"
+              defaultValue={filterStatus === "ALL" ? "" : filterStatus}
+              className="h-8 w-[150px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            >
+              <option value="">All statuses</option>
+              <option value="PUBLISHED">Published</option>
+              <option value="UNPUBLISHED">Unpublished</option>
+            </select>
+            <button
+              type="submit"
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
+            >
+              Apply filters
+            </button>
+            <Link
+              href="/ats/jobs"
+              className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-600 hover:bg-slate-50"
+            >
+              Reset
+            </Link>
+          </form>
 
-            {/* Filters – UI only for now (no server filtering yet) */}
-            <form className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-              <select className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/40">
-                <option value="">All statuses</option>
-                <option value="open">Open</option>
-                <option value="paused">Paused</option>
-                <option value="closed">Closed</option>
-              </select>
-
-              <select className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#2563EB]/40">
-                <option value="">All clients</option>
-                {uniqueClients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-
-              <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px]">
-                <span className="hidden text-slate-400 sm:inline">Search</span>
-                <input
-                  type="search"
-                  placeholder="Role, client or location"
-                  className="w-40 bg-transparent text-[11px] text-slate-700 outline-none placeholder:text-slate-400"
-                />
-              </div>
-            </form>
+          <div className="flex items-center justify-between text-[10px] text-slate-500">
+            <span>
+              Use bulk actions below to publish/unpublish multiple jobs
+              in one go.
+            </span>
           </div>
-        </div>
+        </section>
 
-        {jobs.length === 0 ? (
-          <div className="px-4 py-10 text-center text-xs text-slate-500">
-            No jobs yet. Create your first mandate from the ATS.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-t border-slate-100 text-xs">
-              <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2 text-left">Role</th>
-                  <th className="px-4 py-2 text-left">Client</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                  <th className="px-4 py-2 text-left">Applications</th>
-                  <th className="px-4 py-2 text-left">Avg. score</th>
-                  <th className="px-4 py-2 text-left">Last activity</th>
-                  <th className="px-4 py-2 text-left">Links</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {jobs.map((job) => {
-                  const appCount = job.applications.length;
-                  const avgScore =
-                    appCount > 0
-                      ? Math.round(
-                          job.applications.reduce(
-                            (sum, app) => sum + (app.matchScore ?? 0),
-                            0,
-                          ) / appCount,
-                        )
-                      : null;
-
-                  const lastActivity =
-                    job.applications[0]?.createdAt ?? job.createdAt;
-
-                  const publicJobPath = job.slug
-                    ? `/jobs/${job.slug}`
-                    : `/jobs/${job.id}`;
-
-                  return (
-                    <tr key={job.id} className="align-top">
-                      {/* Role */}
-                      <td className="px-4 py-3">
-                        <div className="space-y-0.5">
-                          <Link
-                            href={`/ats/jobs/${job.id}`}
-                            className="text-xs font-semibold text-[#172965] hover:underline"
-                          >
-                            {job.title}
-                          </Link>
-                          <p className="text-[11px] text-slate-500">
-                            {job.location || job.workMode || "Location not set"}
-                          </p>
-                        </div>
-                      </td>
-
-                      {/* Client */}
-                      <td className="px-4 py-3">
-                        <p className="text-xs text-slate-800">
-                          {job.clientCompany?.name || "—"}
-                        </p>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        <div className="space-y-0.5">
-                          <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium capitalize text-slate-800">
-                            {job.status || "open"}
-                          </span>
-                          <p className="text-[11px] text-slate-500 capitalize">
-                            {job.visibility || "public"}
-                          </p>
-                        </div>
-                      </td>
-
-                      {/* Applications */}
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold text-slate-900">
-                          {appCount}
-                        </span>
-                      </td>
-
-                      {/* Avg score */}
-                      <td className="px-4 py-3">
-                        {avgScore === null ? (
-                          <span className="text-[11px] text-slate-400">
-                            No scores yet
-                          </span>
-                        ) : (
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-sm font-semibold text-slate-900">
-                              {avgScore}
-                            </span>
-                            <span className="text-[10px] text-slate-500">
-                              / 100
-                            </span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Last activity */}
-                      <td className="whitespace-nowrap px-4 py-3 text-[11px] text-slate-500">
-                        {lastActivity.toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </td>
-
-                      {/* Links */}
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1 text-[11px]">
-                          <Link
-                            href={`/ats/jobs/${job.id}`}
-                            className="text-[#172965] hover:underline"
-                          >
-                            View pipeline
-                          </Link>
-                          <Link
-                            href={publicJobPath}
-                            className="text-slate-600 hover:underline"
-                          >
-                            View public job
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+        {/* Jobs table + bulk actions */}
+        <JobsTable jobs={jobs} />
+      </main>
     </div>
   );
 }
