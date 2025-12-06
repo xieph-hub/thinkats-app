@@ -1,5 +1,3 @@
-// schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,17 +6,6 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")   // Supabase pooled URL
   directUrl = env("DIRECT_URL")     // Supabase direct URL
-}
-
-// --------------------------------------------------------------------------
-// ENUMS
-// --------------------------------------------------------------------------
-
-enum TagKind {
-  GENERIC   // catch-all / manual labels
-  SOURCE    // sourcing channels: Talent Network, Referral, LinkedIn, etc.
-  SKILL     // skill / domain tags if you ever want tag-based skills
-  PIPELINE  // pipeline states / meta tags
 }
 
 // --------------------------------------------------------------------------
@@ -69,11 +56,10 @@ model Tenant {
   userTenantRoles    UserTenantRole[]
   tags               Tag[]
 
-  // NEW: skills + structured requirements
-  skills            Skill[]
-  candidateSkills   CandidateSkill[]
-  jobSkills         JobSkill[]
-  jobRequirements   JobRequirement[]
+  // NEW: skills + junctions
+  skills           Skill[]
+  candidateSkills  CandidateSkill[]
+  jobSkills        JobSkill[]
 
   // scoring audit trail
   scoringEvents ScoringEvent[]
@@ -219,13 +205,13 @@ model Job {
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
+
+  // NEW: normalized skills attached to job
+  skills JobSkill[]
+
   applications  JobApplication[]
   stages        JobStage[]
   sentEmails    SentEmail[]
-
-  // NEW: structured skills & requirements
-  jobSkills       JobSkill[]
-  jobRequirements JobRequirement[]
 
   // scoring audit trail
   scoringEvents ScoringEvent[]
@@ -261,7 +247,7 @@ model Candidate {
   notes        Note[]
   sentEmails   SentEmail[]
 
-  // NEW: structured skills for scoring / matching
+  // NEW: structured skills for this candidate
   skills CandidateSkill[]
 
   @@map("candidates")
@@ -272,8 +258,6 @@ model Tag {
   tenantId  String   @map("tenant_id") @db.Uuid
   name      String
   color     String?
-  kind      TagKind  @default(GENERIC)
-  isSystem  Boolean  @map("is_system") @default(false)
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
@@ -281,7 +265,6 @@ model Tag {
   candidates CandidateTag[]
 
   @@map("tags")
-  @@unique([tenantId, name, kind], map: "uniq_tags_tenant_name_kind")
 }
 
 model CandidateTag {
@@ -296,26 +279,21 @@ model CandidateTag {
   tag       Tag       @relation(fields: [tagId], references: [id])
 
   @@map("candidate_tags")
-  @@unique([candidateId, tagId], map: "uniq_candidate_tags_candidate_tag")
-  @@index([tenantId, candidateId], map: "idx_candidate_tags_tenant_candidate")
 }
 
 // --------------------------------------------------------------------------
-// SKILLS & REQUIREMENTS
+// SKILLS & PROFICIENCY (NEW)
 // --------------------------------------------------------------------------
 
-// Global / tenant-scoped skill catalogue.
-// For ESCO/etc: tenantId = null, isGlobal = true, externalSource = "esco".
 model Skill {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId       String?  @map("tenant_id") @db.Uuid
   name           String
-  normalizedName String   @map("normalized_name")
-  category       String?  @map("category")
+  slug           String   // normalized key, e.g. "product-management"
   description    String?  @map("description")
-  externalSource String?  @map("external_source")
-  externalId     String?  @map("external_id")
-  isGlobal       Boolean  @map("is_global") @default(false)
+  category       String?  @map("category")        // e.g. "Digital skills", "Management"
+  externalSource String?  @map("external_source") // e.g. "esco"
+  externalId     String?  @map("external_id")     // e.g. ESCO skill code
   createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
@@ -324,66 +302,46 @@ model Skill {
   jobSkills       JobSkill[]
 
   @@map("skills")
-  @@unique([tenantId, normalizedName], map: "uniq_skills_tenant_normalized_name")
-  @@unique([externalSource, externalId], map: "uniq_skills_external_source_id")
+  @@index([tenantId, slug], map: "idx_skills_tenant_slug")
 }
 
 model CandidateSkill {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String    @map("tenant_id") @db.Uuid
-  candidateId     String    @map("candidate_id") @db.Uuid
-  skillId         String    @map("skill_id") @db.Uuid
-  proficiency     Int?      @map("proficiency")        // 1–5 self-reported / assessed
-  yearsExperience Int?      @map("years_experience")
-  lastUsedAt      DateTime? @map("last_used_at") @db.Timestamptz(6)
-  source          String?   @map("source")            // self_report | cv_parse | assessment | talent_network
-  createdAt       DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  candidateId     String   @map("candidate_id") @db.Uuid
+  skillId         String   @map("skill_id") @db.Uuid
+  level           Int?     @map("level")             // 1–5 self-rating / assessment
+  yearsExperience Int?     @map("years_experience")  // 0–50
+  lastUsedYear    Int?     @map("last_used_year")    // e.g. 2023
+  source          String?  @map("source")            // "talent_network_form", "cv_parsed", etc.
+  isPrimary       Boolean  @map("is_primary") @default(false)
+  createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   candidate Candidate @relation(fields: [candidateId], references: [id])
   skill     Skill     @relation(fields: [skillId], references: [id])
 
   @@map("candidate_skills")
-  @@unique([candidateId, skillId], map: "uniq_candidate_skills_candidate_skill")
-  @@index([tenantId, candidateId], map: "idx_candidate_skills_tenant_candidate")
+  @@index([tenantId, candidateId], map: "idx_candidate_skills_candidate")
+  @@index([tenantId, skillId], map: "idx_candidate_skills_skill")
 }
 
 model JobSkill {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String   @map("tenant_id") @db.Uuid
-  jobId          String   @map("job_id") @db.Uuid
-  skillId        String   @map("skill_id") @db.Uuid
-  minProficiency Int?     @map("min_proficiency")     // expected 1–5
-  required       Boolean  @map("required") @default(true)
-  weight         Int?     @map("weight")              // 0–100, relative weight in scoring
-  createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  jobId      String   @map("job_id") @db.Uuid
+  skillId    String   @map("skill_id") @db.Uuid
+  importance Int?     @map("importance")   // 1–5
+  isRequired Boolean  @map("is_required") @default(true)
+  createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   job    Job    @relation(fields: [jobId], references: [id])
   skill  Skill  @relation(fields: [skillId], references: [id])
 
   @@map("job_skills")
-  @@unique([jobId, skillId], map: "uniq_job_skills_job_skill")
-  @@index([tenantId, jobId], map: "idx_job_skills_tenant_job")
-}
-
-model JobRequirement {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  jobId     String   @map("job_id") @db.Uuid
-  type      String?  @map("type")       // experience | education | certification | other
-  label     String   @map("label")      // human friendly requirement text
-  mustHave  Boolean  @map("must_have") @default(false)
-  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  job    Job    @relation(fields: [jobId], references: [id])
-
-  @@map("job_requirements")
-  @@index([tenantId, jobId], map: "idx_job_requirements_tenant_job")
+  @@index([tenantId, jobId], map: "idx_job_skills_job")
+  @@index([tenantId, skillId], map: "idx_job_skills_skill")
 }
 
 // --------------------------------------------------------------------------
