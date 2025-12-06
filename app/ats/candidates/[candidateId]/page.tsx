@@ -41,7 +41,6 @@ function formatDate(d: Date | null | undefined) {
 
 function formatDateTime(d: Date | null | undefined) {
   if (!d) return "";
-  // YYYY-MM-DD HH:MM from ISO string
   const iso = d.toISOString();
   return iso.slice(0, 16).replace("T", " ");
 }
@@ -54,7 +53,6 @@ function derivePrimaryTier(apps: any[]): string | null {
     if (tier) tiers.add(tier.toUpperCase());
   }
   if (!tiers.size) return null;
-
   const ordered = ["A", "B", "C", "D"];
   for (const t of ordered) {
     if (tiers.has(t)) return t;
@@ -339,6 +337,9 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                       (app.matchReason as string | null | undefined) ??
                       null;
 
+                    const inviterOrgName =
+                      app.job?.clientCompany?.name ?? tenant.name;
+
                     return (
                       <article
                         key={app.id}
@@ -404,6 +405,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                                   app.job?.clientCompany?.name ?? null,
                                 candidateName: candidate.fullName,
                                 candidateEmail: candidate.email,
+                                inviterOrgName,
                               }}
                             />
                           </div>
@@ -543,7 +545,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                     </article>
                   ))}
                 </div>
-              ) }
+              )}
 
               <form
                 action={`/api/ats/candidates/${candidate.id}/notes`}
