@@ -55,6 +55,7 @@ export default function InterviewInviteEmail({
           }}
         >
           <tbody>
+            {/* Header / intro */}
             <tr>
               <td style={{ padding: "20px 24px 12px 24px" }}>
                 <div
@@ -79,25 +80,30 @@ export default function InterviewInviteEmail({
                 >
                   Interview for {jobTitle}
                 </h1>
+
+                {/* Salutation */}
                 <p
                   style={{
-                    margin: "8px 0 0 0",
+                    margin: "10px 0 0 0",
                     fontSize: 13,
                     color: "#475569",
                   }}
                 >
                   Hi {candidateName},
                 </p>
+
+                {/* Spacer / separate body paragraph */}
                 <p
                   style={{
-                    margin: "4px 0 0 0",
+                    margin: "10px 0 0 0",
                     fontSize: 13,
                     color: "#475569",
                   }}
                 >
-                  You&apos;ve been invited to interview with{" "}
-                  <strong>{orgLabel}</strong> for the{" "}
-                  <strong>{jobTitle}</strong> role.
+                  Thank you for your interest in the{" "}
+                  <strong>{jobTitle}</strong> role with{" "}
+                  <strong>{orgLabel}</strong>. We&apos;d like to invite you to
+                  an interview and have included the details below.
                 </p>
               </td>
             </tr>
@@ -127,6 +133,7 @@ export default function InterviewInviteEmail({
                           cellSpacing={0}
                         >
                           <tbody>
+                            {/* Date & time */}
                             <tr>
                               <td
                                 style={{
@@ -150,70 +157,76 @@ export default function InterviewInviteEmail({
                                 {interviewDate}
                               </td>
                             </tr>
+
+                            {/* Format */}
                             {interviewType && (
-                              <tr>
-                                <td
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#cbd5f5",
-                                    paddingBottom: 4,
-                                  }}
-                                >
-                                  Format
-                                </td>
-                              </tr>
+                              <>
+                                <tr>
+                                  <td
+                                    style={{
+                                      fontSize: 12,
+                                      color: "#cbd5f5",
+                                      paddingBottom: 4,
+                                    }}
+                                  >
+                                    Format
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td
+                                    style={{
+                                      fontSize: 13,
+                                      paddingBottom: 10,
+                                    }}
+                                  >
+                                    {interviewType}
+                                  </td>
+                                </tr>
+                              </>
                             )}
-                            {interviewType && (
-                              <tr>
-                                <td
-                                  style={{
-                                    fontSize: 13,
-                                    paddingBottom: 10,
-                                  }}
-                                >
-                                  {interviewType}
-                                </td>
-                              </tr>
-                            )}
+
+                            {/* Where */}
                             {(location || videoUrl) && (
-                              <tr>
-                                <td
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#cbd5f5",
-                                    paddingBottom: 4,
-                                  }}
-                                >
-                                  Where
-                                </td>
-                              </tr>
+                              <>
+                                <tr>
+                                  <td
+                                    style={{
+                                      fontSize: 12,
+                                      color: "#cbd5f5",
+                                      paddingBottom: 4,
+                                    }}
+                                  >
+                                    Where
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td
+                                    style={{
+                                      fontSize: 13,
+                                      paddingBottom: 10,
+                                    }}
+                                  >
+                                    {videoUrl ? (
+                                      <a
+                                        href={videoUrl}
+                                        style={{
+                                          color: "#bfdbfe",
+                                          textDecoration: "underline",
+                                        }}
+                                      >
+                                        Join via video link
+                                      </a>
+                                    ) : null}
+                                    {videoUrl && location ? " · " : null}
+                                    {location ? (
+                                      <span>{location}</span>
+                                    ) : null}
+                                  </td>
+                                </tr>
+                              </>
                             )}
-                            {(location || videoUrl) && (
-                              <tr>
-                                <td
-                                  style={{
-                                    fontSize: 13,
-                                    paddingBottom: 10,
-                                  }}
-                                >
-                                  {videoUrl ? (
-                                    <a
-                                      href={videoUrl}
-                                      style={{
-                                        color: "#bfdbfe",
-                                        textDecoration: "underline",
-                                      }}
-                                    >
-                                      Join via video link
-                                    </a>
-                                  ) : null}
-                                  {videoUrl && location ? " · " : null}
-                                  {location ? (
-                                    <span>{location}</span>
-                                  ) : null}
-                                </td>
-                              </tr>
-                            )}
+
+                            {/* Organisation & organiser */}
                             <tr>
                               <td
                                 style={{
@@ -246,7 +259,7 @@ export default function InterviewInviteEmail({
               </td>
             </tr>
 
-            {/* Notes */}
+            {/* Notes (optional) */}
             {notes && (
               <tr>
                 <td style={{ padding: "0 24px 16px 24px" }}>
@@ -274,34 +287,45 @@ export default function InterviewInviteEmail({
               </tr>
             )}
 
-            {/* Dashboard link */}
+            {/* How to manage / next steps */}
             <tr>
-              <td style={{ padding: "0 24px 20px 24px" }}>
+              <td style={{ padding: "0 24px 18px 24px" }}>
                 <p
                   style={{
-                    margin: "8px 0 12px 0",
+                    margin: "8px 0 8px 0",
                     fontSize: 13,
                     color: "#64748b",
                   }}
                 >
-                  You can manage your application and interview details
-                  directly in your ThinkATS workspace.
+                  To manage your application and interview details (for example,
+                  to reschedule, update your availability or ask a question),
+                  please reply directly to this email and a member of the{" "}
+                  {orgLabel} recruitment team will get back to you.
                 </p>
-                <a
-                  href={dashboardUrl}
-                  style={{
-                    display: "inline-block",
-                    padding: "8px 16px",
-                    borderRadius: 999,
-                    backgroundColor: "#020617",
-                    color: "#f9fafb",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    textDecoration: "none",
-                  }}
-                >
-                  View role in ThinkATS
-                </a>
+
+                {/* Optional: subtle link if you later point this to a candidate-facing page */}
+                {dashboardUrl && (
+                  <p
+                    style={{
+                      margin: "0 0 8px 0",
+                      fontSize: 12,
+                      color: "#64748b",
+                    }}
+                  >
+                    If you were given access to an online application portal,
+                    you can also view this role there:{" "}
+                    <a
+                      href={dashboardUrl}
+                      style={{
+                        color: "#1d4ed8",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      open your application page
+                    </a>
+                    .
+                  </p>
+                )}
               </td>
             </tr>
 
@@ -315,8 +339,11 @@ export default function InterviewInviteEmail({
                 }}
               >
                 <p style={{ margin: 0 }}>
-                  If you need to reschedule, reply to this email and the
-                  coordinator at {orgLabel} will follow up.
+                  If you believe you&apos;ve received this message in error,
+                  please reply to let the team at {orgLabel} know.
+                </p>
+                <p style={{ margin: "6px 0 0 0", fontSize: 10 }}>
+                  Powered by ThinkATS.
                 </p>
               </td>
             </tr>
