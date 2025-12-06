@@ -41,9 +41,17 @@ function formatDate(d: Date | null | undefined) {
 
 function formatDateTime(d: Date | null | undefined) {
   if (!d) return "";
-  // YYYY-MM-DD HH:MM from ISO string
   const iso = d.toISOString();
   return iso.slice(0, 16).replace("T", " ");
+}
+
+function formatInterviewStatus(status: string | null | undefined) {
+  if (!status) return "";
+  return status
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function derivePrimaryTier(apps: any[]): string | null {
@@ -91,6 +99,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
             orderBy: { scheduledAt: "asc" },
             include: {
               participants: true,
+              competencies: true,
             },
           },
         },
@@ -122,6 +131,23 @@ export default async function CandidateProfilePage({ params }: PageProps) {
     candidate.tags
       ?.map((ct) => ct.tag)
       .filter((t): t is NonNullable<typeof t> => Boolean(t)) ?? [];
+
+  // Derive “competencies highlighted in interviews” across this candidate’s pipelines
+  const competencyFrequency = new Map<string, number>();
+  for (const app of candidate.applications) {
+    for (const iv of app.interviews ?? []) {
+      for (const comp of iv.competencies ?? []) {
+        const label = (comp.label || "").trim();
+        if (!label) continue;
+        competencyFrequency.set(label, (competencyFrequency.get(label) ?? 0) + 1);
+      }
+    }
+  }
+
+  const competencyTags = Array.from(competencyFrequency.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([label]) => label);
 
   return (
     <div className="flex h-full flex-1 flex-col">
@@ -228,12 +254,8 @@ export default async function CandidateProfilePage({ params }: PageProps) {
 
               <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
                 <div>
-                  <dt className="text-[11px] text-slate-500">
-                    Current role
-                  </dt>
-                  <dd className="text-xs font-medium text-slate-8
-
-00">
+                  <dt className="text-[11px] text-slate-500">Current role</dt>
+                  <dd className="text-xs font-medium text-slate-800">
                     {candidate.currentTitle || "–"}
                   </dd>
                 </div>
@@ -246,9 +268,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-slate-500">
-                    Source
-                  </dt>
+                  <dt className="text-[11px] text-slate-500">Source</dt>
                   <dd className="text-xs text-slate-800">
                     {candidate.source || "–"}
                   </dd>
@@ -314,6 +334,27 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                     Add tag
                   </button>
                 </form>
+
+                {/* Competencies surfaced from interview feedback */}
+                {competencyTags.length > 0 && (
+                  <div className="mt-4">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-slate-600">
+                        Competencies highlighted in interviews
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {competencyTags.map((label) => (
+                        <span
+                          key={label}
+                          className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-800"
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -443,13 +484,13 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                             </div>
                             <div className="space-y-1.5">
                               {app.interviews.map((iv) => {
-                                const participants =
-                                  iv.participants || [];
+                                const participants = iv.participants || [];
                                 const interviewerNames = participants
                                   .filter(
                                     (p) =>
-                                      (p.role || "").toLowerCase() !==
-                                      "candidate",
+                                      (p.role || "")
+                                        .toLowerCase()
+                                        .trim() !== "candidate",
                                   )
                                   .map((p) => p.name)
                                   .filter(Boolean);
@@ -457,6 +498,8 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                                   interviewerNames.length > 0
                                     ? interviewerNames.join(", ")
                                     : null;
+                                const ratingScaleMax =
+                                  iv.ratingScaleMax || 5;
 
                                 return (
                                   <div
@@ -466,11 +509,16 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                                     <div className="flex flex-wrap items-center justify-between gap-1">
                                       <div className="flex flex-wrap items-center gap-1">
                                         <span className="font-medium text-slate-800">
-                                          {iv.type || "INTERVIEW"}
+                                          {iv.type || "Interview"}
                                         </span>
                                         <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-700">
-                                          {iv.status}
+                                          {formatInterviewStatus(iv.status)}
                                         </span>
+                                        {iv.rating != null && (
+                                          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                                            Rating: {iv.rating}/{ratingScaleMax}
+                                          </span>
+                                        )}
                                       </div>
                                       <span className="text-[10px] text-slate-500">
                                         {formatDateTime(iv.scheduledAt)}
@@ -496,12 +544,35 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                                       {interviewerLabel && (
                                         <span>With: {interviewerLabel}</span>
                                       )}
+                                      {iv.outcome && (
+                                        <span>Outcome: {iv.outcome}</span>
+                                      )}
                                     </div>
-                                    {iv.notes && (
+                                    {iv.feedbackNotes && (
                                       <p className="mt-0.5 text-[10px] text-slate-600">
-                                        {iv.notes}
+                                        {iv.feedbackNotes}
                                       </p>
                                     )}
+
+                                    {iv.competencies &&
+                                      iv.competencies.length > 0 && (
+                                        <div className="mt-1.5 flex flex-wrap gap-1">
+                                          {iv.competencies.map((comp) => (
+                                            <span
+                                              key={comp.id}
+                                              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700"
+                                            >
+                                              {comp.label}
+                                              {comp.rating != null && (
+                                                <span className="ml-1 text-[9px] opacity-75">
+                                                  {comp.rating}/
+                                                  {ratingScaleMax}
+                                                </span>
+                                              )}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                   </div>
                                 );
                               })}
