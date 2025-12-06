@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
         videoUrl,
         notes,
         organiserName: organiserName || orgName,
-        inviterOrgName: orgName,
+        organisationName: orgName, // ✅ match InterviewInviteEmail Props
         dashboardUrl: `${PUBLIC_SITE_URL}/ats/jobs/${job.id}`,
       }),
       attachments: [
