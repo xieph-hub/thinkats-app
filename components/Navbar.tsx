@@ -67,7 +67,7 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
   const hasSession = !!currentUser; // Supabase session exists
   const fullyLoggedIn = hasSession && otpVerified; // Supabase + OTP
 
-  // 🧭 Marketing chrome should not appear inside the ATS product.
+  // Marketing chrome should not appear inside the ATS product.
   if (pathname?.startsWith("/ats")) {
     return null;
   }
@@ -105,6 +105,7 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
             width={140}
             height={40}
             className="h-9 w-auto sm:h-10"
+            priority
           />
         </Link>
 
@@ -177,7 +178,6 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
           {/* Right: auth / workspace */}
           <div className="flex items-center gap-3">
             {fullyLoggedIn ? (
-              // Supabase session + OTP verified
               <>
                 <Link
                   href="/ats"
@@ -228,7 +228,6 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
                 </div>
               </>
             ) : hasSession ? (
-              // Supabase session but OTP NOT verified yet
               <>
                 <Link
                   href={atsWorkspaceHref}
@@ -244,7 +243,6 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
                 </Link>
               </>
             ) : (
-              // No session at all
               <>
                 <Link
                   href="/login"
