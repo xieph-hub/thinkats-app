@@ -3,6 +3,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
+import { Download, Star } from "lucide-react";
 
 type SkillTag = {
   id: string;
@@ -51,6 +52,16 @@ function initialsFromName(name: string) {
   );
 }
 
+// --- Scoring + badges (mock-style) -----------------------------------------
+
+function getScoreColor(score: number | null) {
+  if (score == null) return "#9CA3AF"; // slate-400
+  if (score >= 90) return "#22C55E";   // emerald-500
+  if (score >= 80) return "#2563EB";   // indigo/blue-600
+  if (score >= 70) return "#FACC15";   // amber-400
+  return "#EF4444";                    // red-500
+}
+
 function scoreBadgeClasses(score: number | null) {
   if (score == null) return "bg-slate-100 text-slate-600";
   if (score >= 80) return "bg-emerald-100 text-emerald-700";
@@ -62,9 +73,12 @@ function scoreBadgeClasses(score: number | null) {
 function tierBadgeClasses(tier: string | null) {
   if (!tier) return "bg-slate-100 text-slate-600";
   const upper = tier.toUpperCase();
-  if (upper === "A") return "bg-emerald-100 text-emerald-700";
-  if (upper === "B") return "bg-sky-100 text-sky-700";
-  if (upper === "C") return "bg-amber-100 text-amber-700";
+  if (upper === "A")
+    return "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20";
+  if (upper === "B")
+    return "bg-indigo-500 text-white shadow-lg shadow-indigo-500/20";
+  if (upper === "C")
+    return "bg-amber-400 text-slate-900 shadow-lg shadow-amber-400/20";
   return "bg-slate-100 text-slate-600";
 }
 
@@ -87,16 +101,105 @@ function decisionChipClasses(status: string | null) {
 }
 
 function stagePillClasses() {
-  // Neutral stage pill – decision + score carry the strong colours
+  // Neutral stage pill – score + decision carry the colour weight
   return "border border-slate-200 bg-white text-slate-700";
 }
+
+function skillTagStyle(tag: SkillTag): React.CSSProperties {
+  if (!tag.color) {
+    return {
+      backgroundColor: "rgba(148, 163, 184, 0.1)",
+      color: "#111827",
+    };
+  }
+  // Use 8-digit hex (RRGGBBAA) to fade background: e.g. #2563EB15
+  const base = tag.color.trim();
+  const bgHex = base.length === 7 ? `${base}20` : base;
+  return {
+    backgroundColor: bgHex,
+    color: base,
+  };
+}
+
+// --- Export helpers --------------------------------------------------------
+
+function escapeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) return '""';
+  const s = String(value).replace(/"/g, '""');
+  return `"${s}"`;
+}
+
+function buildExportContent(rows: PipelineAppRow[], delimiter: string) {
+  const headers = [
+    "Candidate name",
+    "Email",
+    "Location",
+    "Experience",
+    "Stage",
+    "Status",
+    "Tier",
+    "Match score",
+    "Source",
+    "Applied at",
+    "Skills",
+  ];
+
+  const lines = rows.map((r) => {
+    const skills = (r.skillTags || []).map((t) => t.label).join(", ");
+    const applied = formatDate(r.appliedAt);
+    const cells = [
+      r.fullName,
+      r.email,
+      r.location || "",
+      r.experienceLabel || "",
+      r.stage || "APPLIED",
+      r.status || "PENDING",
+      r.tier || "",
+      r.matchScore != null ? r.matchScore : "",
+      r.source || "",
+      applied,
+      skills,
+    ];
+    return cells.map(escapeCsvValue).join(delimiter);
+  });
+
+  return [headers.map(escapeCsvValue).join(delimiter), ...lines].join("\n");
+}
+
+function triggerDownload(
+  rows: PipelineAppRow[],
+  jobId: string,
+  format: "csv" | "xls",
+) {
+  if (rows.length === 0) return;
+
+  const delimiter = format === "csv" ? "," : "\t";
+  const content = buildExportContent(rows, delimiter);
+  const blob = new Blob([content], {
+    type:
+      format === "csv"
+        ? "text/csv;charset=utf-8;"
+        : "application/vnd.ms-excel;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const today = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `thinkats-job-${jobId}-pipeline-${today}.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// --- Component -------------------------------------------------------------
 
 export default function JobPipelineBoard({
   jobId,
   stageOptions,
   apps,
 }: JobPipelineBoardProps) {
-  // Local state so we can update instantly without full page refresh
   const [rows, setRows] = useState<PipelineAppRow[]>(apps);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStage, setBulkStage] = useState<string>("");
@@ -104,7 +207,7 @@ export default function JobPipelineBoard({
   const [isBulkSubmitting, startBulkTransition] = useTransition();
   const [inlineSavingId, setInlineSavingId] = useState<string | null>(null);
 
-  // If server filters change (new props), keep local state in sync
+  // keep in sync with server-filtered props
   useEffect(() => {
     setRows(apps);
     setSelectedIds([]);
@@ -179,7 +282,6 @@ export default function JobPipelineBoard({
       );
     } catch (err) {
       console.error("Failed to update application inline", err);
-      // Later: toast
     } finally {
       setInlineSavingId(null);
     }
@@ -231,7 +333,7 @@ export default function JobPipelineBoard({
 
   return (
     <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-      {/* Top summary + bulk bar */}
+      {/* Summary + bulk + export */}
       <section className="border-b border-slate-200 bg-slate-50 px-5 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {/* Summary chips */}
@@ -257,52 +359,74 @@ export default function JobPipelineBoard({
             </span>
           </div>
 
-          {/* Bulk bar (behaviour unchanged) */}
-          <form
-            onSubmit={handleBulkSubmit}
-            className="flex flex-wrap items-center gap-2 text-[11px]"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Bulk actions
-            </span>
-            <select
-              value={bulkStatus}
-              onChange={(e) =>
-                setBulkStatus(e.target.value as DecisionStatus | "")
-              }
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+          {/* Bulk bar + export */}
+          <div className="flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-end">
+            <form
+              onSubmit={handleBulkSubmit}
+              className="flex flex-wrap items-center gap-2 text-[11px]"
             >
-              <option value="">Decision…</option>
-              <option value="PENDING">Accept / active</option>
-              <option value="ON_HOLD">On hold</option>
-              <option value="REJECTED">Reject</option>
-            </select>
-            <select
-              value={bulkStage}
-              onChange={(e) => setBulkStage(e.target.value)}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
-            >
-              <option value="">Stage…</option>
-              {stageOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              disabled={
-                selectedIds.length === 0 ||
-                (!bulkStage && !bulkStatus) ||
-                isBulkSubmitting
-              }
-              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {isBulkSubmitting
-                ? "Updating…"
-                : `Apply to ${selectedIds.length || 0} selected`}
-            </button>
-          </form>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Bulk actions
+              </span>
+              <select
+                value={bulkStatus}
+                onChange={(e) =>
+                  setBulkStatus(e.target.value as DecisionStatus | "")
+                }
+                className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="">Decision…</option>
+                <option value="PENDING">Accept / active</option>
+                <option value="ON_HOLD">On hold</option>
+                <option value="REJECTED">Reject</option>
+              </select>
+              <select
+                value={bulkStage}
+                onChange={(e) => setBulkStage(e.target.value)}
+                className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="">Stage…</option>
+                {stageOptions.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                disabled={
+                  selectedIds.length === 0 ||
+                  (!bulkStage && !bulkStatus) ||
+                  isBulkSubmitting
+                }
+                className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {isBulkSubmitting
+                  ? "Updating…"
+                  : `Apply to ${selectedIds.length || 0} selected`}
+              </button>
+            </form>
+
+            {/* Export buttons */}
+            <div className="flex items-center gap-2 text-[11px]">
+              <button
+                type="button"
+                onClick={() => triggerDownload(rows, jobId, "csv")}
+                className="inline-flex h-8 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => triggerDownload(rows, jobId, "xls")}
+                className="inline-flex h-8 items-center gap-1 rounded-full border border-slate-200 bg-slate-900 px-3 text-[11px] font-medium text-white shadow-sm hover:bg-slate-800"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export Excel
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -335,7 +459,7 @@ export default function JobPipelineBoard({
                   </button>
                 </th>
                 <th className="px-3 py-1">Candidate</th>
-                <th className="px-3 py-1">Score &amp; tier</th>
+                <th className="px-3 py-1">Match</th>
                 <th className="px-3 py-1">Decision</th>
                 <th className="px-3 py-1">Stage</th>
                 <th className="px-3 py-1">Source</th>
@@ -347,9 +471,15 @@ export default function JobPipelineBoard({
               {rows.map((app) => {
                 const isSelected = selectedIds.includes(app.id);
                 const saving = inlineSavingId === app.id;
-
                 const statusUpper = (app.status ||
                   "PENDING") as DecisionStatus;
+
+                const score = app.matchScore ?? null;
+                const circumference = 2 * Math.PI * 28;
+                const progress =
+                  score != null ? Math.max(0, Math.min(100, score)) : 0;
+                const offset =
+                  circumference - (progress / 100) * circumference;
 
                 return (
                   <tr
@@ -376,14 +506,19 @@ export default function JobPipelineBoard({
                     {/* Candidate cell */}
                     <td className="align-top px-3">
                       <div className="flex gap-2">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-indigo-600 text-[11px] font-semibold text-slate-50 shadow-sm">
+                        <div className="relative mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-indigo-600 text-[11px] font-semibold text-slate-50 shadow-sm">
                           {initialsFromName(app.fullName)}
+                          {app.tier?.toUpperCase() === "A" && (
+                            <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] text-slate-900 shadow">
+                              <Star className="h-3 w-3 fill-slate-900 text-slate-900" />
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col gap-0.5">
                           {app.candidateId ? (
                             <Link
                               href={`/ats/candidates/${app.candidateId}`}
-                              className="text-[11px] font-semibold text-slate-900 hover:text-slate-950 hover:underline"
+                              className="text-[11px] font-semibold text-slate-900 hover:text-indigo-700 hover:underline"
                             >
                               {app.fullName}
                             </Link>
@@ -409,12 +544,14 @@ export default function JobPipelineBoard({
                             )}
                           </div>
 
+                          {/* Skill tags – more visually prominent */}
                           {app.skillTags?.length > 0 && (
                             <div className="mt-0.5 flex flex-wrap gap-1">
                               {app.skillTags.slice(0, 3).map((tag) => (
                                 <span
                                   key={tag.id}
-                                  className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-700"
+                                  className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium"
+                                  style={skillTagStyle(tag)}
                                 >
                                   {tag.label}
                                 </span>
@@ -430,29 +567,65 @@ export default function JobPipelineBoard({
                       </div>
                     </td>
 
-                    {/* Score & tier */}
+                    {/* Match (score + tier, mock-style) */}
                     <td className="align-top px-3">
-                      <div className="mt-1 flex flex-col items-start gap-1">
-                        {app.matchScore != null && (
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              scoreBadgeClasses(app.matchScore),
-                            ].join(" ")}
-                          >
-                            Score {app.matchScore}
-                          </span>
-                        )}
-                        {app.tier && (
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                              tierBadgeClasses(app.tier),
-                            ].join(" ")}
-                          >
-                            Tier {app.tier}
-                          </span>
-                        )}
+                      <div className="mt-1 flex items-center gap-2">
+                        {/* Circular score dial */}
+                        <div className="relative h-12 w-12">
+                          <svg className="h-12 w-12 -rotate-90">
+                            <circle
+                              cx="24"
+                              cy="24"
+                              r="18"
+                              stroke="#E5E7EB"
+                              strokeWidth="4"
+                              fill="none"
+                            />
+                            {score != null && (
+                              <circle
+                                cx="24"
+                                cy="24"
+                                r="18"
+                                stroke={getScoreColor(score)}
+                                strokeWidth="4"
+                                fill="none"
+                                strokeDasharray={circumference}
+                                strokeDashoffset={offset}
+                                strokeLinecap="round"
+                                className="transition-all duration-500"
+                              />
+                            )}
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-[11px] font-semibold text-slate-900">
+                              {score != null ? score : "—"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          {app.tier && (
+                            <span
+                              className={[
+                                "inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-semibold",
+                                tierBadgeClasses(app.tier),
+                              ].join(" ")}
+                            >
+                              <Star className="h-3 w-3" />
+                              Tier {app.tier.toUpperCase()}
+                            </span>
+                          )}
+                          {score != null && (
+                            <span
+                              className={[
+                                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px]",
+                                scoreBadgeClasses(score),
+                              ].join(" ")}
+                            >
+                              Match score
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 
@@ -544,7 +717,6 @@ export default function JobPipelineBoard({
                             Email
                           </Link>
                         )}
-                        {/* Future: schedule / notes drawers */}
                       </div>
                       {saving && (
                         <div className="mt-1 text-[9px] text-slate-400">
