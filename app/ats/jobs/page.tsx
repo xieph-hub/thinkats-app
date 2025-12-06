@@ -59,11 +59,11 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   }
 
   if (filterStatus === "PUBLISHED") {
-    // canonical “published” definition: open + public
+    // Canonical “published” definition: open + public
     where.status = "open";
     where.visibility = "public";
   } else if (filterStatus === "UNPUBLISHED") {
-    // everything that is NOT open+public
+    // Everything that is NOT open+public
     where.OR = [
       { status: { not: "open" } },
       { visibility: { not: "public" } },
@@ -91,9 +91,9 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
     const experienceLevel =
       anyJob.experienceLevel ?? anyJob.seniority ?? null;
 
-    const status: string = anyJob.status ?? (job.isPublished ? "open" : "draft");
-    const visibility: string =
-      anyJob.visibility ?? (job.isPublished ? "public" : "internal");
+    // No more isPublished – status + visibility are the source of truth
+    const status: string = anyJob.status ?? "draft";
+    const visibility: string = anyJob.visibility ?? "public";
 
     return {
       id: job.id,
