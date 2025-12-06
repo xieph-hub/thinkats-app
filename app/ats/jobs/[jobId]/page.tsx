@@ -26,7 +26,9 @@ type PageProps = {
 };
 
 type PipelineAppRow = {
-  id: string;
+  id: string; // application id
+  candidateId: string | null; // 🔹 for linking to candidate profile
+
   fullName: string;
   email: string;
   location: string | null;
@@ -113,7 +115,7 @@ export default async function JobPipelinePage({
   const activeView = viewFromId || defaultView || null;
 
   // ---------------------------------------------------------------------------
-  // Filters (search, stage, status, tier) – keep behaviour as before
+  // Filters (search, stage, status, tier)
   // ---------------------------------------------------------------------------
 
   let filterQ = "";
@@ -196,11 +198,10 @@ export default async function JobPipelinePage({
 
     if (!matchesQuery) continue;
 
-    // Status filter (PENDING / ON_HOLD / REJECTED) – "Accept / On hold / Reject"
+    // Status filter (PENDING / ON_HOLD / REJECTED)
     if (
       filterStatus !== "ALL" &&
-      (app.status || "PENDING").toUpperCase() !==
-        filterStatus.toUpperCase()
+      (app.status || "PENDING").toUpperCase() !== filterStatus.toUpperCase()
     ) {
       continue;
     }
@@ -215,10 +216,7 @@ export default async function JobPipelinePage({
 
     // Stage filter
     const stageName = (app.stage || "APPLIED").toUpperCase();
-    if (
-      filterStage !== "ALL" &&
-      stageName !== filterStage.toUpperCase()
-    ) {
+    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
       continue;
     }
 
@@ -232,6 +230,8 @@ export default async function JobPipelinePage({
 
     pipelineApps.push({
       id: app.id,
+      candidateId: app.candidate ? app.candidate.id : null, // 🔹 key line
+
       fullName: app.fullName,
       email: app.email,
       location: app.location,
@@ -256,8 +256,7 @@ export default async function JobPipelinePage({
       job.applications
         .flatMap((a) => a.scoringEvents)
         .map(
-          (e) =>
-            (e?.tier as string | null | undefined) || null,
+          (e) => (e?.tier as string | null | undefined) || null,
         )
         .filter(Boolean) as string[],
     ),
@@ -500,7 +499,7 @@ export default async function JobPipelinePage({
         </form>
       </div>
 
-      {/* Pipeline board – ThinkATS dark list, inline status & stage, bulk actions */}
+      {/* Pipeline board – list view with inline status & stage, bulk actions */}
       <JobPipelineBoard
         jobId={job.id}
         stageOptions={stageOptions}
