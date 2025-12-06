@@ -1,3 +1,4 @@
+// app/ats/jobs/[jobId]/JobPipelineBoard.tsx
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
@@ -86,7 +87,7 @@ function decisionChipClasses(status: string | null) {
 }
 
 function stagePillClasses() {
-  // Keep stage neutral, focus color on decision + score
+  // Neutral stage pill – decision + score carry the strong colours
   return "border border-slate-200 bg-white text-slate-700";
 }
 
@@ -153,10 +154,7 @@ export default function JobPipelineBoard({
       const formData = new FormData();
       formData.set("jobId", jobId);
       formData.set("applicationIds", appId);
-      formData.set(
-        "stage",
-        updates.stage ?? row.stage ?? "APPLIED",
-      );
+      formData.set("stage", updates.stage ?? row.stage ?? "APPLIED");
       formData.set(
         "status",
         (updates.status ?? (row.status as DecisionStatus) ?? "PENDING") as string,
@@ -172,8 +170,7 @@ export default function JobPipelineBoard({
           r.id === appId
             ? {
                 ...r,
-                stage:
-                  updates.stage !== undefined ? updates.stage : r.stage,
+                stage: updates.stage !== undefined ? updates.stage : r.stage,
                 status:
                   updates.status !== undefined ? updates.status : r.status,
               }
@@ -182,7 +179,7 @@ export default function JobPipelineBoard({
       );
     } catch (err) {
       console.error("Failed to update application inline", err);
-      // In a later iteration we can surface a toast here.
+      // Later: toast
     } finally {
       setInlineSavingId(null);
     }
@@ -233,32 +230,34 @@ export default function JobPipelineBoard({
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-white">
+    <div className="flex flex-1 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* Top summary + bulk bar */}
-      <section className="border-b border-slate-200 bg-white px-5 py-3">
+      <section className="border-b border-slate-200 bg-slate-50 px-5 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Summary */}
+          {/* Summary chips */}
           <div className="flex flex-wrap gap-2 text-[11px]">
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
+            <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-slate-800 ring-1 ring-indigo-100">
+              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />
               {total}{" "}
-              {total === 1 ? "candidate in pipeline" : "candidates in pipeline"}
+              {total === 1
+                ? "candidate in pipeline"
+                : "candidates in pipeline"}
             </span>
-            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 ring-1 ring-emerald-100">
               <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
               {acceptedCount} accepted / active
             </span>
-            <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-amber-700">
+            <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-amber-700 ring-1 ring-amber-100">
               <span className="mr-1 h-1.5 w-1.5 rounded-full bg-amber-400" />
               {onHoldCount} on hold
             </span>
-            <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+            <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-rose-700 ring-1 ring-rose-100">
               <span className="mr-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
               {rejectedCount} rejected
             </span>
           </div>
 
-          {/* Bulk bar */}
+          {/* Bulk bar (behaviour unchanged) */}
           <form
             onSubmit={handleBulkSubmit}
             className="flex flex-wrap items-center gap-2 text-[11px]"
@@ -269,11 +268,9 @@ export default function JobPipelineBoard({
             <select
               value={bulkStatus}
               onChange={(e) =>
-                setBulkStatus(
-                  e.target.value as DecisionStatus | "",
-                )
+                setBulkStatus(e.target.value as DecisionStatus | "")
               }
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
             >
               <option value="">Decision…</option>
               <option value="PENDING">Accept / active</option>
@@ -283,7 +280,7 @@ export default function JobPipelineBoard({
             <select
               value={bulkStage}
               onChange={(e) => setBulkStage(e.target.value)}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
             >
               <option value="">Stage…</option>
               {stageOptions.map((s) => (
@@ -299,7 +296,7 @@ export default function JobPipelineBoard({
                 (!bulkStage && !bulkStatus) ||
                 isBulkSubmitting
               }
-              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isBulkSubmitting
                 ? "Updating…"
@@ -355,7 +352,10 @@ export default function JobPipelineBoard({
                   "PENDING") as DecisionStatus;
 
                 return (
-                  <tr key={app.id}>
+                  <tr
+                    key={app.id}
+                    className="align-top transition hover:bg-indigo-50/40"
+                  >
                     <td className="align-top px-3">
                       <button
                         type="button"
@@ -376,7 +376,7 @@ export default function JobPipelineBoard({
                     {/* Candidate cell */}
                     <td className="align-top px-3">
                       <div className="flex gap-2">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-slate-50">
+                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-indigo-600 text-[11px] font-semibold text-slate-50 shadow-sm">
                           {initialsFromName(app.fullName)}
                         </div>
                         <div className="flex flex-col gap-0.5">
@@ -399,6 +399,12 @@ export default function JobPipelineBoard({
                               <>
                                 <span className="text-slate-300">•</span>
                                 <span>{app.location}</span>
+                              </>
+                            )}
+                            {app.experienceLabel && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span>{app.experienceLabel}</span>
                               </>
                             )}
                           </div>
@@ -465,12 +471,9 @@ export default function JobPipelineBoard({
                           disabled={saving}
                           value={statusUpper}
                           onChange={(e) =>
-                            handleInlineStatusChange(
-                              app.id,
-                              e.target.value,
-                            )
+                            handleInlineStatusChange(app.id, e.target.value)
                           }
-                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:bg-slate-100"
                         >
                           <option value="PENDING">Accept / active</option>
                           <option value="ON_HOLD">On hold</option>
@@ -494,12 +497,9 @@ export default function JobPipelineBoard({
                           disabled={saving}
                           value={app.stage || ""}
                           onChange={(e) =>
-                            handleInlineStageChange(
-                              app.id,
-                              e.target.value,
-                            )
+                            handleInlineStageChange(app.id, e.target.value)
                           }
-                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
+                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:bg-slate-100"
                         >
                           <option value="">Select stage…</option>
                           {stageOptions.map((s) => (
@@ -531,22 +531,20 @@ export default function JobPipelineBoard({
                         {app.candidateId && (
                           <Link
                             href={`/ats/candidates/${app.candidateId}`}
-                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 shadow-sm hover:bg-slate-50"
                           >
                             View profile
                           </Link>
                         )}
                         {app.email && (
                           <Link
-                            href={`mailto:${encodeURIComponent(
-                              app.email,
-                            )}`}
-                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
+                            href={`mailto:${encodeURIComponent(app.email)}`}
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 shadow-sm hover:bg-slate-50"
                           >
                             Email
                           </Link>
                         )}
-                        {/* In a later pass, we can wire Schedule / Notes drawers here */}
+                        {/* Future: schedule / notes drawers */}
                       </div>
                       {saving && (
                         <div className="mt-1 text-[9px] text-slate-400">
