@@ -38,7 +38,7 @@ type JobPipelineBoardProps = {
   // These are accepted so page.tsx can keep passing them,
   // but the board currently computes its own columns from Prisma.
   stageOptions?: string[];
-  apps?: ApplicationWithExtras[];
+  apps?: any; // allow PipelineAppRow[] without caring about the exact shape
 };
 
 function tierColour(tier: string | null | undefined) {
