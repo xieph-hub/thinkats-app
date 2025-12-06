@@ -1,17 +1,33 @@
-"use client";
-
-import { useState, useTransition, useEffect } from "react";
+// app/ats/jobs/[jobId]/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
+import { matchesBooleanQuery } from "@/lib/booleanSearch";
+import JobPipelineBoard from "./JobPipelineBoard";
 
-type SkillTag = {
-  id: string;
-  label: string;
-  color?: string | null;
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "ThinkATS | Job pipeline",
+  description: "Pipeline view of candidates for this job.",
 };
 
-export type PipelineAppRow = {
+type PageProps = {
+  params: { jobId: string };
+  searchParams?: {
+    q?: string;
+    stage?: string;
+    status?: string;
+    tier?: string;
+    viewId?: string;
+  };
+};
+
+type PipelineAppRow = {
   id: string; // application id
-  candidateId: string | null;
+  candidateId: string | null; // 🔹 for linking to candidate profile
 
   fullName: string;
   email: string;
@@ -22,545 +38,473 @@ export type PipelineAppRow = {
   matchScore: number | null;
   matchReason: string | null;
   tier: string | null;
-  appliedAt: string; // ISO date string
-  skillTags: SkillTag[];
+  appliedAt: string; // ISO
+  skillTags: { id: string; label: string; color?: string | null }[];
   experienceLabel: string | null;
 };
 
-export type JobPipelineBoardProps = {
-  jobId: string;
-  stageOptions: string[];
-  apps: PipelineAppRow[];
-};
+export default async function JobPipelinePage({
+  params,
+  searchParams = {},
+}: PageProps) {
+  const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
 
-type DecisionStatus = "PENDING" | "ON_HOLD" | "REJECTED";
+  const job = await prisma.job.findFirst({
+    where: {
+      id: params.jobId,
+      tenantId: tenant.id,
+    },
+    include: {
+      clientCompany: true,
+      stages: {
+        orderBy: { position: "asc" },
+      },
+      applications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          candidate: {
+            include: {
+              tags: {
+                include: {
+                  tag: true,
+                },
+              },
+            },
+          },
+          scoringEvents: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
 
-function formatDate(iso: string) {
-  if (!iso) return "";
-  return iso.slice(0, 10);
-}
-
-function initialsFromName(name: string) {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0][0]?.toUpperCase() || "?";
-  return (
-    (parts[0][0]?.toUpperCase() || "") +
-    (parts[parts.length - 1][0]?.toUpperCase() || "")
-  );
-}
-
-function scoreBadgeClasses(score: number | null) {
-  if (score == null) return "bg-slate-100 text-slate-600";
-  if (score >= 80) return "bg-emerald-100 text-emerald-700";
-  if (score >= 65) return "bg-sky-100 text-sky-700";
-  if (score >= 50) return "bg-amber-100 text-amber-700";
-  return "bg-rose-100 text-rose-700";
-}
-
-function tierBadgeClasses(tier: string | null) {
-  if (!tier) return "bg-slate-100 text-slate-600";
-  const upper = tier.toUpperCase();
-  if (upper === "A") return "bg-emerald-100 text-emerald-700";
-  if (upper === "B") return "bg-sky-100 text-sky-700";
-  if (upper === "C") return "bg-amber-100 text-amber-700";
-  return "bg-slate-100 text-slate-600";
-}
-
-function decisionLabel(status: string | null) {
-  const upper = (status || "PENDING").toUpperCase() as DecisionStatus;
-  if (upper === "ON_HOLD") return "On hold";
-  if (upper === "REJECTED") return "Rejected";
-  return "Accepted / active";
-}
-
-function decisionChipClasses(status: string | null) {
-  const upper = (status || "PENDING").toUpperCase() as DecisionStatus;
-  if (upper === "ON_HOLD") {
-    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  if (!job) {
+    notFound();
   }
-  if (upper === "REJECTED") {
-    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+
+  // ---------------------------------------------------------------------------
+  // Saved views (per job)
+  // ---------------------------------------------------------------------------
+
+  const rawViewId =
+    typeof searchParams.viewId === "string" ? searchParams.viewId : "";
+
+  const savedViewsRaw = await prisma.savedView.findMany({
+    where: {
+      tenantId: tenant.id,
+      scope: "job_pipeline",
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const jobViews = savedViewsRaw.filter((v) => {
+    const params = (v.filters || {}) as any;
+    return params.jobId === job.id;
+  });
+
+  const viewFromId =
+    rawViewId && jobViews.length
+      ? jobViews.find((v) => v.id === rawViewId) || null
+      : null;
+
+  const defaultView = jobViews.find((v) => v.isDefault) || null;
+
+  const activeView = viewFromId || defaultView || null;
+
+  // ---------------------------------------------------------------------------
+  // Filters (search, stage, status, tier)
+  // ---------------------------------------------------------------------------
+
+  let filterQ = "";
+  let filterStage = "ALL";
+  let filterStatus = "ALL"; // maps to PENDING / ON_HOLD / REJECTED
+  let filterTier = "ALL";
+
+  if (activeView) {
+    const params = (activeView.filters || {}) as any;
+    if (typeof params.q === "string") filterQ = params.q;
+    if (typeof params.stage === "string") filterStage = params.stage;
+    if (typeof params.status === "string") filterStatus = params.status;
+    if (typeof params.tier === "string") filterTier = params.tier;
   }
-  return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-}
 
-function stagePillClasses() {
-  // Keep stage neutral, focus color on decision + score
-  return "border border-slate-200 bg-white text-slate-700";
-}
+  if (typeof searchParams.q === "string") {
+    filterQ = searchParams.q;
+  }
 
-export default function JobPipelineBoard({
-  jobId,
-  stageOptions,
-  apps,
-}: JobPipelineBoardProps) {
-  // Local state so we can update instantly without full page refresh
-  const [rows, setRows] = useState<PipelineAppRow[]>(apps);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkStage, setBulkStage] = useState<string>("");
-  const [bulkStatus, setBulkStatus] = useState<DecisionStatus | "">("");
-  const [isBulkSubmitting, startBulkTransition] = useTransition();
-  const [inlineSavingId, setInlineSavingId] = useState<string | null>(null);
+  if (typeof searchParams.stage === "string" && searchParams.stage !== "") {
+    filterStage = searchParams.stage;
+  }
 
-  // If server filters change (new props), keep local state in sync
-  useEffect(() => {
-    setRows(apps);
-    setSelectedIds([]);
-    setBulkStage("");
-    setBulkStatus("");
-  }, [apps]);
+  if (typeof searchParams.status === "string" && searchParams.status !== "") {
+    filterStatus = searchParams.status;
+  }
 
-  const total = rows.length;
-  const acceptedCount = rows.filter(
-    (r) => (r.status || "PENDING").toUpperCase() === "PENDING",
-  ).length;
-  const onHoldCount = rows.filter(
-    (r) => (r.status || "").toUpperCase() === "ON_HOLD",
-  ).length;
-  const rejectedCount = rows.filter(
-    (r) => (r.status || "").toUpperCase() === "REJECTED",
-  ).length;
+  if (typeof searchParams.tier === "string" && searchParams.tier !== "") {
+    filterTier = searchParams.tier;
+  }
 
-  const allSelected = total > 0 && selectedIds.length === total;
-  const partiallySelected =
-    selectedIds.length > 0 && selectedIds.length < total;
+  const stageNames =
+    job.stages.length > 0
+      ? job.stages.map((s) => s.name || "UNASSIGNED")
+      : ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
 
-  function toggleSelectAll() {
-    if (allSelected || partiallySelected) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(rows.map((r) => r.id));
+  const stageOptions = stageNames;
+
+  // ---------------------------------------------------------------------------
+  // Build filtered pipeline list (server-side)
+  // ---------------------------------------------------------------------------
+
+  const pipelineApps: PipelineAppRow[] = [];
+
+  for (const app of job.applications) {
+    const latestScore = app.scoringEvents[0] ?? null;
+    const score =
+      (latestScore?.score as number | null | undefined) ??
+      (app.matchScore as number | null | undefined) ??
+      null;
+    const tier =
+      (latestScore?.tier as string | null | undefined) ?? null;
+    const engine =
+      (latestScore?.engine as string | null | undefined) ?? null;
+
+    // Boolean / keyword search
+    const haystack = [
+      app.fullName,
+      app.email,
+      app.location,
+      app.linkedinUrl,
+      app.source,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const matchesQuery = matchesBooleanQuery(filterQ, {
+      haystack,
+      fields: {
+        name: app.fullName || "",
+        email: app.email || "",
+        location: app.location || "",
+        source: app.source || "",
+        stage: app.stage || "",
+        status: app.status || "",
+        tier: tier || "",
+        engine: engine || "",
+      },
+    });
+
+    if (!matchesQuery) continue;
+
+    // Status filter (PENDING / ON_HOLD / REJECTED)
+    if (
+      filterStatus !== "ALL" &&
+      (app.status || "PENDING").toUpperCase() !== filterStatus.toUpperCase()
+    ) {
+      continue;
     }
-  }
 
-  function toggleRowSelection(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }
-
-  async function updateSingleInline(
-    appId: string,
-    updates: { status?: DecisionStatus; stage?: string },
-  ) {
-    const row = rows.find((r) => r.id === appId);
-    if (!row) return;
-
-    setInlineSavingId(appId);
-
-    try {
-      const formData = new FormData();
-      formData.set("jobId", jobId);
-      formData.set("applicationIds", appId);
-      formData.set(
-        "stage",
-        updates.stage ?? row.stage ?? "APPLIED",
-      );
-      formData.set(
-        "status",
-        (updates.status ?? (row.status as DecisionStatus) ?? "PENDING") as string,
-      );
-
-      await fetch("/api/ats/applications/bulk-stage", {
-        method: "POST",
-        body: formData,
-      });
-
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === appId
-            ? {
-                ...r,
-                stage:
-                  updates.stage !== undefined ? updates.stage : r.stage,
-                status:
-                  updates.status !== undefined ? updates.status : r.status,
-              }
-            : r,
-        ),
-      );
-    } catch (err) {
-      console.error("Failed to update application inline", err);
-      // In a later iteration we can surface a toast here.
-    } finally {
-      setInlineSavingId(null);
+    // Tier filter
+    if (
+      filterTier !== "ALL" &&
+      (tier || "").toUpperCase() !== filterTier.toUpperCase()
+    ) {
+      continue;
     }
-  }
 
-  function handleInlineStatusChange(appId: string, value: string) {
-    const v = (value || "PENDING").toUpperCase() as DecisionStatus;
-    updateSingleInline(appId, { status: v });
-  }
+    // Stage filter
+    const stageName = (app.stage || "APPLIED").toUpperCase();
+    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
+      continue;
+    }
 
-  function handleInlineStageChange(appId: string, value: string) {
-    updateSingleInline(appId, { stage: value || "APPLIED" });
-  }
+    // Candidate tags → skills
+    const skillTags =
+      app.candidate?.tags?.map((ct) => ({
+        id: ct.tag.id,
+        label: ct.tag.name,
+        color: ct.tag.color,
+      })) ?? [];
 
-  function handleBulkSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (selectedIds.length === 0) return;
-    if (!bulkStage && !bulkStatus) return;
+    pipelineApps.push({
+      id: app.id,
+      candidateId: app.candidate ? app.candidate.id : null, // 🔹 key line
 
-    startBulkTransition(async () => {
-      try {
-        const formData = new FormData();
-        formData.set("jobId", jobId);
-        formData.set("applicationIds", selectedIds.join(","));
-        if (bulkStage) formData.set("stage", bulkStage);
-        if (bulkStatus) formData.set("status", bulkStatus);
-
-        await fetch("/api/ats/applications/bulk-stage", {
-          method: "POST",
-          body: formData,
-        });
-
-        setRows((prev) =>
-          prev.map((r) => {
-            if (!selectedIds.includes(r.id)) return r;
-            return {
-              ...r,
-              stage: bulkStage || r.stage,
-              status: bulkStatus || r.status,
-            };
-          }),
-        );
-        setSelectedIds([]);
-      } catch (err) {
-        console.error("Bulk update failed", err);
-      }
+      fullName: app.fullName,
+      email: app.email,
+      location: app.location,
+      source: app.source,
+      stage: app.stage,
+      status: app.status,
+      matchScore: score,
+      matchReason: app.matchReason,
+      tier,
+      appliedAt: app.createdAt.toISOString(),
+      skillTags,
+      // Placeholder – once you collect years of experience per candidate,
+      // you can populate this field.
+      experienceLabel: null,
     });
   }
 
-  return (
-    <div className="flex flex-1 flex-col bg-white">
-      {/* Top summary + bulk bar */}
-      <section className="border-b border-slate-200 bg-white px-5 py-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Summary */}
-          <div className="flex flex-wrap gap-2 text-[11px]">
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
-              {total}{" "}
-              {total === 1 ? "candidate in pipeline" : "candidates in pipeline"}
-            </span>
-            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
-              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              {acceptedCount} accepted / active
-            </span>
-            <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-amber-700">
-              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-amber-400" />
-              {onHoldCount} on hold
-            </span>
-            <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-rose-700">
-              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
-              {rejectedCount} rejected
-            </span>
-          </div>
+  const allVisibleApplicationIds = pipelineApps.map((a) => a.id);
 
-          {/* Bulk bar */}
-          <form
-            onSubmit={handleBulkSubmit}
-            className="flex flex-wrap items-center gap-2 text-[11px]"
-          >
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Bulk actions
+  const uniqueTiers = Array.from(
+    new Set(
+      job.applications
+        .flatMap((a) => a.scoringEvents)
+        .map(
+          (e) => (e?.tier as string | null | undefined) || null,
+        )
+        .filter(Boolean) as string[],
+    ),
+  ).sort();
+
+  const currentViewId =
+    typeof searchParams.viewId === "string"
+      ? searchParams.viewId
+      : activeView?.id || "";
+
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
+
+  return (
+    <div className="flex h-full flex-1 flex-col">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white px-5 py-4">
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Link href="/ats/jobs" className="hover:underline">
+            Jobs
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-slate-700">
+            {job.title}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-base font-semibold text-slate-900">
+              {job.title}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+              {job.clientCompany && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  {job.clientCompany.name}
+                </span>
+              )}
+              {job.location && (
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  {job.location}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                {job.applications.length} applications
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
+            <span>
+              Tenant plan:{" "}
+              <span className="font-medium capitalize">
+                {(tenant as any).plan ?? "free"}
+              </span>
             </span>
-            <select
-              value={bulkStatus}
-              onChange={(e) =>
-                setBulkStatus(
-                  e.target.value as DecisionStatus | "",
-                )
-              }
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-            >
-              <option value="">Decision…</option>
-              <option value="PENDING">Accept / active</option>
-              <option value="ON_HOLD">On hold</option>
-              <option value="REJECTED">Reject</option>
-            </select>
-            <select
-              value={bulkStage}
-              onChange={(e) => setBulkStage(e.target.value)}
-              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-            >
-              <option value="">Stage…</option>
-              {stageOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            {activeView && (
+              <span className="mt-0.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                Active view: {activeView.name}
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Filters + info */}
+      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          {/* Filters */}
+          <form
+            className="flex flex-wrap items-end gap-2 text-xs"
+            method="GET"
+          >
+            {/* View selector */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                View
+              </label>
+              <select
+                name="viewId"
+                defaultValue={currentViewId}
+                className="h-8 min-w-[140px] rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="">All candidates</option>
+                {jobViews.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                    {v.isDefault ? " · default" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Search
+              </label>
+              <input
+                type="text"
+                name="q"
+                defaultValue={filterQ}
+                placeholder='e.g. "senior engineer" email:gmail.com -contract'
+                className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              />
+            </div>
+
+            {/* Stage filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Stage
+              </label>
+              <select
+                name="stage"
+                defaultValue={filterStage}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="ALL">All</option>
+                {stageNames.map((s) => (
+                  <option key={s} value={s.toUpperCase()}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status filter (Accept / On hold / Reject) */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Decision
+              </label>
+              <select
+                name="status"
+                defaultValue={filterStatus}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="ALL">All</option>
+                <option value="PENDING">Accepted / active</option>
+                <option value="ON_HOLD">On hold</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            {/* Tier filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] text-slate-600">
+                Tier
+              </label>
+              <select
+                name="tier"
+                defaultValue={filterTier}
+                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+              >
+                <option value="ALL">All</option>
+                {uniqueTiers.map((t) => (
+                  <option key={t} value={t.toUpperCase()}>
+                    Tier {t.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="submit"
-              disabled={
-                selectedIds.length === 0 ||
-                (!bulkStage && !bulkStatus) ||
-                isBulkSubmitting
-              }
-              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="mt-5 inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
             >
-              {isBulkSubmitting
-                ? "Updating…"
-                : `Apply to ${selectedIds.length || 0} selected`}
+              Apply filters
             </button>
+            <Link
+              href={`/ats/jobs/${job.id}`}
+              className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 hover:bg-slate-100"
+            >
+              Reset
+            </Link>
           </form>
-        </div>
-      </section>
 
-      {/* Table */}
-      <section className="flex-1 overflow-x-auto bg-white px-5 pb-5 pt-3">
-        {rows.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-[11px] text-slate-500">
-            <p className="mb-1 font-medium text-slate-700">
-              No candidates match this view.
-            </p>
-            <p>
-              Adjust filters above or broaden your search to see more of the
+          {/* Visible count */}
+          <div className="flex flex-col items-end text-[11px] text-slate-500">
+            <span>
+              Visible applications:{" "}
+              <span className="font-semibold text-slate-700">
+                {allVisibleApplicationIds.length}
+              </span>
+            </span>
+            <span className="text-[10px]">
+              Use status and stage inline controls below to manage the
               pipeline.
-            </p>
+            </span>
           </div>
-        ) : (
-          <table className="min-w-full border-separate border-spacing-y-2 text-[11px]">
-            <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-1">
-                  <button
-                    type="button"
-                    onClick={toggleSelectAll}
-                    className="flex h-4 w-4 items-center justify-center rounded border border-slate-300 bg-white"
-                    aria-checked={allSelected}
-                  >
-                    {allSelected || partiallySelected ? (
-                      <span className="h-2 w-2 rounded bg-slate-900" />
-                    ) : null}
-                  </button>
-                </th>
-                <th className="px-3 py-1">Candidate</th>
-                <th className="px-3 py-1">Score &amp; tier</th>
-                <th className="px-3 py-1">Decision</th>
-                <th className="px-3 py-1">Stage</th>
-                <th className="px-3 py-1">Source</th>
-                <th className="px-3 py-1">Applied</th>
-                <th className="px-3 py-1 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((app) => {
-                const isSelected = selectedIds.includes(app.id);
-                const saving = inlineSavingId === app.id;
+        </div>
 
-                const statusUpper = (app.status ||
-                  "PENDING") as DecisionStatus;
+        {/* Save current filters as a named view */}
+        <form
+          action="/api/ats/views"
+          method="POST"
+          className="mt-3 flex flex-wrap items-end gap-2 text-xs"
+        >
+          <input type="hidden" name="scope" value="job_pipeline" />
+          <input type="hidden" name="jobId" value={job.id} />
+          <input
+            type="hidden"
+            name="redirectTo"
+            value={`/ats/jobs/${job.id}`}
+          />
+          <input type="hidden" name="q" value={filterQ} />
+          <input type="hidden" name="stage" value={filterStage} />
+          <input type="hidden" name="status" value={filterStatus} />
+          <input type="hidden" name="tier" value={filterTier} />
 
-                return (
-                  <tr key={app.id}>
-                    <td className="align-top px-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleRowSelection(app.id)}
-                        className={[
-                          "mt-2 flex h-4 w-4 items-center justify-center rounded border bg-white",
-                          isSelected
-                            ? "border-slate-900"
-                            : "border-slate-300",
-                        ].join(" ")}
-                      >
-                        {isSelected && (
-                          <span className="h-2 w-2 rounded bg-slate-900" />
-                        )}
-                      </button>
-                    </td>
+          <div className="flex flex-col">
+            <label className="mb-1 text-[11px] text-slate-600">
+              Save current filters as view
+            </label>
+            <input
+              type="text"
+              name="name"
+              required
+              placeholder="e.g. Tier A · Interview ready"
+              className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+            />
+          </div>
 
-                    {/* Candidate cell */}
-                    <td className="align-top px-3">
-                      <div className="flex gap-2">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-slate-50">
-                          {initialsFromName(app.fullName)}
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          {app.candidateId ? (
-                            <Link
-                              href={`/ats/candidates/${app.candidateId}`}
-                              className="text-[11px] font-semibold text-slate-900 hover:text-slate-950 hover:underline"
-                            >
-                              {app.fullName}
-                            </Link>
-                          ) : (
-                            <span className="text-[11px] font-semibold text-slate-900">
-                              {app.fullName}
-                            </span>
-                          )}
+          <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-600">
+            <input
+              type="checkbox"
+              name="setDefault"
+              className="h-3 w-3 rounded border-slate-400"
+            />
+            <span>Set as default view for this job</span>
+          </label>
 
-                          <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                            {app.email && <span>{app.email}</span>}
-                            {app.location && (
-                              <>
-                                <span className="text-slate-300">•</span>
-                                <span>{app.location}</span>
-                              </>
-                            )}
-                          </div>
+          <button
+            type="submit"
+            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+          >
+            Save view
+          </button>
+        </form>
+      </div>
 
-                          {app.skillTags?.length > 0 && (
-                            <div className="mt-0.5 flex flex-wrap gap-1">
-                              {app.skillTags.slice(0, 3).map((tag) => (
-                                <span
-                                  key={tag.id}
-                                  className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-700"
-                                >
-                                  {tag.label}
-                                </span>
-                              ))}
-                              {app.skillTags.length > 3 && (
-                                <span className="text-[9px] text-slate-400">
-                                  +{app.skillTags.length - 3} more
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Score & tier */}
-                    <td className="align-top px-3">
-                      <div className="mt-1 flex flex-col items-start gap-1">
-                        {app.matchScore != null && (
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              scoreBadgeClasses(app.matchScore),
-                            ].join(" ")}
-                          >
-                            Score {app.matchScore}
-                          </span>
-                        )}
-                        {app.tier && (
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                              tierBadgeClasses(app.tier),
-                            ].join(" ")}
-                          >
-                            Tier {app.tier}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Decision (status) */}
-                    <td className="align-top px-3">
-                      <div className="mt-1 flex flex-col gap-1">
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            decisionChipClasses(app.status),
-                          ].join(" ")}
-                        >
-                          {decisionLabel(app.status)}
-                        </span>
-                        <select
-                          disabled={saving}
-                          value={statusUpper}
-                          onChange={(e) =>
-                            handleInlineStatusChange(
-                              app.id,
-                              e.target.value,
-                            )
-                          }
-                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        >
-                          <option value="PENDING">Accept / active</option>
-                          <option value="ON_HOLD">On hold</option>
-                          <option value="REJECTED">Reject</option>
-                        </select>
-                      </div>
-                    </td>
-
-                    {/* Stage */}
-                    <td className="align-top px-3">
-                      <div className="mt-1 flex flex-col gap-1">
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px]",
-                            stagePillClasses(),
-                          ].join(" ")}
-                        >
-                          {app.stage || "APPLIED"}
-                        </span>
-                        <select
-                          disabled={saving}
-                          value={app.stage || ""}
-                          onChange={(e) =>
-                            handleInlineStageChange(
-                              app.id,
-                              e.target.value,
-                            )
-                          }
-                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
-                        >
-                          <option value="">Select stage…</option>
-                          {stageOptions.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </td>
-
-                    {/* Source */}
-                    <td className="align-top px-3">
-                      <div className="mt-1 text-[10px] text-slate-600">
-                        {app.source || "—"}
-                      </div>
-                    </td>
-
-                    {/* Applied */}
-                    <td className="align-top px-3">
-                      <div className="mt-1 text-[10px] text-slate-600">
-                        {formatDate(app.appliedAt)}
-                      </div>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="align-top px-3 text-right">
-                      <div className="mt-1 flex flex-wrap justify-end gap-1 text-[10px]">
-                        {app.candidateId && (
-                          <Link
-                            href={`/ats/candidates/${app.candidateId}`}
-                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
-                          >
-                            View profile
-                          </Link>
-                        )}
-                        {app.email && (
-                          <Link
-                            href={`mailto:${encodeURIComponent(
-                              app.email,
-                            )}`}
-                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
-                          >
-                            Email
-                          </Link>
-                        )}
-                        {/* In a later pass, we can wire Schedule / Notes drawers here */}
-                      </div>
-                      {saving && (
-                        <div className="mt-1 text-[9px] text-slate-400">
-                          Saving…
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </section>
+      {/* Pipeline board – list view with inline status & stage, bulk actions */}
+      <JobPipelineBoard
+        jobId={job.id}
+        stageOptions={stageOptions}
+        apps={pipelineApps}
+      />
     </div>
   );
 }
