@@ -100,10 +100,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
       tenantId: tenant.id,
       scope: "candidates",
     },
-    orderBy: [
-      { isDefault: "desc" },
-      { createdAt: "asc" },
-    ],
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
   });
 
   const activeView =
@@ -204,6 +201,46 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
 
   const totalCandidates = candidates.length;
   const totalFiltered = filteredCandidates.length;
+  const totalPipelines = candidates.reduce(
+    (sum, c) => sum + c.applications.length,
+    0,
+  );
+
+  const now = new Date();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const activeIn30Days = candidates.filter((c) =>
+    c.applications.some(
+      (a: any) =>
+        a.createdAt &&
+        now.getTime() - a.createdAt.getTime() <= THIRTY_DAYS_MS,
+    ),
+  ).length;
+
+  const uniqueSources = (() => {
+    const set = new Set<string>();
+    for (const c of candidates) {
+      if (c.source) set.add(c.source.trim().toLowerCase());
+      for (const app of c.applications as any[]) {
+        if (app.source) set.add((app.source as string).trim().toLowerCase());
+      }
+    }
+    return set.size;
+  })();
+
+  const tierCounts = (() => {
+    const counts: Record<string, number> = { A: 0, B: 0, C: 0, OTHER: 0 };
+    for (const c of candidates) {
+      const t = derivePrimaryTier(c.applications as any[]);
+      if (!t) continue;
+      const up = t.toUpperCase();
+      if (up === "A" || up === "B" || up === "C") {
+        counts[up] += 1;
+      } else {
+        counts.OTHER += 1;
+      }
+    }
+    return counts;
+  })();
 
   return (
     <div className="flex h-full flex-1 flex-col">
@@ -222,83 +259,189 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
             <h1 className="text-base font-semibold text-slate-900">
               Candidates
             </h1>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Talent across all roles in this workspace, unified into a single
-              view. Search, filter and save views for different workflows.
+            <p className="mt-0.5 max-w-xl text-[11px] text-slate-500">
+              Talent across all roles in this workspace. Search, segment and
+              tier candidates into a single, unified view.
             </p>
           </div>
           <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
-            <span>{tenant.name}</span>
+            <span className="font-medium text-slate-800">
+              {tenant.name}
+            </span>
             <span className="text-[10px] text-slate-400">
               {totalFiltered} of {totalCandidates} candidates visible
             </span>
+          </div>
+        </div>
+
+        {/* Stats strip */}
+        <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-600 md:grid-cols-4">
+          <div className="flex flex-col">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+              Total candidates
+            </span>
+            <span className="text-sm font-semibold text-slate-900">
+              {totalCandidates}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+              Pipelines
+            </span>
+            <span className="text-sm font-semibold text-slate-900">
+              {totalPipelines}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {Math.max(totalCandidates, 1)
+                ? (totalPipelines / Math.max(totalCandidates, 1)).toFixed(1)
+                : "0.0"}{" "}
+              per candidate on average
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+              Active in last 30 days
+            </span>
+            <span className="text-sm font-semibold text-slate-900">
+              {activeIn30Days}
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {totalCandidates
+                ? Math.round((activeIn30Days / totalCandidates) * 100)
+                : 0}
+              % of pool
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+              Sources &amp; tiers
+            </span>
+            <span className="text-sm font-semibold text-slate-900">
+              {uniqueSources} sources
+            </span>
+            <div className="mt-0.5 flex flex-wrap gap-1 text-[9px] text-slate-500">
+              <span>Tier A {tierCounts.A}</span>
+              <span className="text-slate-300">•</span>
+              <span>Tier B {tierCounts.B}</span>
+              <span className="text-slate-300">•</span>
+              <span>Tier C {tierCounts.C}</span>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Body */}
       <main className="flex flex-1 flex-col bg-slate-50 px-5 py-4">
-        {/* Filters + saved views */}
-        <section className="mb-3 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
-          {/* Filters row */}
-          <form className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              name="q"
-              defaultValue={filterQ}
-              placeholder="Search by name, email, company…"
-              className="h-8 min-w-[180px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-            />
-            <input
-              type="text"
-              name="source"
-              defaultValue={filterSource}
-              placeholder="Source (e.g. LinkedIn, Referral…)"
-              className="h-8 min-w-[140px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-            />
-            <input
-              type="text"
-              name="stage"
-              defaultValue={filterStage}
-              placeholder="Stage (e.g. APPLIED, INTERVIEW…)"
-              className="h-8 min-w-[140px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-            />
-            <input
-              type="text"
-              name="tier"
-              defaultValue={filterTier}
-              placeholder="Tier (A, B, C…)"
-              className="h-8 min-w-[120px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-            />
-            {activeView && (
-              <input type="hidden" name="view" value={activeView.id} />
-            )}
-            <button
-              type="submit"
-              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
-            >
-              Apply filters
-            </button>
-          </form>
-
-          {/* Saved views row */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Saved views
-            </span>
-            {savedViews.length === 0 ? (
-              <span className="text-[11px] text-slate-400">
-                No saved views yet. Create them from the toolbar in a later
-                iteration.
+        {/* Filters + saved views + quick chips */}
+        <section className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)]">
+          {/* Filters card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Filters
               </span>
+              <Link
+                href="/ats/candidates"
+                className="text-[10px] text-slate-400 hover:text-slate-600"
+              >
+                Reset
+              </Link>
+            </div>
+
+            <form className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                name="q"
+                defaultValue={filterQ}
+                placeholder="Search by name, email, company…"
+                className="h-8 min-w-[180px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              />
+              <input
+                type="text"
+                name="source"
+                defaultValue={filterSource}
+                placeholder="Source (e.g. LinkedIn, Referral…)"
+                className="h-8 min-w-[140px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              />
+              <input
+                type="text"
+                name="stage"
+                defaultValue={filterStage}
+                placeholder="Stage (e.g. APPLIED, INTERVIEW…)"
+                className="h-8 min-w-[140px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              />
+              <input
+                type="text"
+                name="tier"
+                defaultValue={filterTier}
+                placeholder="Tier (A, B, C…)"
+                className="h-8 min-w-[100px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              />
+              {activeView && (
+                <input type="hidden" name="view" value={activeView.id} />
+              )}
+              <button
+                type="submit"
+                className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
+              >
+                Apply filters
+              </button>
+            </form>
+
+            {/* Quick tier chips */}
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                Quick tiers
+              </span>
+              {["A", "B", "C"].map((tier) => {
+                const params = new URLSearchParams();
+                params.set("tier", tier);
+                if (activeView) params.set("view", activeView.id);
+                const href = `/ats/candidates?${params.toString()}`;
+                const isActive = filterTier === tier;
+
+                return (
+                  <Link
+                    key={tier}
+                    href={href}
+                    className={[
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px]",
+                      isActive
+                        ? "bg-slate-900 text-slate-50"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+                    ].join(" ")}
+                  >
+                    Tier {tier}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Saved views / view chips */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Saved views
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Views are workspace-wide. Build sourcing &amp; screening
+                dashboards here.
+              </span>
+            </div>
+
+            {savedViews.length === 0 ? (
+              <p className="text-[11px] text-slate-400">
+                No saved views yet. We&apos;ll use this space later for things
+                like &ldquo;Leadership funnel&rdquo; or &ldquo;Referrals
+                only&rdquo;.
+              </p>
             ) : (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-2">
                 {savedViews.map((view) => {
                   const isActive = activeView && activeView.id === view.id;
                   const params = new URLSearchParams();
                   params.set("view", view.id);
-                  // When jumping between views, we let the view filters drive
-                  // the values; we don't forward current URL filters.
                   const href = `/ats/candidates?${params.toString()}`;
 
                   return (
@@ -306,9 +449,9 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                       key={view.id}
                       href={href}
                       className={[
-                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px]",
+                        "inline-flex items-center rounded-full px-3 py-1 text-[10px]",
                         isActive
-                          ? "bg-slate-900 text-slate-50"
+                          ? "bg-slate-900 text-slate-50 shadow-sm"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200",
                       ].join(" ")}
                     >
@@ -326,15 +469,19 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
           </div>
         </section>
 
-        {/* Table */}
+        {/* Candidates table / list */}
         <section className="flex-1 rounded-2xl border border-slate-200 bg-white">
           {filteredCandidates.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center text-[11px] text-slate-500">
-              <p className="mb-1 font-medium text-slate-700">
+              <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white shadow-sm">
+                ATS
+              </div>
+              <p className="mb-1 text-[12px] font-medium text-slate-800">
                 No candidates match these filters.
               </p>
-              <p>
-                Try clearing one or more filters, or widen your search query.
+              <p className="max-w-sm text-[11px] text-slate-500">
+                Try clearing one or more filters, or widen your search term to
+                see more of your talent pool.
               </p>
             </div>
           ) : (
@@ -344,15 +491,15 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                   <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-3 py-2">Candidate</th>
                     <th className="px-3 py-2">Pipelines</th>
-                    <th className="px-3 py-2">Primary tier</th>
+                    <th className="px-3 py-2 text-right">Tier / score</th>
                     <th className="px-3 py-2">Latest role</th>
                     <th className="px-3 py-2">Source</th>
-                    <th className="px-3 py-2">Last seen</th>
+                    <th className="px-3 py-2 text-right">Last touch</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCandidates.map((candidate) => {
-                    const apps = candidate.applications;
+                    const apps = candidate.applications as any[];
                     const primaryTier = derivePrimaryTier(apps);
                     const lastSeen = deriveLastSeen(
                       apps,
@@ -365,7 +512,10 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                       const latest = latestApp.scoringEvents?.[0];
                       return (
                         (latest?.score as number | null | undefined) ??
-                        (latestApp.matchScore as number | null | undefined) ??
+                        (latestApp.matchScore as
+                          | number
+                          | null
+                          | undefined) ??
                         null
                       );
                     })();
@@ -375,7 +525,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                     const latestClient =
                       latestApp?.job?.clientCompany?.name || null;
                     const anySource =
-                      latestApp?.source || candidate.source || "";
+                      latestApp?.source || (candidate as any).source || "";
 
                     const uniqueTags =
                       candidate.tags
@@ -388,26 +538,48 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                       <tr key={candidate.id}>
                         {/* Candidate */}
                         <td className="align-top px-3 py-2">
-                          <div className="flex flex-col gap-0.5">
-                            <Link
-                              href={`/ats/candidates/${candidate.id}`}
-                              className="text-[11px] font-semibold text-slate-900 hover:underline"
-                            >
-                              {candidate.fullName}
-                            </Link>
-                            <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                              {candidate.email && (
-                                <span>{candidate.email}</span>
-                              )}
-                              {candidate.location && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span>{candidate.location}</span>
-                                </>
-                              )}
+                          <div className="flex flex-col gap-0.5 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <Link
+                                  href={`/ats/candidates/${candidate.id}`}
+                                  className="text-[11px] font-semibold text-slate-900 hover:underline"
+                                >
+                                  {candidate.fullName}
+                                </Link>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+                                  {candidate.email && (
+                                    <span>{candidate.email}</span>
+                                  )}
+                                  {candidate.location && (
+                                    <>
+                                      <span className="text-slate-300">
+                                        •
+                                      </span>
+                                      <span>{candidate.location}</span>
+                                    </>
+                                  )}
+                                  {(candidate as any).currentCompany && (
+                                    <>
+                                      <span className="text-slate-300">
+                                        •
+                                      </span>
+                                      <span>
+                                        {(candidate as any).currentCompany}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end text-[10px] text-slate-500">
+                                <span>
+                                  Added {formatDate(candidate.createdAt)}
+                                </span>
+                              </div>
                             </div>
+
                             {uniqueTags.length > 0 && (
-                              <div className="mt-0.5 flex flex-wrap gap-1">
+                              <div className="mt-1 flex flex-wrap gap-1">
                                 {uniqueTags.slice(0, 3).map((tag) => (
                                   <span
                                     key={tag.id}
@@ -503,7 +675,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                         </td>
 
                         {/* Last seen */}
-                        <td className="align-top px-3 py-2 text-[10px] text-slate-600">
+                        <td className="align-top px-3 py-2 text-right text-[10px] text-slate-600">
                           {formatDate(lastSeen)}
                         </td>
                       </tr>
