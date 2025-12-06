@@ -86,9 +86,7 @@ export default function ApplicationInterviewDrawer({
       const scheduledAt = (formData.get("scheduledAt") as string) || "";
       const type = (formData.get("type") as string) || "VIRTUAL";
       const durationMinsRaw = formData.get("durationMins") as string;
-      const durationMins = durationMinsRaw
-        ? Number(durationMinsRaw)
-        : 60;
+      const durationMins = durationMinsRaw ? Number(durationMinsRaw) : 60;
 
       const location =
         ((formData.get("location") as string) || "").trim() || null;
@@ -405,7 +403,7 @@ export default function ApplicationInterviewDrawer({
                     disabled={submitting}
                     className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:opacity-70"
                   >
-                    {submitting ? "Saving…" : "Save interview"}
+                    {submitting ? "Scheduling…" : "Confirm & send invite"}
                   </button>
                 </div>
               </form>
