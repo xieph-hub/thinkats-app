@@ -105,7 +105,7 @@ export async function POST(req: Request) {
           currentTitle: body.currentTitle?.trim() || candidate.currentTitle,
           currentCompany:
             body.currentCompany?.trim() || candidate.currentCompany,
-          // Do not erase an existing, richer source – just backfill if empty
+          // Do not erase an existing richer source – just backfill if empty
           source: candidate.source ?? "talent_network",
         },
       });
@@ -165,27 +165,35 @@ export async function POST(req: Request) {
           ? raw.yearsExperience
           : null;
 
-      await prisma.candidateSkill.upsert({
+      // Manual "upsert" without relying on a composite unique in Prisma types
+      const existingCandidateSkill = await prisma.candidateSkill.findFirst({
         where: {
-          candidateId_skillId: {
-            candidateId: candidate.id,
-            skillId: skill.id,
-          },
-        },
-        update: {
-          proficiency: proficiency ?? undefined,
-          yearsExperience: yearsExperience ?? undefined,
-          source: "talent_network",
-        },
-        create: {
-          tenantId: tenant.id,
           candidateId: candidate.id,
           skillId: skill.id,
-          proficiency,
-          yearsExperience,
-          source: "talent_network",
         },
       });
+
+      if (existingCandidateSkill) {
+        await prisma.candidateSkill.update({
+          where: { id: existingCandidateSkill.id },
+          data: {
+            proficiency: proficiency ?? undefined,
+            yearsExperience: yearsExperience ?? undefined,
+            source: "talent_network",
+          },
+        });
+      } else {
+        await prisma.candidateSkill.create({
+          data: {
+            tenantId: tenant.id,
+            candidateId: candidate.id,
+            skillId: skill.id,
+            proficiency,
+            yearsExperience,
+            source: "talent_network",
+          },
+        });
+      }
     }
 
     // -------------------------------------------------------------------
@@ -239,8 +247,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Failed to join talent network. Please try again shortly.",
+        error: "Failed to join talent network. Please try again shortly.",
       },
       { status: 500 },
     );
