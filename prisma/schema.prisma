@@ -9,6 +9,17 @@ datasource db {
 }
 
 // --------------------------------------------------------------------------
+// ENUMS
+// --------------------------------------------------------------------------
+
+enum TagKind {
+  GENERAL
+  SOURCE
+  SKILL
+  PIPELINE
+}
+
+// --------------------------------------------------------------------------
 // TENANTS
 // --------------------------------------------------------------------------
 
@@ -57,9 +68,9 @@ model Tenant {
   tags               Tag[]
 
   // NEW: skills + junctions
-  skills           Skill[]
-  candidateSkills  CandidateSkill[]
-  jobSkills        JobSkill[]
+  skills          Skill[]
+  candidateSkills CandidateSkill[]
+  jobSkills       JobSkill[]
 
   // scoring audit trail
   scoringEvents ScoringEvent[]
@@ -261,10 +272,15 @@ model Tag {
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
+  // NEW
+  kind     TagKind @map("kind") @default(GENERAL)
+  isSystem Boolean @map("is_system") @default(false)
+
   tenant     Tenant         @relation(fields: [tenantId], references: [id])
   candidates CandidateTag[]
 
   @@map("tags")
+  @@unique([tenantId, name, kind], name: "tenantId_name_kind")
 }
 
 model CandidateTag {
@@ -279,6 +295,8 @@ model CandidateTag {
   tag       Tag       @relation(fields: [tagId], references: [id])
 
   @@map("candidate_tags")
+  @@unique([candidateId, tagId], name: "candidateId_tagId")
+  @@index([tenantId, candidateId], map: "idx_candidate_tags_candidate")
 }
 
 // --------------------------------------------------------------------------
@@ -289,11 +307,13 @@ model Skill {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId       String?  @map("tenant_id") @db.Uuid
   name           String
-  slug           String   // normalized key, e.g. "product-management"
+  normalizedName String   @map("normalized_name")
+  slug           String?  @map("slug")      // optional pretty key
   description    String?  @map("description")
   category       String?  @map("category")        // e.g. "Digital skills", "Management"
   externalSource String?  @map("external_source") // e.g. "esco"
   externalId     String?  @map("external_id")     // e.g. ESCO skill code
+  isGlobal       Boolean  @map("is_global") @default(false)
   createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
@@ -302,6 +322,8 @@ model Skill {
   jobSkills       JobSkill[]
 
   @@map("skills")
+  @@unique([tenantId, normalizedName], name: "uniq_skill_tenant_normalized_name")
+  @@index([tenantId, normalizedName], map: "idx_skill_tenant_normalized_name")
   @@index([tenantId, slug], map: "idx_skills_tenant_slug")
 }
 
@@ -310,18 +332,18 @@ model CandidateSkill {
   tenantId        String   @map("tenant_id") @db.Uuid
   candidateId     String   @map("candidate_id") @db.Uuid
   skillId         String   @map("skill_id") @db.Uuid
-  level           Int?     @map("level")             // 1–5 self-rating / assessment
+  proficiency     Int?     @map("proficiency")       // 1–5 self-rating / assessment
   yearsExperience Int?     @map("years_experience")  // 0–50
-  lastUsedYear    Int?     @map("last_used_year")    // e.g. 2023
-  source          String?  @map("source")            // "talent_network_form", "cv_parsed", etc.
-  isPrimary       Boolean  @map("is_primary") @default(false)
+  source          String?  @map("source")            // "talent_network", "cv_parsed", etc.
   createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   candidate Candidate @relation(fields: [candidateId], references: [id])
   skill     Skill     @relation(fields: [skillId], references: [id])
 
   @@map("candidate_skills")
+  @@unique([candidateId, skillId], name: "candidateId_skillId")
   @@index([tenantId, candidateId], map: "idx_candidate_skills_candidate")
   @@index([tenantId, skillId], map: "idx_candidate_skills_skill")
 }
