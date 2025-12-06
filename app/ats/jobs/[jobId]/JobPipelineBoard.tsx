@@ -1,12 +1,16 @@
-// app/ats/jobs/[jobId]/JobPipelineBoard.tsx
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState, useTransition, useEffect } from "react";
+import Link from "next/link";
 
-export type PipelineApp = {
-  // NOTE: id = applicationId
+type SkillTag = {
   id: string;
+  label: string;
+  color?: string | null;
+};
+
+export type PipelineAppRow = {
+  id: string; // application id
   candidateId: string | null;
 
   fullName: string;
@@ -18,61 +22,72 @@ export type PipelineApp = {
   matchScore: number | null;
   matchReason: string | null;
   tier: string | null;
-  appliedAt: string; // ISO
-  skillTags: { id: string; label: string; color?: string | null }[];
+  appliedAt: string; // ISO date string
+  skillTags: SkillTag[];
   experienceLabel: string | null;
 };
 
-type JobPipelineBoardProps = {
+export type JobPipelineBoardProps = {
   jobId: string;
   stageOptions: string[];
-  apps: PipelineApp[];
+  apps: PipelineAppRow[];
 };
 
-type UiStatus = "accepted" | "on_hold" | "rejected";
+type DecisionStatus = "PENDING" | "ON_HOLD" | "REJECTED";
 
-function uiStatusFromDb(status: string | null | undefined): UiStatus {
-  const s = (status || "").toUpperCase();
-  if (s === "REJECTED") return "rejected";
-  if (s === "ON_HOLD") return "on_hold";
-  return "accepted"; // default = active / in play
+function formatDate(iso: string) {
+  if (!iso) return "";
+  return iso.slice(0, 10);
 }
 
-function dbStatusFromUi(ui: UiStatus): string {
-  if (ui === "rejected") return "REJECTED";
-  if (ui === "on_hold") return "ON_HOLD";
-  return "PENDING";
+function initialsFromName(name: string) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() || "?";
+  return (
+    (parts[0][0]?.toUpperCase() || "") +
+    (parts[parts.length - 1][0]?.toUpperCase() || "")
+  );
 }
 
-function scoreColor(score?: number | null) {
-  if (score == null) return "bg-slate-100 text-slate-600 border border-slate-200";
-  if (score >= 85) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  if (score >= 70) return "bg-sky-50 text-sky-700 border border-sky-200";
-  if (score >= 60) return "bg-amber-50 text-amber-700 border border-amber-200";
-  return "bg-rose-50 text-rose-700 border border-rose-200";
+function scoreBadgeClasses(score: number | null) {
+  if (score == null) return "bg-slate-100 text-slate-600";
+  if (score >= 80) return "bg-emerald-100 text-emerald-700";
+  if (score >= 65) return "bg-sky-100 text-sky-700";
+  if (score >= 50) return "bg-amber-100 text-amber-700";
+  return "bg-rose-100 text-rose-700";
 }
 
-function tierColor(tier?: string | null) {
-  if (!tier)
-    return "bg-slate-100 text-slate-600 border border-slate-200";
+function tierBadgeClasses(tier: string | null) {
+  if (!tier) return "bg-slate-100 text-slate-600";
   const upper = tier.toUpperCase();
-  if (upper === "A")
-    return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-  if (upper === "B")
-    return "bg-sky-50 text-sky-700 border border-sky-200";
-  if (upper === "C")
-    return "bg-amber-50 text-amber-700 border border-amber-200";
-  return "bg-slate-100 text-slate-600 border border-slate-200";
+  if (upper === "A") return "bg-emerald-100 text-emerald-700";
+  if (upper === "B") return "bg-sky-100 text-sky-700";
+  if (upper === "C") return "bg-amber-100 text-amber-700";
+  return "bg-slate-100 text-slate-600";
 }
 
-function formatDate(dIso: string) {
-  const d = new Date(dIso);
-  if (Number.isNaN(d.getTime())) return "–";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  });
+function decisionLabel(status: string | null) {
+  const upper = (status || "PENDING").toUpperCase() as DecisionStatus;
+  if (upper === "ON_HOLD") return "On hold";
+  if (upper === "REJECTED") return "Rejected";
+  return "Accepted / active";
+}
+
+function decisionChipClasses(status: string | null) {
+  const upper = (status || "PENDING").toUpperCase() as DecisionStatus;
+  if (upper === "ON_HOLD") {
+    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  }
+  if (upper === "REJECTED") {
+    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
+  }
+  return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+}
+
+function stagePillClasses() {
+  // Keep stage neutral, focus color on decision + score
+  return "border border-slate-200 bg-white text-slate-700";
 }
 
 export default function JobPipelineBoard({
@@ -80,482 +95,470 @@ export default function JobPipelineBoard({
   stageOptions,
   apps,
 }: JobPipelineBoardProps) {
-  const router = useRouter();
-
-  const [rows, setRows] = useState<PipelineApp[]>(apps);
+  // Local state so we can update instantly without full page refresh
+  const [rows, setRows] = useState<PipelineAppRow[]>(apps);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStage, setBulkStage] = useState<string>("");
+  const [bulkStatus, setBulkStatus] = useState<DecisionStatus | "">("");
+  const [isBulkSubmitting, startBulkTransition] = useTransition();
+  const [inlineSavingId, setInlineSavingId] = useState<string | null>(null);
 
-  const totalCount = rows.length;
-  const selectedCount = selectedIds.length;
-  const allSelected = totalCount > 0 && selectedCount === totalCount;
+  // If server filters change (new props), keep local state in sync
+  useEffect(() => {
+    setRows(apps);
+    setSelectedIds([]);
+    setBulkStage("");
+    setBulkStatus("");
+  }, [apps]);
 
-  const scoreSummary = useMemo(() => {
-    const scores = rows
-      .map((r) => r.matchScore)
-      .filter((s): s is number => s != null);
-    if (!scores.length) return "No scores yet";
-    const avg = scores.reduce((acc, v) => acc + v, 0) / scores.length;
-    return `Avg score ${Math.round(avg)}`;
-  }, [rows]);
+  const total = rows.length;
+  const acceptedCount = rows.filter(
+    (r) => (r.status || "PENDING").toUpperCase() === "PENDING",
+  ).length;
+  const onHoldCount = rows.filter(
+    (r) => (r.status || "").toUpperCase() === "ON_HOLD",
+  ).length;
+  const rejectedCount = rows.filter(
+    (r) => (r.status || "").toUpperCase() === "REJECTED",
+  ).length;
+
+  const allSelected = total > 0 && selectedIds.length === total;
+  const partiallySelected =
+    selectedIds.length > 0 && selectedIds.length < total;
 
   function toggleSelectAll() {
-    if (allSelected) {
+    if (allSelected || partiallySelected) {
       setSelectedIds([]);
     } else {
       setSelectedIds(rows.map((r) => r.id));
     }
   }
 
-  function toggleSelectOne(id: string) {
+  function toggleRowSelection(id: string) {
     setSelectedIds((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id],
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   }
 
-  async function updateSingle(
-    applicationId: string,
-    updates: { stage?: string; status?: string },
+  async function updateSingleInline(
+    appId: string,
+    updates: { status?: DecisionStatus; stage?: string },
   ) {
-    // Optimistic UI
-    setRows((prev) =>
-      prev.map((row) =>
-        row.id === applicationId ? { ...row, ...updates } : row,
-      ),
-    );
+    const row = rows.find((r) => r.id === appId);
+    if (!row) return;
+
+    setInlineSavingId(appId);
 
     try {
-      await fetch("/api/ats/applications/update", {
+      const formData = new FormData();
+      formData.set("jobId", jobId);
+      formData.set("applicationIds", appId);
+      formData.set(
+        "stage",
+        updates.stage ?? row.stage ?? "APPLIED",
+      );
+      formData.set(
+        "status",
+        (updates.status ?? (row.status as DecisionStatus) ?? "PENDING") as string,
+      );
+
+      await fetch("/api/ats/applications/bulk-stage", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          applicationId,
-          ...updates,
-        }),
+        body: formData,
       });
-      router.refresh();
-    } catch (error) {
-      console.error("Failed to update application", error);
+
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === appId
+            ? {
+                ...r,
+                stage:
+                  updates.stage !== undefined ? updates.stage : r.stage,
+                status:
+                  updates.status !== undefined ? updates.status : r.status,
+              }
+            : r,
+        ),
+      );
+    } catch (err) {
+      console.error("Failed to update application inline", err);
+      // In a later iteration we can surface a toast here.
+    } finally {
+      setInlineSavingId(null);
     }
   }
 
-  async function handleStatusChange(id: string, uiStatus: UiStatus) {
-    const status = dbStatusFromUi(uiStatus);
-    await updateSingle(id, { status });
+  function handleInlineStatusChange(appId: string, value: string) {
+    const v = (value || "PENDING").toUpperCase() as DecisionStatus;
+    updateSingleInline(appId, { status: v });
   }
 
-  async function handleStageChange(id: string, stage: string) {
-    await updateSingle(id, { stage });
+  function handleInlineStageChange(appId: string, value: string) {
+    updateSingleInline(appId, { stage: value || "APPLIED" });
   }
 
-  async function bulkUpdate(payload: { status?: string; stage?: string }) {
-    if (!selectedIds.length) return;
+  function handleBulkSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selectedIds.length === 0) return;
+    if (!bulkStage && !bulkStatus) return;
 
-    // Optimistic
-    setRows((prev) =>
-      prev.map((row) =>
-        selectedIds.includes(row.id) ? { ...row, ...payload } : row,
-      ),
-    );
+    startBulkTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.set("jobId", jobId);
+        formData.set("applicationIds", selectedIds.join(","));
+        if (bulkStage) formData.set("stage", bulkStage);
+        if (bulkStatus) formData.set("status", bulkStatus);
 
-    try {
-      await fetch("/api/ats/applications/bulk-update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          applicationIds: selectedIds,
-          ...payload,
-        }),
-      });
-      setSelectedIds([]);
-      router.refresh();
-    } catch (error) {
-      console.error("Bulk update failed", error);
-    }
-  }
+        await fetch("/api/ats/applications/bulk-stage", {
+          method: "POST",
+          body: formData,
+        });
 
-  async function handleBulkStatus(uiStatus: UiStatus) {
-    const status = dbStatusFromUi(uiStatus);
-    await bulkUpdate({ status });
-  }
-
-  async function handleBulkStageApply() {
-    if (!bulkStage) return;
-    await bulkUpdate({ stage: bulkStage });
-    setBulkStage("");
-  }
-
-  function openCandidateProfile(row: PipelineApp) {
-    // Prefer candidate profile if we have an id, otherwise fall back to the application route
-    if (row.candidateId) {
-      router.push(`/ats/candidates/${row.candidateId}`);
-    } else {
-      router.push(`/ats/applications/${row.id}`);
-    }
+        setRows((prev) =>
+          prev.map((r) => {
+            if (!selectedIds.includes(r.id)) return r;
+            return {
+              ...r,
+              stage: bulkStage || r.stage,
+              status: bulkStatus || r.status,
+            };
+          }),
+        );
+        setSelectedIds([]);
+      } catch (err) {
+        console.error("Bulk update failed", err);
+      }
+    });
   }
 
   return (
-    <div className="flex flex-1 flex-col bg-slate-50">
-      <section className="m-4 flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm">
-        {/* Top strip: metrics & legend */}
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-          <div className="space-y-1 text-[11px]">
-            <div className="text-[13px] font-semibold tracking-wide text-slate-900">
-              Pipeline · Candidates
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-slate-500">
-              <span>
-                {totalCount} candidate{totalCount === 1 ? "" : "s"} in view
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                {scoreSummary}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-                ThinkATS · list view
-              </span>
-            </div>
+    <div className="flex flex-1 flex-col bg-white">
+      {/* Top summary + bulk bar */}
+      <section className="border-b border-slate-200 bg-white px-5 py-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          {/* Summary */}
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
+              {total}{" "}
+              {total === 1 ? "candidate in pipeline" : "candidates in pipeline"}
+            </span>
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {acceptedCount} accepted / active
+            </span>
+            <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-amber-700">
+              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-amber-400" />
+              {onHoldCount} on hold
+            </span>
+            <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+              <span className="mr-1 h-1.5 w-1.5 rounded-full bg-rose-500" />
+              {rejectedCount} rejected
+            </span>
           </div>
 
-          <div className="flex flex-col items-end gap-1 text-[10px] text-slate-500">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span className="ml-1">85+ strong match</span>
-              </span>
-              <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-                <span className="ml-1">70–84 good</span>
-              </span>
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                <span className="ml-1">60–69 maybe</span>
-              </span>
-              <span className="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-[10px] text-rose-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                <span className="ml-1">&lt;60 low fit</span>
-              </span>
-            </div>
-            <span>Inline changes are saved instantly – no refresh.</span>
-          </div>
-        </header>
+          {/* Bulk bar */}
+          <form
+            onSubmit={handleBulkSubmit}
+            className="flex flex-wrap items-center gap-2 text-[11px]"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Bulk actions
+            </span>
+            <select
+              value={bulkStatus}
+              onChange={(e) =>
+                setBulkStatus(
+                  e.target.value as DecisionStatus | "",
+                )
+              }
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            >
+              <option value="">Decision…</option>
+              <option value="PENDING">Accept / active</option>
+              <option value="ON_HOLD">On hold</option>
+              <option value="REJECTED">Reject</option>
+            </select>
+            <select
+              value={bulkStage}
+              onChange={(e) => setBulkStage(e.target.value)}
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            >
+              <option value="">Stage…</option>
+              {stageOptions.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={
+                selectedIds.length === 0 ||
+                (!bulkStage && !bulkStatus) ||
+                isBulkSubmitting
+              }
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {isBulkSubmitting
+                ? "Updating…"
+                : `Apply to ${selectedIds.length || 0} selected`}
+            </button>
+          </form>
+        </div>
+      </section>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto">
-          <table className="min-w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
-              <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
-                <th className="w-10 px-3 py-2 text-left">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                  />
+      {/* Table */}
+      <section className="flex-1 overflow-x-auto bg-white px-5 pb-5 pt-3">
+        {rows.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-[11px] text-slate-500">
+            <p className="mb-1 font-medium text-slate-700">
+              No candidates match this view.
+            </p>
+            <p>
+              Adjust filters above or broaden your search to see more of the
+              pipeline.
+            </p>
+          </div>
+        ) : (
+          <table className="min-w-full border-separate border-spacing-y-2 text-[11px]">
+            <thead>
+              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-1">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="flex h-4 w-4 items-center justify-center rounded border border-slate-300 bg-white"
+                    aria-checked={allSelected}
+                  >
+                    {allSelected || partiallySelected ? (
+                      <span className="h-2 w-2 rounded bg-slate-900" />
+                    ) : null}
+                  </button>
                 </th>
-                <th className="w-64 px-2 py-2 text-left">Candidate</th>
-                <th className="w-40 px-2 py-2 text-left">Match</th>
-                <th className="w-44 px-2 py-2 text-left">
-                  Location / Source
-                </th>
-                <th className="px-2 py-2 text-left">
-                  Skills / Experience
-                </th>
-                <th className="w-44 px-2 py-2 text-left">
-                  Status (decision)
-                </th>
-                <th className="w-40 px-2 py-2 text-left">Stage</th>
-                <th className="w-32 px-2 py-2 text-left">Applied</th>
+                <th className="px-3 py-1">Candidate</th>
+                <th className="px-3 py-1">Score &amp; tier</th>
+                <th className="px-3 py-1">Decision</th>
+                <th className="px-3 py-1">Stage</th>
+                <th className="px-3 py-1">Source</th>
+                <th className="px-3 py-1">Applied</th>
+                <th className="px-3 py-1 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, idx) => {
-                const uiStatus = uiStatusFromDb(row.status);
-                const isSelected = selectedIds.includes(row.id);
-                const zebra = idx % 2 === 1;
+              {rows.map((app) => {
+                const isSelected = selectedIds.includes(app.id);
+                const saving = inlineSavingId === app.id;
+
+                const statusUpper = (app.status ||
+                  "PENDING") as DecisionStatus;
 
                 return (
-                  <tr
-                    key={row.id}
-                    className={[
-                      "border-b border-slate-100 transition-colors",
-                      zebra ? "bg-slate-50/40" : "bg-white",
-                      "hover:bg-sky-50/60",
-                      isSelected ? "bg-sky-50/80" : "",
-                    ].join(" ")}
-                  >
-                    {/* Select */}
-                    <td className="px-3 py-3 align-top">
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600"
-                        checked={isSelected}
-                        onChange={() => toggleSelectOne(row.id)}
-                      />
-                    </td>
-
-                    {/* Candidate */}
-                    <td className="px-2 py-3 align-top">
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openCandidateProfile(row)}
-                          className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-[11px] font-semibold text-white shadow-sm transition hover:bg-sky-700"
-                          title="Open candidate profile"
-                        >
-                          {row.fullName
-                            .split(" ")
-                            .slice(0, 2)
-                            .map((p) => p[0]?.toUpperCase())
-                            .join("")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openCandidateProfile(row)}
-                          className="group text-left"
-                        >
-                          <div className="flex items-center gap-1">
-                            <div className="text-[13px] font-semibold text-slate-900 group-hover:text-sky-700">
-                              {row.fullName}
-                            </div>
-                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-slate-500 group-hover:border-sky-200 group-hover:text-sky-600">
-                              View profile
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {row.email}
-                          </div>
-                          {row.matchReason && (
-                            <p className="mt-1 line-clamp-2 text-[10px] text-slate-600">
-                              {row.matchReason}
-                            </p>
-                          )}
-                        </button>
-                      </div>
-                    </td>
-
-                    {/* Match / tier */}
-                    <td className="px-2 py-3 align-top">
-                      <div className="flex flex-col gap-1">
-                        <span
-                          className={`inline-flex w-min items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${scoreColor(
-                            row.matchScore,
-                          )}`}
-                        >
-                          {row.matchScore != null
-                            ? `Score ${row.matchScore}`
-                            : "No score"}
-                        </span>
-                        {row.tier && (
-                          <span
-                            className={`inline-flex w-min items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${tierColor(
-                              row.tier,
-                            )}`}
-                          >
-                            Tier {row.tier}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Location / source */}
-                    <td className="px-2 py-3 align-top">
-                      <div className="flex flex-col gap-1 text-[10px] text-slate-600">
-                        {row.location && (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                            {row.location}
-                          </span>
-                        )}
-                        {row.source && (
-                          <span className="inline-flex items-center gap-1 text-slate-500">
-                            <span className="h-1.5 w-1.5 rounded-full bg-sky-300" />
-                            {row.source}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Skills / experience */}
-                    <td className="px-2 py-3 align-top">
-                      <div className="flex flex-wrap gap-1">
-                        {row.skillTags.slice(0, 4).map((tag) => (
-                          <span
-                            key={tag.id}
-                            className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700"
-                          >
-                            {tag.label}
-                          </span>
-                        ))}
-                        {row.experienceLabel && (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                            {row.experienceLabel}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Status control – Accept / On hold / Reject */}
-                    <td className="px-2 py-3 align-top">
-                      <div className="inline-flex rounded-full bg-slate-50 p-0.5 text-[10px] shadow-inner">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleStatusChange(row.id, "accepted")
-                          }
-                          className={[
-                            "flex-1 rounded-full px-2 py-0.5 transition",
-                            uiStatus === "accepted"
-                              ? "bg-emerald-500 text-white shadow-sm"
-                              : "text-slate-500 hover:bg-emerald-50 hover:text-emerald-700",
-                          ].join(" ")}
-                        >
-                          ✓ Accept
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleStatusChange(row.id, "on_hold")
-                          }
-                          className={[
-                            "flex-1 rounded-full px-2 py-0.5 transition",
-                            uiStatus === "on_hold"
-                              ? "bg-amber-400 text-slate-900 shadow-sm"
-                              : "text-slate-500 hover:bg-amber-50 hover:text-amber-700",
-                          ].join(" ")}
-                        >
-                          ⏸ On hold
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleStatusChange(row.id, "rejected")
-                          }
-                          className={[
-                            "flex-1 rounded-full px-2 py-0.5 transition",
-                            uiStatus === "rejected"
-                              ? "bg-rose-500 text-white shadow-sm"
-                              : "text-slate-500 hover:bg-rose-50 hover:text-rose-700",
-                          ].join(" ")}
-                        >
-                          ✗ Reject
-                        </button>
-                      </div>
-                      {row.status && (
-                        <div className="mt-1 text-[10px] text-slate-400">
-                          Stored as: {row.status}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Stage dropdown */}
-                    <td className="px-2 py-3 align-top">
-                      <select
-                        className="h-8 w-full rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
-                        value={row.stage || ""}
-                        onChange={(e) =>
-                          handleStageChange(row.id, e.target.value)
-                        }
+                  <tr key={app.id}>
+                    <td className="align-top px-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleRowSelection(app.id)}
+                        className={[
+                          "mt-2 flex h-4 w-4 items-center justify-center rounded border bg-white",
+                          isSelected
+                            ? "border-slate-900"
+                            : "border-slate-300",
+                        ].join(" ")}
                       >
-                        <option value="">Select stage…</option>
-                        {stageOptions.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                        {isSelected && (
+                          <span className="h-2 w-2 rounded bg-slate-900" />
+                        )}
+                      </button>
+                    </td>
+
+                    {/* Candidate cell */}
+                    <td className="align-top px-3">
+                      <div className="flex gap-2">
+                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-slate-50">
+                          {initialsFromName(app.fullName)}
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          {app.candidateId ? (
+                            <Link
+                              href={`/ats/candidates/${app.candidateId}`}
+                              className="text-[11px] font-semibold text-slate-900 hover:text-slate-950 hover:underline"
+                            >
+                              {app.fullName}
+                            </Link>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-slate-900">
+                              {app.fullName}
+                            </span>
+                          )}
+
+                          <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+                            {app.email && <span>{app.email}</span>}
+                            {app.location && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span>{app.location}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {app.skillTags?.length > 0 && (
+                            <div className="mt-0.5 flex flex-wrap gap-1">
+                              {app.skillTags.slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag.id}
+                                  className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-700"
+                                >
+                                  {tag.label}
+                                </span>
+                              ))}
+                              {app.skillTags.length > 3 && (
+                                <span className="text-[9px] text-slate-400">
+                                  +{app.skillTags.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Score & tier */}
+                    <td className="align-top px-3">
+                      <div className="mt-1 flex flex-col items-start gap-1">
+                        {app.matchScore != null && (
+                          <span
+                            className={[
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                              scoreBadgeClasses(app.matchScore),
+                            ].join(" ")}
+                          >
+                            Score {app.matchScore}
+                          </span>
+                        )}
+                        {app.tier && (
+                          <span
+                            className={[
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              tierBadgeClasses(app.tier),
+                            ].join(" ")}
+                          >
+                            Tier {app.tier}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Decision (status) */}
+                    <td className="align-top px-3">
+                      <div className="mt-1 flex flex-col gap-1">
+                        <span
+                          className={[
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            decisionChipClasses(app.status),
+                          ].join(" ")}
+                        >
+                          {decisionLabel(app.status)}
+                        </span>
+                        <select
+                          disabled={saving}
+                          value={statusUpper}
+                          onChange={(e) =>
+                            handleInlineStatusChange(
+                              app.id,
+                              e.target.value,
+                            )
+                          }
+                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        >
+                          <option value="PENDING">Accept / active</option>
+                          <option value="ON_HOLD">On hold</option>
+                          <option value="REJECTED">Reject</option>
+                        </select>
+                      </div>
+                    </td>
+
+                    {/* Stage */}
+                    <td className="align-top px-3">
+                      <div className="mt-1 flex flex-col gap-1">
+                        <span
+                          className={[
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px]",
+                            stagePillClasses(),
+                          ].join(" ")}
+                        >
+                          {app.stage || "APPLIED"}
+                        </span>
+                        <select
+                          disabled={saving}
+                          value={app.stage || ""}
+                          onChange={(e) =>
+                            handleInlineStageChange(
+                              app.id,
+                              e.target.value,
+                            )
+                          }
+                          className="h-7 rounded-full border border-slate-200 bg-white px-2 text-[10px] text-slate-800 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        >
+                          <option value="">Select stage…</option>
+                          {stageOptions.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </td>
+
+                    {/* Source */}
+                    <td className="align-top px-3">
+                      <div className="mt-1 text-[10px] text-slate-600">
+                        {app.source || "—"}
+                      </div>
                     </td>
 
                     {/* Applied */}
-                    <td className="px-2 py-3 align-top text-[10px] text-slate-600">
-                      {formatDate(row.appliedAt)}
+                    <td className="align-top px-3">
+                      <div className="mt-1 text-[10px] text-slate-600">
+                        {formatDate(app.appliedAt)}
+                      </div>
+                    </td>
+
+                    {/* Actions */}
+                    <td className="align-top px-3 text-right">
+                      <div className="mt-1 flex flex-wrap justify-end gap-1 text-[10px]">
+                        {app.candidateId && (
+                          <Link
+                            href={`/ats/candidates/${app.candidateId}`}
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
+                          >
+                            View profile
+                          </Link>
+                        )}
+                        {app.email && (
+                          <Link
+                            href={`mailto:${encodeURIComponent(
+                              app.email,
+                            )}`}
+                            className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
+                          >
+                            Email
+                          </Link>
+                        )}
+                        {/* In a later pass, we can wire Schedule / Notes drawers here */}
+                      </div>
+                      {saving && (
+                        <div className="mt-1 text-[9px] text-slate-400">
+                          Saving…
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
               })}
-
-              {rows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-8 text-center text-[11px] text-slate-500"
-                  >
-                    No candidates match the current filters.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
-        </div>
-
-        {/* Bulk action bar */}
-        {selectedCount > 0 && (
-          <footer className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-[11px] text-slate-800">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold">
-                  {selectedCount} selected
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedIds([])}
-                  className="text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex rounded-full bg-white p-0.5 shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => handleBulkStatus("accepted")}
-                    className="rounded-full px-3 py-1 text-[10px] text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
-                  >
-                    ✓ Mark as accepted
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBulkStatus("on_hold")}
-                    className="rounded-full px-3 py-1 text-[10px] text-slate-700 hover:bg-amber-50 hover:text-amber-700"
-                  >
-                    ⏸ Mark on hold
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBulkStatus("rejected")}
-                    className="rounded-full px-3 py-1 text-[10px] text-slate-700 hover:bg-rose-50 hover:text-rose-700"
-                  >
-                    ✗ Reject
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <select
-                    value={bulkStage}
-                    onChange={(e) => setBulkStage(e.target.value)}
-                    className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
-                  >
-                    <option value="">Move to stage…</option>
-                    {stageOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleBulkStageApply}
-                    className="inline-flex h-8 items-center rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white shadow-sm hover:bg-sky-500"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
-            </div>
-          </footer>
         )}
       </section>
     </div>
