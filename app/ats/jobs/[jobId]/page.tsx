@@ -27,7 +27,7 @@ type PageProps = {
 
 type PipelineAppRow = {
   id: string; // application id
-  candidateId: string | null; // 🔹 for linking to candidate profile
+  candidateId: string | null; // for linking to candidate profile
 
   fullName: string;
   email: string;
@@ -166,8 +166,7 @@ export default async function JobPipelinePage({
       (latestScore?.score as number | null | undefined) ??
       (app.matchScore as number | null | undefined) ??
       null;
-    const tier =
-      (latestScore?.tier as string | null | undefined) ?? null;
+    const tier = (latestScore?.tier as string | null | undefined) ?? null;
     const engine =
       (latestScore?.engine as string | null | undefined) ?? null;
 
@@ -230,7 +229,7 @@ export default async function JobPipelinePage({
 
     pipelineApps.push({
       id: app.id,
-      candidateId: app.candidate ? app.candidate.id : null, // 🔹 key line
+      candidateId: app.candidate ? app.candidate.id : null,
 
       fullName: app.fullName,
       email: app.email,
@@ -243,8 +242,7 @@ export default async function JobPipelinePage({
       tier,
       appliedAt: app.createdAt.toISOString(),
       skillTags,
-      // Placeholder – once you collect years of experience per candidate,
-      // you can populate this field.
+      // Future: derive from candidate profile once you collect it
       experienceLabel: null,
     });
   }
@@ -255,9 +253,7 @@ export default async function JobPipelinePage({
     new Set(
       job.applications
         .flatMap((a) => a.scoringEvents)
-        .map(
-          (e) => (e?.tier as string | null | undefined) || null,
-        )
+        .map((e) => (e?.tier as string | null | undefined) || null)
         .filter(Boolean) as string[],
     ),
   ).sort();
@@ -272,75 +268,87 @@ export default async function JobPipelinePage({
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="flex h-full flex-1 flex-col">
-      {/* Header */}
-      <header className="border-b border-slate-200 bg-white px-5 py-4">
+    <div className="flex h-full flex-1 flex-col bg-slate-50">
+      {/* Job header */}
+      <header className="border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/ats/jobs" className="hover:underline">
+          <Link href="/ats/jobs" className="hover:text-slate-700 hover:underline">
             Jobs
           </Link>
           <span>/</span>
-          <span className="font-medium text-slate-700">
-            {job.title}
-          </span>
+          {job.clientCompany && (
+            <>
+              <span className="text-slate-500">{job.clientCompany.name}</span>
+              <span>/</span>
+            </>
+          )}
+          <span className="font-medium text-slate-800">{job.title}</span>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
+
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-base font-semibold text-slate-900">
+            <h1 className="text-lg font-semibold text-slate-900">
               {job.title}
             </h1>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               {job.clientCompany && (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                   {job.clientCompany.name}
                 </span>
               )}
               {job.location && (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                   {job.location}
                 </span>
               )}
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                {job.applications.length} applications
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                {job.applications.length} total applications
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {allVisibleApplicationIds.length} in current view
               </span>
             </div>
           </div>
-          <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
-            <span>
+
+          <div className="flex flex-col items-end gap-1 text-right text-[11px] text-slate-500">
+            <span className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
               Tenant plan:{" "}
-              <span className="font-medium capitalize">
+              <span className="ml-1 capitalize">
                 {(tenant as any).plan ?? "free"}
               </span>
             </span>
             {activeView && (
-              <span className="mt-0.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />
                 Active view: {activeView.name}
+                {activeView.isDefault ? " · default" : ""}
               </span>
             )}
           </div>
         </div>
       </header>
 
-      {/* Filters + info */}
-      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      {/* Filters + view management */}
+      <section className="border-b border-slate-200 bg-slate-50/80 px-5 py-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           {/* Filters */}
           <form
-            className="flex flex-wrap items-end gap-2 text-xs"
+            className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
             method="GET"
           >
             {/* View selector */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
                 View
               </label>
               <select
                 name="viewId"
                 defaultValue={currentViewId}
-                className="h-8 min-w-[140px] rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+                className="h-8 min-w-[140px] rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="">All candidates</option>
                 {jobViews.map((v) => (
@@ -354,27 +362,27 @@ export default async function JobPipelinePage({
 
             {/* Search */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
                 Search
               </label>
               <input
                 type="text"
                 name="q"
                 defaultValue={filterQ}
-                placeholder='e.g. "senior engineer" email:gmail.com -contract'
-                className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+                placeholder='e.g. "senior engineer" source:linkedin -contract'
+                className="h-8 w-56 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               />
             </div>
 
             {/* Stage filter */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
                 Stage
               </label>
               <select
                 name="stage"
                 defaultValue={filterStage}
-                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="ALL">All</option>
                 {stageNames.map((s) => (
@@ -385,15 +393,15 @@ export default async function JobPipelinePage({
               </select>
             </div>
 
-            {/* Status filter (Accept / On hold / Reject) */}
+            {/* Status filter */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
                 Decision
               </label>
               <select
                 name="status"
                 defaultValue={filterStatus}
-                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="ALL">All</option>
                 <option value="PENDING">Accepted / active</option>
@@ -404,13 +412,13 @@ export default async function JobPipelinePage({
 
             {/* Tier filter */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] text-slate-600">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
                 Tier
               </label>
               <select
                 name="tier"
                 defaultValue={filterTier}
-                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800"
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="ALL">All</option>
                 {uniqueTiers.map((t) => (
@@ -423,38 +431,38 @@ export default async function JobPipelinePage({
 
             <button
               type="submit"
-              className="mt-5 inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+              className="mt-5 inline-flex h-8 items-center rounded-full bg-indigo-600 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700"
             >
               Apply filters
             </button>
             <Link
               href={`/ats/jobs/${job.id}`}
-              className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 hover:bg-slate-100"
+              className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 transition hover:bg-slate-100"
             >
               Reset
             </Link>
           </form>
 
-          {/* Visible count */}
-          <div className="flex flex-col items-end text-[11px] text-slate-500">
+          {/* Visible count + hint */}
+          <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
             <span>
               Visible applications:{" "}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-slate-800">
                 {allVisibleApplicationIds.length}
               </span>
             </span>
-            <span className="text-[10px]">
-              Use status and stage inline controls below to manage the
-              pipeline.
+            <span className="max-w-xs text-right text-[10px]">
+              Use the filters and saved views to keep your shortlists and
+              interview-ready candidates one click away.
             </span>
           </div>
         </div>
 
-        {/* Save current filters as a named view */}
+        {/* Save current filters as view */}
         <form
           action="/api/ats/views"
           method="POST"
-          className="mt-3 flex flex-wrap items-end gap-2 text-xs"
+          className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
         >
           <input type="hidden" name="scope" value="job_pipeline" />
           <input type="hidden" name="jobId" value={job.id} />
@@ -469,42 +477,44 @@ export default async function JobPipelinePage({
           <input type="hidden" name="tier" value={filterTier} />
 
           <div className="flex flex-col">
-            <label className="mb-1 text-[11px] text-slate-600">
+            <label className="mb-1 text-[11px] font-medium text-slate-600">
               Save current filters as view
             </label>
             <input
               type="text"
               name="name"
               required
-              placeholder="e.g. Tier A · Interview ready"
-              className="h-8 w-56 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+              placeholder="e.g. Tier A · Interview-ready"
+              className="h-8 w-64 rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
             />
           </div>
 
-          <label className="mb-1 flex items-center gap-1 text-[11px] text-slate-600">
+          <label className="mb-1 mt-4 flex items-center gap-1 text-[11px] text-slate-600 md:mt-0">
             <input
               type="checkbox"
               name="setDefault"
-              className="h-3 w-3 rounded border-slate-400"
+              className="h-3 w-3 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500/40"
             />
             <span>Set as default view for this job</span>
           </label>
 
           <button
             type="submit"
-            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
           >
             Save view
           </button>
         </form>
-      </div>
+      </section>
 
-      {/* Pipeline board – list view with inline status & stage, bulk actions */}
-      <JobPipelineBoard
-        jobId={job.id}
-        stageOptions={stageOptions}
-        apps={pipelineApps}
-      />
+      {/* Pipeline board */}
+      <section className="flex-1 px-5 py-4">
+        <JobPipelineBoard
+          jobId={job.id}
+          stageOptions={stageOptions}
+          apps={pipelineApps}
+        />
+      </section>
     </div>
   );
 }
