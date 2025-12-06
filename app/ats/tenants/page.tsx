@@ -17,7 +17,9 @@ export const metadata: Metadata = {
 
 type TenantsPageSearchParams = {
   created?: string;
+  updated?: string;
   error?: string;
+  editTenantId?: string;
 };
 
 function formatDate(value: any): string {
@@ -123,12 +125,30 @@ export default async function AtsTenantsPage({
 
   // For messaging banners
   const created = searchParams?.created === "1";
+  const updated = searchParams?.updated === "1";
   const errorCode = searchParams?.error;
+
+  // Which tenant (if any) are we editing?
+  const rawEditTenantId = searchParams?.editTenantId;
+  const editTenantId =
+    typeof rawEditTenantId === "string" && rawEditTenantId.length > 0
+      ? rawEditTenantId
+      : undefined;
+
+  const editingTenant =
+    editTenantId && tenants.length
+      ? tenants.find((t) => t.id === editTenantId) ?? null
+      : null;
+
+  const isEditing = Boolean(editingTenant);
 
   // Default tenant for copy & examples
   const defaultTenant = await getResourcinTenant();
 
   const latestTenant = tenants[0] ?? null;
+
+  const formStatusDefault =
+    (editingTenant?.status && editingTenant.status.toLowerCase()) || "active";
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 lg:px-8">
@@ -172,6 +192,11 @@ export default async function AtsTenantsPage({
           jobs, clients and dashboard screens.
         </div>
       )}
+      {updated && (
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+          Workspace updated successfully.
+        </div>
+      )}
       {errorCode && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
           {errorCode === "missing_name"
@@ -180,7 +205,7 @@ export default async function AtsTenantsPage({
         </div>
       )}
 
-      {/* Top row: stats + create form */}
+      {/* Top row: stats + create/edit form */}
       <div className="mb-8 grid gap-4 md:grid-cols-[minmax(0,1.35fr)_minmax(0,1.15fr)]">
         {/* Stats & health overview */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -240,15 +265,31 @@ export default async function AtsTenantsPage({
           </div>
         </section>
 
-        {/* Create tenant form (with KYC-lite hints) */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">
-            Create a new workspace
-          </h2>
-          <p className="mt-1 text-[11px] text-slate-600">
-            Think of this as a separate ATS account. You can capture basic KYC
-            here for compliance, while keeping candidate-facing pages clean.
-          </p>
+        {/* Create / Edit tenant form (with KYC) */}
+        <section
+          id="workspace-form"
+          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                {isEditing ? "Edit workspace" : "Create a new workspace"}
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-600">
+                Think of this as a separate ATS account. You can capture basic
+                KYC here for compliance, while keeping candidate-facing pages
+                clean.
+              </p>
+            </div>
+            {isEditing && editingTenant && (
+              <span className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-600">
+                Editing:{" "}
+                <span className="font-semibold text-slate-800">
+                  {editingTenant.name || editingTenant.slug}
+                </span>
+              </span>
+            )}
+          </div>
 
           <form
             method="POST"
@@ -256,6 +297,14 @@ export default async function AtsTenantsPage({
             encType="multipart/form-data"
             className="mt-4 space-y-4 text-[13px]"
           >
+            {/* id is what route.tsx uses to decide create vs update */}
+            <input
+              type="hidden"
+              name="tenantId"
+              value={editingTenant?.id ?? ""}
+            />
+
+            {/* Basic identity */}
             <div className="space-y-1">
               <label
                 htmlFor="tenant-name"
@@ -267,6 +316,7 @@ export default async function AtsTenantsPage({
                 id="tenant-name"
                 name="name"
                 required
+                defaultValue={editingTenant?.name ?? ""}
                 placeholder="Acme Talent Partners"
                 className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
@@ -283,12 +333,13 @@ export default async function AtsTenantsPage({
                 <input
                   id="tenant-slug"
                   name="slug"
+                  defaultValue={editingTenant?.slug ?? ""}
                   placeholder="acme-talent"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
                 <p className="mt-1 text-[10px] text-slate-500">
-                  Used internally to reference the workspace. If left blank
-                  we&apos;ll generate one from the name.
+                  Used internally and in careers URLs. If left blank we&apos;ll
+                  generate one from the name.
                 </p>
               </div>
 
@@ -308,12 +359,156 @@ export default async function AtsTenantsPage({
                 />
                 <p className="mt-1 text-[10px] text-slate-500">
                   PNG, JPG or SVG. Square logos look best in the list. If the
-                  image fails to load, we fallback to an initial badge.
+                  file upload fails, we fallback to an initial badge.
                 </p>
               </div>
             </div>
 
-            {/* You can wire these to TenantKyc or extra Tenant fields later */}
+            {/* KYC lite */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor="registrationNumber"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Registration / RC number (optional)
+                </label>
+                <input
+                  id="registrationNumber"
+                  name="registrationNumber"
+                  defaultValue={editingTenant?.registrationNumber ?? ""}
+                  placeholder="RC 1234567"
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="taxId"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Tax ID / TIN (optional)
+                </label>
+                <input
+                  id="taxId"
+                  name="taxId"
+                  defaultValue={editingTenant?.taxId ?? ""}
+                  placeholder="TIN 0123456789"
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor="country"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Country (optional)
+                </label>
+                <input
+                  id="country"
+                  name="country"
+                  defaultValue={editingTenant?.country ?? ""}
+                  placeholder="Nigeria"
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="state"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    State / Region (optional)
+                  </label>
+                  <input
+                    id="state"
+                    name="state"
+                    defaultValue={editingTenant?.state ?? ""}
+                    placeholder="Lagos"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="city"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    City (optional)
+                  </label>
+                  <input
+                    id="city"
+                    name="city"
+                    defaultValue={editingTenant?.city ?? ""}
+                    placeholder="Victoria Island"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="addressLine1"
+                className="text-xs font-medium text-slate-700"
+              >
+                Address (optional)
+              </label>
+              <input
+                id="addressLine1"
+                name="addressLine1"
+                defaultValue={editingTenant?.addressLine1 ?? ""}
+                placeholder="Plot 123, Admiralty Way"
+                className="mb-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              />
+              <input
+                id="addressLine2"
+                name="addressLine2"
+                defaultValue={editingTenant?.addressLine2 ?? ""}
+                placeholder="Floor / Suite / Landmark (optional)"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label
+                  htmlFor="industry"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Industry (optional)
+                </label>
+                <input
+                  id="industry"
+                  name="industry"
+                  defaultValue={editingTenant?.industry ?? ""}
+                  placeholder="Fintech, Healthcare, Logistics..."
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="websiteUrl"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Website (optional)
+                </label>
+                <input
+                  id="websiteUrl"
+                  name="websiteUrl"
+                  defaultValue={editingTenant?.websiteUrl ?? ""}
+                  placeholder="https://acme.com"
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+            </div>
+
+            {/* Email + status */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <label
@@ -326,6 +521,7 @@ export default async function AtsTenantsPage({
                   id="primaryContactEmail"
                   name="primaryContactEmail"
                   type="email"
+                  defaultValue={editingTenant?.primaryContactEmail ?? ""}
                   placeholder="founder@acme.com"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -344,7 +540,7 @@ export default async function AtsTenantsPage({
                 <select
                   id="status"
                   name="status"
-                  defaultValue="active"
+                  defaultValue={formStatusDefault}
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 >
                   <option value="active">Active</option>
@@ -359,7 +555,7 @@ export default async function AtsTenantsPage({
               type="submit"
               className="inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
             >
-              Create workspace
+              {isEditing ? "Save workspace changes" : "Create workspace"}
             </button>
           </form>
         </section>
@@ -408,6 +604,12 @@ export default async function AtsTenantsPage({
 
               const isDefault =
                 defaultTenant && defaultTenant.id === tenant.id;
+
+              const locationParts: string[] = [];
+              if (tenant.city) locationParts.push(tenant.city);
+              if (tenant.state) locationParts.push(tenant.state);
+              if (tenant.country) locationParts.push(tenant.country);
+              const prettyLocation = locationParts.join(", ");
 
               return (
                 <article
@@ -459,6 +661,41 @@ export default async function AtsTenantsPage({
                             No primary contact set
                           </span>
                         )}
+
+                        {tenant.registrationNumber && (
+                          <span className="text-slate-500">
+                            RC:{" "}
+                            <span className="font-medium text-slate-800">
+                              {tenant.registrationNumber}
+                            </span>
+                          </span>
+                        )}
+
+                        {tenant.taxId && (
+                          <span className="text-slate-500">
+                            TIN:{" "}
+                            <span className="font-medium text-slate-800">
+                              {tenant.taxId}
+                            </span>
+                          </span>
+                        )}
+
+                        {prettyLocation && (
+                          <span className="text-slate-500">
+                            {prettyLocation}
+                          </span>
+                        )}
+
+                        {tenant.websiteUrl && (
+                          <a
+                            href={tenant.websiteUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[#172965] underline-offset-2 hover:underline"
+                          >
+                            Website
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -481,6 +718,14 @@ export default async function AtsTenantsPage({
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
+                      <Link
+                        href={`/ats/tenants?editTenantId=${encodeURIComponent(
+                          tenant.id,
+                        )}#workspace-form`}
+                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        Edit workspace
+                      </Link>
                       <Link
                         href={`/ats/jobs?tenantId=${encodeURIComponent(
                           tenant.id,
