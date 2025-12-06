@@ -5,8 +5,8 @@ import { getResourcinTenant } from "@/lib/tenant";
 
 type IncomingSkill = {
   name: string;
-  proficiency?: number;      // 1–5 (for future use)
-  yearsExperience?: number;  // integer (for future use)
+  proficiency?: number; // 1–5 (future use)
+  yearsExperience?: number; // integer (future use)
 };
 
 type TalentNetworkPayload = {
@@ -20,7 +20,7 @@ type TalentNetworkPayload = {
   headline?: string;
   summary?: string;
   skills?: IncomingSkill[];
-  sourceLabel?: string;      // e.g. "Talent Network", "Sourcing Drive – Lagos"
+  sourceLabel?: string; // e.g. "Talent Network", "Sourcing Drive – Lagos"
 };
 
 // Normalise to a URL-safe, tenant-scoped skill key
@@ -187,41 +187,49 @@ export async function POST(req: Request) {
     // -------------------------------------------------------------------
     // 3) Tag candidate with a SOURCE tag (kind = "SOURCE")
     // -------------------------------------------------------------------
-    const sourceLabel = (body.sourceLabel || "Talent Network").trim();
+    const rawSourceLabel = body.sourceLabel || "Talent Network";
+    const sourceLabel = rawSourceLabel.trim();
 
     if (sourceLabel) {
-      const sourceTag = await prisma.tag.upsert({
+      // Avoid composite-unique helper; just find or create manually
+      let sourceTag = await prisma.tag.findFirst({
         where: {
-          tenantId_name_kind: {
-            tenantId: tenant.id,
-            name: sourceLabel,
-            kind: "SOURCE",
-          },
-        },
-        update: {},
-        create: {
           tenantId: tenant.id,
           name: sourceLabel,
-          kind: "SOURCE",
-          color: "#2563EB", // soft blue – adjust in UI if needed
-          isSystem: true,
+          // If Tag.kind exists as an enum/string, this is fine. If not, you can
+          // drop `kind` from this filter and from the create() below.
+          kind: "SOURCE" as any,
         },
       });
 
-      await prisma.candidateTag.upsert({
-        where: {
-          candidateId_tagId: {
-            candidateId: candidate.id,
-            tagId: sourceTag.id,
+      if (!sourceTag) {
+        sourceTag = await prisma.tag.create({
+          data: {
+            tenantId: tenant.id,
+            name: sourceLabel,
+            kind: "SOURCE" as any,
+            color: "#2563EB",
+            isSystem: true,
           },
-        },
-        update: {},
-        create: {
-          tenantId: tenant.id,
+        });
+      }
+
+      const existingCandidateTag = await prisma.candidateTag.findFirst({
+        where: {
           candidateId: candidate.id,
           tagId: sourceTag.id,
         },
       });
+
+      if (!existingCandidateTag) {
+        await prisma.candidateTag.create({
+          data: {
+            tenantId: tenant.id,
+            candidateId: candidate.id,
+            tagId: sourceTag.id,
+          },
+        });
+      }
     }
 
     return NextResponse.json({
