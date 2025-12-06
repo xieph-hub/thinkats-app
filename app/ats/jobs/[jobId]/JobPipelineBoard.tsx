@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 type JobPipelineBoardProps = {
   jobId: string;
@@ -27,6 +28,27 @@ function scoreColour(score: number | null | undefined) {
   if (score >= 50) return "text-amber-700";
   return "text-slate-600";
 }
+
+// Shape of a JobApplication as used in this board (candidate + tags + skills + scoringEvents)
+type ApplicationWithExtras = Prisma.JobApplicationGetPayload<{
+  include: {
+    candidate: {
+      include: {
+        skills: {
+          include: {
+            skill: true;
+          };
+        };
+        tags: {
+          include: {
+            tag: true;
+          };
+        };
+      };
+    };
+    scoringEvents: true;
+  };
+}>;
 
 export default async function JobPipelineBoard({
   jobId,
@@ -64,14 +86,12 @@ export default async function JobPipelineBoard({
     notFound();
   }
 
-  const stages = [...job.stages].sort(
-    (a, b) => a.position - b.position,
-  );
+  const stages = [...job.stages].sort((a, b) => a.position - b.position);
 
   type Column = {
     id: string;
     name: string;
-    applications: typeof job.applications;
+    applications: ApplicationWithExtras[];
   };
 
   const columns: Column[] = stages.map((s) => ({
@@ -88,7 +108,7 @@ export default async function JobPipelineBoard({
   const fallbackColumn =
     columnByStageName.get("APPLIED") ?? columns[0] ?? null;
 
-  for (const app of job.applications) {
+  for (const app of job.applications as ApplicationWithExtras[]) {
     const stageKey = (app.stage || "").toUpperCase();
     const col =
       columnByStageName.get(stageKey) ?? fallbackColumn;
@@ -191,15 +211,10 @@ export default async function JobPipelineBoard({
   );
 }
 
-type ApplicationWithExtras =
-  NonNullable<
-    Awaited<ReturnType<typeof prisma.job.findUnique>>
-  >["applications"][number];
-
 function getSourceLabel(app: ApplicationWithExtras): string | null {
   const sourceTag = app.candidate?.tags
     ?.map((ct) => ct.tag)
-    .find((t) => t.kind === "SOURCE");
+    .find((t) => (t as any)?.kind === "SOURCE");
 
   if (sourceTag) return sourceTag.name;
 
@@ -210,7 +225,11 @@ function getSourceLabel(app: ApplicationWithExtras): string | null {
   return null;
 }
 
-function PipelineCard({ application }: { application: ApplicationWithExtras }) {
+function PipelineCard({
+  application,
+}: {
+  application: ApplicationWithExtras;
+}) {
   const candidate = application.candidate;
   const latestScoring = application.scoringEvents[0] ?? null;
 
@@ -251,9 +270,7 @@ function PipelineCard({ application }: { application: ApplicationWithExtras }) {
 
           <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
             {candidate?.currentTitle && (
-              <span className="truncate">
-                {candidate.currentTitle}
-              </span>
+              <span className="truncate">{candidate.currentTitle}</span>
             )}
             {candidate?.currentCompany && (
               <span className="truncate">
