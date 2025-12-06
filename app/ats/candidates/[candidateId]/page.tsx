@@ -70,6 +70,44 @@ function derivePrimaryTier(apps: any[]): string | null {
   return Array.from(tiers)[0];
 }
 
+type TimelineEventKind =
+  | "application"
+  | "score"
+  | "interview"
+  | "note"
+  | "email";
+
+type TimelineEvent = {
+  kind: TimelineEventKind;
+  id: string;
+  date: Date;
+  jobTitle?: string | null;
+  clientName?: string | null;
+  // application
+  stage?: string | null;
+  status?: string | null;
+  // score
+  score?: number | null;
+  tier?: string | null;
+  reason?: string | null;
+  engine?: string | null;
+  risks?: string[];
+  redFlags?: string[];
+  // interview
+  interviewType?: string | null;
+  interviewStatus?: string | null;
+  interviewOutcome?: string | null;
+  interviewLocation?: string | null;
+  interviewDurationMins?: number | null;
+  interviewWith?: string | null;
+  // note
+  noteBody?: string | null;
+  noteType?: string | null;
+  // email
+  emailSubject?: string | null;
+  emailStatus?: string | null;
+};
+
 export default async function CandidateProfilePage({ params }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
@@ -93,7 +131,6 @@ export default async function CandidateProfilePage({ params }: PageProps) {
           },
           scoringEvents: {
             orderBy: { createdAt: "desc" },
-            take: 1,
           },
           interviews: {
             orderBy: { scheduledAt: "asc" },
@@ -106,6 +143,10 @@ export default async function CandidateProfilePage({ params }: PageProps) {
       },
       notes: {
         orderBy: { createdAt: "desc" },
+        take: 50,
+      },
+      sentEmails: {
+        orderBy: { sentAt: "desc" },
         take: 50,
       },
     },
@@ -148,6 +189,122 @@ export default async function CandidateProfilePage({ params }: PageProps) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12)
     .map(([label]) => label);
+
+  // -------------------------------------------------------------------------
+  // Unified activity timeline (applications, scores, interviews, notes, emails)
+  // -------------------------------------------------------------------------
+  const timelineEvents: TimelineEvent[] = [];
+
+  for (const app of candidate.applications) {
+    const jobTitle = app.job?.title || "Untitled role";
+    const clientName = app.job?.clientCompany?.name ?? null;
+
+    // Application creation
+    if (app.createdAt) {
+      timelineEvents.push({
+        kind: "application",
+        id: `app-${app.id}`,
+        date: app.createdAt,
+        jobTitle,
+        clientName,
+        stage: app.stage,
+        status: app.status,
+      });
+    }
+
+    // Scoring events
+    for (const se of app.scoringEvents ?? []) {
+      if (!se.createdAt) continue;
+      const risksArray = Array.isArray((se as any).risks)
+        ? ((se as any).risks as unknown[]).filter(
+            (r): r is string => typeof r === "string",
+          )
+        : [];
+      const redFlagsArray = Array.isArray((se as any).redFlags)
+        ? ((se as any).redFlags as unknown[]).filter(
+            (r): r is string => typeof r === "string",
+          )
+        : [];
+
+      timelineEvents.push({
+        kind: "score",
+        id: `score-${se.id}`,
+        date: se.createdAt,
+        jobTitle,
+        clientName,
+        score: (se as any).score ?? null,
+        tier: (se as any).tier ?? null,
+        reason: (se as any).reason ?? null,
+        engine: (se as any).engine ?? null,
+        risks: risksArray,
+        redFlags: redFlagsArray,
+      });
+    }
+
+    // Interviews
+    for (const iv of app.interviews ?? []) {
+      if (!iv.scheduledAt) continue;
+
+      const participants = iv.participants || [];
+      const interviewerNames = participants
+        .filter(
+          (p) =>
+            (p.role || "").toLowerCase().trim() !== "candidate",
+        )
+        .map((p) => p.name)
+        .filter(Boolean);
+      const interviewerLabel =
+        interviewerNames.length > 0
+          ? interviewerNames.join(", ")
+          : null;
+
+      timelineEvents.push({
+        kind: "interview",
+        id: `iv-${iv.id}`,
+        date: iv.scheduledAt,
+        jobTitle,
+        clientName,
+        interviewType: iv.type,
+        interviewStatus: iv.status,
+        interviewOutcome: iv.outcome,
+        interviewLocation: iv.location,
+        interviewDurationMins: iv.durationMins,
+        interviewWith: interviewerLabel,
+      });
+    }
+  }
+
+  // Notes
+  for (const note of candidate.notes ?? []) {
+    if (!note.createdAt) continue;
+    timelineEvents.push({
+      kind: "note",
+      id: `note-${note.id}`,
+      date: note.createdAt,
+      noteBody: note.body,
+      noteType: note.noteType,
+    });
+  }
+
+  // Emails
+  for (const email of candidate.sentEmails ?? []) {
+    if (!email.sentAt) continue;
+    timelineEvents.push({
+      kind: "email",
+      id: `email-${email.id}`,
+      date: email.sentAt,
+      jobTitle: email.job?.title ?? null,
+      clientName: email.job?.clientCompany?.name ?? null,
+      emailSubject: email.subject,
+      emailStatus: email.status,
+    });
+  }
+
+  // Sort newest → oldest
+  timelineEvents.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const VISIBLE_TIMELINE_LIMIT = 40;
+  const visibleTimeline = timelineEvents.slice(0, VISIBLE_TIMELINE_LIMIT);
 
   return (
     <div className="flex h-full flex-1 flex-col">
@@ -587,8 +744,209 @@ export default async function CandidateProfilePage({ params }: PageProps) {
             </section>
           </div>
 
-          {/* Right: notes / comments */}
+          {/* Right: activity timeline + notes */}
           <aside className="space-y-4">
+            {/* Activity timeline */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Activity timeline
+                </h2>
+                <span className="text-[11px] text-slate-400">
+                  {timelineEvents.length} events · showing{" "}
+                  {visibleTimeline.length}
+                </span>
+              </div>
+
+              {visibleTimeline.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500">
+                  No activity logged yet for this candidate beyond profile
+                  creation. As you move them through pipelines, scores,
+                  interviews and emails will appear here.
+                </div>
+              ) : (
+                <ol className="max-h-80 space-y-2 overflow-y-auto pr-1 text-[11px]">
+                  {visibleTimeline.map((ev) => (
+                    <li
+                      key={`${ev.kind}-${ev.id}-${ev.date.toISOString()}`}
+                      className="flex gap-2"
+                    >
+                      <div className="flex flex-col items-center">
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-300" />
+                        <span className="flex-1 border-l border-slate-200" />
+                      </div>
+                      <div className="flex-1 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2">
+                        <div className="mb-0.5 flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="rounded-full bg-slate-900 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-50">
+                              {ev.kind === "application" && "Application"}
+                              {ev.kind === "score" && "Score"}
+                              {ev.kind === "interview" && "Interview"}
+                              {ev.kind === "note" && "Note"}
+                              {ev.kind === "email" && "Email"}
+                            </span>
+                            {ev.jobTitle && (
+                              <span className="text-[10px] font-medium text-slate-800">
+                                {ev.jobTitle}
+                              </span>
+                            )}
+                            {ev.clientName && (
+                              <span className="text-[10px] text-slate-500">
+                                · {ev.clientName}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {formatDateTime(ev.date)}
+                          </span>
+                        </div>
+
+                        {/* Per-kind detail */}
+                        {ev.kind === "application" && (
+                          <p className="text-[11px] text-slate-600">
+                            Applied to{" "}
+                            <span className="font-medium">
+                              {ev.jobTitle || "Untitled role"}
+                            </span>{" "}
+                            · Stage{" "}
+                            <span className="font-medium">
+                              {ev.stage || "APPLIED"}
+                            </span>{" "}
+                            · Status{" "}
+                            <span className="font-medium">
+                              {ev.status || "PENDING"}
+                            </span>
+                          </p>
+                        )}
+
+                        {ev.kind === "score" && (
+                          <div className="space-y-1 text-[11px] text-slate-600">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {ev.score != null && (
+                                <span
+                                  className={[
+                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                    scoreChipColor(ev.score),
+                                  ].join(" ")}
+                                >
+                                  Score {ev.score}
+                                </span>
+                              )}
+                              {ev.tier && (
+                                <span
+                                  className={[
+                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                    tierChipColor(ev.tier),
+                                  ].join(" ")}
+                                >
+                                  Tier {ev.tier}
+                                </span>
+                              )}
+                              {ev.engine && (
+                                <span className="text-[10px] text-slate-400">
+                                  Engine: {ev.engine}
+                                </span>
+                              )}
+                            </div>
+                            {ev.reason && (
+                              <p className="text-[11px] text-slate-600">
+                                {ev.reason}
+                              </p>
+                            )}
+                            {(ev.risks && ev.risks.length > 0) ||
+                            (ev.redFlags && ev.redFlags.length > 0) ? (
+                              <div className="mt-0.5 flex flex-wrap gap-1">
+                                {ev.risks?.slice(0, 4).map((r) => (
+                                  <span
+                                    key={`risk-${r}`}
+                                    className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800"
+                                  >
+                                    Risk: {r}
+                                  </span>
+                                ))}
+                                {ev.redFlags?.slice(0, 4).map((r) => (
+                                  <span
+                                    key={`rf-${r}`}
+                                    className="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-[10px] text-rose-800"
+                                  >
+                                    Red flag: {r}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {ev.kind === "interview" && (
+                          <div className="space-y-0.5 text-[11px] text-slate-600">
+                            <p>
+                              {ev.interviewType || "Interview"} ·{" "}
+                              {formatInterviewStatus(ev.interviewStatus)}
+                              {ev.interviewOutcome && (
+                                <>
+                                  {" "}
+                                  · Outcome:{" "}
+                                  <span className="font-medium">
+                                    {ev.interviewOutcome}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                            <div className="flex flex-wrap gap-2 text-[10px] text-slate-500">
+                              {ev.interviewLocation && (
+                                <span>Location: {ev.interviewLocation}</span>
+                              )}
+                              {ev.interviewDurationMins && (
+                                <span>
+                                  Duration: {ev.interviewDurationMins} mins
+                                </span>
+                              )}
+                              {ev.interviewWith && (
+                                <span>With: {ev.interviewWith}</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {ev.kind === "note" && (
+                          <div className="space-y-0.5 text-[11px] text-slate-600">
+                            <div className="text-[10px] text-slate-500">
+                              Internal note
+                              {ev.noteType && ev.noteType !== "general"
+                                ? ` · ${ev.noteType}`
+                                : ""}
+                            </div>
+                            {ev.noteBody && (
+                              <p className="whitespace-pre-wrap">
+                                {ev.noteBody}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {ev.kind === "email" && (
+                          <div className="space-y-0.5 text-[11px] text-slate-600">
+                            <p>
+                              Email sent:{" "}
+                              <span className="font-medium">
+                                {ev.emailSubject || "No subject"}
+                              </span>
+                            </p>
+                            {ev.emailStatus && (
+                              <p className="text-[10px] text-slate-500">
+                                Status: {ev.emailStatus}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            {/* Notes & comments (unchanged but below timeline now) */}
             <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
