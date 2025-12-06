@@ -1,7 +1,7 @@
-// app/api/ats/jobs/[jobId]/edit/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Generic slug helper for both jobs and skills
 function slugify(raw: string): string {
   return raw
     .toLowerCase()
@@ -112,124 +112,158 @@ export async function POST(
     const requiredSkills = parseCsv(getStr("requiredSkills"));
 
     const slugFieldRaw = formData.get("slug");
-    const slugField =
-      typeof slugFieldRaw === "string"
-        ? slugFieldRaw.trim()
-        : "";
+    const slugField = typeof slugFieldRaw === "string" ? slugFieldRaw.trim() : "";
     let finalSlug = existingJob.slug as string | null;
 
     if (slugField === "") {
+      // Explicitly clear slug
       finalSlug = null;
     } else if (slugField.length > 0) {
       const baseSlug = slugify(slugField);
       if (baseSlug) {
-        let candidate = baseSlug;
+        let candidateSlug = baseSlug;
         let suffix = 1;
 
         while (true) {
           const collision = await prisma.job.findFirst({
             where: {
               tenantId: existingJob.tenantId,
-              slug: candidate,
+              slug: candidateSlug,
               NOT: { id: existingJob.id },
             },
           });
 
           if (!collision) {
-            finalSlug = candidate;
+            finalSlug = candidateSlug;
             break;
           }
 
           suffix += 1;
-          candidate = `${baseSlug}-${suffix}`;
+          candidateSlug = `${baseSlug}-${suffix}`;
         }
       } else {
         finalSlug = null;
       }
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.job.update({
-        where: { id: jobId },
-        data: {
-          title,
-          department,
-          location,
-          locationType,
-          employmentType,
-          experienceLevel,
-          workMode,
-          shortDescription,
-          overview,
-          aboutClient,
-          responsibilities,
-          requirements,
-          benefits,
-          salaryCurrency,
-          salaryMin,
-          salaryMax,
-          salaryVisible,
-          status,
-          visibility,
-          internalOnly,
-          confidential,
-          externalId,
-          clientCompanyId,
-          tags,
-          requiredSkills,
-          slug: finalSlug,
-        },
-      });
+    // -------------------------------------------------------------------
+    // 1) Update the Job record (string arrays stay as source-of-truth)
+    // -------------------------------------------------------------------
+    await prisma.job.update({
+      where: { id: jobId },
+      data: {
+        title,
+        department,
+        location,
+        locationType,
+        employmentType,
+        experienceLevel,
+        workMode,
+        shortDescription,
+        overview,
+        aboutClient,
+        responsibilities,
+        requirements,
+        benefits,
+        salaryCurrency,
+        salaryMin,
+        salaryMax,
+        salaryVisible,
+        status,
+        visibility,
+        internalOnly,
+        confidential,
+        externalId,
+        clientCompanyId,
+        tags,
+        requiredSkills,
+        slug: finalSlug,
+      },
+    });
 
-      // Rebuild JobSkill from requiredSkills
-      await tx.jobSkill.deleteMany({
-        where: {
-          jobId,
-          tenantId: existingJob.tenantId,
-        },
-      });
+    // -------------------------------------------------------------------
+    // 2) Synchronise JobSkill with requiredSkills[]
+    //    - For each requiredSkill string, ensure there is a Skill row.
+    //    - Then attach JobSkill rows for this job.
+    // -------------------------------------------------------------------
 
-      for (const nameRaw of requiredSkills) {
-        const name = nameRaw.trim();
-        if (!name) continue;
+    const tenantId = existingJob.tenantId;
 
-        const skillSlug = name
-          .toLowerCase()
-          .replace(/['"]/g, "")
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
+    // Normalise to a deduplicated list of skill names
+    const normalizedSkillNames = Array.from(
+      new Set(
+        requiredSkills
+          .map((name) => name.trim())
+          .filter((name) => name.length > 0),
+      ),
+    );
 
-        const existingSkill = await tx.skill.findFirst({
+    if (normalizedSkillNames.length > 0) {
+      // 2a) Look up or create Skill rows for each name
+      const skillRecords: { id: string }[] = [];
+
+      for (const name of normalizedSkillNames) {
+        const skillSlug = slugify(name);
+        if (!skillSlug) continue;
+
+        // Try to reuse an existing tenant-specific or global skill
+        const existingSkill = await prisma.skill.findFirst({
           where: {
             OR: [
-              { tenantId: existingJob.tenantId, slug: skillSlug },
+              { tenantId, slug: skillSlug },
               { tenantId: null, slug: skillSlug },
             ],
           },
+          select: { id: true },
         });
 
-        const skill =
-          existingSkill ??
-          (await tx.skill.create({
+        if (existingSkill) {
+          skillRecords.push({ id: existingSkill.id });
+        } else {
+          const created = await prisma.skill.create({
             data: {
-              tenantId: existingJob.tenantId,
+              tenantId,           // tenant-scoped skill
               name,
               slug: skillSlug,
-              isGlobal: false,
+              externalSource: null,
+              externalId: null,
+              description: null,
+              category: null,
             },
-          }));
+            select: { id: true },
+          });
+          skillRecords.push({ id: created.id });
+        }
+      }
 
-        await tx.jobSkill.create({
-          data: {
-            tenantId: existingJob.tenantId,
+      // 2b) Wipe existing JobSkill rows for this job and recreate
+      await prisma.jobSkill.deleteMany({
+        where: {
+          tenantId,
+          jobId,
+        },
+      });
+
+      if (skillRecords.length > 0) {
+        await prisma.jobSkill.createMany({
+          data: skillRecords.map((skill) => ({
+            tenantId,
             jobId,
             skillId: skill.id,
-            required: true,
-            importance: 3,
-          },
+            importance: null,
+            isRequired: true,
+          })),
         });
       }
-    });
+    } else {
+      // If no requiredSkills, clear JobSkill entries for this job
+      await prisma.jobSkill.deleteMany({
+        where: {
+          tenantId,
+          jobId,
+        },
+      });
+    }
 
     const redirectUrl = new URL(`/ats/jobs/${jobId}`, req.url);
     return NextResponse.redirect(redirectUrl);
