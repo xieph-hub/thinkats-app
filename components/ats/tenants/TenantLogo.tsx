@@ -29,11 +29,14 @@ export default function TenantLogo({
       ? "h-7 w-7 text-[10px]"
       : "h-9 w-9 text-xs";
 
+  const commonClasses =
+    "flex items-center justify-center rounded-lg border border-slate-200 overflow-hidden";
+
   // Fallback: initials badge
   if (!src || hasError) {
     return (
       <div
-        className={`flex items-center justify-center rounded-lg border border-slate-200 bg-slate-100 font-semibold text-slate-600 ${boxClasses}`}
+        className={`${commonClasses} bg-slate-100 font-semibold text-slate-600 ${boxClasses}`}
       >
         {initials}
       </div>
@@ -43,7 +46,7 @@ export default function TenantLogo({
   // Normal path: show logo image (any domain, no Next image config issues)
   return (
     <div
-      className={`flex items-center justify-center rounded-lg border border-slate-200 bg-white ${boxClasses}`}
+      className={`${commonClasses} bg-white ${boxClasses}`}
     >
       <img
         src={src}
