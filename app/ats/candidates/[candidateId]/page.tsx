@@ -41,6 +41,7 @@ function formatDate(d: Date | null | undefined) {
 
 function formatDateTime(d: Date | null | undefined) {
   if (!d) return "";
+  // YYYY-MM-DD HH:MM from ISO string
   const iso = d.toISOString();
   return iso.slice(0, 16).replace("T", " ");
 }
@@ -53,6 +54,7 @@ function derivePrimaryTier(apps: any[]): string | null {
     if (tier) tiers.add(tier.toUpperCase());
   }
   if (!tiers.size) return null;
+
   const ordered = ["A", "B", "C", "D"];
   for (const t of ordered) {
     if (tiers.has(t)) return t;
@@ -125,14 +127,24 @@ export default async function CandidateProfilePage({ params }: PageProps) {
     <div className="flex h-full flex-1 flex-col">
       {/* Header */}
       <header className="border-b border-slate-200 bg-white px-5 py-4">
-        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/ats/candidates" className="hover:underline">
-            Candidates
+        {/* Breadcrumb + Back button */}
+        <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <Link href="/ats/candidates" className="hover:underline">
+              Candidates
+            </Link>
+            <span>/</span>
+            <span className="font-medium text-slate-700">
+              {candidate.fullName}
+            </span>
+          </div>
+
+          <Link
+            href="/ats/candidates"
+            className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] text-slate-600 hover:bg-slate-50"
+          >
+            ← Back to all candidates
           </Link>
-          <span>/</span>
-          <span className="font-medium text-slate-700">
-            {candidate.fullName}
-          </span>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -219,7 +231,9 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                   <dt className="text-[11px] text-slate-500">
                     Current role
                   </dt>
-                  <dd className="text-xs font-medium text-slate-800">
+                  <dd className="text-xs font-medium text-slate-8
+
+00">
                     {candidate.currentTitle || "–"}
                   </dd>
                 </div>
@@ -337,9 +351,6 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                       (app.matchReason as string | null | undefined) ??
                       null;
 
-                    const inviterOrgName =
-                      app.job?.clientCompany?.name ?? tenant.name;
-
                     return (
                       <article
                         key={app.id}
@@ -405,7 +416,9 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                                   app.job?.clientCompany?.name ?? null,
                                 candidateName: candidate.fullName,
                                 candidateEmail: candidate.email,
-                                inviterOrgName,
+                                inviterOrgName:
+                                  app.job?.clientCompany?.name ||
+                                  tenant.name,
                               }}
                             />
                           </div>
