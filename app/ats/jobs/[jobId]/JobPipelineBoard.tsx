@@ -4,8 +4,41 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
+// Shape of a JobApplication as used in this board (candidate + tags + skills + scoringEvents)
+type ApplicationWithExtras = Prisma.JobApplicationGetPayload<{
+  include: {
+    candidate: {
+      include: {
+        skills: {
+          include: {
+            skill: true;
+          };
+          orderBy: {
+            createdAt: "desc";
+          };
+        };
+        tags: {
+          include: {
+            tag: true;
+          };
+        };
+      };
+    };
+    scoringEvents: {
+      orderBy: {
+        createdAt: "desc";
+      };
+      take: 1;
+    };
+  };
+}>;
+
 type JobPipelineBoardProps = {
   jobId: string;
+  // These are accepted so page.tsx can keep passing them,
+  // but the board currently computes its own columns from Prisma.
+  stageOptions?: string[];
+  apps?: ApplicationWithExtras[];
 };
 
 function tierColour(tier: string | null | undefined) {
@@ -29,30 +62,9 @@ function scoreColour(score: number | null | undefined) {
   return "text-slate-600";
 }
 
-// Shape of a JobApplication as used in this board (candidate + tags + skills + scoringEvents)
-type ApplicationWithExtras = Prisma.JobApplicationGetPayload<{
-  include: {
-    candidate: {
-      include: {
-        skills: {
-          include: {
-            skill: true;
-          };
-        };
-        tags: {
-          include: {
-            tag: true;
-          };
-        };
-      };
-    };
-    scoringEvents: true;
-  };
-}>;
+export default async function JobPipelineBoard(props: JobPipelineBoardProps) {
+  const { jobId } = props;
 
-export default async function JobPipelineBoard({
-  jobId,
-}: JobPipelineBoardProps) {
   const job = await prisma.job.findUnique({
     where: { id: jobId },
     include: {
@@ -110,8 +122,7 @@ export default async function JobPipelineBoard({
 
   for (const app of job.applications as ApplicationWithExtras[]) {
     const stageKey = (app.stage || "").toUpperCase();
-    const col =
-      columnByStageName.get(stageKey) ?? fallbackColumn;
+    const col = columnByStageName.get(stageKey) ?? fallbackColumn;
     if (col) {
       col.applications.push(app);
     }
