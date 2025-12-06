@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 export type PipelineApp = {
+  // NOTE: id = applicationId
   id: string;
+  candidateId: string | null;
+
   fullName: string;
   email: string;
   location: string | null;
@@ -32,7 +35,7 @@ function uiStatusFromDb(status: string | null | undefined): UiStatus {
   const s = (status || "").toUpperCase();
   if (s === "REJECTED") return "rejected";
   if (s === "ON_HOLD") return "on_hold";
-  return "accepted"; // default = active
+  return "accepted"; // default = active / in play
 }
 
 function dbStatusFromUi(ui: UiStatus): string {
@@ -42,23 +45,24 @@ function dbStatusFromUi(ui: UiStatus): string {
 }
 
 function scoreColor(score?: number | null) {
-  if (score == null) return "bg-slate-700/40 text-slate-100";
-  if (score >= 85) return "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40";
-  if (score >= 70) return "bg-sky-500/15 text-sky-300 border border-sky-500/40";
-  if (score >= 60) return "bg-amber-500/15 text-amber-300 border border-amber-500/40";
-  return "bg-rose-500/15 text-rose-300 border border-rose-500/40";
+  if (score == null) return "bg-slate-100 text-slate-600 border border-slate-200";
+  if (score >= 85) return "bg-emerald-50 text-emerald-700 border border-emerald-200";
+  if (score >= 70) return "bg-sky-50 text-sky-700 border border-sky-200";
+  if (score >= 60) return "bg-amber-50 text-amber-700 border border-amber-200";
+  return "bg-rose-50 text-rose-700 border border-rose-200";
 }
 
 function tierColor(tier?: string | null) {
-  if (!tier) return "bg-slate-700/40 text-slate-100";
+  if (!tier)
+    return "bg-slate-100 text-slate-600 border border-slate-200";
   const upper = tier.toUpperCase();
   if (upper === "A")
-    return "bg-emerald-600/20 text-emerald-200 border border-emerald-500/40";
+    return "bg-emerald-50 text-emerald-700 border border-emerald-200";
   if (upper === "B")
-    return "bg-sky-600/20 text-sky-200 border border-sky-500/40";
+    return "bg-sky-50 text-sky-700 border border-sky-200";
   if (upper === "C")
-    return "bg-amber-600/20 text-amber-200 border border-amber-500/40";
-  return "bg-slate-700/40 text-slate-100";
+    return "bg-amber-50 text-amber-700 border border-amber-200";
+  return "bg-slate-100 text-slate-600 border border-slate-200";
 }
 
 function formatDate(dIso: string) {
@@ -91,8 +95,7 @@ export default function JobPipelineBoard({
       .map((r) => r.matchScore)
       .filter((s): s is number => s != null);
     if (!scores.length) return "No scores yet";
-    const avg =
-      scores.reduce((acc, v) => acc + v, 0) / scores.length;
+    const avg = scores.reduce((acc, v) => acc + v, 0) / scores.length;
     return `Avg score ${Math.round(avg)}`;
   }, [rows]);
 
@@ -116,7 +119,7 @@ export default function JobPipelineBoard({
     applicationId: string,
     updates: { stage?: string; status?: string },
   ) {
-    // optimistic update
+    // Optimistic UI
     setRows((prev) =>
       prev.map((row) =>
         row.id === applicationId ? { ...row, ...updates } : row,
@@ -150,6 +153,7 @@ export default function JobPipelineBoard({
   async function bulkUpdate(payload: { status?: string; stage?: string }) {
     if (!selectedIds.length) return;
 
+    // Optimistic
     setRows((prev) =>
       prev.map((row) =>
         selectedIds.includes(row.id) ? { ...row, ...payload } : row,
@@ -183,64 +187,71 @@ export default function JobPipelineBoard({
     setBulkStage("");
   }
 
+  function openCandidateProfile(row: PipelineApp) {
+    // Prefer candidate profile if we have an id, otherwise fall back to the application route
+    if (row.candidateId) {
+      router.push(`/ats/candidates/${row.candidateId}`);
+    } else {
+      router.push(`/ats/applications/${row.id}`);
+    }
+  }
+
   return (
-    <div className="flex flex-1 flex-col bg-slate-950">
-      <section className="m-4 flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/95 text-slate-50 shadow-xl">
+    <div className="flex flex-1 flex-col bg-slate-50">
+      <section className="m-4 flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm">
         {/* Top strip: metrics & legend */}
-        <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-          <div className="space-y-0.5 text-[11px]">
-            <div className="text-[12px] font-semibold tracking-wide text-slate-100">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div className="space-y-1 text-[11px]">
+            <div className="text-[13px] font-semibold tracking-wide text-slate-900">
               Pipeline · Candidates
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-slate-400">
+            <div className="flex flex-wrap items-center gap-3 text-slate-500">
               <span>
-                {totalCount} candidate{totalCount === 1 ? "" : "s"} in
-                current view
+                {totalCount} candidate{totalCount === 1 ? "" : "s"} in view
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="h-1 w-1 rounded-full bg-emerald-400" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 {scoreSummary}
               </span>
               <span className="inline-flex items-center gap-1">
-                <span className="h-1 w-1 rounded-full bg-sky-400" />
-                <span>ThinkATS · list view</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                ThinkATS · list view
               </span>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1 text-[10px] text-slate-400">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+
+          <div className="flex flex-col items-end gap-1 text-[10px] text-slate-500">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 <span className="ml-1">85+ strong match</span>
               </span>
-              <span className="inline-flex items-center rounded-full bg-sky-500/15 px-2 py-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+              <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
                 <span className="ml-1">70–84 good</span>
               </span>
-              <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 <span className="ml-1">60–69 maybe</span>
               </span>
-              <span className="inline-flex items-center rounded-full bg-rose-500/15 px-2 py-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+              <span className="inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-[10px] text-rose-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                 <span className="ml-1">&lt;60 low fit</span>
               </span>
             </div>
-            <span>
-              Inline changes are saved instantly – no page refresh.
-            </span>
+            <span>Inline changes are saved instantly – no refresh.</span>
           </div>
         </header>
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
           <table className="min-w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-slate-950/98 backdrop-blur">
-              <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wide text-slate-400">
+            <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+              <tr className="border-b border-slate-200 text-[10px] uppercase tracking-wide text-slate-500">
                 <th className="w-10 px-3 py-2 text-left">
                   <input
                     type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-500 bg-slate-900 text-sky-500"
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600"
                     checked={allSelected}
                     onChange={toggleSelectAll}
                   />
@@ -261,20 +272,27 @@ export default function JobPipelineBoard({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {rows.map((row, idx) => {
                 const uiStatus = uiStatusFromDb(row.status);
+                const isSelected = selectedIds.includes(row.id);
+                const zebra = idx % 2 === 1;
 
                 return (
                   <tr
                     key={row.id}
-                    className="border-b border-slate-900/80 bg-slate-950/60 hover:bg-slate-900/70"
+                    className={[
+                      "border-b border-slate-100 transition-colors",
+                      zebra ? "bg-slate-50/40" : "bg-white",
+                      "hover:bg-sky-50/60",
+                      isSelected ? "bg-sky-50/80" : "",
+                    ].join(" ")}
                   >
                     {/* Select */}
                     <td className="px-3 py-3 align-top">
                       <input
                         type="checkbox"
-                        className="h-3.5 w-3.5 rounded border-slate-500 bg-slate-900 text-sky-500"
-                        checked={selectedIds.includes(row.id)}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600"
+                        checked={isSelected}
                         onChange={() => toggleSelectOne(row.id)}
                       />
                     </td>
@@ -282,26 +300,40 @@ export default function JobPipelineBoard({
                     {/* Candidate */}
                     <td className="px-2 py-3 align-top">
                       <div className="flex items-start gap-2">
-                        <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sky-500 text-[11px] font-semibold text-slate-950">
+                        <button
+                          type="button"
+                          onClick={() => openCandidateProfile(row)}
+                          className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-sky-600 text-[11px] font-semibold text-white shadow-sm transition hover:bg-sky-700"
+                          title="Open candidate profile"
+                        >
                           {row.fullName
                             .split(" ")
                             .slice(0, 2)
                             .map((p) => p[0]?.toUpperCase())
                             .join("")}
-                        </div>
-                        <div>
-                          <div className="text-[13px] font-semibold text-slate-50">
-                            {row.fullName}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openCandidateProfile(row)}
+                          className="group text-left"
+                        >
+                          <div className="flex items-center gap-1">
+                            <div className="text-[13px] font-semibold text-slate-900 group-hover:text-sky-700">
+                              {row.fullName}
+                            </div>
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-slate-500 group-hover:border-sky-200 group-hover:text-sky-600">
+                              View profile
+                            </span>
                           </div>
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-[10px] text-slate-500">
                             {row.email}
                           </div>
                           {row.matchReason && (
-                            <p className="mt-1 line-clamp-2 text-[10px] text-slate-300">
+                            <p className="mt-1 line-clamp-2 text-[10px] text-slate-600">
                               {row.matchReason}
                             </p>
                           )}
-                        </div>
+                        </button>
                       </div>
                     </td>
 
@@ -331,11 +363,16 @@ export default function JobPipelineBoard({
 
                     {/* Location / source */}
                     <td className="px-2 py-3 align-top">
-                      <div className="flex flex-col gap-1 text-[10px] text-slate-300">
-                        {row.location && <span>{row.location}</span>}
+                      <div className="flex flex-col gap-1 text-[10px] text-slate-600">
+                        {row.location && (
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                            {row.location}
+                          </span>
+                        )}
                         {row.source && (
-                          <span className="inline-flex items-center gap-1 text-slate-400">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                          <span className="inline-flex items-center gap-1 text-slate-500">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-300" />
                             {row.source}
                           </span>
                         )}
@@ -348,13 +385,13 @@ export default function JobPipelineBoard({
                         {row.skillTags.slice(0, 4).map((tag) => (
                           <span
                             key={tag.id}
-                            className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-100"
+                            className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700"
                           >
                             {tag.label}
                           </span>
                         ))}
                         {row.experienceLabel && (
-                          <span className="rounded-full bg-emerald-700/40 px-2 py-0.5 text-[10px] text-emerald-100">
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
                             {row.experienceLabel}
                           </span>
                         )}
@@ -363,17 +400,17 @@ export default function JobPipelineBoard({
 
                     {/* Status control – Accept / On hold / Reject */}
                     <td className="px-2 py-3 align-top">
-                      <div className="inline-flex rounded-full bg-slate-900 p-0.5 text-[10px]">
+                      <div className="inline-flex rounded-full bg-slate-50 p-0.5 text-[10px] shadow-inner">
                         <button
                           type="button"
                           onClick={() =>
                             handleStatusChange(row.id, "accepted")
                           }
                           className={[
-                            "flex-1 rounded-full px-2 py-0.5",
+                            "flex-1 rounded-full px-2 py-0.5 transition",
                             uiStatus === "accepted"
-                              ? "bg-emerald-500 text-slate-950"
-                              : "text-slate-300 hover:bg-emerald-500/20",
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "text-slate-500 hover:bg-emerald-50 hover:text-emerald-700",
                           ].join(" ")}
                         >
                           ✓ Accept
@@ -384,10 +421,10 @@ export default function JobPipelineBoard({
                             handleStatusChange(row.id, "on_hold")
                           }
                           className={[
-                            "flex-1 rounded-full px-2 py-0.5",
+                            "flex-1 rounded-full px-2 py-0.5 transition",
                             uiStatus === "on_hold"
-                              ? "bg-amber-400 text-slate-950"
-                              : "text-slate-300 hover:bg-amber-400/20",
+                              ? "bg-amber-400 text-slate-900 shadow-sm"
+                              : "text-slate-500 hover:bg-amber-50 hover:text-amber-700",
                           ].join(" ")}
                         >
                           ⏸ On hold
@@ -398,17 +435,17 @@ export default function JobPipelineBoard({
                             handleStatusChange(row.id, "rejected")
                           }
                           className={[
-                            "flex-1 rounded-full px-2 py-0.5",
+                            "flex-1 rounded-full px-2 py-0.5 transition",
                             uiStatus === "rejected"
-                              ? "bg-rose-500 text-slate-50"
-                              : "text-slate-300 hover:bg-rose-500/20",
+                              ? "bg-rose-500 text-white shadow-sm"
+                              : "text-slate-500 hover:bg-rose-50 hover:text-rose-700",
                           ].join(" ")}
                         >
                           ✗ Reject
                         </button>
                       </div>
                       {row.status && (
-                        <div className="mt-1 text-[10px] text-slate-500">
+                        <div className="mt-1 text-[10px] text-slate-400">
                           Stored as: {row.status}
                         </div>
                       )}
@@ -417,7 +454,7 @@ export default function JobPipelineBoard({
                     {/* Stage dropdown */}
                     <td className="px-2 py-3 align-top">
                       <select
-                        className="h-8 w-full rounded-full border border-slate-700 bg-slate-900 px-3 text-[11px] text-slate-100 outline-none focus:border-sky-500"
+                        className="h-8 w-full rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 outline-none transition focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
                         value={row.stage || ""}
                         onChange={(e) =>
                           handleStageChange(row.id, e.target.value)
@@ -433,7 +470,7 @@ export default function JobPipelineBoard({
                     </td>
 
                     {/* Applied */}
-                    <td className="px-2 py-3 align-top text-[10px] text-slate-300">
+                    <td className="px-2 py-3 align-top text-[10px] text-slate-600">
                       {formatDate(row.appliedAt)}
                     </td>
                   </tr>
@@ -444,7 +481,7 @@ export default function JobPipelineBoard({
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-8 text-center text-[11px] text-slate-400"
+                    className="px-4 py-8 text-center text-[11px] text-slate-500"
                   >
                     No candidates match the current filters.
                   </td>
@@ -456,7 +493,7 @@ export default function JobPipelineBoard({
 
         {/* Bulk action bar */}
         {selectedCount > 0 && (
-          <footer className="border-t border-slate-800 bg-slate-950/95 px-4 py-3 text-[11px] text-slate-100">
+          <footer className="border-t border-slate-200 bg-slate-50 px-4 py-3 text-[11px] text-slate-800">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">
@@ -465,31 +502,31 @@ export default function JobPipelineBoard({
                 <button
                   type="button"
                   onClick={() => setSelectedIds([])}
-                  className="text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                  className="text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
                 >
                   Clear
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex rounded-full bg-slate-900 p-0.5">
+                <div className="inline-flex rounded-full bg-white p-0.5 shadow-sm">
                   <button
                     type="button"
                     onClick={() => handleBulkStatus("accepted")}
-                    className="rounded-full px-3 py-1 text-[10px] hover:bg-emerald-500/20"
+                    className="rounded-full px-3 py-1 text-[10px] text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
                   >
                     ✓ Mark as accepted
                   </button>
                   <button
                     type="button"
                     onClick={() => handleBulkStatus("on_hold")}
-                    className="rounded-full px-3 py-1 text-[10px] hover:bg-amber-400/20"
+                    className="rounded-full px-3 py-1 text-[10px] text-slate-700 hover:bg-amber-50 hover:text-amber-700"
                   >
                     ⏸ Mark on hold
                   </button>
                   <button
                     type="button"
                     onClick={() => handleBulkStatus("rejected")}
-                    className="rounded-full px-3 py-1 text-[10px] hover:bg-rose-500/20"
+                    className="rounded-full px-3 py-1 text-[10px] text-slate-700 hover:bg-rose-50 hover:text-rose-700"
                   >
                     ✗ Reject
                   </button>
@@ -499,7 +536,7 @@ export default function JobPipelineBoard({
                   <select
                     value={bulkStage}
                     onChange={(e) => setBulkStage(e.target.value)}
-                    className="h-8 rounded-full border border-slate-700 bg-slate-900 px-3 text-[11px] text-slate-100 outline-none focus:border-sky-500"
+                    className="h-8 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-200"
                   >
                     <option value="">Move to stage…</option>
                     {stageOptions.map((s) => (
@@ -511,7 +548,7 @@ export default function JobPipelineBoard({
                   <button
                     type="button"
                     onClick={handleBulkStageApply}
-                    className="inline-flex h-8 items-center rounded-full bg-sky-500 px-3 text-[11px] font-semibold text-slate-950 hover:bg-sky-400"
+                    className="inline-flex h-8 items-center rounded-full bg-sky-600 px-3 text-[11px] font-semibold text-white shadow-sm hover:bg-sky-500"
                   >
                     Apply
                   </button>
