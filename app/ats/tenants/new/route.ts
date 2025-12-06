@@ -11,6 +11,12 @@ function slugify(input: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function toNullableString(value: FormDataEntryValue | null): string | null {
+  if (!value) return null;
+  const s = value.toString().trim();
+  return s.length ? s : null;
+}
+
 async function uploadLogoToStorage(file: File, folder: "tenant-logos") {
   if (!file) return null;
 
@@ -25,7 +31,6 @@ async function uploadLogoToStorage(file: File, folder: "tenant-logos") {
       .toString(36)
       .slice(2)}.${ext.toLowerCase()}`;
 
-    // Convert File -> Uint8Array for Supabase storage
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     const contentType =
@@ -70,8 +75,19 @@ export async function POST(req: Request) {
   const nameRaw = formData.get("name");
   const slugRaw = formData.get("slug");
   const logoFile = formData.get("logo") as File | null;
+
   const statusRaw = formData.get("status");
   const primaryContactEmailRaw = formData.get("primaryContactEmail");
+
+  const registrationNumberRaw = formData.get("registrationNumber");
+  const taxIdRaw = formData.get("taxId");
+  const countryRaw = formData.get("country");
+  const stateRaw = formData.get("state");
+  const cityRaw = formData.get("city");
+  const addressLine1Raw = formData.get("addressLine1");
+  const addressLine2Raw = formData.get("addressLine2");
+  const industryRaw = formData.get("industry");
+  const websiteUrlRaw = formData.get("websiteUrl");
 
   const name = typeof nameRaw === "string" ? nameRaw.trim() : "";
   let slug = typeof slugRaw === "string" ? slugRaw.trim() : "";
@@ -94,11 +110,16 @@ export async function POST(req: Request) {
       ? statusRaw.trim().toLowerCase()
       : null;
 
-  const primaryContactEmail =
-    typeof primaryContactEmailRaw === "string" &&
-    primaryContactEmailRaw.trim().length > 0
-      ? primaryContactEmailRaw.trim()
-      : null;
+  const primaryContactEmail = toNullableString(primaryContactEmailRaw);
+  const registrationNumber = toNullableString(registrationNumberRaw);
+  const taxId = toNullableString(taxIdRaw);
+  const country = toNullableString(countryRaw);
+  const state = toNullableString(stateRaw);
+  const city = toNullableString(cityRaw);
+  const addressLine1 = toNullableString(addressLine1Raw);
+  const addressLine2 = toNullableString(addressLine2Raw);
+  const industry = toNullableString(industryRaw);
+  const websiteUrl = toNullableString(websiteUrlRaw);
 
   let logoUrl: string | null = null;
   if (logoFile && typeof (logoFile as any).arrayBuffer === "function") {
@@ -109,20 +130,23 @@ export async function POST(req: Request) {
     const data: any = {
       name,
       slug,
+      // status has default("active") but we allow override here.
     };
 
-    if (logoUrl) {
-      data.logoUrl = logoUrl;
-    }
-    if (primaryContactEmail) {
-      data.primaryContactEmail = primaryContactEmail;
-    }
-    if (status) {
-      data.status = status;
-    }
+    if (status) data.status = status;
+    if (primaryContactEmail) data.primaryContactEmail = primaryContactEmail;
+    if (registrationNumber) data.registrationNumber = registrationNumber;
+    if (taxId) data.taxId = taxId;
+    if (country) data.country = country;
+    if (state) data.state = state;
+    if (city) data.city = city;
+    if (addressLine1) data.addressLine1 = addressLine1;
+    if (addressLine2) data.addressLine2 = addressLine2;
+    if (industry) data.industry = industry;
+    if (websiteUrl) data.websiteUrl = websiteUrl;
+    if (logoUrl) data.logoUrl = logoUrl;
 
     if (tenantId) {
-      // Update existing workspace
       await prisma.tenant.update({
         where: { id: tenantId },
         data,
@@ -134,7 +158,6 @@ export async function POST(req: Request) {
       return NextResponse.redirect(url, 303);
     }
 
-    // Create new workspace
     await prisma.tenant.create({
       data,
     });
