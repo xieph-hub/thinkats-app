@@ -11,9 +11,50 @@ import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ThinkATS | Modern Applicant Tracking System",
+  metadataBase: new URL("https://www.thinkats.com"),
+  title: {
+    default: "ThinkATS | Modern Applicant Tracking System",
+    template: "%s | ThinkATS",
+  },
   description:
     "ThinkATS is a modern, multi-tenant ATS for recruitment teams, agencies and HR departments.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      {
+        url: "/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
+  openGraph: {
+    title: "ThinkATS | Modern Applicant Tracking System",
+    description:
+      "ThinkATS is a multi-tenant recruitment OS for jobs, pipelines, careers sites and candidate experience in one place.",
+    url: "https://www.thinkats.com",
+    siteName: "ThinkATS",
+    images: [
+      {
+        url: "/og-default.png",
+        width: 1200,
+        height: 630,
+        alt: "ThinkATS – modern recruiting OS",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ThinkATS | Modern Applicant Tracking System",
+    description:
+      "ThinkATS helps founders and HR teams run recruiting with multi-tenant ATS, careers sites and pipelines in one place.",
+    images: ["/og-default.png"],
+  },
 };
 
 export default async function RootLayout({
