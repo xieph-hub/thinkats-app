@@ -23,8 +23,16 @@ type TalentNetworkPayload = {
   sourceLabel?: string;      // e.g. "Talent Network", "Sourcing Drive – Lagos"
 };
 
-function normaliseSkillName(raw: string): string {
-  return raw.trim().toLowerCase();
+// Normalise to a URL-safe, tenant-scoped skill key
+function slugify(input: string): string {
+  return input
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
 export async function POST(req: Request) {
@@ -97,6 +105,7 @@ export async function POST(req: Request) {
           currentTitle: body.currentTitle?.trim() || candidate.currentTitle,
           currentCompany:
             body.currentCompany?.trim() || candidate.currentCompany,
+          // Do not erase an existing, richer source – just backfill if empty
           source: candidate.source ?? "talent_network",
         },
       });
@@ -111,20 +120,14 @@ export async function POST(req: Request) {
       const name = (raw.name || "").trim();
       if (!name) continue;
 
-      const normalizedName = normaliseSkillName(name);
+      const skillSlug = slugify(name);
 
-      // Prefer a tenant-local skill; fall back to global ESCO/etc if present.
+      // Prefer a tenant-local skill; fall back to global (tenantId = null)
       let skill = await prisma.skill.findFirst({
         where: {
           OR: [
-            {
-              tenantId: tenant.id,
-              normalizedName,
-            },
-            {
-              tenantId: null,
-              normalizedName,
-            },
+            { tenantId: tenant.id, slug: skillSlug },
+            { tenantId: null, slug: skillSlug },
           ],
         },
       });
@@ -135,12 +138,11 @@ export async function POST(req: Request) {
           data: {
             tenantId: tenant.id,
             name,
-            normalizedName,
+            slug: skillSlug,
             category: null,
             description: null,
             externalSource: null,
             externalId: null,
-            isGlobal: false,
           },
         });
       } else if (skill.tenantId === tenant.id && skill.name !== name) {
@@ -152,7 +154,8 @@ export async function POST(req: Request) {
       }
 
       const proficiency =
-        typeof raw.proficiency === "number" && Number.isFinite(raw.proficiency)
+        typeof raw.proficiency === "number" &&
+        Number.isFinite(raw.proficiency)
           ? raw.proficiency
           : null;
 
@@ -186,7 +189,7 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------------
-    // 3) Tag candidate with a SOURCE tag (TagKind.SOURCE)
+    // 3) Tag candidate with a SOURCE tag (kind = "SOURCE")
     // -------------------------------------------------------------------
     const sourceLabel = (body.sourceLabel || "Talent Network").trim();
 
@@ -204,7 +207,7 @@ export async function POST(req: Request) {
           tenantId: tenant.id,
           name: sourceLabel,
           kind: "SOURCE",
-          color: "#2563EB", // soft blue – tweak in UI if needed
+          color: "#2563EB", // soft blue – adjust in UI if needed
           isSystem: true,
         },
       });
@@ -236,7 +239,8 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to join talent network. Please try again shortly.",
+        error:
+          "Failed to join talent network. Please try again shortly.",
       },
       { status: 500 },
     );
