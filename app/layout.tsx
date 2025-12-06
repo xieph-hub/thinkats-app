@@ -20,13 +20,24 @@ export const metadata: Metadata = {
     "ThinkATS is a modern, multi-tenant ATS for recruitment teams, agencies and HR departments.",
   icons: {
     icon: [
-      { url: "/favicon.ico", type: "image/x-icon" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      {
+        url: "/favicon.ico?v=2",
+        type: "image/x-icon",
+      },
+      {
+        url: "/icon-192.png?v=2",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/icon-512.png?v=2",
+        sizes: "512x512",
+        type: "image/png",
+      },
     ],
     apple: [
       {
-        url: "/apple-touch-icon.png",
+        url: "/apple-touch-icon.png?v=2",
         sizes: "180x180",
         type: "image/png",
       },
@@ -40,7 +51,7 @@ export const metadata: Metadata = {
     siteName: "ThinkATS",
     images: [
       {
-        url: "/og-default.png",
+        url: "/og-default.png?v=2",
         width: 1200,
         height: 630,
         alt: "ThinkATS – modern recruiting OS",
@@ -53,7 +64,7 @@ export const metadata: Metadata = {
     title: "ThinkATS | Modern Applicant Tracking System",
     description:
       "ThinkATS helps founders and HR teams run recruiting with multi-tenant ATS, careers sites and pipelines in one place.",
-    images: ["/og-default.png"],
+    images: ["/og-default.png?v=2"],
   },
 };
 
