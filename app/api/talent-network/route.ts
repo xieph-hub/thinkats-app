@@ -5,8 +5,8 @@ import { getResourcinTenant } from "@/lib/tenant";
 
 type IncomingSkill = {
   name: string;
-  proficiency?: number;      // 1–5
-  yearsExperience?: number;  // integer
+  proficiency?: number;      // 1–5 (for future use)
+  yearsExperience?: number;  // integer (for future use)
 };
 
 type TalentNetworkPayload = {
@@ -153,19 +153,11 @@ export async function POST(req: Request) {
         });
       }
 
-      const proficiency =
-        typeof raw.proficiency === "number" &&
-        Number.isFinite(raw.proficiency)
-          ? raw.proficiency
-          : null;
+      // We *read* proficiency / yearsExperience for future use, but
+      // don't persist them yet because they aren't in the Prisma model.
+      // const proficiency = ...
+      // const yearsExperience = ...
 
-      const yearsExperience =
-        typeof raw.yearsExperience === "number" &&
-        Number.isInteger(raw.yearsExperience)
-          ? raw.yearsExperience
-          : null;
-
-      // Manual "upsert" without relying on a composite unique in Prisma types
       const existingCandidateSkill = await prisma.candidateSkill.findFirst({
         where: {
           candidateId: candidate.id,
@@ -177,8 +169,6 @@ export async function POST(req: Request) {
         await prisma.candidateSkill.update({
           where: { id: existingCandidateSkill.id },
           data: {
-            proficiency: proficiency ?? undefined,
-            yearsExperience: yearsExperience ?? undefined,
             source: "talent_network",
           },
         });
@@ -188,8 +178,6 @@ export async function POST(req: Request) {
             tenantId: tenant.id,
             candidateId: candidate.id,
             skillId: skill.id,
-            proficiency,
-            yearsExperience,
             source: "talent_network",
           },
         });
