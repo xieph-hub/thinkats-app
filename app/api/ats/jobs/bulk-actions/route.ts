@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
         data: {
           status: "open",
           visibility: "public",
-          isPublished: true,
         },
       });
     } else if (action === "unpublish") {
@@ -64,7 +63,6 @@ export async function POST(req: NextRequest) {
         where: jobWhere,
         data: {
           visibility: "internal",
-          isPublished: false,
         },
       });
     } else if (action === "close") {
@@ -72,7 +70,6 @@ export async function POST(req: NextRequest) {
         where: jobWhere,
         data: {
           status: "closed",
-          isPublished: false,
         },
       });
     } else if (action === "delete") {
@@ -116,7 +113,6 @@ export async function POST(req: NextRequest) {
         id: true,
         status: true,
         visibility: true,
-        isPublished: true,
       },
     });
 
