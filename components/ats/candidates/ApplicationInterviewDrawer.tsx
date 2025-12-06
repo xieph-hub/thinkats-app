@@ -1,7 +1,7 @@
 // components/ats/candidates/ApplicationInterviewDrawer.tsx
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type ApplicationContext = {
@@ -11,6 +11,7 @@ type ApplicationContext = {
   clientName: string | null;
   candidateName: string;
   candidateEmail: string | null;
+  inviterOrgName: string;
 };
 
 type Props = {
@@ -18,134 +19,141 @@ type Props = {
   application: ApplicationContext;
 };
 
-type AttendeeRow = {
+type Attendee = {
   name: string;
   email: string;
   role: string;
 };
 
 export default function ApplicationInterviewDrawer({
-  candidateId, // kept for potential future redirect usage
+  candidateId,
   application,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [attendees, setAttendees] = useState<AttendeeRow[]>([]);
+  const [attendees, setAttendees] = useState<Attendee[]>([
+    { name: "", email: "", role: "Interviewer" },
+  ]);
 
   function handleOpen() {
+    setError(null);
     setOpen(true);
   }
 
   function handleClose() {
-    if (isSubmitting) return;
+    if (submitting) return;
     setOpen(false);
-    setError(null);
-    // optional: clear attendees when closing
-    // setAttendees([]);
   }
 
-  function handleAddAttendee() {
+  function updateAttendee(
+    index: number,
+    field: keyof Attendee,
+    value: string,
+  ) {
+    setAttendees((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  }
+
+  function addAttendeeRow() {
     setAttendees((prev) => [
       ...prev,
       { name: "", email: "", role: "Interviewer" },
     ]);
   }
 
-  function handleRemoveAttendee(index: number) {
-    setAttendees((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function handleChangeAttendee(
-    index: number,
-    field: keyof AttendeeRow,
-    value: string,
-  ) {
+  function removeAttendeeRow(index: number) {
     setAttendees((prev) =>
-      prev.map((row, i) =>
-        i === index ? { ...row, [field]: value } : row,
-      ),
+      prev.length <= 1 ? prev : prev.filter((_, i) => i !== index),
     );
   }
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting) return;
+
+    setSubmitting(true);
     setError(null);
-    setIsSubmitting(true);
 
     try {
       const form = e.currentTarget;
       const formData = new FormData(form);
 
-      const scheduledAt = String(formData.get("scheduledAt") || "");
-      const type = String(formData.get("type") || "");
-      const durationRaw = String(formData.get("durationMins") || "");
-      const location = String(formData.get("location") || "");
-      const videoUrl = String(formData.get("videoUrl") || "");
-      const notes = String(formData.get("notes") || "");
-      const organiserName = String(formData.get("organiserName") || "");
-      const organiserEmail = String(formData.get("organiserEmail") || "");
+      const scheduledAt = (formData.get("scheduledAt") as string) || "";
+      const type = (formData.get("type") as string) || "VIRTUAL";
+      const durationMinsRaw = formData.get("durationMins") as string;
+      const durationMins = durationMinsRaw
+        ? Number(durationMinsRaw)
+        : 60;
 
-      if (!scheduledAt) {
-        throw new Error("Please select a date and time.");
-      }
+      const location =
+        ((formData.get("location") as string) || "").trim() || null;
+      const videoUrl =
+        ((formData.get("videoUrl") as string) || "").trim() || null;
+      const notes =
+        ((formData.get("notes") as string) || "").trim() || null;
+      const organiserName =
+        ((formData.get("organiserName") as string) || "").trim() ||
+        null;
+      const organiserEmail =
+        ((formData.get("organiserEmail") as string) || "").trim() ||
+        null;
 
-      const durationMins =
-        durationRaw.trim() === "" ? undefined : Number(durationRaw);
-
-      const attendeesPayload = attendees
+      const cleanAttendees = attendees
         .map((a) => ({
-          name: a.name.trim() || undefined,
+          name: a.name.trim(),
           email: a.email.trim(),
-          role: a.role.trim() || undefined,
+          role: a.role.trim(),
         }))
-        .filter((a) => a.email); // only send rows with an email
+        .filter((a) => a.email);
 
-      const body = {
+      const payload = {
         applicationId: application.id,
         scheduledAt,
         durationMins,
-        type: type || undefined,
-        location: location || null,
-        videoUrl: videoUrl || null,
-        notes: notes || null,
-        organiserName: organiserName || null,
-        organiserEmail: organiserEmail || null,
-        attendees: attendeesPayload,
+        type,
+        location,
+        videoUrl,
+        notes,
+        organiserName,
+        organiserEmail,
+        inviterOrgName: application.inviterOrgName,
+        attendees: cleanAttendees,
       };
 
       const res = await fetch("/api/ats/interviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
 
-      let data: any = null;
-      try {
-        data = await res.json();
-      } catch {
-        // ignore parse error
-      }
+      const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || data?.ok === false) {
+      if (!res.ok || !data.ok) {
         throw new Error(
-          data?.error || "Failed to schedule interview. Please try again.",
+          data?.error ||
+            "Unable to schedule interview. Please try again.",
         );
       }
 
-      // Success: reset, close, refresh so interviews + participants show up
-      form.reset();
-      setAttendees([]);
       setOpen(false);
       router.refresh();
     } catch (err: any) {
-      setError(err?.message || "Something went wrong scheduling interview.");
+      console.error("Error scheduling interview", err);
+      setError(
+        err?.message ||
+          "Something went wrong while scheduling the interview.",
+      );
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   }
+
+  const orgLabel = application.inviterOrgName;
 
   return (
     <>
@@ -167,7 +175,6 @@ export default function ApplicationInterviewDrawer({
 
           {/* Drawer panel */}
           <div className="relative ml-auto flex h-full w-full max-w-md flex-col bg-white shadow-xl">
-            {/* Header */}
             <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">
@@ -179,6 +186,12 @@ export default function ApplicationInterviewDrawer({
                     ? ` · ${application.clientName}`
                     : ""}
                 </p>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  From:{" "}
+                  <span className="font-medium text-slate-800">
+                    {orgLabel}
+                  </span>
+                </p>
               </div>
               <button
                 type="button"
@@ -189,10 +202,15 @@ export default function ApplicationInterviewDrawer({
               </button>
             </div>
 
-            {/* Body + form */}
             <div className="flex-1 overflow-y-auto px-4 py-3 text-xs text-slate-700">
               <form onSubmit={handleSubmit} className="space-y-3">
-                {/* When */}
+                {/* Hidden: candidate just for context if you ever need */}
+                <input
+                  type="hidden"
+                  name="candidateId"
+                  value={candidateId}
+                />
+
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-500">
                     When
@@ -209,7 +227,6 @@ export default function ApplicationInterviewDrawer({
                   </p>
                 </div>
 
-                {/* Type + duration */}
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
                   <div className="space-y-1">
                     <label className="text-[11px] text-slate-500">
@@ -242,7 +259,6 @@ export default function ApplicationInterviewDrawer({
                   </div>
                 </div>
 
-                {/* Location */}
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-500">
                     Location (if in-person)
@@ -255,7 +271,6 @@ export default function ApplicationInterviewDrawer({
                   />
                 </div>
 
-                {/* Video link */}
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-500">
                     Video link (if virtual)
@@ -268,7 +283,6 @@ export default function ApplicationInterviewDrawer({
                   />
                 </div>
 
-                {/* Organiser details */}
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label className="text-[11px] text-slate-500">
@@ -294,86 +308,6 @@ export default function ApplicationInterviewDrawer({
                   </div>
                 </div>
 
-                {/* Attendees */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] text-slate-500">
-                      Interviewers / attendees (optional)
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAddAttendee}
-                      className="text-[10px] font-medium text-sky-700 hover:underline"
-                    >
-                      + Add attendee
-                    </button>
-                  </div>
-                  {attendees.length === 0 && (
-                    <p className="text-[10px] text-slate-400">
-                      Add interviewers here to CC them and track them as
-                      participants on the candidate profile.
-                    </p>
-                  )}
-                  {attendees.length > 0 && (
-                    <div className="space-y-2">
-                      {attendees.map((row, index) => (
-                        <div
-                          key={index}
-                          className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto]"
-                        >
-                          <input
-                            type="text"
-                            value={row.name}
-                            onChange={(e) =>
-                              handleChangeAttendee(
-                                index,
-                                "name",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Name"
-                            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
-                          />
-                          <input
-                            type="email"
-                            value={row.email}
-                            onChange={(e) =>
-                              handleChangeAttendee(
-                                index,
-                                "email",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="email@company.com"
-                            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
-                          />
-                          <input
-                            type="text"
-                            value={row.role}
-                            onChange={(e) =>
-                              handleChangeAttendee(
-                                index,
-                                "role",
-                                e.target.value,
-                              )
-                            }
-                            placeholder="Role (Interviewer, Observer…)"
-                            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAttendee(index)}
-                            className="self-center text-[10px] text-slate-400 hover:text-rose-500"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Notes */}
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-500">
                     Internal notes
@@ -389,28 +323,89 @@ export default function ApplicationInterviewDrawer({
                   </p>
                 </div>
 
-                {error && (
-                  <p className="text-[11px] text-rose-600">
-                    {error}
+                {/* Attendees */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-slate-500">
+                      Interviewers &amp; attendees (CC)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addAttendeeRow}
+                      className="text-[10px] font-medium text-sky-700 hover:underline"
+                    >
+                      + Add attendee
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {attendees.map((att, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2"
+                      >
+                        <input
+                          type="text"
+                          placeholder="Name"
+                          value={att.name}
+                          onChange={(e) =>
+                            updateAttendee(index, "name", e.target.value)
+                          }
+                          className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+                        />
+                        <input
+                          type="email"
+                          placeholder="email@company.com"
+                          value={att.email}
+                          onChange={(e) =>
+                            updateAttendee(index, "email", e.target.value)
+                          }
+                          className="h-7 flex-[1.4] rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Role"
+                          value={att.role}
+                          onChange={(e) =>
+                            updateAttendee(index, "role", e.target.value)
+                          }
+                          className="h-7 w-24 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAttendeeRow(index)}
+                          className="text-[10px] text-slate-400 hover:text-rose-600"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    All attendees with an email will be CC’d on the invite and
+                    appear as participants in the candidate’s timeline.
                   </p>
+                </div>
+
+                {error && (
+                  <p className="text-[11px] text-rose-600">{error}</p>
                 )}
 
-                {/* Actions */}
                 <div className="mt-2 flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={handleClose}
-                    disabled={isSubmitting}
+                    disabled={submitting}
                     className="inline-flex h-8 items-center rounded-full border border-slate-200 px-3 text-[11px] text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                    disabled={submitting}
+                    className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800 disabled:opacity-70"
                   >
-                    {isSubmitting ? "Saving…" : "Save interview"}
+                    {submitting ? "Saving…" : "Save interview"}
                   </button>
                 </div>
               </form>
