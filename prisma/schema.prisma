@@ -26,6 +26,17 @@ model Tenant {
   hiringMode    String @map("hiring_mode") @default("balanced") // volume | executive | balanced
   scoringConfig Json?  @map("scoring_config")                    // tenant-level weights/thresholds
 
+  // KYC / compliance-lite fields (mapped to existing Supabase columns)
+  registrationNumber String? @map("registration_number")
+  taxId              String? @map("tax_id")
+  country            String? @map("country")
+  state              String? @map("state")
+  city               String? @map("city")
+  addressLine1       String? @map("address_line_1")
+  addressLine2       String? @map("address_line_2")
+  industry           String? @map("industry")
+  websiteUrl         String? @map("website_url")
+
   internalNotes String?   @map("notes")
   logoUrl       String?   @map("logo_url")
   createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
