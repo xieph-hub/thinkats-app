@@ -20,9 +20,7 @@ function toStringOrNull(value: FormDataEntryValue | null): string | null {
   return s.length ? s : null;
 }
 
-function parseNumberValue(
-  value: FormDataEntryValue | null,
-): number | null {
+function parseNumberValue(value: FormDataEntryValue | null): number | null {
   if (!value) return null;
   const s = value.toString().replace(/,/g, "").trim();
   if (!s) return null;
@@ -54,8 +52,7 @@ export async function POST(req: NextRequest) {
 
     // ----- Required: title -----
     const titleRaw = formData.get("title");
-    const title =
-      typeof titleRaw === "string" ? titleRaw.trim() : "";
+    const title = typeof titleRaw === "string" ? titleRaw.trim() : "";
 
     if (!title) {
       return NextResponse.json(
@@ -65,9 +62,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ----- Core relations / ownership -----
-    const clientCompanyId = toStringOrNull(
-      formData.get("clientCompanyId"),
-    );
+    const clientCompanyId = toStringOrNull(formData.get("clientCompanyId"));
 
     const hiringManagerId = toStringOrNull(
       formData.get("hiringManagerId"),
@@ -102,9 +97,7 @@ export async function POST(req: NextRequest) {
       formData.get("shortDescription"),
     );
     const overview = toStringOrNull(formData.get("overview"));
-    const aboutClient = toStringOrNull(
-      formData.get("aboutClient"),
-    );
+    const aboutClient = toStringOrNull(formData.get("aboutClient"));
     const responsibilities = toStringOrNull(
       formData.get("responsibilities"),
     );
@@ -132,9 +125,7 @@ export async function POST(req: NextRequest) {
 
     // ----- Status / visibility -----
     const statusRaw = toStringOrNull(formData.get("status"));
-    const visibilityRaw = toStringOrNull(
-      formData.get("visibility"),
-    );
+    const visibilityRaw = toStringOrNull(formData.get("visibility"));
 
     const status =
       statusRaw && ["draft", "open", "closed"].includes(statusRaw)
@@ -142,8 +133,7 @@ export async function POST(req: NextRequest) {
         : "draft";
 
     const visibility =
-      visibilityRaw &&
-      ["public", "internal"].includes(visibilityRaw)
+      visibilityRaw && ["public", "internal"].includes(visibilityRaw)
         ? visibilityRaw
         : "public";
 
@@ -161,8 +151,7 @@ export async function POST(req: NextRequest) {
       toStringOrNull(formData.get("salaryCurrency")) ?? "NGN";
 
     // ----- Slug generation (per tenant) -----
-    const slugSource =
-      toStringOrNull(formData.get("slug")) ?? title;
+    const slugSource = toStringOrNull(formData.get("slug")) ?? title;
     const baseSlug = slugify(slugSource);
     let slug: string | null = baseSlug || null;
 
@@ -179,6 +168,9 @@ export async function POST(req: NextRequest) {
         slug = `${baseSlug}-${Date.now().toString(36)}`;
       }
     }
+
+    // Derived published flag to keep legacy fields in sync
+    const isPublished = status === "open" && visibility === "public";
 
     // ----- Create job -----
     const job = await prisma.job.create({
@@ -220,6 +212,7 @@ export async function POST(req: NextRequest) {
         visibility,
         internalOnly,
         confidential,
+        isPublished,
 
         // Compensation
         salaryMin,
@@ -233,10 +226,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Redirect to the ATS job pipeline view for this role
-    const redirectUrl = new URL(
-      `/ats/jobs/${job.id}`,
-      req.url,
-    ).toString();
+    const redirectUrl = new URL(`/ats/jobs/${job.id}`, req.url).toString();
 
     return NextResponse.redirect(redirectUrl, {
       status: 303,
