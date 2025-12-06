@@ -60,9 +60,18 @@ async function uploadLogoToStorage(file: File, folder: "tenant-logos") {
 
 export async function POST(req: Request) {
   const formData = await req.formData();
+
+  const tenantIdRaw = formData.get("tenantId");
+  const tenantId =
+    typeof tenantIdRaw === "string" && tenantIdRaw.trim().length > 0
+      ? tenantIdRaw.trim()
+      : null;
+
   const nameRaw = formData.get("name");
   const slugRaw = formData.get("slug");
   const logoFile = formData.get("logo") as File | null;
+  const statusRaw = formData.get("status");
+  const primaryContactEmailRaw = formData.get("primaryContactEmail");
 
   const name = typeof nameRaw === "string" ? nameRaw.trim() : "";
   let slug = typeof slugRaw === "string" ? slugRaw.trim() : "";
@@ -70,6 +79,7 @@ export async function POST(req: Request) {
   if (!name) {
     const url = new URL("/ats/tenants", req.url);
     url.searchParams.set("error", "missing_name");
+    if (tenantId) url.searchParams.set("editTenantId", tenantId);
     return NextResponse.redirect(url, 303);
   }
 
@@ -79,28 +89,64 @@ export async function POST(req: Request) {
     slug = slugify(slug);
   }
 
+  const status =
+    typeof statusRaw === "string" && statusRaw.trim().length > 0
+      ? statusRaw.trim().toLowerCase()
+      : null;
+
+  const primaryContactEmail =
+    typeof primaryContactEmailRaw === "string" &&
+    primaryContactEmailRaw.trim().length > 0
+      ? primaryContactEmailRaw.trim()
+      : null;
+
   let logoUrl: string | null = null;
   if (logoFile && typeof (logoFile as any).arrayBuffer === "function") {
     logoUrl = await uploadLogoToStorage(logoFile, "tenant-logos");
   }
 
   try {
+    const data: any = {
+      name,
+      slug,
+    };
+
+    if (logoUrl) {
+      data.logoUrl = logoUrl;
+    }
+    if (primaryContactEmail) {
+      data.primaryContactEmail = primaryContactEmail;
+    }
+    if (status) {
+      data.status = status;
+    }
+
+    if (tenantId) {
+      // Update existing workspace
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data,
+      });
+
+      const url = new URL("/ats/tenants", req.url);
+      url.searchParams.set("updated", "1");
+      url.searchParams.set("editTenantId", tenantId);
+      return NextResponse.redirect(url, 303);
+    }
+
+    // Create new workspace
     await prisma.tenant.create({
-      data: {
-        name,
-        slug,
-        // status has @default("active") in Prisma, so we can omit it
-        ...(logoUrl ? { logoUrl } : {}),
-      },
+      data,
     });
 
     const url = new URL("/ats/tenants", req.url);
     url.searchParams.set("created", "1");
     return NextResponse.redirect(url, 303);
   } catch (err) {
-    console.error("Failed to create tenant", err);
+    console.error("Failed to create/update tenant", err);
     const url = new URL("/ats/tenants", req.url);
     url.searchParams.set("error", "create_failed");
+    if (tenantId) url.searchParams.set("editTenantId", tenantId);
     return NextResponse.redirect(url, 303);
   }
 }
