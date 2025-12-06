@@ -1,4 +1,3 @@
-// app/ats/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -17,6 +16,8 @@ export const metadata: Metadata = {
 type JobsPageSearchParams = {
   q?: string | string[];
   status?: string | string[];
+  clientId?: string | string[];
+  function?: string | string[];
 };
 
 type PageProps = {
@@ -39,17 +40,20 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       ? rawStatus
       : "ALL";
 
-  // Base scope: tenant-wide
+  const filterClientId = firstString(searchParams.clientId).trim();
+  const filterFunction = firstString(searchParams.function).trim();
+
+  // Base scoping by tenant
   const baseWhere: any = {
     tenantId: tenant.id,
   };
 
-  // Build filters using AND clauses so search + status can combine cleanly
+  // Compose filters using AND so they stack cleanly
   const where: any = { ...baseWhere };
-  const andClauses: any[] = [];
+  const andConditions: any[] = [];
 
   if (filterQ) {
-    andClauses.push({
+    andConditions.push({
       OR: [
         { title: { contains: filterQ, mode: "insensitive" } },
         { location: { contains: filterQ, mode: "insensitive" } },
@@ -64,14 +68,14 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   }
 
   if (filterStatus === "PUBLISHED") {
-    // Canonical “published” definition: open + public
-    andClauses.push({
+    // canonical “published” definition: open + public
+    andConditions.push({
       status: "open",
       visibility: "public",
     });
   } else if (filterStatus === "UNPUBLISHED") {
-    // Everything that is NOT open+public
-    andClauses.push({
+    // anything that is NOT open+public
+    andConditions.push({
       OR: [
         { status: { not: "open" } },
         { visibility: { not: "public" } },
@@ -79,11 +83,25 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
     });
   }
 
-  if (andClauses.length > 0) {
-    where.AND = andClauses;
+  if (filterClientId) {
+    andConditions.push({ clientCompanyId: filterClientId });
   }
 
-  const [totalJobs, jobsRaw] = await Promise.all([
+  if (filterFunction) {
+    // Using department field in Prisma, but labelled as “Function” in UI
+    andConditions.push({
+      department: {
+        contains: filterFunction,
+        mode: "insensitive",
+      },
+    });
+  }
+
+  if (andConditions.length > 0) {
+    (where as any).AND = andConditions;
+  }
+
+  const [totalJobs, jobsRaw, clientCompanies] = await Promise.all([
     prisma.job.count({ where: baseWhere }),
     prisma.job.findMany({
       where,
@@ -94,6 +112,10 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
           select: { applications: true },
         },
       },
+    }),
+    prisma.clientCompany.findMany({
+      where: { tenantId: tenant.id },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -119,6 +141,13 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       visibility,
       applicationsCount: job._count.applications ?? 0,
       createdAt: job.createdAt.toISOString(),
+      // extra fields for preview
+      shortDescription: job.shortDescription ?? null,
+      overview: job.overview ?? null,
+      department: job.department ?? null,
+      salaryMin: job.salaryMin ?? null,
+      salaryMax: job.salaryMax ?? null,
+      salaryCurrency: job.salaryCurrency ?? null,
     };
   });
 
@@ -130,9 +159,9 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   ).length;
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-slate-50">
+    <div className="flex h-full flex-1 flex-col">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white px-5 py-4">
+      <header className="border-b border-slate-200 bg-white px-5 py-4">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
           <Link href="/ats/jobs" className="hover:underline">
             ATS
@@ -141,34 +170,16 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
           <span className="font-medium text-slate-700">Jobs</span>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <h1 className="text-base font-semibold text-slate-900">
-              Jobs overview
+              Jobs
             </h1>
-            <p className="max-w-xl text-[11px] text-slate-500">
-              Command-centre view of all open, draft and closed roles in this
-              workspace. Search, filter and run bulk publishing actions without
-              leaving this screen.
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              All open and draft roles in this workspace. Search, filter
+              by client and function, and manage publishing directly from
+              here.
             </p>
-
-            {/* Quick stats bar */}
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#E5F0FF] px-2 py-0.5 font-medium text-[#1D4ED8]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
-                {publishedJobs} published roles
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                {visibleJobs} visible in this view
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">
-                Total in workspace:{" "}
-                <span className="font-medium text-slate-800">
-                  {totalJobs}
-                </span>
-              </span>
-            </div>
           </div>
 
           <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
@@ -176,11 +187,15 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
               {tenant.name}
             </span>
             <span className="text-[10px] text-slate-400">
-              Workspace-level controls for this tenant
+              {visibleJobs} of {totalJobs} jobs visible ·{" "}
+              <span className="font-semibold text-emerald-700">
+                {publishedJobs}
+              </span>{" "}
+              published
             </span>
             <Link
               href="/ats/jobs/new"
-              className="mt-3 inline-flex h-8 items-center rounded-full bg-[#2563EB] px-4 text-[11px] font-semibold text-white shadow-sm shadow-blue-100 hover:bg-[#1D4ED8]"
+              className="mt-2 inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
             >
               + Create job
             </Link>
@@ -191,48 +206,41 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       {/* Filters + table */}
       <main className="flex flex-1 flex-col bg-slate-50 px-5 py-4">
         {/* Filters row */}
-        <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_6px_20px_rgba(15,23,42,0.04)]">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-0.5">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Filters &amp; search
-              </h2>
-              <p className="text-[10px] text-slate-500">
-                Narrow down by title, client, location or publication state.
-                Results update when you apply filters.
-              </p>
-            </div>
-            <div className="hidden items-center gap-2 text-[10px] text-slate-400 sm:flex">
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Open + public &rarr;{" "}
-                <span className="font-medium text-slate-700">
-                  Published
-                </span>
-              </span>
-            </div>
-          </div>
-
+        <section className="mb-3 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
           <form className="flex flex-wrap items-center gap-2">
-            <div className="flex min-w-[220px] flex-1 items-center gap-2">
-              <div className="relative flex-1">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[10px] text-slate-400">
-                  🔍
-                </span>
-                <input
-                  type="text"
-                  name="q"
-                  defaultValue={filterQ}
-                  placeholder="Search by title, client, location…"
-                  className="h-8 w-full rounded-full border border-slate-200 bg-slate-50 pl-7 pr-3 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-[#2563EB] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
-                />
-              </div>
-            </div>
+            <input
+              type="text"
+              name="q"
+              defaultValue={filterQ}
+              placeholder="Search by title, client, location…"
+              className="h-8 min-w-[220px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            />
+
+            <select
+              name="clientId"
+              defaultValue={filterClientId || ""}
+              className="h-8 w-[200px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            >
+              <option value="">All clients</option>
+              {clientCompanies.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="text"
+              name="function"
+              defaultValue={filterFunction}
+              placeholder="Function (e.g. Product, Ops…)"
+              className="h-8 w-[180px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            />
 
             <select
               name="status"
               defaultValue={filterStatus === "ALL" ? "" : filterStatus}
-              className="h-8 w-[150px] rounded-full border border-slate-200 bg-slate-50 px-3 text-[11px] text-slate-800 focus:border-[#2563EB] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+              className="h-8 w-[150px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
             >
               <option value="">All statuses</option>
               <option value="PUBLISHED">Published</option>
@@ -241,7 +249,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
 
             <button
               type="submit"
-              className="inline-flex h-8 items-center rounded-full bg-[#2563EB] px-4 text-[11px] font-semibold text-white hover:bg-[#1D4ED8]"
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
             >
               Apply filters
             </button>
@@ -253,18 +261,16 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
             </Link>
           </form>
 
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
+          <div className="flex items-center justify-between text-[10px] text-slate-500">
             <span>
-              Use the checkboxes in the table below to select jobs and run{" "}
-              <span className="font-medium text-slate-700">
-                bulk publish / unpublish / close
-              </span>{" "}
-              actions.
+              Use bulk actions below to publish/unpublish multiple jobs
+              in one go, then drill into any role for a full pipeline
+              view.
             </span>
           </div>
         </section>
 
-        {/* Jobs table + bulk actions */}
+        {/* Jobs table + preview + bulk actions */}
         <AtsJobsTable initialJobs={jobs} />
       </main>
     </div>
