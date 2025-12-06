@@ -1,11 +1,6 @@
 // lib/scoring/server.ts
 import { prisma } from "@/lib/prisma";
-import type {
-  Candidate,
-  Job,
-  JobApplication,
-  Tenant,
-} from "@prisma/client";
+import type { Job, JobApplication, Candidate, Tenant } from "@prisma/client";
 import type {
   NormalizedScoringConfig,
   SemanticScoringResponse,
@@ -84,7 +79,7 @@ export function mergeScoringConfig(opts: {
   jobOverrides: any;
   tenantHiringMode: string | null;
   jobHiringMode: string | null;
-}): NormalizedScoringConfig {
+}: NormalizedScoringConfig | any): NormalizedScoringConfig {
   const base: any = {
     ...DEFAULT_SCORING_CONFIG,
     ...(opts.tenantConfig ?? {}),
@@ -290,6 +285,18 @@ async function callScoringService(opts: {
   }
 }
 
+function normaliseCategory(cat: string | null | undefined): string {
+  const trimmed = (cat || "").trim();
+  return trimmed || "uncategorised";
+}
+
+function externalSourceKey(skill: any): string {
+  const src = (skill?.externalSource || "").toLowerCase().trim();
+  if (!src) return "local";
+  if (src === "esco") return "esco";
+  return src;
+}
+
 /**
  * Main hook for write-paths:
  * - Calls external scoring service
@@ -323,6 +330,139 @@ export async function scoreAndPersistApplication(
 
   const { config } = await getScoringConfigForJob(job.id);
 
+  // -----------------------------------------------------------------------
+  // Feature extraction for skills / ESCO coverage
+  // -----------------------------------------------------------------------
+  const jobSkills = await prisma.jobSkill.findMany({
+    where: {
+      tenantId: tenant.id,
+      jobId: job.id,
+    },
+    include: {
+      skill: true,
+    },
+  });
+
+  const candidateSkills = candidate
+    ? await prisma.candidateSkill.findMany({
+        where: {
+          tenantId: tenant.id,
+          candidateId: candidate.id,
+        },
+        include: {
+          skill: true,
+        },
+      })
+    : [];
+
+  const jobSkillIds = new Set(jobSkills.map((js) => js.skillId));
+  const candidateSkillIds = new Set(
+    candidateSkills.map((cs) => cs.skillId),
+  );
+
+  const matchedSkillIds: string[] = [];
+  for (const id of jobSkillIds) {
+    if (candidateSkillIds.has(id)) {
+      matchedSkillIds.push(id);
+    }
+  }
+
+  const matchedSkillNames: string[] = [];
+  for (const id of matchedSkillIds) {
+    const fromJob = jobSkills.find((js) => js.skillId === id)?.skill;
+    const fromCandidate = candidateSkills.find(
+      (cs) => cs.skillId === id,
+    )?.skill;
+    const skillEntity = fromJob || fromCandidate;
+    if (skillEntity?.name) {
+      matchedSkillNames.push(skillEntity.name);
+    }
+  }
+
+  const categoryStats: Record<
+    string,
+    { jobSkills: number; candidateSkills: number; matchedSkills: number }
+  > = {};
+
+  function ensureCategory(cat: string | null | undefined) {
+    const key = normaliseCategory(cat);
+    if (!categoryStats[key]) {
+      categoryStats[key] = {
+        jobSkills: 0,
+        candidateSkills: 0,
+        matchedSkills: 0,
+      };
+    }
+    return key;
+  }
+
+  for (const js of jobSkills) {
+    const key = ensureCategory(js.skill.category);
+    categoryStats[key].jobSkills += 1;
+  }
+
+  for (const cs of candidateSkills) {
+    const key = ensureCategory(cs.skill.category);
+    categoryStats[key].candidateSkills += 1;
+  }
+
+  for (const id of matchedSkillIds) {
+    const fromJob = jobSkills.find((js) => js.skillId === id)?.skill;
+    const fromCandidate = candidateSkills.find(
+      (cs) => cs.skillId === id,
+    )?.skill;
+    const skillEntity = fromJob || fromCandidate;
+    const key = ensureCategory(skillEntity?.category ?? null);
+    categoryStats[key].matchedSkills += 1;
+  }
+
+  const externalSourceStats: Record<
+    string,
+    { jobSkills: number; candidateSkills: number; matchedSkills: number }
+  > = {};
+
+  function ensureExternalKey(key: string) {
+    if (!externalSourceStats[key]) {
+      externalSourceStats[key] = {
+        jobSkills: 0,
+        candidateSkills: 0,
+        matchedSkills: 0,
+      };
+    }
+  }
+
+  for (const js of jobSkills) {
+    const key = externalSourceKey(js.skill);
+    ensureExternalKey(key);
+    externalSourceStats[key].jobSkills += 1;
+  }
+
+  for (const cs of candidateSkills) {
+    const key = externalSourceKey(cs.skill);
+    ensureExternalKey(key);
+    externalSourceStats[key].candidateSkills += 1;
+  }
+
+  for (const id of matchedSkillIds) {
+    const fromJob = jobSkills.find((js) => js.skillId === id)?.skill;
+    const fromCandidate = candidateSkills.find(
+      (cs) => cs.skillId === id,
+    )?.skill;
+    const skillEntity = fromJob || fromCandidate;
+    const key = externalSourceKey(skillEntity);
+    ensureExternalKey(key);
+    externalSourceStats[key].matchedSkills += 1;
+  }
+
+  const hasCv = Boolean(application.cvUrl || candidate?.cvUrl);
+  const hasCoverLetter = Boolean(application.coverLetter);
+  const hasJobSkills = jobSkills.length > 0;
+  const hasCandidateSkills = candidateSkills.length > 0;
+  const hasRequiredSkills = (job.requiredSkills?.length ?? 0) > 0;
+
+  // -----------------------------------------------------------------------
+  // Call external semantic scoring service
+  // -----------------------------------------------------------------------
   const semantic: SemanticScoringResponse = await callScoringService({
     tenant,
     job,
@@ -339,7 +479,9 @@ export async function scoreAndPersistApplication(
     (semantic.tier as Tier | undefined) ??
     tierFromScore(score, config.thresholds);
 
-  // Persist on the application itself
+  // -----------------------------------------------------------------------
+  // Persist application + scoring event
+  // -----------------------------------------------------------------------
   await prisma.jobApplication.update({
     where: { id: application.id },
     data: {
@@ -350,7 +492,28 @@ export async function scoreAndPersistApplication(
     },
   });
 
-  // Write audit event
+  const inputSummary: any = {
+    hasCv,
+    hasCoverLetter,
+    jobRequiredSkills: job.requiredSkills ?? [],
+    source: application.source ?? null,
+    features: {
+      usedCv: hasCv,
+      usedCoverLetter: hasCoverLetter,
+      hasJobSkills,
+      hasCandidateSkills,
+      hasRequiredSkills,
+    },
+    skills: {
+      jobSkillCount: jobSkills.length,
+      candidateSkillCount: candidateSkills.length,
+      matchedSkillCount: matchedSkillIds.length,
+      matchedSkillNames,
+      categories: categoryStats,
+      externalSources: externalSourceStats,
+    },
+  };
+
   await prisma.scoringEvent.create({
     data: {
       tenantId: tenant.id,
@@ -362,12 +525,7 @@ export async function scoreAndPersistApplication(
       score,
       tier,
       configSnapshot: config as any,
-      inputSummary: {
-        hasCv: Boolean(application.cvUrl || candidate?.cvUrl),
-        hasCoverLetter: Boolean(application.coverLetter),
-        jobRequiredSkills: job.requiredSkills ?? [],
-        source: application.source ?? null,
-      },
+      inputSummary,
       reason: semantic.reason ?? null,
       risks: semantic.risks ?? [],
       redFlags: semantic.redFlags ?? [],
