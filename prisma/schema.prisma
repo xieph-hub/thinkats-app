@@ -70,10 +70,8 @@ model User {
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   userTenantRoles UserTenantRole[]
-  loginOtps       LoginOtp[]      // OTP records for this user
-
-  // NEW: back-relation for SavedView.owner
-  savedViews      SavedView[]
+  loginOtps       LoginOtp[]
+  savedViews      SavedView[]       // back-relation for SavedView.owner
 
   @@map("users")
 }
@@ -198,7 +196,7 @@ model Job {
   // scoring audit trail
   scoringEvents ScoringEvent[]
 
-  // NEW: back-relation for AnalyticsSnapshot.job
+  // back-relation for AnalyticsSnapshot.job
   analyticsSnapshots AnalyticsSnapshot[]
 
   @@map("jobs")
@@ -333,14 +331,28 @@ model ApplicationInterview {
   type          String?  @map("type")      // PHONE, VIRTUAL, ONSITE, PANEL, etc.
   location      String?  @map("location")  // address or meeting room
   videoUrl      String?  @map("video_url") // e.g. Zoom/Meet link
-  status        String   @map("status") @default("SCHEDULED") @db.Text // SCHEDULED, COMPLETED, NO_SHOW, CANCELLED
-  durationMins  Int?     @map("duration_mins")
-  notes         String?  @map("notes")
+
+  // Lifecycle / status
+  status       String   @map("status") @default("SCHEDULED") @db.Text
+  // e.g. SCHEDULED, COMPLETED, NO_SHOW, CANCELLED_CLIENT, CANCELLED_CANDIDATE, CANCELLED_OTHER
+
+  durationMins Int?     @map("duration_mins")
+
+  // Internal scheduling notes (not candidate-facing)
+  notes        String?  @map("notes")
+
+  // Evaluation fields
+  rating         Int?    @map("rating")           // 1..ratingScaleMax
+  ratingScaleMax Int?    @map("rating_scale_max") // e.g. 4 or 5 depending on org preference
+  feedbackNotes  String? @map("feedback_notes")   // richer free-text summary
+  outcome        String? @map("outcome")          // e.g. "Proceed to panel", "Hold", "Reject"
+
   createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  application  JobApplication       @relation(fields: [applicationId], references: [id])
+  application  JobApplication            @relation(fields: [applicationId], references: [id])
   participants InterviewParticipant[]
+  competencies InterviewCompetencyRating[]
 
   @@map("application_interviews")
 }
@@ -358,6 +370,23 @@ model InterviewParticipant {
 
   @@map("interview_participants")
   @@index([interviewId], map: "idx_interview_participants_interview")
+}
+
+// Per-interview competency grid (for rating matrix)
+model InterviewCompetencyRating {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  interviewId String   @map("interview_id") @db.Uuid
+
+  label       String   // e.g. "Structured thinking & analysis"
+  rating      Int?     @map("rating")   // 1..ratingScaleMax (optional)
+  comment     String?  @map("comment")  // short colour / nuance
+
+  createdAt   DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  interview ApplicationInterview @relation(fields: [interviewId], references: [id])
+
+  @@map("interview_competency_ratings")
+  @@index([interviewId], map: "idx_interview_competency_ratings_interview")
 }
 
 // --------------------------------------------------------------------------
@@ -501,7 +530,7 @@ model ScoringEvent {
 
   engine        String   @map("engine") // e.g. "semantic-v1"
   engineVersion String?  @map("engine_version")
-  mode          String?  @map("mode")  // volume | executive | balanced
+  mode          String?  @map("mode")   // volume | executive | balanced
   score         Int?     @map("score")
   tier          String?  @map("tier")
 
@@ -529,7 +558,7 @@ model SavedView {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId  String   @map("tenant_id") @db.Uuid
   ownerId   String?  @map("owner_id") @db.Uuid
-  scope     String   @map("scope") // e.g. "job_applications", "candidates"
+  scope     String   @map("scope") // e.g. "job_applications", "candidates", "job_pipeline"
   name      String
   isShared  Boolean  @map("is_shared") @default(false)
   isDefault Boolean  @map("is_default") @default(false)
