@@ -1,10 +1,10 @@
 // app/careers/page.tsx
 import type { Metadata } from "next";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getHostContext } from "@/lib/tenantHost";
+import { getHostContext } from "@/lib/host";
 
 export const dynamic = "force-dynamic";
 
@@ -50,33 +50,38 @@ function formatDate(value: string | Date | null | undefined) {
   });
 }
 
-export default async function TenantCareersForHostPage() {
-  const { tenantSlugFromHost, isPrimaryHost } = getHostContext();
+export default async function HostAwareCareersPage() {
+  const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // On the main ThinkATS site, keep /careers as an entry into the marketplace
-  if (!tenantSlugFromHost || isPrimaryHost) {
+  // If we're on thinkats.com / www.thinkats.com or any host
+  // that is NOT a tenant subdomain, just send to global jobs.
+  if (isPrimaryHost || !tenantSlugFromHost) {
     redirect("/jobs");
   }
 
   const slug = decodeURIComponent(tenantSlugFromHost);
 
+  // 1) Resolve tenant by slug
   const tenant = await prisma.tenant.findFirst({
     where: { slug },
-    include: {
-      careerSiteSettings: true,
-    },
   });
 
   if (!tenant) {
     notFound();
   }
 
-  const settings = tenant.careerSiteSettings[0] ?? null;
+  // 2) Load careersite settings (branding, copy, marketplace flag, etc.)
+  const settings = await prisma.careerSiteSettings.findFirst({
+    where: { tenantId: tenant.id },
+  });
 
-  if (!settings || !settings.isPublic) {
+  // If tenant explicitly turned off their careers page, hide it
+  if (settings && settings.isPublic === false) {
     notFound();
   }
 
+  // 3) Load this tenant's public, open jobs (careers site should show them
+  //    even if they are NOT in the global marketplace)
   const jobs = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -91,22 +96,24 @@ export default async function TenantCareersForHostPage() {
   const totalJobs = jobs.length;
 
   const heroTitle =
-    settings.heroTitle ||
+    settings?.heroTitle ||
     `Careers at ${tenant.name || tenant.slug || "our company"}`;
   const heroSubtitle =
-    settings.heroSubtitle ||
+    settings?.heroSubtitle ||
     "Explore open roles and opportunities to join the team.";
 
   const aboutHtml =
-    settings.aboutHtml ||
-    `<p>Every application is reviewed by a real member of our hiring team. You can expect a structured, respectful interview experience.</p>`;
+    settings?.aboutHtml ||
+    `<p>We use ThinkATS to manage our hiring process. Every application is reviewed by a real hiring team member, and you can expect a structured, respectful interview experience.</p>`;
 
-  const logoUrl = settings.logoUrl || tenant.logoUrl || null;
+  const logoUrl = settings?.logoUrl || tenant.logoUrl || null;
 
-  const primaryColor = settings.primaryColorHex || "#172965";
-  const accentColor = settings.accentColorHex || "#FFC000";
-  const heroBackground = settings.heroBackgroundHex || "#F5F6FA";
+  // Colour overrides with safe defaults
+  const primaryColor = settings?.primaryColorHex || "#172965"; // deep blue
+  const accentColor = settings?.accentColorHex || "#FFC000"; // yellow
+  const heroBackground = settings?.heroBackgroundHex || "#F5F6FA"; // soft grey
 
+  // Tracking source for job detail (so /jobs/[id] knows it came from this careers page)
   const trackingSource = `CAREERS_${(tenant.slug || tenant.id).toUpperCase()}`;
 
   function jobPublicUrl(job: any) {
@@ -121,13 +128,14 @@ export default async function TenantCareersForHostPage() {
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <div className="mx-auto max-w-5xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
-        {/* Hero – client-first, very light ThinkATS copy */}
+        {/* Hero */}
         <section
           className="mb-8 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur sm:p-8"
-          style={{ background: heroBackground }}
+          style={{ backgroundColor: heroBackground }}
         >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-4">
+              {/* Logo / avatar */}
               <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                 {logoUrl ? (
                   <Image
@@ -138,7 +146,10 @@ export default async function TenantCareersForHostPage() {
                     className="h-full w-full object-contain p-1"
                   />
                 ) : (
-                  <span className="text-xl font-semibold text-[#172965]">
+                  <span
+                    className="text-xl font-semibold"
+                    style={{ color: primaryColor }}
+                  >
                     {(tenant.name || tenant.slug || "T")
                       .charAt(0)
                       .toUpperCase()}
@@ -153,7 +164,10 @@ export default async function TenantCareersForHostPage() {
                 >
                   Careers
                 </p>
-                <h1 className="mt-1 text-2xl font-semibold text-[#172965] sm:text-3xl">
+                <h1
+                  className="mt-1 text-2xl font-semibold sm:text-3xl"
+                  style={{ color: primaryColor }}
+                >
                   {heroTitle}
                 </h1>
                 {tenant.name && (
@@ -173,10 +187,39 @@ export default async function TenantCareersForHostPage() {
                 </p>
               </div>
             </div>
+
+            <div
+              className="space-y-3 rounded-2xl px-4 py-3 text-xs text-slate-100 sm:w-64"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <p
+                className="text-[11px] font-semibold uppercase tracking-[0.16em]"
+                style={{ color: accentColor }}
+              >
+                Powered by ThinkATS
+              </p>
+              <p className="text-xs text-slate-100">
+                This careers site is powered by ThinkATS. Applications go
+                directly into the company&apos;s ATS workspace with structured
+                pipelines and clear interview stages.
+              </p>
+              <p className="text-[11px] text-slate-200">
+                You&apos;ll create a simple candidate profile once, then can be
+                considered for multiple suitable roles.
+              </p>
+              <Link
+                href="/jobs"
+                className="inline-flex items-center text-[11px] font-medium hover:text-white"
+                style={{ color: accentColor }}
+              >
+                Browse all jobs on ThinkATS
+                <span className="ml-1 text-[10px]">↗</span>
+              </Link>
+            </div>
           </div>
         </section>
 
-        {/* About & hiring process – still generic, no heavy ThinkATS marketing */}
+        {/* About section */}
         <section className="mb-8 grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -190,11 +233,11 @@ export default async function TenantCareersForHostPage() {
 
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-xs text-slate-600 shadow-sm">
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Our hiring process
+              Hiring process at a glance
             </h3>
             <ol className="mt-2 space-y-1.5 list-decimal pl-4">
               <li>Submit your application via the relevant role.</li>
-              <li>Shortlisting by the hiring team.</li>
+              <li>Screening by the hiring team using ThinkATS pipelines.</li>
               <li>Interviews and assessments where relevant.</li>
               <li>Decision and feedback shared as soon as possible.</li>
             </ol>
@@ -213,10 +256,9 @@ export default async function TenantCareersForHostPage() {
               You can still{" "}
               <Link
                 href="/jobs"
-                className="font-medium"
-                style={{ color: primaryColor }}
+                className="font-medium text-[#172965] hover:underline"
               >
-                explore other roles
+                explore other roles on ThinkATS
               </Link>{" "}
               or check back soon.
             </p>
@@ -243,14 +285,20 @@ export default async function TenantCareersForHostPage() {
               return (
                 <article
                   key={job.id}
-                  className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-700 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md sm:flex-row sm:items-stretch"
+                  className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md sm:flex-row sm:items-stretch"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
                         {job.title}
                       </h2>
-                      <span className="inline-flex items-center rounded-full bg-[#E9F7EE] px-2 py-0.5 text-[10px] font-medium text-[#306B34]">
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{
+                          backgroundColor: "#E9F7EE",
+                          color: "#306B34",
+                        }}
+                      >
                         Actively hiring
                       </span>
                     </div>
@@ -311,12 +359,6 @@ export default async function TenantCareersForHostPage() {
             })}
           </section>
         )}
-
-        {/* Very light attribution */}
-        <p className="mt-8 text-center text-[10px] text-slate-400">
-          Careers site powered by{" "}
-          <span className="font-semibold">ThinkATS</span>
-        </p>
       </div>
     </div>
   );
