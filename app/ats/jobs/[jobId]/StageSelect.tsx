@@ -51,6 +51,7 @@ export function StageSelect({
           body: JSON.stringify({
             action: "SET_STAGE",
             stage: nextStage,
+            nextStage, // <-- this is what the bulk API already expects
             applicationIds: [applicationId],
           }),
         },
@@ -59,7 +60,7 @@ export function StageSelect({
       if (!res.ok) {
         throw new Error("Failed to update stage");
       }
-      // no page refresh – stays inline
+      // stays inline – no full page reload
     } catch (err) {
       console.error(err);
       // revert if it failed
