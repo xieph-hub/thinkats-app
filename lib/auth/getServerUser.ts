@@ -1,6 +1,13 @@
-// lib/auth/getServerUser.ts
 import { prisma } from "@/lib/prisma";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+
+export type ServerUserContext = {
+  supabaseUser: any | null; // Supabase user (or null)
+  user: any | null;         // Prisma User (or null)
+  isSuperAdmin: boolean;
+  primaryTenant: any | null;
+  tenant: any | null;       // alias for primaryTenant
+};
 
 /**
  * Server-side helper to:
@@ -8,19 +15,64 @@ import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
  * - Map to our Prisma User row
  * - Resolve primary tenant + SUPER_ADMIN flag
  *
+ * IMPORTANT:
+ * - If there is *no* Supabase session (AuthSessionMissingError), we simply
+ *   return everything as null instead of throwing/logging loudly.
+ *
  * Safe to use from:
  * - Route handlers in app/api
  * - Server components (pages/layouts) in the app router
  */
-export async function getServerUser() {
+export async function getServerUser(): Promise<ServerUserContext> {
   const supabase = createSupabaseRouteClient();
 
-  const {
-    data: { user: supabaseUser },
-    error,
-  } = await supabase.auth.getUser();
+  let supabaseUser: any | null = null;
+  let authError: any | null = null;
 
-  if (error || !supabaseUser || !supabaseUser.email) {
+  // Wrap auth.getUser() so "Auth session missing" is treated as "logged out"
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    supabaseUser = data?.user ?? null;
+    authError = error ?? null;
+  } catch (err: any) {
+    authError = err;
+  }
+
+  if (authError) {
+    const name = authError?.name ?? "";
+    const message = authError?.message ?? "";
+
+    // Normal anonymous state: no Supabase session cookie.
+    if (
+      name === "AuthSessionMissingError" ||
+      message.includes("Auth session missing")
+    ) {
+      return {
+        supabaseUser: null,
+        user: null,
+        isSuperAdmin: false,
+        primaryTenant: null,
+        tenant: null,
+      };
+    }
+
+    // Anything else is unexpected – log once and treat as logged-out.
+    console.error(
+      "Supabase auth.getUser unexpected error in getServerUser",
+      authError,
+    );
+
+    return {
+      supabaseUser: null,
+      user: null,
+      isSuperAdmin: false,
+      primaryTenant: null,
+      tenant: null,
+    };
+  }
+
+  // No error, but also no user/email → logged out
+  if (!supabaseUser || !supabaseUser.email) {
     return {
       supabaseUser: null,
       user: null,
@@ -43,6 +95,7 @@ export async function getServerUser() {
     },
   });
 
+  // Supabase user exists but no Prisma user row yet
   if (!appUser) {
     return {
       supabaseUser,
@@ -62,17 +115,17 @@ export async function getServerUser() {
   const primaryTenant = primaryRole?.tenant ?? null;
 
   return {
-    supabaseUser,    // raw Supabase user
-    user: appUser,   // Prisma User
-    isSuperAdmin,    // boolean
-    primaryTenant,   // Tenant | null
-    tenant: primaryTenant, // alias, in case we destructure as { tenant }
+    supabaseUser, // raw Supabase user
+    user: appUser, // Prisma User
+    isSuperAdmin,
+    primaryTenant,
+    tenant: primaryTenant,
   };
 }
 
 /**
- * Convenience helper if you want to *require* auth in some endpoints.
- * Throws if there is no logged-in user.
+ * Convenience helper if you want to *require* a Prisma User row.
+ * Throws if there is no logged-in app user.
  */
 export async function requireServerUser() {
   const ctx = await getServerUser();
