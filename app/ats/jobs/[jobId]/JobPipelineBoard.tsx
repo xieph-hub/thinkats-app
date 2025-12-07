@@ -1,44 +1,46 @@
 // app/ats/jobs/[jobId]/JobPipelineBoard.tsx
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { StageSelect } from "./StageSelect";
 
-// Shape of a JobApplication as used in this board (candidate + tags + skills + scoringEvents)
-type ApplicationWithExtras = Prisma.JobApplicationGetPayload<{
-  include: {
-    candidate: {
-      include: {
-        skills: {
-          include: {
-            skill: true;
-          };
-          orderBy: {
-            createdAt: "desc";
-          };
-        };
-        tags: {
-          include: {
-            tag: true;
-          };
-        };
-      };
-    };
-    scoringEvents: {
-      orderBy: {
-        createdAt: "desc";
-      };
-      take: 1;
-    };
-  };
-}>;
+type SkillTag = {
+  id: string;
+  label: string;
+  color?: string | null;
+};
+
+type PipelineApp = {
+  id: string;
+  candidateId: string | null;
+
+  fullName: string;
+  email: string;
+  location: string | null;
+  currentTitle: string | null;
+  currentCompany: string | null;
+
+  source: string | null;
+  stage: string | null;
+  status: string | null;
+
+  matchScore: number | null;
+  matchReason: string | null;
+  tier: string | null;
+  scoreReason: string | null;
+
+  appliedAt: string; // ISO
+  skillTags: SkillTag[];
+  experienceLabel: string | null;
+};
+
+type StageInfo = {
+  id: string;
+  name: string;
+};
 
 type JobPipelineBoardProps = {
   jobId: string;
-  // These are accepted so page.tsx can keep passing them,
-  // but the board currently computes its own columns from Prisma.
-  stageOptions?: string[];
-  apps?: any; // allow PipelineAppRow[] without caring about the exact shape
+  stages: StageInfo[];
+  applications: PipelineApp[];
 };
 
 function tierColour(tier: string | null | undefined) {
@@ -62,51 +64,32 @@ function scoreColour(score: number | null | undefined) {
   return "text-slate-600";
 }
 
-export default async function JobPipelineBoard(props: JobPipelineBoardProps) {
-  const { jobId } = props;
-
-  const job = await prisma.job.findUnique({
-    where: { id: jobId },
-    include: {
-      stages: {
-        orderBy: { position: "asc" },
-      },
-      applications: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          candidate: {
-            include: {
-              skills: {
-                include: { skill: true },
-                orderBy: { createdAt: "desc" },
-              },
-              tags: {
-                include: { tag: true },
-              },
-            },
-          },
-          scoringEvents: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
-        },
-      },
-    },
-  });
-
-  if (!job) {
-    notFound();
-  }
-
-  const stages = [...job.stages].sort((a, b) => a.position - b.position);
+export default function JobPipelineBoard({
+  jobId,
+  stages,
+  applications,
+}: JobPipelineBoardProps) {
+  // If no stages in DB for this job, fall back to sane defaults
+  const effectiveStages: StageInfo[] =
+    stages && stages.length > 0
+      ? stages
+      : [
+          { id: "v-APPLIED", name: "APPLIED" },
+          { id: "v-SCREENING", name: "SCREENING" },
+          { id: "v-SHORTLISTED", name: "SHORTLISTED" },
+          { id: "v-INTERVIEW", name: "INTERVIEW" },
+          { id: "v-OFFER", name: "OFFER" },
+          { id: "v-HIRED", name: "HIRED" },
+          { id: "v-REJECTED", name: "REJECTED" },
+        ];
 
   type Column = {
     id: string;
     name: string;
-    applications: ApplicationWithExtras[];
+    applications: PipelineApp[];
   };
 
-  const columns: Column[] = stages.map((s) => ({
+  const columns: Column[] = effectiveStages.map((s) => ({
     id: s.id,
     name: s.name,
     applications: [],
@@ -120,15 +103,15 @@ export default async function JobPipelineBoard(props: JobPipelineBoardProps) {
   const fallbackColumn =
     columnByStageName.get("APPLIED") ?? columns[0] ?? null;
 
-  for (const app of job.applications as ApplicationWithExtras[]) {
-    const stageKey = (app.stage || "").toUpperCase();
+  for (const app of applications) {
+    const stageKey = (app.stage || "APPLIED").toUpperCase();
     const col = columnByStageName.get(stageKey) ?? fallbackColumn;
     if (col) {
       col.applications.push(app);
     }
   }
 
-  const totalApplications = job.applications.length;
+  const totalApplications = applications.length;
 
   const exportCsvHref = `/api/ats/jobs/${jobId}/pipeline/export?format=csv`;
   const exportXlsHref = `/api/ats/jobs/${jobId}/pipeline/export?format=xls`;
@@ -206,7 +189,7 @@ export default async function JobPipelineBoard(props: JobPipelineBoardProps) {
 
             <div className="space-y-2">
               {column.applications.map((app) => (
-                <PipelineCard key={app.id} application={app} />
+                <PipelineCard key={app.id} jobId={jobId} application={app} />
               ))}
 
               {column.applications.length === 0 && (
@@ -222,47 +205,22 @@ export default async function JobPipelineBoard(props: JobPipelineBoardProps) {
   );
 }
 
-function getSourceLabel(app: ApplicationWithExtras): string | null {
-  const sourceTag = app.candidate?.tags
-    ?.map((ct) => ct.tag)
-    .find((t) => (t as any)?.kind === "SOURCE");
-
-  if (sourceTag) return sourceTag.name;
-
-  if (app.source) return app.source;
-
-  if (app.howHeard) return app.howHeard;
-
-  return null;
-}
-
 function PipelineCard({
   application,
+  jobId,
 }: {
-  application: ApplicationWithExtras;
+  application: PipelineApp;
+  jobId: string;
 }) {
-  const candidate = application.candidate;
-  const latestScoring = application.scoringEvents[0] ?? null;
-
-  const score =
-    typeof application.matchScore === "number"
-      ? application.matchScore
-      : latestScoring?.score ?? null;
-
-  const tier =
-    (latestScoring?.tier as string | null | undefined) ?? null;
-
+  const score = application.matchScore;
+  const tier = application.tier;
   const scoreReason =
-    latestScoring?.reason ??
-    application.matchReason ??
+    application.scoreReason ||
+    application.matchReason ||
     "Scored by semantic CV/JD engine.";
 
-  const sourceLabel = getSourceLabel(application);
-
-  const skills =
-    candidate?.skills?.map((cs) => cs.skill).filter(Boolean) ?? [];
-
-  const topSkills = skills.slice(0, 6);
+  const sourceLabel = application.source;
+  const topSkills = application.skillTags.slice(0, 6);
 
   return (
     <article className="rounded-lg border border-slate-100 bg-white/80 p-3 text-xs shadow-sm">
@@ -270,7 +228,7 @@ function PipelineCard({
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <div className="truncate text-[13px] font-medium text-slate-900">
-              {candidate?.fullName || application.fullName}
+              {application.fullName}
             </div>
             {sourceLabel && (
               <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
@@ -280,19 +238,21 @@ function PipelineCard({
           </div>
 
           <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-            {candidate?.currentTitle && (
-              <span className="truncate">{candidate.currentTitle}</span>
-            )}
-            {candidate?.currentCompany && (
+            {application.currentTitle && (
               <span className="truncate">
-                {" · "}
-                {candidate.currentCompany}
+                {application.currentTitle}
               </span>
             )}
-            {candidate?.location && (
+            {application.currentCompany && (
               <span className="truncate">
                 {" · "}
-                {candidate.location}
+                {application.currentCompany}
+              </span>
+            )}
+            {application.location && (
+              <span className="truncate">
+                {" · "}
+                {application.location}
               </span>
             )}
           </div>
@@ -329,18 +289,19 @@ function PipelineCard({
               key={skill.id}
               className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
             >
-              {skill.name}
+              {skill.label}
             </span>
           ))}
         </div>
       )}
 
       <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-500">
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
-            <span className="mr-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
-            {application.stage}
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <StageSelect
+            jobId={jobId}
+            applicationId={application.id}
+            currentStage={application.stage}
+          />
 
           {application.status && (
             <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
@@ -350,9 +311,9 @@ function PipelineCard({
         </div>
 
         <div className="flex items-center gap-1.5">
-          {candidate?.email && (
+          {application.email && (
             <a
-              href={`mailto:${candidate.email}`}
+              href={`mailto:${application.email}`}
               className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
             >
               <span>✉</span>
@@ -360,9 +321,9 @@ function PipelineCard({
             </a>
           )}
 
-          {candidate?.id && (
+          {application.candidateId && (
             <Link
-              href={`/ats/candidates/${candidate.id}`}
+              href={`/ats/candidates/${application.candidateId}`}
               className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
             >
               <span>👤</span>
