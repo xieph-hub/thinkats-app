@@ -1,57 +1,66 @@
+// app/ats/jobs/[jobId]/JobPipelineList.tsx
 "use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
-
-type SkillTag = {
-  id: string;
-  label: string;
-  color?: string | null;
-};
-
-type PipelineApp = {
-  id: string;
-  candidateId: string | null;
-
-  fullName: string;
-  email: string;
-  location: string | null;
-  currentTitle: string | null;
-  currentCompany: string | null;
-
-  source: string | null;
-  stage: string | null;
-  status: string | null;
-
-  matchScore: number | null;
-  matchReason?: string | null;
-  tier: string | null;
-  scoreReason?: string | null;
-
-  appliedAt: string; // ISO string
-  skillTags: SkillTag[];
-  experienceLabel: string | null;
-};
+import type { PipelineApp, StageInfo } from "./JobPipelineBoard";
 
 type JobPipelineListProps = {
   jobId: string;
+  stages: StageInfo[];
   applications: PipelineApp[];
-  stageOptions: string[];
 };
 
-const STATUS_OPTIONS = [
-  { value: "PENDING", label: "Active" },
-  { value: "ON_HOLD", label: "On hold" },
-  { value: "REJECTED", label: "Rejected" },
+type StageOption = {
+  label: string;
+  value: string;
+};
+
+const DEFAULT_STAGE_NAMES = [
+  "APPLIED",
+  "SCREENING",
+  "SHORTLISTED",
+  "INTERVIEW",
+  "OFFER",
+  "HIRED",
+  "REJECTED",
 ];
 
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return "";
-  // yyyy-mm-dd
-  return iso.slice(0, 10);
+function normaliseStages(stageInfos: StageInfo[]): StageOption[] {
+  const base =
+    stageInfos && stageInfos.length > 0
+      ? stageInfos.map((s) => s.name)
+      : DEFAULT_STAGE_NAMES;
+
+  return base.map((name) => {
+    const label = name || "UNASSIGNED";
+    return {
+      label,
+      value: label.toUpperCase(),
+    };
+  });
 }
 
-function scoreChipColor(score: number | null) {
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+}
+
+function getInitials(name: string): string {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] ?? "" : "";
+  return (first + last).toUpperCase();
+}
+
+function scoreChipColor(score: number | null): string {
   if (score == null) return "bg-slate-100 text-slate-600";
   if (score >= 80) return "bg-emerald-100 text-emerald-700";
   if (score >= 65) return "bg-sky-100 text-sky-700";
@@ -59,16 +68,30 @@ function scoreChipColor(score: number | null) {
   return "bg-rose-100 text-rose-700";
 }
 
-function tierChipColor(tier?: string | null) {
-  if (!tier) return "bg-slate-100 text-slate-600";
-  const upper = tier.toUpperCase();
+function tierChipColor(tier: string | null | undefined): string {
+  const upper = (tier || "").toUpperCase();
+  if (!upper) return "bg-slate-100 text-slate-600";
   if (upper === "A") return "bg-emerald-100 text-emerald-700";
   if (upper === "B") return "bg-sky-100 text-sky-700";
   if (upper === "C") return "bg-amber-100 text-amber-700";
   return "bg-slate-100 text-slate-600";
 }
 
-function statusLabel(status: string | null) {
+function statusChipClass(status: string | null): string {
+  const up = (status || "").toUpperCase();
+  if (up === "PENDING") {
+    return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  }
+  if (up === "ON_HOLD") {
+    return "bg-amber-50 text-amber-700 ring-amber-200";
+  }
+  if (up === "REJECTED") {
+    return "bg-rose-50 text-rose-700 ring-rose-200";
+  }
+  return "bg-slate-50 text-slate-600 ring-slate-200";
+}
+
+function statusLabel(status: string | null): string {
   const up = (status || "").toUpperCase();
   if (up === "PENDING") return "Active";
   if (up === "ON_HOLD") return "On hold";
@@ -76,320 +99,490 @@ function statusLabel(status: string | null) {
   return up || "—";
 }
 
-function statusChipClass(status: string | null) {
-  const up = (status || "").toUpperCase();
-  if (up === "PENDING") {
-    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-  }
-  if (up === "ON_HOLD") {
-    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
-  }
-  if (up === "REJECTED") {
-    return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
-  }
-  return "bg-slate-50 text-slate-600 ring-1 ring-slate-200";
-}
-
 export default function JobPipelineList({
   jobId,
+  stages,
   applications,
-  stageOptions,
 }: JobPipelineListProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
-  const allIds = applications.map((a) => a.id);
-  const allSelected = selectedIds.length > 0 && selectedIds.length === allIds.length;
+  const [bulkStage, setBulkStage] = useState("");
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkTier, setBulkTier] = useState("");
 
-  function toggleSelect(id: string) {
+  const [inlineUpdatingId, setInlineUpdatingId] = useState<string | null>(null);
+
+  const stageOptions = normaliseStages(stages);
+
+  const tiersInData = Array.from(
+    new Set(
+      applications
+        .map((a) => (a.tier || "").toUpperCase())
+        .filter(Boolean),
+    ),
+  );
+
+  const statusOptions = [
+    { value: "PENDING", label: "Accepted / active" },
+    { value: "ON_HOLD", label: "On hold" },
+    { value: "REJECTED", label: "Rejected" },
+  ];
+
+  function toggleAll(checked: boolean) {
+    setSelectedIds(checked ? applications.map((a) => a.id) : []);
+  }
+
+  function toggleOne(id: string, checked: boolean) {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      checked ? [...prev, id] : prev.filter((x) => x !== id),
     );
   }
 
-  function toggleSelectAll() {
-    setSelectedIds((prev) => (prev.length === allIds.length ? [] : allIds));
+  async function updateApplication(
+    appId: string,
+    opts: {
+      newStage?: string;
+      newStatus?: string;
+      newTier?: string;
+      source: string;
+    },
+  ) {
+    const fd = new FormData();
+    fd.append("jobId", jobId);
+    fd.append("applicationId", appId);
+    if (opts.newStage) fd.append("newStage", opts.newStage);
+    if (opts.newStatus) fd.append("newStatus", opts.newStatus);
+    if (opts.newTier) fd.append("newTier", opts.newTier);
+    fd.append("source", opts.source);
+
+    await fetch("/ats/applications/actions", {
+      method: "POST",
+      body: fd,
+    });
   }
 
-  async function handleBulkSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!selectedIds.length) return;
-
-    const formData = new FormData(e.currentTarget);
-    const newStage = (formData.get("bulkStage") as string) || "";
-    const newStatus = (formData.get("bulkStatus") as string) || "";
-
-    // Nothing to do
-    if (!newStage && !newStatus) return;
-
-    setIsSubmitting(true);
+  async function handleInlineUpdate(
+    appId: string,
+    field: "stage" | "status" | "tier",
+    value: string,
+  ) {
+    if (!value) return;
+    setInlineUpdatingId(appId);
 
     try {
-      // Reuse existing /ats/applications/actions endpoint; one POST per application.
-      await Promise.all(
-        selectedIds.map((applicationId) => {
-          const fd = new FormData();
-          fd.append("jobId", jobId);
-          fd.append("applicationId", applicationId);
-          if (newStage) fd.append("newStage", newStage);
-          if (newStatus) fd.append("newStatus", newStatus);
-          // small hint for backend if you ever want to branch on origin
-          fd.append("source", "job_pipeline_bulk");
+      const payload: {
+        newStage?: string;
+        newStatus?: string;
+        newTier?: string;
+        source: string;
+      } = {
+        source: `job_pipeline_list_inline_${field}`,
+      };
 
-          return fetch("/ats/applications/actions", {
-            method: "POST",
-            body: fd,
-          });
-        }),
-      );
+      if (field === "stage") payload.newStage = value;
+      if (field === "status") payload.newStatus = value;
+      if (field === "tier") payload.newTier = value;
 
-      setSelectedIds([]);
+      await updateApplication(appId, payload);
 
       if (typeof window !== "undefined") {
         window.location.reload();
       }
     } finally {
-      setIsSubmitting(false);
+      setInlineUpdatingId(null);
     }
   }
 
+  async function handleApplyBulk() {
+    if (!selectedIds.length) return;
+    if (!bulkStage && !bulkStatus && !bulkTier) return;
+
+    setIsBulkSubmitting(true);
+    try {
+      const promises: Promise<void>[] = [];
+
+      for (const id of selectedIds) {
+        if (bulkStage) {
+          promises.push(
+            updateApplication(id, {
+              newStage: bulkStage,
+              source: "job_pipeline_bulk_stage",
+            }),
+          );
+        }
+        if (bulkStatus) {
+          promises.push(
+            updateApplication(id, {
+              newStatus: bulkStatus,
+              source: "job_pipeline_bulk_status",
+            }),
+          );
+        }
+        if (bulkTier) {
+          promises.push(
+            updateApplication(id, {
+              newTier: bulkTier,
+              source: "job_pipeline_bulk_tier",
+            }),
+          );
+        }
+      }
+
+      await Promise.all(promises);
+
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      }
+    } finally {
+      setIsBulkSubmitting(false);
+    }
+  }
+
+  const anySelected = selectedIds.length > 0;
+
+  if (!applications.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500">
+        No applications in this view yet. Once candidates apply, they will
+        appear here and you can move them through stages, assign tiers and run
+        bulk actions.
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col rounded-2xl border border-slate-200 bg-white">
+    <div className="flex flex-col gap-3">
       {/* Bulk actions bar */}
-      {selectedIds.length > 0 && (
-        <form
-          onSubmit={handleBulkSubmit}
-          className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px]"
-        >
+      {anySelected && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[11px] text-indigo-900">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-slate-800">
+            <span className="inline-flex h-6 items-center rounded-full bg-indigo-600 px-2 text-[10px] font-semibold text-white">
               {selectedIds.length} selected
             </span>
+            <span className="text-[11px]">
+              Apply a stage, decision or tier to all selected candidates.
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Stage */}
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-medium uppercase tracking-wide">
+                Stage
+              </span>
+              <select
+                value={bulkStage}
+                onChange={(e) => setBulkStage(e.target.value)}
+                className="h-7 min-w-[120px] rounded-md border border-indigo-200 bg-white px-2 text-[11px] text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="">No change</option>
+                {stageOptions.map((stage) => (
+                  <option key={stage.value} value={stage.value}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-medium uppercase tracking-wide">
+                Decision
+              </span>
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                className="h-7 min-w-[120px] rounded-md border border-indigo-200 bg-white px-2 text-[11px] text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="">No change</option>
+                {statusOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tier */}
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-medium uppercase tracking-wide">
+                Tier
+              </span>
+              <select
+                value={bulkTier}
+                onChange={(e) => setBulkTier(e.target.value)}
+                className="h-7 min-w-[90px] rounded-md border border-indigo-200 bg-white px-2 text-[11px] text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="">No change</option>
+                {tiersInData.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="button"
-              onClick={() => setSelectedIds([])}
-              className="text-[10px] text-indigo-600 hover:underline"
+              onClick={handleApplyBulk}
+              disabled={
+                isBulkSubmitting || (!bulkStage && !bulkStatus && !bulkTier)
+              }
+              className="inline-flex h-8 items-center rounded-full bg-indigo-600 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
             >
-              Clear
+              {isBulkSubmitting ? "Applying…" : "Apply to selected"}
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              name="bulkStage"
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
-            >
-              <option value="">Move to stage…</option>
-              {stageOptions.map((stageName) => {
-                const value = (stageName || "").toUpperCase();
-                return (
-                  <option key={value} value={value}>
-                    {stageName}
-                  </option>
-                );
-              })}
-            </select>
-
-            <select
-              name="bulkStatus"
-              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
-            >
-              <option value="">Change status…</option>
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex h-8 items-center rounded-full bg-indigo-600 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
-            >
-              {isSubmitting ? "Updating…" : "Apply"}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
-      {/* List table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-separate border-spacing-y-1 text-[11px]">
-          <thead>
-            <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">
+      {/* Table */}
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <table className="min-w-full divide-y divide-slate-200 text-xs">
+          <thead className="bg-slate-50/80">
+            <tr>
+              <th className="w-8 px-3 py-2 text-left">
                 <input
                   type="checkbox"
+                  aria-label="Select all"
+                  checked={selectedIds.length === applications.length}
+                  onChange={(e) => toggleAll(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/40"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
                 />
               </th>
-              <th className="px-3 py-2">Candidate</th>
-              <th className="px-3 py-2">Stage</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-right">Tier / score</th>
-              <th className="px-3 py-2 text-right">Applied</th>
-              <th className="px-3 py-2 text-right">Actions</th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Candidate
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Source &amp; stage
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Tier &amp; score
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Decision
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Applied
+              </th>
+              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Actions
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {applications.map((app) => {
-              const isSelected = selectedIds.includes(app.id);
               const appliedDate = formatDate(app.appliedAt);
+              const stageValue = (
+                app.stage ||
+                stageOptions[0]?.value ||
+                "APPLIED"
+              ).toUpperCase();
+              const tierValue = (app.tier || "").toUpperCase();
+              const statusValue = (app.status || "PENDING").toUpperCase();
+
+              const stageLabel =
+                stageOptions.find((s) => s.value === stageValue)?.label ||
+                stageValue;
+
+              const initials = getInitials(app.fullName);
 
               return (
-                <tr key={app.id}>
-                  {/* Checkbox */}
-                  <td className="align-top px-3 py-2">
+                <tr key={app.id} className="hover:bg-slate-50/70">
+                  {/* Select */}
+                  <td className="whitespace-nowrap px-3 py-3 align-top">
                     <input
                       type="checkbox"
+                      checked={selectedIds.includes(app.id)}
+                      onChange={(e) => toggleOne(app.id, e.target.checked)}
                       className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/40"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(app.id)}
                     />
                   </td>
 
-                  {/* Candidate */}
-                  <td className="align-top px-3 py-2">
-                    <div
-                      className={[
-                        "flex flex-col gap-0.5 rounded-xl border px-3 py-2",
-                        isSelected
-                          ? "border-indigo-300 bg-indigo-50/70"
-                          : "border-slate-100 bg-slate-50/70",
-                      ].join(" ")}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <Link
-                            href={
-                              app.candidateId
-                                ? `/ats/candidates/${app.candidateId}`
-                                : "#"
-                            }
-                            className="text-[11px] font-semibold text-slate-900 hover:underline"
-                          >
-                            {app.fullName}
-                          </Link>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                            {app.email && <span>{app.email}</span>}
-                            {app.location && (
-                              <>
-                                <span className="text-slate-300">•</span>
-                                <span>{app.location}</span>
-                              </>
+                  {/* Candidate card */}
+                  <td className="min-w-[220px] px-3 py-3 align-top">
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-700">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1">
+                          {app.candidateId ? (
+                            <Link
+                              href={`/ats/candidates/${app.candidateId}`}
+                              className="truncate text-[13px] font-semibold text-slate-900 hover:underline"
+                            >
+                              {app.fullName}
+                            </Link>
+                          ) : (
+                            <span className="truncate text-[13px] font-semibold text-slate-900">
+                              {app.fullName}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                          {app.currentTitle && <span>{app.currentTitle}</span>}
+                          {app.currentTitle && app.currentCompany && (
+                            <span className="text-slate-300">•</span>
+                          )}
+                          {app.currentCompany && (
+                            <span>{app.currentCompany}</span>
+                          )}
+                          {(app.currentTitle || app.currentCompany) &&
+                            app.location && (
+                              <span className="text-slate-300">•</span>
                             )}
-                            {app.currentCompany && (
-                              <>
-                                <span className="text-slate-300">•</span>
-                                <span>{app.currentCompany}</span>
-                              </>
+                          {app.location && <span>{app.location}</span>}
+                        </div>
+
+                        {app.email && (
+                          <div className="mt-0.5 text-[11px] text-slate-500">
+                            {app.email}
+                          </div>
+                        )}
+
+                        {app.skillTags && app.skillTags.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {app.skillTags.slice(0, 3).map((tag) => (
+                              <span
+                                key={tag.id}
+                                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700"
+                              >
+                                {tag.label}
+                              </span>
+                            ))}
+                            {app.skillTags.length > 3 && (
+                              <span className="text-[10px] text-slate-400">
+                                +{app.skillTags.length - 3} more
+                              </span>
                             )}
                           </div>
-                        </div>
-                        <div className="flex flex-col items-end text-[10px] text-slate-500">
-                          <span>Added {appliedDate}</span>
-                          {app.source && (
-                            <span className="mt-0.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5">
-                              {app.source}
-                            </span>
-                          )}
-                        </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Source & Stage */}
+                  <td className="min-w-[160px] px-3 py-3 align-top">
+                    <div className="flex flex-col gap-1 text-[11px] text-slate-500">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {app.source && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">
+                            {app.source}
+                          </span>
+                        )}
+                        {app.experienceLabel && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">
+                            {app.experienceLabel}
+                          </span>
+                        )}
                       </div>
 
-                      {app.skillTags && app.skillTags.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {app.skillTags.slice(0, 3).map((tag) => (
-                            <span
-                              key={tag.id}
-                              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-700"
-                            >
-                              {tag.label}
-                            </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-500">
+                          Stage
+                        </span>
+                        <select
+                          value={stageValue}
+                          onChange={(e) =>
+                            handleInlineUpdate(
+                              app.id,
+                              "stage",
+                              e.target.value,
+                            )
+                          }
+                          disabled={inlineUpdatingId === app.id}
+                          className="h-7 min-w-[130px] rounded-full border border-slate-200 bg-slate-50 px-2 text-[10px] text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+                        >
+                          {stageOptions.map((stage) => (
+                            <option key={stage.value} value={stage.value}>
+                              {stage.label}
+                            </option>
                           ))}
-                          {app.skillTags.length > 3 && (
-                            <span className="text-[9px] text-slate-400">
-                              +{app.skillTags.length - 3} more
-                            </span>
-                          )}
-                        </div>
+                        </select>
+                        {inlineUpdatingId === app.id && (
+                          <span className="text-[9px] text-indigo-500">
+                            Updating…
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Tier & score */}
+                  <td className="min-w-[150px] px-3 py-3 align-top">
+                    <div className="flex flex-col gap-1 text-[11px] text-slate-500">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {tierValue && (
+                          <span
+                            className={[
+                              "inline-flex h-6 min-w-[32px] items-center justify-center rounded-full px-2 text-[10px] font-semibold",
+                              tierChipColor(tierValue),
+                            ].join(" ")}
+                          >
+                            {tierValue}
+                          </span>
+                        )}
+
+                        {typeof app.matchScore === "number" && (
+                          <span
+                            className={[
+                              "inline-flex h-6 items-center rounded-full px-2 text-[10px] font-medium",
+                              scoreChipColor(app.matchScore),
+                            ].join(" ")}
+                          >
+                            {app.matchScore}
+                          </span>
+                        )}
+                      </div>
+
+                      {app.matchReason && (
+                        <p className="line-clamp-2 max-w-xs text-[10px] text-slate-500">
+                          {app.matchReason}
+                        </p>
                       )}
                     </div>
                   </td>
 
-                  {/* Stage */}
-                  <td className="align-top px-3 py-2 text-[10px] text-slate-600">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-medium text-slate-900">
-                        {(app.stage || "APPLIED").toUpperCase()}
+                  {/* Decision */}
+                  <td className="min-w-[120px] px-3 py-3 align-top">
+                    <div className="flex flex-col gap-1 text-[11px] text-slate-500">
+                      <span
+                        className={[
+                          "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+                          statusChipClass(statusValue),
+                        ].join(" ")}
+                      >
+                        <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current opacity-70" />
+                        {statusLabel(statusValue)}
                       </span>
                     </div>
                   </td>
 
-                  {/* Status */}
-                  <td className="align-top px-3 py-2 text-[10px] text-slate-600">
-                    <span
-                      className={[
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        statusChipClass(app.status),
-                      ].join(" ")}
-                    >
-                      <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-                      {statusLabel(app.status)}
-                    </span>
-                  </td>
-
-                  {/* Tier / score */}
-                  <td className="align-top px-3 py-2 text-right">
-                    <div className="flex flex-col items-end gap-1">
-                      {app.tier && (
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            tierChipColor(app.tier),
-                          ].join(" ")}
-                        >
-                          Tier {app.tier.toUpperCase()}
-                        </span>
-                      )}
-                      {app.matchScore != null && (
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                            scoreChipColor(app.matchScore),
-                          ].join(" ")}
-                        >
-                          Score {app.matchScore}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Applied at */}
-                  <td className="align-top px-3 py-2 text-right text-[10px] text-slate-600">
-                    {appliedDate}
+                  {/* Applied */}
+                  <td className="whitespace-nowrap px-3 py-3 align-top text-[11px] text-slate-500">
+                    {appliedDate && <span>Applied {appliedDate}</span>}
                   </td>
 
                   {/* Actions */}
-                  <td className="align-top px-3 py-2 text-right text-[10px] text-slate-600">
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {app.email && (
-                        <a
-                          href={`mailto:${app.email}`}
-                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          ✉ Email
-                        </a>
-                      )}
+                  <td className="whitespace-nowrap px-3 py-3 align-top text-right">
+                    <div className="flex flex-col items-end gap-1 text-[11px]">
                       {app.candidateId && (
                         <Link
                           href={`/ats/candidates/${app.candidateId}`}
                           className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
                         >
-                          👤 Profile
+                          View profile
                         </Link>
                       )}
+                      <Link
+                        href={`/ats/jobs/${jobId}`}
+                        className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Open in pipeline
+                      </Link>
                     </div>
                   </td>
                 </tr>
@@ -397,12 +590,6 @@ export default function JobPipelineList({
             })}
           </tbody>
         </table>
-
-        {applications.length === 0 && (
-          <div className="px-6 py-10 text-center text-[11px] text-slate-500">
-            No applications in this view yet.
-          </div>
-        )}
       </div>
     </div>
   );
