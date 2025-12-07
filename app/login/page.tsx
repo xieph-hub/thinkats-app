@@ -1,78 +1,61 @@
 // app/login/page.tsx
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { getHostContext } from "@/lib/host";
 import { prisma } from "@/lib/prisma";
+import { getHostContext } from "@/lib/host";
 import LoginPageClient from "./LoginPageClient";
 
 export const metadata: Metadata = {
   title: "Login | ThinkATS",
   description:
-    "Login to ThinkATS to access your ATS workspace, roles, candidates and pipelines.",
+    "Log in to access your hiring workspace, roles, candidates and pipelines.",
 };
 
-export const dynamic = "force-dynamic";
-
-export type LoginBrandConfig = {
-  isPrimaryHost: boolean;
-  tenantSlug: string | null;
-  tenantName: string | null;
-  logoUrl: string | null;
-  primaryColor: string;
-  accentColor: string;
-  tagline: string;
+type LoginBrandConfig = {
+  context: "primary" | "tenant";
+  pillLabel: string;
   heading: string;
-  subheading: string;
+  description: string;
+  tenantName: string | null;
+  tenantSlug: string | null;
 };
 
 async function getBrandConfigForRequest(): Promise<LoginBrandConfig> {
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // 🔹 Primary host (thinkats.com / www.thinkats.com)
+  // 🔹 Primary host – global ThinkATS admin login
   if (isPrimaryHost || !tenantSlugFromHost) {
     return {
-      isPrimaryHost: true,
-      tenantSlug: null,
-      tenantName: null,
-      logoUrl: null,
-      primaryColor: "#1E40AF",
-      accentColor: "#38BDF8",
-      tagline: "THINKATS · LOGIN",
+      context: "primary",
+      pillLabel: "THINKATS · ADMIN LOGIN",
       heading: "Log in to your ThinkATS workspace",
-      subheading:
-        "Access roles, candidates, hiring pipelines and client workspaces in one ATS.",
+      description:
+        "Access roles, candidates, hiring pipelines and client workspaces in one ATS built for recruitment teams and agencies.",
+      tenantName: null,
+      tenantSlug: null,
     };
   }
 
-  // 🔹 Tenant host (slug.thinkats.com)
-  const tenant = await prisma.tenant.findFirst({
+  // 🔹 Tenant subdomain – client hiring workspace login
+  const tenant = await prisma.tenant.findUnique({
     where: { slug: tenantSlugFromHost },
     select: {
-      id: true,
       name: true,
+      slug: true,
     },
   });
 
-  const settings = tenant
-    ? await prisma.careerSiteSettings.findFirst({
-        where: { tenantId: tenant.id },
-        orderBy: { createdAt: "desc" },
-      })
-    : null;
-
-  const tenantName = tenant?.name ?? tenantSlugFromHost;
+  const tenantName =
+    tenant?.name || tenant?.slug || tenantSlugFromHost || "Your organisation";
 
   return {
-    isPrimaryHost: false,
-    tenantSlug: tenantSlugFromHost,
+    context: "tenant",
+    pillLabel: `${tenantName} · Hiring workspace`,
+    heading: `Log in to ${tenantName}'s hiring workspace`,
+    description:
+      "Access roles, candidates and pipelines for this organisation. Only authorised admins and recruiters can log in here.",
     tenantName,
-    logoUrl: settings?.logoUrl ?? null,
-    primaryColor: settings?.primaryColorHex ?? "#172965",
-    accentColor: settings?.accentColorHex ?? "#FFC000",
-    tagline: `${tenantName.toUpperCase()} · LOGIN`,
-    heading: `Log in to ${tenantName} hiring workspace`,
-    subheading:
-      "Admins and hiring managers can access their ATS dashboard here. Candidates should use the careers and jobs pages.",
+    tenantSlug: tenant?.slug ?? tenantSlugFromHost,
   };
 }
 
