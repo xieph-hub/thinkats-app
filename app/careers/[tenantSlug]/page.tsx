@@ -1,34 +1,30 @@
 // app/careers/[tenantSlug]/page.tsx
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
+import { getHostContext } from "@/lib/host";
 
-type TenantCareersRedirectProps = {
+type PageProps = {
   params: { tenantSlug: string };
 };
 
-function getBaseDomain(): string {
-  // Optional: you can set NEXT_PUBLIC_BASE_DOMAIN="thinkats.com"
-  // to avoid parsing the URL.
-  const explicit = process.env.NEXT_PUBLIC_BASE_DOMAIN;
-  if (explicit) {
-    return explicit.replace(/^www\./, "");
+export default function CareersTenantSlugRedirect({ params }: PageProps) {
+  const { isPrimaryHost } = getHostContext();
+  const slug = params.tenantSlug;
+
+  if (!slug) {
+    notFound();
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thinkats.com";
-  try {
-    const url = new URL(siteUrl);
-    return url.hostname.replace(/^www\./, "");
-  } catch {
-    return "thinkats.com";
+  // If we're already on a tenant subdomain (e.g. resourcin.thinkats.com),
+  // never bounce between /careers and /careers/[slug]. Just send to /careers.
+  if (!isPrimaryHost) {
+    redirect("/careers");
   }
-}
 
-export default function TenantCareersRedirect({
-  params,
-}: TenantCareersRedirectProps) {
-  const baseDomain = getBaseDomain();
-  const slug = decodeURIComponent(params.tenantSlug);
+  // On the primary host, redirect to the tenant's subdomain careers page.
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://thinkats.com";
+  const baseDomain = new URL(siteUrl).hostname; // e.g. "thinkats.com"
 
-  // e.g. https://thinkats.com/careers/resourcin
-  //  → https://resourcin.thinkats.com/careers
-  redirect(`https://${slug}.${baseDomain}/careers`);
+  const targetUrl = `https://${slug}.${baseDomain}/careers`;
+  redirect(targetUrl);
 }
