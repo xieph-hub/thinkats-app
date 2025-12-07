@@ -109,7 +109,7 @@ export async function POST(req: Request) {
     }
 
     // -------------------------------------------------------------------
-    // 2) Map skills → Skill + CandidateSkill
+    // 2) Map skills → Skill + CandidateSkill (proficiency + yearsExperience)
     // -------------------------------------------------------------------
     const incomingSkills = Array.isArray(body.skills) ? body.skills : [];
 
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
       });
 
       if (!skill) {
-        // Create tenant-scoped skill using the relation, not tenantId scalar
+        // Create tenant-scoped skill via relation (tenant), not raw tenantId
         skill = await prisma.skill.create({
           data: {
             name,
@@ -147,20 +147,21 @@ export async function POST(req: Request) {
             description: null,
             externalSource: null,
             externalId: null,
+            isGlobal: false,
             tenant: {
               connect: { id: tenant.id },
             },
           },
         });
       } else if (skill.tenantId === tenant.id && skill.name !== name) {
-        // Keep local display-name fresh for tenant-scoped skills
+        // Keep display name fresh for tenant-local skills
         await prisma.skill.update({
           where: { id: skill.id },
           data: { name },
         });
       }
 
-      const level =
+      const proficiency =
         typeof raw.proficiency === "number" &&
         Number.isFinite(raw.proficiency)
           ? raw.proficiency
@@ -172,59 +173,42 @@ export async function POST(req: Request) {
           ? raw.yearsExperience
           : null;
 
-      // No composite unique on (candidateId, skillId), so do findFirst → update/create
-      const existingCandidateSkill = await prisma.candidateSkill.findFirst({
+      // Use upsert on the composite unique (candidateId, skillId)
+      await prisma.candidateSkill.upsert({
         where: {
+          candidateId_skillId: {
+            candidateId: candidate.id,
+            skillId: skill.id,
+          },
+        },
+        create: {
           tenantId: tenant.id,
           candidateId: candidate.id,
           skillId: skill.id,
+          proficiency,
+          yearsExperience,
+          source: "talent_network",
+        },
+        update: {
+          ...(proficiency != null ? { proficiency } : {}),
+          ...(yearsExperience != null ? { yearsExperience } : {}),
+          source: "talent_network",
         },
       });
-
-      if (existingCandidateSkill) {
-        // Build update payload as `any` to avoid Prisma union type quirks
-        const updateData: any = {
-          source: existingCandidateSkill.source ?? "talent_network",
-        };
-
-        if (level != null) {
-          updateData.level = level;
-        }
-        if (yearsExperience != null) {
-          updateData.yearsExperience = yearsExperience;
-        }
-
-        await prisma.candidateSkill.update({
-          where: { id: existingCandidateSkill.id },
-          data: updateData,
-        });
-      } else {
-        // Create new candidate skill (this shape matches your schema)
-        await prisma.candidateSkill.create({
-          data: {
-            tenantId: tenant.id,
-            candidateId: candidate.id,
-            skillId: skill.id,
-            level,
-            yearsExperience,
-            lastUsedYear: null,
-            source: "talent_network",
-            isPrimary: false,
-          } as any,
-        });
-      }
     }
 
     // -------------------------------------------------------------------
-    // 3) Tag candidate with a SOURCE-like tag (no Tag.kind in schema)
+    // 3) Tag candidate with a SOURCE tag (Tag.kind = SOURCE)
     // -------------------------------------------------------------------
     const sourceLabel = (body.sourceLabel || "Talent Network").trim();
 
     if (sourceLabel) {
+      // Respect TagKind and the (tenantId, name, kind) unique
       let sourceTag = await prisma.tag.findFirst({
         where: {
           tenantId: tenant.id,
           name: sourceLabel,
+          kind: "SOURCE",
         },
       });
 
@@ -233,7 +217,9 @@ export async function POST(req: Request) {
           data: {
             tenantId: tenant.id,
             name: sourceLabel,
-            color: "#2563EB", // soft blue – tweak later in UI
+            color: "#2563EB",
+            kind: "SOURCE",
+            isSystem: false,
           },
         });
       }
