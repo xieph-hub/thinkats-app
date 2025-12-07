@@ -1,3 +1,4 @@
+// app/ats/jobs/[jobId]/JobPipelineBoard.tsx
 import Link from "next/link";
 import { StageSelect } from "./StageSelect";
 
@@ -26,7 +27,7 @@ type PipelineApp = {
   tier: string | null;
   scoreReason: string | null;
 
-  appliedAt: string;
+  appliedAt: string; // ISO
   skillTags: SkillTag[];
   experienceLabel: string | null;
 };
@@ -55,7 +56,15 @@ function tierColour(tier: string | null | undefined) {
   }
 }
 
-function scoreColour(score: number | null | undefined) {
+function scoreRingColour(score: number | null | undefined) {
+  if (score == null) return "stroke-slate-200";
+  if (score >= 80) return "stroke-emerald-500";
+  if (score >= 65) return "stroke-sky-500";
+  if (score >= 50) return "stroke-amber-500";
+  return "stroke-slate-400";
+}
+
+function scoreTextColour(score: number | null | undefined) {
   if (score == null) return "text-slate-500";
   if (score >= 80) return "text-emerald-700";
   if (score >= 65) return "text-sky-700";
@@ -63,18 +72,77 @@ function scoreColour(score: number | null | undefined) {
   return "text-slate-600";
 }
 
-function formatApplied(atIso: string) {
-  try {
-    const d = new Date(atIso);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return "";
+function statusPillClasses(status: string | null | undefined) {
+  const value = (status || "PENDING").toUpperCase();
+  if (value === "REJECTED") {
+    return "bg-rose-50 text-rose-700 ring-rose-200";
   }
+  if (value === "ON_HOLD") {
+    return "bg-amber-50 text-amber-700 ring-amber-200";
+  }
+  // Default = active / pending
+  return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+}
+
+function formatAppliedDate(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ScoreRing({ score }: { score: number | null }) {
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = score == null ? 0 : Math.max(0, Math.min(100, score));
+  const offset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <div className="flex items-center gap-2">
+      <svg
+        className="h-11 w-11"
+        viewBox="0 0 48 48"
+        aria-hidden="true"
+      >
+        <circle
+          className="stroke-slate-200"
+          cx="24"
+          cy="24"
+          r={radius}
+          fill="none"
+          strokeWidth={4}
+        />
+        <circle
+          className={scoreRingColour(score)}
+          cx="24"
+          cy="24"
+          r={radius}
+          fill="none"
+          strokeWidth={4}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference}
+          style={{ strokeDashoffset: offset }}
+        />
+        <text
+          x="50%"
+          y="50%"
+          dominantBaseline="middle"
+          textAnchor="middle"
+          className={`text-[11px] font-semibold ${scoreTextColour(score)}`}
+        >
+          {score != null ? score : "–"}
+        </text>
+      </svg>
+      <div className="flex flex-col text-[10px] leading-tight text-slate-500">
+        <span className="font-semibold text-slate-700">Match score</span>
+        <span>Semantic CV/JD fit</span>
+      </div>
+    </div>
+  );
 }
 
 export default function JobPipelineBoard({
@@ -131,10 +199,11 @@ export default function JobPipelineBoard({
 
   return (
     <section className="mt-6 space-y-4">
+      {/* Header row: legend + exports */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-            Pipeline
+            Pipeline (Board)
           </h2>
           <p className="text-xs text-slate-500">
             {totalApplications} application
@@ -183,11 +252,12 @@ export default function JobPipelineBoard({
         </div>
       </div>
 
+      {/* Kanban columns */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {columns.map((column) => (
           <div
             key={column.id}
-            className="flex flex-col rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm backdrop-blur"
+            className="flex flex-col rounded-xl border border-slate-200 bg-white/80 p-3 shadow-sm backdrop-blur"
           >
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-baseline gap-2">
@@ -233,32 +303,33 @@ function PipelineCard({
     "Scored by semantic CV/JD engine.";
 
   const sourceLabel = application.source;
-  const topSkills = application.skillTags.slice(0, 4);
-  const appliedOn = formatApplied(application.appliedAt);
+  const topSkills = application.skillTags.slice(0, 5);
+  const appliedDate = formatAppliedDate(application.appliedAt);
+
+  const statusLabel = (application.status || "Active").toUpperCase();
 
   return (
-    <article className="rounded-lg border border-slate-100 bg-white/80 p-3 text-xs shadow-sm">
-      {/* Header: candidate name as main anchor + match pill */}
+    <article className="rounded-xl border border-slate-100 bg-white/90 p-3 text-xs shadow-sm">
+      {/* Candidate header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          {application.candidateId ? (
+          <div className="flex items-center gap-1.5">
             <Link
-              href={`/ats/candidates/${application.candidateId}`}
-              className="block truncate text-[13px] font-semibold text-slate-900 hover:text-indigo-700"
+              href={
+                application.candidateId
+                  ? `/ats/candidates/${application.candidateId}`
+                  : "#"
+              }
+              className="truncate text-[13px] font-semibold text-slate-900 hover:text-indigo-700 hover:underline"
             >
               {application.fullName}
             </Link>
-          ) : (
-            <div className="truncate text-[13px] font-semibold text-slate-900">
-              {application.fullName}
-            </div>
-          )}
-
-          {application.email && (
-            <p className="truncate text-[11px] text-slate-500">
-              {application.email}
-            </p>
-          )}
+            {sourceLabel && (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                {sourceLabel}
+              </span>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
             {application.currentTitle && (
@@ -277,77 +348,84 @@ function PipelineCard({
               </span>
             )}
           </div>
+
+          {appliedDate && (
+            <div className="flex items-center gap-1 text-[10px] text-slate-400">
+              <span>Applied</span>
+              <span className="h-0.5 w-0.5 rounded-full bg-slate-300" />
+              <span>{appliedDate}</span>
+            </div>
+          )}
         </div>
 
+        {/* Match score + tier */}
         <div className="flex flex-col items-end gap-1">
-          <div
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tierColour(
-              tier,
-            )}`}
-          >
-            <span className={scoreColour(score)}>
-              {score != null ? `${score}` : "–"}
-            </span>
-            {tier && (
-              <span className="text-[10px] uppercase text-slate-500">
-                · {tier}
-              </span>
-            )}
+          <div className="flex items-center gap-2">
+            <ScoreRing score={score} />
           </div>
+          {tier && (
+            <div
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${tierColour(
+                tier,
+              )}`}
+            >
+              <span className="text-[9px]">★</span>
+              <span>Tier {tier.toUpperCase()}</span>
+            </div>
+          )}
           <span
-            className="cursor-help text-[10px] text-slate-400"
+            className="cursor-help text-[9px] text-slate-400"
             title={scoreReason}
           >
-            Match score
+            Why this score?
           </span>
         </div>
       </div>
 
-      {/* Tags & source / applied */}
-      <div className="mt-2 space-y-1">
-        {topSkills.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {topSkills.map((skill) => (
-              <span
-                key={skill.id}
-                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-              >
-                {skill.label}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-          {sourceLabel && <span>Source · {sourceLabel}</span>}
-          {appliedOn && (
-            <span className="text-slate-500">Applied · {appliedOn}</span>
-          )}
+      {/* Skills */}
+      {topSkills.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {topSkills.map((skill) => (
+            <span
+              key={skill.id}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+            >
+              {skill.label}
+            </span>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Footer: stage / status / actions */}
-      <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-500">
+      {/* Stage / status / actions inline */}
+      <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-slate-500">
         <div className="flex flex-wrap items-center gap-2">
           <StageSelect
             jobId={jobId}
             applicationId={application.id}
             currentStage={application.stage}
           />
-
-          {application.status && (
-            <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
-              {application.status}
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${statusPillClasses(
+              application.status,
+            )}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+            <span>
+              {statusLabel === "ON_HOLD"
+                ? "On hold"
+                : statusLabel === "REJECTED"
+                ? "Rejected"
+                : "Active"}
             </span>
-          )}
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5">
           {application.email && (
             <a
               href={`mailto:${application.email}`}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-[12px] text-slate-700 hover:bg-slate-50"
-              title={`Email ${application.fullName}`}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 shadow-sm hover:bg-slate-50"
+              title="Email candidate"
             >
               ✉
             </a>
@@ -356,10 +434,10 @@ function PipelineCard({
           {application.candidateId && (
             <Link
               href={`/ats/candidates/${application.candidateId}`}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-[12px] text-slate-700 hover:bg-slate-50"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-[12px] text-slate-600 shadow-sm hover:bg-slate-50"
               title="Open candidate profile"
             >
-              👤
+              👁
             </Link>
           )}
         </div>
