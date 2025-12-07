@@ -1,6 +1,7 @@
 // app/ats/clients/new/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +11,27 @@ export const metadata: Metadata = {
   description: "Create a new recruitment client for this workspace.",
 };
 
-export default async function NewClientPage() {
-  const tenant = await getResourcinTenant();
+function firstString(value?: string | string[]): string {
+  if (Array.isArray(value)) return value[0] || "";
+  return value || "";
+}
+
+export default async function NewClientPage({
+  searchParams,
+}: {
+  searchParams?: { tenantId?: string | string[] };
+}) {
+  const rawTenant = searchParams?.tenantId ?? "";
+  const tenantParam = firstString(rawTenant);
+
+  let tenant =
+    (tenantParam &&
+      (await prisma.tenant.findFirst({
+        where: {
+          OR: [{ id: tenantParam }, { slug: tenantParam }],
+        } as any,
+      }))) || (await getResourcinTenant());
+
   if (!tenant) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8">
@@ -25,12 +45,15 @@ export default async function NewClientPage() {
     );
   }
 
+  const tenantLabel =
+    tenant.name ?? (tenant as any).slug ?? tenant.id ?? "Workspace";
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
       <div className="flex items-center justify-between gap-2">
         <div>
           <Link
-            href="/ats/clients"
+            href={`/ats/clients?tenantId=${encodeURIComponent(tenant.id)}`}
             className="inline-flex items-center text-[11px] font-medium text-slate-500 hover:text-slate-800"
           >
             <span className="mr-1.5">←</span>
@@ -41,16 +64,22 @@ export default async function NewClientPage() {
           </h1>
           <p className="mt-1 text-xs text-slate-600">
             Create a client company to attach roles, pipelines and careersites
-            under this workspace.
+            under{" "}
+            <span className="font-medium text-slate-900">
+              {tenantLabel}
+            </span>
+            .
           </p>
         </div>
       </div>
 
       <form
         method="POST"
-        action="/api/ats/clients"
+        action="/ats/clients/new"
         className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
       >
+        <input type="hidden" name="tenantId" value={tenant.id} />
+
         {/* Basic details */}
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-slate-900">
@@ -123,8 +152,8 @@ export default async function NewClientPage() {
               className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
             />
             <p className="mt-1 text-[11px] text-slate-500">
-              Used on job cards and candidate profiles. (You can wire uploads
-              later.)
+              Used on job cards and candidate profiles. You can wire uploads
+              later.
             </p>
           </div>
         </section>
@@ -165,7 +194,8 @@ export default async function NewClientPage() {
                 className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
               <p className="mt-1 text-[11px] text-slate-500">
-                For URLs like <span className="font-mono">acme.resourcin.com</span>.
+                For URLs like{" "}
+                <span className="font-mono">acme.resourcin.com</span>.
               </p>
             </div>
 
