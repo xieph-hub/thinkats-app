@@ -94,7 +94,7 @@ function ScoreRing({ score, title }: { score: number | null; title?: string }) {
           cy="20"
           r={radius}
           fill="none"
-          stroke="#e5e7eb" // slate-200
+          stroke="#e5e7eb"
           strokeWidth="4"
         />
         {/* progress */}
@@ -251,9 +251,7 @@ export default function JobPipelineList({
     }
   }
 
-  // ✅ Inline status update – supports BOTH API contracts:
-  // - action + status
-  // - nextStatus (like bulk)
+  // Inline status update — matches the bulk API, but for a single id.
   async function handleInlineStatusChange(
     applicationId: string,
     nextStatus: string,
@@ -261,7 +259,7 @@ export default function JobPipelineList({
     const originalStatus =
       rows.find((row) => row.id === applicationId)?.status ?? null;
 
-    // Optimistic UI update
+    // Optimistic UI
     setRows((prev) =>
       prev.map((row) =>
         row.id === applicationId ? { ...row, status: nextStatus } : row,
@@ -273,10 +271,11 @@ export default function JobPipelineList({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // single-item "bulk"
+          applicationIds: [applicationId],
           action: "SET_STATUS",
           status: nextStatus,
           nextStatus: nextStatus,
-          applicationIds: [applicationId],
         }),
       });
 
@@ -288,8 +287,7 @@ export default function JobPipelineList({
             text || "Please try again."
           }`,
         );
-
-        // Revert
+        // revert
         setRows((prev) =>
           prev.map((row) =>
             row.id === applicationId ? { ...row, status: originalStatus } : row,
@@ -300,7 +298,7 @@ export default function JobPipelineList({
       console.error(err);
       alert("Something went wrong while updating status.");
 
-      // Revert
+      // revert
       setRows((prev) =>
         prev.map((row) =>
           row.id === applicationId ? { ...row, status: originalStatus } : row,
@@ -515,7 +513,7 @@ export default function JobPipelineList({
                     />
                   </td>
 
-                  {/* Status – icon buttons only (no duplicate select) */}
+                  {/* Status – inline pill buttons */}
                   <td className="px-3 py-3 align-top">
                     <StatusCell
                       status={app.status}
