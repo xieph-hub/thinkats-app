@@ -1,7 +1,16 @@
 // app/ats/jobs/[jobId]/StageSelect.tsx
-import React from "react";
+"use client";
 
-const STAGES = [
+import { useEffect, useState } from "react";
+
+type StageSelectProps = {
+  jobId: string;
+  applicationId: string;
+  currentStage: string | null;
+};
+
+// Fallback defaults – your job-specific stages will usually map to these
+const DEFAULT_STAGES = [
   "APPLIED",
   "SCREENING",
   "SHORTLISTED",
@@ -9,46 +18,74 @@ const STAGES = [
   "OFFER",
   "HIRED",
   "REJECTED",
-] as const;
-
-type StageSelectProps = {
-  jobId: string;
-  applicationId: string;
-  currentStage?: string | null;
-};
+];
 
 export function StageSelect({
   jobId,
   applicationId,
   currentStage,
 }: StageSelectProps) {
-  const value = (currentStage || "APPLIED").toUpperCase();
+  const [value, setValue] = useState<string>(
+    (currentStage || "APPLIED").toUpperCase(),
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Keep in sync if server-side stage changes
+  useEffect(() => {
+    setValue((currentStage || "APPLIED").toUpperCase());
+  }, [currentStage]);
+
+  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const nextStage = e.target.value;
+    setValue(nextStage);
+    setIsSaving(true);
+
+    try {
+      const res = await fetch(
+        `/api/ats/jobs/${jobId}/pipeline/bulk`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "SET_STAGE",
+            stage: nextStage,
+            applicationIds: [applicationId],
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error("Failed to update stage");
+      }
+      // no page refresh – stays inline
+    } catch (err) {
+      console.error(err);
+      // revert if it failed
+      setValue((currentStage || "APPLIED").toUpperCase());
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   return (
-    <form
-      method="POST"
-      action="/ats/applications/actions"
-      className="inline-flex items-center gap-1"
-    >
-      <input type="hidden" name="jobId" value={jobId} />
-      <input type="hidden" name="applicationId" value={applicationId} />
+    <div className="inline-flex items-center gap-1">
       <select
-        name="newStage"
-        defaultValue={value}
-        className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+        value={value}
+        onChange={handleChange}
+        className="h-7 rounded-full border border-slate-200 bg-slate-50 px-2 text-[10px] font-medium text-slate-700 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
       >
-        {STAGES.map((stage) => (
+        {DEFAULT_STAGES.map((stage) => (
           <option key={stage} value={stage}>
             {stage}
           </option>
         ))}
       </select>
-      <button
-        type="submit"
-        className="text-[10px] font-medium text-[#172965] hover:underline"
-      >
-        Move
-      </button>
-    </form>
+
+      {isSaving && (
+        <span className="text-[9px] text-slate-400">Saving…</span>
+      )}
+    </div>
   );
 }
