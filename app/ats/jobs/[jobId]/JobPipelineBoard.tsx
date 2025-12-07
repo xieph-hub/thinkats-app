@@ -239,9 +239,7 @@ function PipelineCard({
 
           <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
             {application.currentTitle && (
-              <span className="truncate">
-                {application.currentTitle}
-              </span>
+              <span className="truncate">{application.currentTitle}</span>
             )}
             {application.currentCompany && (
               <span className="truncate">
