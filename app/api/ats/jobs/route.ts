@@ -1,301 +1,322 @@
+// app/api/ats/jobs/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
-function slugify(input: string): string {
-  return input
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
+type CreateJobPayload = {
+  title: string;
+  department?: string | null;
+  location?: string | null;
+  employmentType?: string | null;
+  seniority?: string | null;
+  description?: string | null;
+  overview?: string | null;
+  aboutClient?: string | null;
+  responsibilities?: string | null;
+  requirements?: string | null;
+  benefits?: string | null;
+  locationType?: string | null;
+  experienceLevel?: string | null;
+  yearsExperienceMin?: number | null;
+  yearsExperienceMax?: number | null;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryCurrency?: string | null;
+  salaryVisible?: boolean | null;
+  status?: string;
+  visibility?: string;
+  clientCompanyId?: string | null;
+  workMode?: string | null;
+  internalOnly?: boolean | null;
+  confidential?: boolean | null;
+  shortDescription?: string | null;
+  educationRequired?: string | null;
+  educationField?: string | null;
 
-function toStringOrNull(value: FormDataEntryValue | null): string | null {
-  if (!value) return null;
-  const s = value.toString().trim();
-  return s.length ? s : null;
-}
+  // list of skill display-names from the form
+  requiredSkills?: string[];
+};
 
-function parseNumberValue(value: FormDataEntryValue | null): number | null {
-  if (!value) return null;
-  const s = value.toString().replace(/,/g, "").trim();
-  if (!s) return null;
-  const n = Number(s);
-  if (Number.isNaN(n)) return null;
-  return n;
-}
-
-function parseStringList(raw: string | null): string[] {
-  if (!raw) return [];
+function slugify(raw: string): string {
   return raw
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
 }
 
-export async function POST(req: NextRequest) {
+function normaliseSkillName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+// ---------------------------------------------------------------------
+// GET – lightweight jobs listing (for any consumers using this API)
+// ---------------------------------------------------------------------
+export async function GET(req: NextRequest) {
   try {
     const tenant = await getResourcinTenant();
-
     if (!tenant) {
       return NextResponse.json(
-        { error: "No default tenant configured." },
+        { ok: false, error: "No default tenant configured." },
         { status: 500 },
       );
     }
 
-    const formData = await req.formData();
+    const url = new URL(req.url);
+    const q = url.searchParams.get("q") || "";
+    const status = url.searchParams.get("status") || "";
 
-    // ----- Required: title -----
-    const titleRaw = formData.get("title");
-    const title = typeof titleRaw === "string" ? titleRaw.trim() : "";
+    const where: any = {
+      tenantId: tenant.id,
+    };
 
-    if (!title) {
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: "insensitive" } },
+        { department: { contains: q, mode: "insensitive" } },
+        { location: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    const jobs = await prisma.job.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({ ok: true, jobs });
+  } catch (err) {
+    console.error("GET /api/ats/jobs error", err);
+    return NextResponse.json(
+      { ok: false, error: "Failed to fetch jobs." },
+      { status: 500 },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------
+// POST – create a new ATS job + wire requiredSkills → Skill/JobSkill
+// ---------------------------------------------------------------------
+export async function POST(req: NextRequest) {
+  try {
+    const tenant = await getResourcinTenant();
+    if (!tenant) {
       return NextResponse.json(
-        { error: "Title is required." },
+        { ok: false, error: "No default tenant configured." },
+        { status: 500 },
+      );
+    }
+
+    const body = (await req.json().catch(() => null)) as
+      | CreateJobPayload
+      | null;
+
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { ok: false, error: "Invalid JSON body." },
         { status: 400 },
       );
     }
 
-    // ----- Core relations / ownership -----
-    const clientCompanyId = toStringOrNull(formData.get("clientCompanyId"));
-
-    const hiringManagerId = toStringOrNull(
-      formData.get("hiringManagerId"),
-    );
-
-    // ----- Basic classification -----
-    const location = toStringOrNull(formData.get("location"));
-
-    // We label this as “Work mode” in the UI
-    const workMode = toStringOrNull(formData.get("workMode"));
-
-    const employmentType = toStringOrNull(
-      formData.get("employmentType"),
-    );
-
-    const experienceLevel = toStringOrNull(
-      formData.get("experienceLevel"),
-    );
-
-    const yearsExperienceMin = parseNumberValue(
-      formData.get("yearsExperienceMin"),
-    );
-    const yearsExperienceMax = parseNumberValue(
-      formData.get("yearsExperienceMax"),
-    );
-
-    // Function / discipline mapped to Job.department
-    const department = toStringOrNull(formData.get("department"));
-
-    // ----- Narrative fields -----
-    const shortDescription = toStringOrNull(
-      formData.get("shortDescription"),
-    );
-    const overview = toStringOrNull(formData.get("overview"));
-    const aboutClient = toStringOrNull(formData.get("aboutClient"));
-    const responsibilities = toStringOrNull(
-      formData.get("responsibilities"),
-    );
-    const requirements = toStringOrNull(
-      formData.get("requirements"),
-    );
-    const benefits = toStringOrNull(formData.get("benefits"));
-
-    // ----- Education -----
-    const educationRequired = toStringOrNull(
-      formData.get("educationRequired"),
-    );
-    const educationField = toStringOrNull(
-      formData.get("educationField"),
-    );
-
-    // ----- Tags & skills (String[]) -----
-    const tagsRaw = toStringOrNull(formData.get("tags"));
-    const requiredSkillsRaw = toStringOrNull(
-      formData.get("requiredSkills"),
-    );
-
-    const tags = parseStringList(tagsRaw);
-    const requiredSkills = parseStringList(requiredSkillsRaw);
-
-    // ----- Status / visibility -----
-    const statusRaw = toStringOrNull(formData.get("status"));
-    const visibilityRaw = toStringOrNull(formData.get("visibility"));
-
-    const status =
-      statusRaw && ["draft", "open", "closed"].includes(statusRaw)
-        ? statusRaw
-        : "draft";
-
-    const visibility =
-      visibilityRaw && ["public", "internal"].includes(visibilityRaw)
-        ? visibilityRaw
-        : "public";
-
-    const internalOnly =
-      formData.get("internalOnly") === "on" ? true : false;
-    const confidential =
-      formData.get("confidential") === "on" ? true : false;
-    const salaryVisible =
-      formData.get("salaryVisible") === "on" ? true : false;
-
-    // ----- Compensation -----
-    const salaryMin = parseNumberValue(formData.get("salaryMin"));
-    const salaryMax = parseNumberValue(formData.get("salaryMax"));
-    const salaryCurrency =
-      toStringOrNull(formData.get("salaryCurrency")) ?? "NGN";
-
-    // ----- Slug generation (per tenant) -----
-    const slugSource = toStringOrNull(formData.get("slug")) ?? title;
-    const baseSlug = slugify(slugSource);
-    let slug: string | null = baseSlug || null;
-
-    if (slug) {
-      const existing = await prisma.job.findFirst({
-        where: {
-          tenantId: tenant.id,
-          slug,
-        },
-        select: { id: true },
-      });
-
-      if (existing) {
-        slug = `${baseSlug}-${Date.now().toString(36)}`;
-      }
+    const title = (body.title || "").trim();
+    if (!title) {
+      return NextResponse.json(
+        { ok: false, error: "Title is required." },
+        { status: 400 },
+      );
     }
 
-    // -------------------------------------------------------------------
-    // 1) Create job
-    // -------------------------------------------------------------------
+    const slug = slugify(title);
+
+    const {
+      department,
+      location,
+      employmentType,
+      seniority,
+      description,
+      overview,
+      aboutClient,
+      responsibilities,
+      requirements,
+      benefits,
+      locationType,
+      experienceLevel,
+      yearsExperienceMin,
+      yearsExperienceMax,
+      salaryMin,
+      salaryMax,
+      salaryCurrency,
+      salaryVisible,
+      status,
+      visibility,
+      clientCompanyId,
+      workMode,
+      internalOnly,
+      confidential,
+      shortDescription,
+      educationRequired,
+      educationField,
+      requiredSkills,
+    } = body;
+
+    const data: any = {
+      tenantId: tenant.id,
+      title,
+      slug,
+      status: status ?? "open",
+      visibility: visibility ?? "public",
+    };
+
+    if (department !== undefined) data.department = department;
+    if (location !== undefined) data.location = location;
+    if (employmentType !== undefined) data.employmentType = employmentType;
+    if (seniority !== undefined) data.seniority = seniority;
+    if (description !== undefined) data.description = description;
+    if (overview !== undefined) data.overview = overview;
+    if (aboutClient !== undefined) data.aboutClient = aboutClient;
+    if (responsibilities !== undefined) data.responsibilities = responsibilities;
+    if (requirements !== undefined) data.requirements = requirements;
+    if (benefits !== undefined) data.benefits = benefits;
+    if (locationType !== undefined) data.locationType = locationType;
+    if (experienceLevel !== undefined) data.experienceLevel = experienceLevel;
+    if (yearsExperienceMin !== undefined)
+      data.yearsExperienceMin = yearsExperienceMin;
+    if (yearsExperienceMax !== undefined)
+      data.yearsExperienceMax = yearsExperienceMax;
+    if (salaryMin !== undefined && salaryMin !== null) data.salaryMin = salaryMin;
+    if (salaryMax !== undefined && salaryMax !== null) data.salaryMax = salaryMax;
+    if (salaryCurrency !== undefined) data.salaryCurrency = salaryCurrency;
+    if (salaryVisible !== undefined && salaryVisible !== null)
+      data.salaryVisible = salaryVisible;
+    if (clientCompanyId !== undefined) data.clientCompanyId = clientCompanyId;
+    if (workMode !== undefined) data.workMode = workMode;
+    if (internalOnly !== undefined && internalOnly !== null)
+      data.internalOnly = internalOnly;
+    if (confidential !== undefined && confidential !== null)
+      data.confidential = confidential;
+    if (shortDescription !== undefined) data.shortDescription = shortDescription;
+    if (educationRequired !== undefined)
+      data.educationRequired = educationRequired;
+    if (educationField !== undefined) data.educationField = educationField;
+
+    // 1) Create job row
     const job = await prisma.job.create({
-      data: {
-        tenantId: tenant.id,
-        clientCompanyId,
-        title,
-        slug,
-
-        // Classification
-        department,
-        location,
-        workMode,
-        // Keep locationType in sync for now (backwards-compat chips, etc.)
-        locationType: workMode ?? null,
-        employmentType,
-        experienceLevel,
-        yearsExperienceMin: yearsExperienceMin ?? null,
-        yearsExperienceMax: yearsExperienceMax ?? null,
-
-        // Narrative
-        shortDescription,
-        overview,
-        aboutClient,
-        responsibilities,
-        requirements,
-        benefits,
-
-        // Education
-        educationRequired,
-        educationField,
-
-        // Arrays
-        tags,
-        requiredSkills,
-
-        // Status & flags
-        status,
-        visibility,
-        internalOnly,
-        confidential,
-
-        // Compensation
-        salaryMin,
-        salaryMax,
-        salaryCurrency,
-        salaryVisible,
-
-        // Owner / recruiter
-        hiringManagerId,
-      },
+      data,
     });
 
-    // -------------------------------------------------------------------
-    // 2) Synchronise JobSkill with requiredSkills[]
-    //    (mirror of what we do in the edit route)
-    // -------------------------------------------------------------------
-    const tenantId = tenant.id;
+    // 2) Create a simple default pipeline for this job
+    const defaultStages = [
+      "APPLIED",
+      "SCREEN",
+      "INTERVIEW",
+      "OFFER",
+      "HIRED",
+    ];
 
-    const normalizedSkillNames = Array.from(
-      new Set(
-        requiredSkills
-          .map((name) => name.trim())
-          .filter((name) => name.length > 0),
-      ),
-    );
+    await prisma.jobStage.createMany({
+      data: defaultStages.map((name, index) => ({
+        tenantId: tenant.id,
+        jobId: job.id,
+        name,
+        position: index + 1,
+        isTerminal: name === "HIRED",
+      })),
+      skipDuplicates: true,
+    });
 
-    if (normalizedSkillNames.length > 0) {
-      const skillRecords: { id: string }[] = [];
+    // 3) Map requiredSkills → Skill / JobSkill
+    const incomingSkillNames: string[] = Array.isArray(requiredSkills)
+      ? requiredSkills
+          .filter((s) => typeof s === "string")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
-      for (const name of normalizedSkillNames) {
+    if (incomingSkillNames.length > 0) {
+      const normalizedToSkillId = new Map<string, string>();
+
+      for (const name of incomingSkillNames) {
+        const normalizedName = normaliseSkillName(name);
+        if (!normalizedName) continue;
+        if (normalizedToSkillId.has(normalizedName)) continue;
+
         const skillSlug = slugify(name);
-        if (!skillSlug) continue;
 
-        // Reuse tenant-specific or global (tenantId = null) skills
-        const existingSkill = await prisma.skill.findFirst({
+        let skill = await prisma.skill.findFirst({
           where: {
             OR: [
-              { tenantId, slug: skillSlug },
-              { tenantId: null, slug: skillSlug },
+              {
+                tenantId: tenant.id,
+                normalizedName,
+              },
+              {
+                tenantId: null,
+                normalizedName,
+              },
             ],
           },
-          select: { id: true },
         });
 
-        if (existingSkill) {
-          skillRecords.push({ id: existingSkill.id });
-        } else {
-          const created = await prisma.skill.create({
+        if (!skill) {
+          // Use the relation-based API so Prisma's type system stays happy
+          skill = await prisma.skill.create({
             data: {
-              tenantId, // tenant-scoped skill
               name,
+              normalizedName,
               slug: skillSlug,
               category: null,
               description: null,
               externalSource: null,
               externalId: null,
+              isGlobal: false,
+              tenant: {
+                connect: { id: tenant.id },
+              },
             },
-            select: { id: true },
           });
-          skillRecords.push({ id: created.id });
+        } else if (skill.tenantId === tenant.id && skill.name !== name) {
+          // Keep local display name fresh
+          await prisma.skill.update({
+            where: { id: skill.id },
+            data: { name },
+          });
         }
+
+        normalizedToSkillId.set(normalizedName, skill.id);
       }
 
-      if (skillRecords.length > 0) {
+      const jobSkillData = Array.from(normalizedToSkillId.values()).map(
+        (skillId) => ({
+          tenantId: tenant.id,
+          jobId: job.id,
+          skillId,
+          importance: 3,
+          isRequired: true,
+        }),
+      );
+
+      if (jobSkillData.length > 0) {
         await prisma.jobSkill.createMany({
-          data: skillRecords.map((skill) => ({
-            tenantId,
-            jobId: job.id,
-            skillId: skill.id,
-            importance: null,
-            isRequired: true,
-          })),
+          data: jobSkillData,
+          skipDuplicates: true,
         });
       }
+
+      // Keep text-array version in sync for simple filters
+      await prisma.job.update({
+        where: { id: job.id },
+        data: { requiredSkills: incomingSkillNames },
+      });
     }
 
-    // Redirect to the ATS job pipeline view for this role
-    const redirectUrl = new URL(`/ats/jobs/${job.id}`, req.url).toString();
-
-    return NextResponse.redirect(redirectUrl, {
-      status: 303,
-    });
-  } catch (error) {
-    console.error("POST /api/ats/jobs error", error);
+    return NextResponse.json({ ok: true, jobId: job.id });
+  } catch (err) {
+    console.error("POST /api/ats/jobs error", err);
     return NextResponse.json(
-      { error: "Failed to create job." },
+      { ok: false, error: "Failed to create job." },
       { status: 500 },
     );
   }
