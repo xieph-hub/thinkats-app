@@ -74,8 +74,30 @@ export default async function TenantCareersPage({
     where: { tenantId: tenant.id },
   });
 
-  // 3) Load this tenant's public, open jobs (careers site should show them
-  //    even if they are NOT in the global marketplace)
+  // Respect the "Careers page is public" toggle from /ats/tenants/[id]/careersite
+  const isPublic = settings?.isPublic ?? true;
+  if (!isPublic) {
+    notFound();
+  }
+
+  // 3) Brand customisation — safe even if these fields don't exist yet.
+  const settingsAny = settings as any;
+
+  const primaryColor: string =
+    settingsAny?.primaryColorHex || "#172965"; // ThinkATS deep blue
+  const accentColor: string =
+    settingsAny?.accentColorHex || "#FFC000"; // ThinkATS yellow
+  const heroBackground: string =
+    settingsAny?.heroBackgroundHex || "#ffffff";
+
+  // Prefer a careersite-specific logo, then tenant-level logo, then an initial
+  const logoUrl: string | null =
+    (settingsAny?.logoUrl as string | undefined) ||
+    (tenant.logoUrl as string | null) ||
+    null;
+
+  // 4) Load this tenant's public, open jobs (careers site always shows them
+  //    if they are public + open, regardless of marketplace flag)
   const jobs = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -100,8 +122,6 @@ export default async function TenantCareersPage({
     settings?.aboutHtml ||
     `<p>We use ThinkATS to manage our hiring process. Every application is reviewed by a real hiring team member, and you can expect a structured, respectful interview experience.</p>`;
 
-  const logoUrl = settings?.logoUrl || tenant.logoUrl || null;
-
   // Tracking source for job detail (so /jobs/[id] knows it came from this careers page)
   const trackingSource = `CAREERS_${(tenant.slug || tenant.id).toUpperCase()}`;
 
@@ -114,37 +134,54 @@ export default async function TenantCareersPage({
     return `${basePath}${connector}src=${encodeURIComponent(trackingSource)}`;
   }
 
+  const companyLabel = tenant.name || tenant.slug || "Company";
+
   return (
-    <div className="min-h-screen bg-[#F5F6FA]">
+    <div
+      className="min-h-screen bg-[#F5F6FA]"
+      style={{ backgroundColor: "#F5F6FA" }}
+    >
       <div className="mx-auto max-w-5xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
         {/* Hero */}
-        <section className="mb-8 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur sm:p-8">
+        <section
+          className="mb-8 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm backdrop-blur-sm sm:p-8"
+          style={{ backgroundColor: heroBackground }}
+        >
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-4">
               {/* Logo / avatar */}
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 {logoUrl ? (
                   <Image
                     src={logoUrl}
-                    alt={tenant.name || "Company logo"}
-                    width={56}
-                    height={56}
-                    className="h-full w-full object-contain p-1"
+                    alt={`${companyLabel} logo`}
+                    width={64}
+                    height={64}
+                    sizes="64px"
+                    className="h-14 w-14 object-contain"
+                    priority
                   />
                 ) : (
-                  <span className="text-xl font-semibold text-[#172965]">
-                    {(tenant.name || tenant.slug || "T")
-                      .charAt(0)
-                      .toUpperCase()}
+                  <span
+                    className="text-2xl font-semibold"
+                    style={{ color: primaryColor }}
+                  >
+                    {companyLabel.charAt(0).toUpperCase()}
                   </span>
                 )}
               </div>
 
               <div className="max-w-xl">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#FFC000]">
+                <p
+                  className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                  style={{ color: accentColor }}
+                >
                   Careers
                 </p>
-                <h1 className="mt-1 text-2xl font-semibold text-[#172965] sm:text-3xl">
+                <h1
+                  className="mt-1 text-2xl font-semibold sm:text-3xl"
+                  style={{ color: primaryColor }}
+                >
                   {heroTitle}
                 </h1>
                 {tenant.name && (
@@ -152,10 +189,10 @@ export default async function TenantCareersPage({
                     {tenant.name}
                   </p>
                 )}
-                <p className="mt-3 text-sm text-slate-600">
+                <p className="mt-3 text-sm text-slate-700">
                   {heroSubtitle}
                 </p>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-[11px] text-slate-500">
                   {totalJobs === 0
                     ? "No open roles at the moment."
                     : `${totalJobs} open ${
@@ -165,7 +202,10 @@ export default async function TenantCareersPage({
               </div>
             </div>
 
-            <div className="space-y-3 rounded-2xl bg-[#172965] px-4 py-3 text-xs text-slate-100 sm:w-64">
+            <div
+              className="space-y-3 rounded-2xl px-4 py-3 text-xs text-slate-100 sm:w-64"
+              style={{ backgroundColor: "#172965" }} // Keep ThinkATS brand here
+            >
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#FFC000]">
                 Powered by ThinkATS
               </p>
@@ -255,14 +295,20 @@ export default async function TenantCareersPage({
               return (
                 <article
                   key={job.id}
-                  className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-700 shadow-sm transition hover:border-[#172965]/70 hover:shadow-md sm:flex-row sm:items-stretch"
+                  className="group flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-xs text-slate-700 shadow-sm transition hover:border-slate-300 hover:shadow-md sm:flex-row sm:items-stretch"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
+                      <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-slate-900">
                         {job.title}
                       </h2>
-                      <span className="inline-flex items-center rounded-full bg-[#E9F7EE] px-2 py-0.5 text-[10px] font-medium text-[#306B34]">
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
+                        style={{
+                          backgroundColor: accentColor,
+                          color: "#111827",
+                        }}
+                      >
                         Actively hiring
                       </span>
                     </div>
@@ -308,7 +354,8 @@ export default async function TenantCareersPage({
                     <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
                       <Link
                         href={jobPublicUrl(job)}
-                        className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
+                        className="inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
+                        style={{ backgroundColor: primaryColor }}
                       >
                         View &amp; apply
                         <span className="ml-1.5 text-[10px] opacity-80">
