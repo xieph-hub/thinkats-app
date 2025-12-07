@@ -2,74 +2,53 @@
 import { headers } from "next/headers";
 
 export type HostContext = {
-  host: string;                  // raw host (without port)
-  hostname: string;              // same as host, lowercased
-  baseDomain: string;            // e.g. "thinkats.com"
-  isPrimaryHost: boolean;        // true for thinkats.com / www.thinkats.com / localhost
-  tenantSlugFromHost: string | null; // e.g. "resourcin" from resourcin.thinkats.com
+  host: string;                 // raw host with optional port
+  hostname: string;             // host without port, lowercased
+  baseDomain: string;           // e.g. "thinkats.com"
+  isPrimaryHost: boolean;       // true for thinkats.com / www.thinkats.com
+  tenantSlugFromHost: string | null; // "resourcin" for resourcin.thinkats.com
 };
 
-/**
- * Derive tenant context from the incoming Host header.
- *
- * Works for:
- *  - thinkats.com / www.thinkats.com          → primary host
- *  - resourcin.thinkats.com                  → tenant subdomain "resourcin"
- *  - localhost:3000 (dev)                    → primary host
- */
+function getPrimaryDomain(): string {
+  const env = process.env.NEXT_PUBLIC_SITE_URL;
+  if (env) {
+    try {
+      return new URL(env).hostname.toLowerCase();
+    } catch {
+      // If someone set it as "thinkats.com" without protocol
+      return env.replace(/^https?:\/\//, "").toLowerCase();
+    }
+  }
+  return "thinkats.com";
+}
+
 export function getHostContext(): HostContext {
-  const hdrs = headers();
+  const h = headers();
 
-  // Prefer proxy header on Vercel, fall back to Host
-  const rawHost =
-    hdrs.get("x-forwarded-host") ??
-    hdrs.get("host") ??
-    "";
+  const rawHostHeader =
+    h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
 
-  const hostname = rawHost.split(":")[0].toLowerCase();
-  const parts = hostname.split(".").filter(Boolean);
+  // x-forwarded-host can be a comma-separated list – take the first
+  const firstHost = rawHostHeader.split(",")[0].trim();
+  const hostname = firstHost.split(":")[0].toLowerCase();
 
-  // Local dev or single-label host (e.g. "localhost")
-  if (parts.length <= 1) {
-    return {
-      host: hostname,
-      hostname,
-      baseDomain: hostname,
-      isPrimaryHost: true,
-      tenantSlugFromHost: null,
-    };
+  const baseDomain = getPrimaryDomain();
+
+  let isPrimaryHost = false;
+  let tenantSlugFromHost: string | null = null;
+
+  if (hostname === baseDomain || hostname === `www.${baseDomain}`) {
+    isPrimaryHost = true;
+  } else if (hostname.endsWith(`.${baseDomain}`)) {
+    const sub = hostname.slice(0, -1 * (`.${baseDomain}`.length));
+    tenantSlugFromHost = sub || null;
   }
-
-  // Primary domain style:
-  //  - thinkats.com
-  //  - www.thinkats.com
-  if (
-    parts.length === 2 || // thinkats.com
-    (parts.length === 3 && parts[0] === "www") // www.thinkats.com
-  ) {
-    const baseDomain =
-      parts.length === 2 ? hostname : parts.slice(1).join(".");
-
-    return {
-      host: hostname,
-      hostname,
-      baseDomain,
-      isPrimaryHost: true,
-      tenantSlugFromHost: null,
-    };
-  }
-
-  // Tenant subdomain style:
-  //  - resourcin.thinkats.com
-  //  - acme.eu.thinkats.com (we still treat first label as tenant)
-  const tenantSlugFromHost = parts[0];
-  const baseDomain = parts.slice(-2).join(".");
 
   return {
-    host: hostname,
+    host: firstHost,
     hostname,
     baseDomain,
-    isPrimaryHost: false,
+    isPrimaryHost,
     tenantSlugFromHost,
   };
 }
