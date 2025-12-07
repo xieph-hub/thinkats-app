@@ -2,6 +2,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getHostContext } from "@/lib/host";
+import { getServerUser } from "@/lib/auth/getServerUser";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Hiring workspaces & careers",
@@ -9,13 +12,20 @@ export const metadata: Metadata = {
     "ThinkATS powers modern hiring workspaces, shared pipelines and branded careers sites for companies and agencies.",
 };
 
-export default function HomePage() {
+export default async function HomePage() {
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // 🔹 If we're on a tenant subdomain (e.g. resourcin.thinkats.com),
-  // treat the root as THEIR app entry point → straight into their login.
+  // 🔹 Tenant subdomain root (e.g. resourcin.thinkats.com)
+  // If logged out → go to login on this host with callback to /ats
+  // If logged in  → straight into /ats dashboard on this host
   if (!isPrimaryHost && tenantSlugFromHost) {
-    redirect("/login");
+    const { supabaseUser } = await getServerUser();
+
+    if (!supabaseUser) {
+      redirect("/login?callbackUrl=/ats");
+    }
+
+    redirect("/ats");
   }
 
   // 🔹 Primary host (thinkats.com / www.thinkats.com):
@@ -31,13 +41,15 @@ export default function HomePage() {
 
           <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-5xl">
             One ATS for teams, clients
-            <span className="block text-sky-400">and branded careers sites.</span>
+            <span className="block text-sky-400">
+              and branded careers sites.
+            </span>
           </h1>
 
           <p className="max-w-xl text-sm text-slate-300 sm:text-base">
-            ThinkATS gives recruiters, founders and in-house People teams a shared
-            workspace for roles, pipelines and talent — plus white-label careers
-            sites for every client or business unit.
+            ThinkATS gives recruiters, founders and in-house People teams a
+            shared workspace for roles, pipelines and talent — plus
+            white-label careers sites for every client or business unit.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -65,14 +77,18 @@ export default function HomePage() {
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-              <p className="font-semibold text-slate-50">Client-branded careers</p>
+              <p className="font-semibold text-slate-50">
+                Client-branded careers
+              </p>
               <p className="mt-1 text-[11px] text-slate-400">
                 Give each client or business unit their own careers site on a
                 subdomain.
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-              <p className="font-semibold text-slate-50">Candidate-first flows</p>
+              <p className="font-semibold text-slate-50">
+                Candidate-first flows
+              </p>
               <p className="mt-1 text-[11px] text-slate-400">
                 Candidates apply once and can be matched across suitable roles.
               </p>
@@ -90,8 +106,8 @@ export default function HomePage() {
               How teams use ThinkATS
             </h2>
             <p className="mt-1 text-xs text-slate-400">
-              One workspace for roles, candidates and clients — with a careers site
-              for each tenant.
+              One workspace for roles, candidates and clients — with a careers
+              site for each tenant.
             </p>
 
             <div className="mt-4 space-y-3 text-[11px] text-slate-300">
@@ -102,7 +118,8 @@ export default function HomePage() {
                     Resourcin ATS · resourcin.thinkats.com
                   </p>
                   <p className="mt-0.5 text-slate-400">
-                    Internal roles and client mandates in a single pipeline view.
+                    Internal roles and client mandates in a single pipeline
+                    view.
                   </p>
                 </div>
               </div>
@@ -123,7 +140,8 @@ export default function HomePage() {
                 <div>
                   <p className="font-medium text-slate-50">Jobs on ThinkATS</p>
                   <p className="mt-0.5 text-slate-400">
-                    Selected roles opt into the global marketplace at thinkats.com.
+                    Selected roles opt into the global marketplace at
+                    thinkats.com.
                   </p>
                 </div>
               </div>
