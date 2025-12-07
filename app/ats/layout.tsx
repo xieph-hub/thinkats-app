@@ -3,10 +3,9 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { ensureOtpVerified } from "@/lib/requireOtp";
-import AtsSidebar from "@/components/ats/AtsSidebar";
-import AtsTopbar from "@/components/ats/AtsTopbar";
 import { isOfficialUser } from "@/lib/officialEmail";
 import { getHostContext } from "@/lib/host";
+import AtsLayoutClient from "./AtsLayoutClient";
 
 export const metadata = {
   title: "ThinkATS | ATS Workspace",
@@ -20,19 +19,16 @@ export default async function AtsLayout({ children }: { children: ReactNode }) {
   // 1) Primary auth – must be logged in via Supabase
   const { supabaseUser, user, isSuperAdmin } = await getServerUser();
 
-  // No Supabase session → send to login for ATS
   if (!supabaseUser || !supabaseUser.email) {
     redirect("/login?callbackUrl=/ats");
   }
 
   // 2) Email policy – only official / whitelisted users allowed in ATS
-  // (still based on Supabase user, as you had before)
   if (!isOfficialUser(supabaseUser)) {
     redirect("/access-denied");
   }
 
   // 3) Require an app-level User record for ATS access at all
-  //    (we need this to check tenant membership).
   if (!user) {
     redirect("/access-denied?reason=no_app_user");
   }
@@ -48,7 +44,7 @@ export default async function AtsLayout({ children }: { children: ReactNode }) {
     const roles = user.userTenantRoles ?? [];
 
     const hasMembership = roles.some(
-      (r) => r.tenant && r.tenant.slug === tenantSlugFromHost,
+      (r: any) => r.tenant && r.tenant.slug === tenantSlugFromHost,
     );
 
     if (!hasMembership) {
@@ -65,14 +61,12 @@ export default async function AtsLayout({ children }: { children: ReactNode }) {
   //    - Has an app-level User row
   //    - On tenant host, belongs to that tenant (or is SUPER_ADMIN)
   //    - OTP-verified (cookie)
+  //
+  // Hand off to the client layout which renders the sidebar, top ribbon, and
+  // the “Switch workspace” control pointing at /ats/tenants.
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <AtsSidebar />
-      <div className="flex min-h-screen flex-1 flex-col">
-        {/* pass Prisma user first, fall back to Supabase shape if needed */}
-        <AtsTopbar user={user ?? supabaseUser} />
-        <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8">{children}</main>
-      </div>
-    </div>
+    <AtsLayoutClient user={user as any}>
+      {children}
+    </AtsLayoutClient>
   );
 }
