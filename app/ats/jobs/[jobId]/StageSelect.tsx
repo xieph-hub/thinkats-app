@@ -37,7 +37,7 @@ export function StageSelect({
 
   async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const nextStage = e.target.value;
-    setValue(nextStage);
+    setValue(nextStage); // optimistic
     setIsSaving(true);
 
     try {
@@ -49,10 +49,9 @@ export function StageSelect({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            action: "SET_STAGE",
-            stage: nextStage,
-            nextStage, // <-- this is what the bulk API already expects
             applicationIds: [applicationId],
+            nextStage,      // ✅ match bulk API shape
+            nextStatus: null,
           }),
         },
       );
@@ -60,7 +59,7 @@ export function StageSelect({
       if (!res.ok) {
         throw new Error("Failed to update stage");
       }
-      // stays inline – no full page reload
+      // stays inline, no reload
     } catch (err) {
       console.error(err);
       // revert if it failed
