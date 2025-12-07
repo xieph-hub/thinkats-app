@@ -5,8 +5,8 @@ import { getResourcinTenant } from "@/lib/tenant";
 
 type IncomingSkill = {
   name: string;
-  proficiency?: number; // 1–5 (future use)
-  yearsExperience?: number; // integer (future use)
+  proficiency?: number;      // 1–5
+  yearsExperience?: number;  // integer years
 };
 
 type TalentNetworkPayload = {
@@ -20,19 +20,17 @@ type TalentNetworkPayload = {
   headline?: string;
   summary?: string;
   skills?: IncomingSkill[];
-  sourceLabel?: string; // e.g. "Talent Network", "Sourcing Drive – Lagos"
+  sourceLabel?: string;      // e.g. "Talent Network", "Sourcing Drive – Lagos"
 };
 
-// Normalise to a URL-safe, tenant-scoped skill key
-function slugify(input: string): string {
-  return input
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/['"]/g, "")
+function normaliseSkillName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+function slugifySkillName(raw: string): string {
+  return normaliseSkillName(raw)
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .replace(/(^-|-$)+/g, "");
 }
 
 export async function POST(req: Request) {
@@ -105,7 +103,6 @@ export async function POST(req: Request) {
           currentTitle: body.currentTitle?.trim() || candidate.currentTitle,
           currentCompany:
             body.currentCompany?.trim() || candidate.currentCompany,
-          // Backfill source if missing, but don’t overwrite richer info
           source: candidate.source ?? "talent_network",
         },
       });
@@ -120,46 +117,63 @@ export async function POST(req: Request) {
       const name = (raw.name || "").trim();
       if (!name) continue;
 
-      const skillSlug = slugify(name);
+      const skillSlug = slugifySkillName(name);
 
-      // Prefer a tenant-local skill; fall back to global (tenantId = null)
+      // Prefer a tenant-local skill; fall back to global skill (tenantId = null)
       let skill = await prisma.skill.findFirst({
         where: {
           OR: [
-            { tenantId: tenant.id, slug: skillSlug },
-            { tenantId: null, slug: skillSlug },
+            {
+              tenantId: tenant.id,
+              slug: skillSlug,
+            },
+            {
+              tenantId: null,
+              slug: skillSlug,
+            },
           ],
         },
       });
 
       if (!skill) {
-        // Create tenant-scoped skill
+        // Create tenant-scoped skill using the relation, not tenantId scalar
         skill = await prisma.skill.create({
           data: {
-            tenantId: tenant.id,
             name,
             slug: skillSlug,
             category: null,
             description: null,
             externalSource: null,
             externalId: null,
+            tenant: {
+              connect: { id: tenant.id },
+            },
           },
         });
       } else if (skill.tenantId === tenant.id && skill.name !== name) {
-        // Keep local display-name fresh
+        // Keep local display-name fresh for tenant-scoped skills
         await prisma.skill.update({
           where: { id: skill.id },
           data: { name },
         });
       }
 
-      // We read proficiency / yearsExperience but don't persist them yet
-      // because CandidateSkill currently only has tenantId / candidateId / skillId / source.
-      // const proficiency = ...
-      // const yearsExperience = ...
+      const level =
+        typeof raw.proficiency === "number" &&
+        Number.isFinite(raw.proficiency)
+          ? raw.proficiency
+          : null;
 
+      const yearsExperience =
+        typeof raw.yearsExperience === "number" &&
+        Number.isInteger(raw.yearsExperience)
+          ? raw.yearsExperience
+          : null;
+
+      // No composite unique on (candidateId, skillId), so do findFirst → update/create
       const existingCandidateSkill = await prisma.candidateSkill.findFirst({
         where: {
+          tenantId: tenant.id,
           candidateId: candidate.id,
           skillId: skill.id,
         },
@@ -169,7 +183,10 @@ export async function POST(req: Request) {
         await prisma.candidateSkill.update({
           where: { id: existingCandidateSkill.id },
           data: {
-            source: "talent_network",
+            level: level ?? existingCandidateSkill.level,
+            yearsExperience:
+              yearsExperience ?? existingCandidateSkill.yearsExperience,
+            source: existingCandidateSkill.source ?? "talent_network",
           },
         });
       } else {
@@ -178,20 +195,22 @@ export async function POST(req: Request) {
             tenantId: tenant.id,
             candidateId: candidate.id,
             skillId: skill.id,
+            level,
+            yearsExperience,
+            lastUsedYear: null,
             source: "talent_network",
+            isPrimary: false,
           },
         });
       }
     }
 
     // -------------------------------------------------------------------
-    // 3) Tag candidate with a SOURCE-ish tag (tenantId + name)
+    // 3) Tag candidate with a SOURCE-like tag (no Tag.kind in schema)
     // -------------------------------------------------------------------
-    const rawSourceLabel = body.sourceLabel || "Talent Network";
-    const sourceLabel = rawSourceLabel.trim();
+    const sourceLabel = (body.sourceLabel || "Talent Network").trim();
 
     if (sourceLabel) {
-      // Simple find-or-create on (tenantId, name)
       let sourceTag = await prisma.tag.findFirst({
         where: {
           tenantId: tenant.id,
@@ -204,13 +223,14 @@ export async function POST(req: Request) {
           data: {
             tenantId: tenant.id,
             name: sourceLabel,
-            color: "#2563EB", // soft blue
+            color: "#2563EB", // soft blue – tweak later in UI
           },
         });
       }
 
       const existingCandidateTag = await prisma.candidateTag.findFirst({
         where: {
+          tenantId: tenant.id,
           candidateId: candidate.id,
           tagId: sourceTag.id,
         },
