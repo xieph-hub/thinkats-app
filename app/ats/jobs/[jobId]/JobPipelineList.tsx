@@ -55,7 +55,7 @@ function tierColour(tier: string | null | undefined) {
 }
 
 function scoreColorHex(score: number | null | undefined) {
-  if (score == null) return "#64748b";
+  if (score == null) return "#64748b"; // slate-500
   if (score >= 80) return "#16a34a";
   if (score >= 65) return "#2563eb";
   if (score >= 50) return "#f59e0b";
@@ -205,7 +205,6 @@ export default function JobPipelineList({
     );
   }
 
-  // Bulk toolbar: call the backend exactly as defined in route.ts
   async function runBulkUpdate() {
     if (!anySelected) return;
     if (!bulkStage && !bulkStatus) return;
@@ -269,7 +268,6 @@ export default function JobPipelineList({
         }
       }
 
-      // If both calls succeeded, update UI optimistically
       setRows((prev) =>
         prev.map((row) => {
           if (!selectedIds.includes(row.id)) return row;
@@ -291,7 +289,6 @@ export default function JobPipelineList({
     }
   }
 
-  // Inline status: single-item version of the same API
   async function handleInlineStatusChange(
     applicationId: string,
     nextStatus: string,
@@ -300,7 +297,6 @@ export default function JobPipelineList({
     const originalStatus =
       rows.find((row) => row.id === applicationId)?.status ?? null;
 
-    // Optimistic UI
     setRows((prev) =>
       prev.map((row) =>
         row.id === applicationId ? { ...row, status: normalised } : row,
@@ -330,7 +326,6 @@ export default function JobPipelineList({
             text || "Please try again."
           }`,
         );
-        // revert
         setRows((prev) =>
           prev.map((row) =>
             row.id === applicationId ? { ...row, status: originalStatus } : row,
@@ -340,7 +335,6 @@ export default function JobPipelineList({
     } catch (err) {
       console.error(err);
       alert("Something went wrong while updating status.");
-      // revert
       setRows((prev) =>
         prev.map((row) =>
           row.id === applicationId ? { ...row, status: originalStatus } : row,
