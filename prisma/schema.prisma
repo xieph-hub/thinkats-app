@@ -79,6 +79,9 @@ model Tenant {
   savedViews         SavedView[]
   analyticsSnapshots AnalyticsSnapshot[]
 
+  // invitations
+  invitations TenantInvitation[]
+
   @@map("tenants")
 }
 
@@ -96,9 +99,10 @@ model User {
   createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  userTenantRoles UserTenantRole[]
-  loginOtps       LoginOtp[]
-  savedViews      SavedView[]       // back-relation for SavedView.owner
+  userTenantRoles    UserTenantRole[]
+  loginOtps          LoginOtp[]
+  savedViews         SavedView[]       // back-relation for SavedView.owner
+  tenantInvitations  TenantInvitation[]
 
   @@map("users")
 }
@@ -133,6 +137,29 @@ model LoginOtp {
 
   @@map("login_otps")
   @@index([userId, consumed, expiresAt], map: "idx_login_otps_user_active")
+}
+
+// --------------------------------------------------------------------------
+// TENANT INVITATIONS (NEW)
+// --------------------------------------------------------------------------
+
+model TenantInvitation {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  email     String   @map("email")
+  role      String   @map("role") @default("admin") // "owner" | "admin" | "recruiter" | "viewer"
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@map("tenant_invitations")
+  @@index([tenantId, email], map: "idx_tenant_invitations_tenant_email")
+  @@index([tokenHash], map: "idx_tenant_invitations_token_hash")
 }
 
 // --------------------------------------------------------------------------
