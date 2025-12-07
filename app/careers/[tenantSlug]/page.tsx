@@ -67,6 +67,40 @@ export default async function TenantCareersPage({ params }: PageProps) {
     );
   }
 
+  // Pull tenant-specific careers configuration
+  const settings = await prisma.careerSiteSettings.findFirst({
+    where: { tenantId: tenant.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const isPublic = settings?.isPublic ?? true;
+  const heroTitle =
+    settings?.heroTitle || (tenant.name ? `Careers at ${tenant.name}` : "Careers");
+  const heroSubtitle =
+    settings?.heroSubtitle ||
+    "Browse open roles and apply in a few clicks.";
+
+  const primaryColor = settings?.primaryColorHex || "#172965"; // deep blue
+  const heroBackground = settings?.heroBackgroundHex || "#F5F6FA"; // soft neutral
+  const aboutHtml = settings?.aboutHtml || "";
+
+  // If page is marked private, don't show jobs – just a simple notice
+  if (!isPublic) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-md rounded-xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold mb-2">
+            Careers page not public
+          </h1>
+          <p className="text-sm text-slate-600">
+            This careers site is currently not visible to candidates.
+            Please check back later or contact the hiring team.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const jobs = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -82,20 +116,40 @@ export default async function TenantCareersPage({ params }: PageProps) {
   return (
     <main className="min-h-screen bg-slate-50">
       <section className="mx-auto max-w-5xl px-4 py-10">
-        <header className="mb-8">
+        {/* Hero / brand panel */}
+        <header
+          className="mb-8 rounded-2xl border border-slate-200 px-5 py-6"
+          style={{ backgroundColor: heroBackground }}
+        >
           <p className="text-xs uppercase tracking-wide text-slate-500 mb-1">
             Careers at
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            {tenant.name}
+          <h1
+            className="text-2xl font-semibold"
+            style={{ color: primaryColor }}
+          >
+            {heroTitle}
           </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Browse open roles and apply in a few clicks.
-          </p>
+          {heroSubtitle && (
+            <p className="mt-2 text-sm text-slate-600">
+              {heroSubtitle}
+            </p>
+          )}
         </header>
 
+        {/* About section (optional) */}
+        {aboutHtml && (
+          <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 leading-relaxed space-y-2">
+            <div
+              // You already control this from the ATS; keep it simple and safe.
+              dangerouslySetInnerHTML={{ __html: aboutHtml }}
+            />
+          </section>
+        )}
+
+        {/* Jobs list */}
         {jobs.length === 0 ? (
-          <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-600">
             No open roles are currently published for this workspace.
           </div>
         ) : (
@@ -106,7 +160,7 @@ export default async function TenantCareersPage({ params }: PageProps) {
                 <Link
                   key={job.id}
                   href={`/jobs/${encodeURIComponent(jobSlugOrId)}`}
-                  className="block rounded-xl border bg-white p-4 hover:border-slate-400 transition-colors"
+                  className="block rounded-2xl border border-slate-200 bg-white p-4 hover:border-slate-400 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -128,7 +182,10 @@ export default async function TenantCareersPage({ params }: PageProps) {
                         </p>
                       )}
                     </div>
-                    <span className="text-xs font-medium text-slate-500">
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: primaryColor }}
+                    >
                       View role →
                     </span>
                   </div>
