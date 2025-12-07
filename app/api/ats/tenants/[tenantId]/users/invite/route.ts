@@ -26,9 +26,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // -------------------------------------------------------------------
     // 1) Who is acting?
-    // -------------------------------------------------------------------
     const supabase = createSupabaseRouteClient();
     const {
       data: { user: supaUser },
@@ -62,9 +60,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // -------------------------------------------------------------------
     // 2) Check tenant exists
-    // -------------------------------------------------------------------
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
       select: {
@@ -80,9 +76,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // -------------------------------------------------------------------
     // 3) Authorisation: SUPER_ADMIN or tenant owner/admin
-    // -------------------------------------------------------------------
     const isSuperAdmin = actingUser.globalRole === "SUPER_ADMIN";
     let isAllowed = false;
 
@@ -109,9 +103,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // -------------------------------------------------------------------
     // 4) Parse request body (JSON only for now)
-    // -------------------------------------------------------------------
     const body = await req.json().catch(() => null);
 
     if (!body || typeof body !== "object") {
@@ -141,9 +133,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // -------------------------------------------------------------------
     // 5) Check if user already exists + already a member
-    // -------------------------------------------------------------------
     const existingUser = await prisma.user.findUnique({
       where: { email: invitedEmail },
       select: { id: true },
@@ -165,9 +155,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       }
     }
 
-    // -------------------------------------------------------------------
     // 6) Check for existing active invite
-    // -------------------------------------------------------------------
     const now = new Date();
 
     const activeInvite = await prisma.tenantInvitation.findFirst({
@@ -186,9 +174,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       );
     }
 
-    // -------------------------------------------------------------------
     // 7) Create new invite (+ hashed token)
-    // -------------------------------------------------------------------
     const rawToken = randomBytes(32).toString("hex");
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -204,9 +190,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       },
     });
 
-    // -------------------------------------------------------------------
     // 8) Send email via Resend (if configured)
-    // -------------------------------------------------------------------
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.thinkats.com";
 
@@ -237,9 +221,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       });
     }
 
-    // -------------------------------------------------------------------
     // 9) Done
-    // -------------------------------------------------------------------
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Invite user error", err);
