@@ -1,22 +1,48 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    // Remove this line if you don't use any other experimental flags
+    // Add other experimental flags here if/when you need them
   },
   images: {
     remotePatterns: [
-      // Notion file/CDN hosts (add others you see in your broken URLs if needed)
-      { protocol: 'https', hostname: 'prod-files-secure.s3.us-west-2.amazonaws.com' },
-      { protocol: 'https', hostname: 's3.us-west-2.amazonaws.com' },
-      { protocol: 'https', hostname: 's3.us-east-1.amazonaws.com' },
-      { protocol: 'https', hostname: 'images.notion.so' },
-      { protocol: 'https', hostname: 'www.notion.so' },
+      // Supabase Storage: logos bucket for tenant + careersite logos
+      {
+        protocol: "https",
+        hostname: "ojkyjcuicyejhkrtkasy.supabase.co",
+        pathname: "/storage/v1/object/public/logos/**",
+      },
+
+      // Notion file/CDN hosts
+      {
+        protocol: "https",
+        hostname: "prod-files-secure.s3.us-west-2.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "s3.us-west-2.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "s3.us-east-1.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "images.notion.so",
+      },
+      {
+        protocol: "https",
+        hostname: "www.notion.so",
+      },
 
       // Common stock image/CDN (optional)
-      { protocol: 'https', hostname: 'images.unsplash.com' },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+      },
     ],
     dangerouslyAllowSVG: true,
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    contentSecurityPolicy:
+      "default-src 'self'; script-src 'none'; sandbox;",
   },
 };
 
