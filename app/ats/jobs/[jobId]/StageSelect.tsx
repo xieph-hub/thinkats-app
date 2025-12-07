@@ -9,7 +9,6 @@ type StageSelectProps = {
   currentStage: string | null;
 };
 
-// Fallback defaults – your job-specific stages will usually map to these
 const DEFAULT_STAGES = [
   "APPLIED",
   "SCREENING",
@@ -30,14 +29,15 @@ export function StageSelect({
   );
   const [isSaving, setIsSaving] = useState(false);
 
-  // Keep in sync if server-side stage changes
   useEffect(() => {
     setValue((currentStage || "APPLIED").toUpperCase());
   }, [currentStage]);
 
   async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const nextStage = e.target.value;
-    setValue(nextStage); // optimistic
+    const nextStage = e.target.value.toUpperCase();
+    const previous = value;
+
+    setValue(nextStage);
     setIsSaving(true);
 
     try {
@@ -49,21 +49,21 @@ export function StageSelect({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            jobId,
             applicationIds: [applicationId],
-            nextStage,      // ✅ match bulk API shape
-            nextStatus: null,
+            action: "move_stage",
+            stage: nextStage,
           }),
         },
       );
 
       if (!res.ok) {
-        throw new Error("Failed to update stage");
+        console.error("Failed to update stage", res.status, await res.text());
+        setValue(previous);
       }
-      // stays inline, no reload
     } catch (err) {
       console.error(err);
-      // revert if it failed
-      setValue((currentStage || "APPLIED").toUpperCase());
+      setValue(previous);
     } finally {
       setIsSaving(false);
     }
