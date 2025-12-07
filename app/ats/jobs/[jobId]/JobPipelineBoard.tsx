@@ -2,13 +2,13 @@
 import Link from "next/link";
 import { StageSelect } from "./StageSelect";
 
-type SkillTag = {
+export type SkillTag = {
   id: string;
   label: string;
   color?: string | null;
 };
 
-type PipelineApp = {
+export type PipelineApp = {
   id: string;
   candidateId: string | null;
 
@@ -32,12 +32,12 @@ type PipelineApp = {
   experienceLabel: string | null;
 };
 
-type StageInfo = {
+export type StageInfo = {
   id: string;
   name: string;
 };
 
-type JobPipelineBoardProps = {
+export type JobPipelineBoardProps = {
   jobId: string;
   stages: StageInfo[];
   applications: PipelineApp[];
@@ -111,97 +111,38 @@ export default function JobPipelineBoard({
     }
   }
 
-  const totalApplications = applications.length;
-
-  const exportCsvHref = `/api/ats/jobs/${jobId}/pipeline/export?format=csv`;
-  const exportXlsHref = `/api/ats/jobs/${jobId}/pipeline/export?format=xls`;
-
   return (
-    <section className="mt-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-            Pipeline
-          </h2>
-          <p className="text-xs text-slate-500">
-            {totalApplications} application
-            {totalApplications === 1 ? "" : "s"} across{" "}
-            {columns.length} stage
-            {columns.length === 1 ? "" : "s"}.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Tier A
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-              Tier B
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              Tier C
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-              Tier D / unscored
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <a
-              href={exportCsvHref}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              <span>⬇</span>
-              <span>Export CSV</span>
-            </a>
-            <a
-              href={exportXlsHref}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              <span>⬇</span>
-              <span>Export XLS</span>
-            </a>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {columns.map((column) => (
-          <div
-            key={column.id}
-            className="flex flex-col rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm backdrop-blur"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  {column.name}
-                </h3>
-                <span className="text-[10px] font-medium text-slate-400">
-                  {column.applications.length}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {column.applications.map((app) => (
-                <PipelineCard key={app.id} jobId={jobId} application={app} />
-              ))}
-
-              {column.applications.length === 0 && (
-                <p className="mt-2 text-center text-[11px] text-slate-400">
-                  No candidates here yet.
-                </p>
-              )}
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {columns.map((column) => (
+        <div
+          key={column.id}
+          className="flex flex-col rounded-xl border border-slate-200 bg-white/70 p-3 shadow-sm backdrop-blur"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                {column.name}
+              </h3>
+              <span className="text-[10px] font-medium text-slate-400">
+                {column.applications.length}
+              </span>
             </div>
           </div>
-        ))}
-      </div>
-    </section>
+
+          <div className="space-y-2">
+            {column.applications.map((app) => (
+              <PipelineCard key={app.id} jobId={jobId} application={app} />
+            ))}
+
+            {column.applications.length === 0 && (
+              <p className="mt-2 text-center text-[11px] text-slate-400">
+                No candidates here yet.
+              </p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -262,14 +203,14 @@ function PipelineCard({
               tier,
             )}`}
           >
+            {tier && (
+              <span className="text-[10px] uppercase text-slate-700">
+                {tier}
+              </span>
+            )}
             <span className={scoreColour(score)}>
               {score != null ? `${score}` : "–"}
             </span>
-            {tier && (
-              <span className="text-[10px] uppercase text-slate-500">
-                · {tier}
-              </span>
-            )}
           </div>
           <span
             className="cursor-help text-[10px] text-slate-400"
