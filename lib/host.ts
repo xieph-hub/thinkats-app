@@ -1,6 +1,4 @@
 // lib/host.ts
-"use server";
-
 import { headers } from "next/headers";
 
 export type HostContext = {
