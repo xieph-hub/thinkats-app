@@ -1,22 +1,26 @@
 // app/ats/verify/page.tsx
 import type { Metadata } from "next";
-import { getServerUser } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
+import { getServerUser } from "@/lib/auth/getServerUser"; // 👈 use the new helper
 import VerifyOtpClient from "./VerifyOtpClient";
 
 export const metadata: Metadata = {
   title: "Verify login | ThinkATS",
-  description: "Enter the one-time code sent to your email to access ThinkATS.",
+  description:
+    "Enter the one-time code sent to your email to access ThinkATS.",
 };
 
 export default async function AtsVerifyPage() {
-  const user = await getServerUser();
+  // getServerUser now returns a context object:
+  // { supabaseUser, user, isSuperAdmin, primaryTenant, tenant }
+  const { supabaseUser } = await getServerUser();
 
-  if (!user) {
+  // If there is no Supabase user or no email, treat as unauthenticated
+  if (!supabaseUser || !supabaseUser.email) {
     redirect("/login?callbackUrl=/ats");
   }
 
-  const email = user.email ?? "";
+  const email: string = supabaseUser.email ?? "";
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
