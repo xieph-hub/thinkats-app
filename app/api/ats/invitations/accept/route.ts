@@ -39,14 +39,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tokenHash = hashToken(normalizedToken);
     const now = new Date();
+
+    // Support BOTH:
+    // - old links: raw token (db.tokenHash == hash(raw))
+    // - new links: tokenHash directly (db.tokenHash == inviteToken)
+    const candidateHash = hashToken(normalizedToken);
 
     const invite = await prisma.tenantInvitation.findFirst({
       where: {
-        tokenHash,
         usedAt: null,
         expiresAt: { gt: now },
+        OR: [
+          { tokenHash: candidateHash },       // raw token (old emails)
+          { tokenHash: normalizedToken },     // hashed token (copy / resend links)
+        ],
       },
       include: {
         tenant: {
@@ -128,7 +135,7 @@ export async function POST(req: NextRequest) {
         data: {
           userId: appUser.id,
           tenantId: invite.tenantId,
-          role: invite.role, // "owner" | "admin" | "recruiter" | "viewer" | "hiring_manager"
+          role: invite.role,
           isPrimary: false,
         },
       });
