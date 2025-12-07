@@ -32,12 +32,18 @@ type PipelineAppRow = {
   fullName: string;
   email: string;
   location: string | null;
+  currentTitle: string | null;
+  currentCompany: string | null;
+
   source: string | null;
   stage: string | null;
   status: string | null;
+
   matchScore: number | null;
   matchReason: string | null;
   tier: string | null;
+  scoreReason: string | null;
+
   appliedAt: string; // ISO
   skillTags: { id: string; label: string; color?: string | null }[];
   experienceLabel: string | null;
@@ -67,7 +73,13 @@ export default async function JobPipelinePage({
             include: {
               tags: {
                 include: {
-                  tag: true,
+                  tag: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true,
+                    },
+                  },
                 },
               },
             },
@@ -152,8 +164,6 @@ export default async function JobPipelinePage({
       ? job.stages.map((s) => s.name || "UNASSIGNED")
       : ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
 
-  const stageOptions = stageNames;
-
   // ---------------------------------------------------------------------------
   // Build filtered pipeline list (server-side)
   // ---------------------------------------------------------------------------
@@ -169,6 +179,12 @@ export default async function JobPipelinePage({
     const tier = (latestScore?.tier as string | null | undefined) ?? null;
     const engine =
       (latestScore?.engine as string | null | undefined) ?? null;
+    const scoreReason =
+      (latestScore?.reason as string | null | undefined) ??
+      (app.matchReason as string | null | undefined) ??
+      null;
+
+    const candidate = app.candidate ?? null;
 
     // Boolean / keyword search
     const haystack = [
@@ -219,9 +235,9 @@ export default async function JobPipelinePage({
       continue;
     }
 
-    // Candidate tags → skills
+    // Candidate tags → chips
     const skillTags =
-      app.candidate?.tags?.map((ct) => ({
+      candidate?.tags?.map((ct) => ({
         id: ct.tag.id,
         label: ct.tag.name,
         color: ct.tag.color,
@@ -229,17 +245,23 @@ export default async function JobPipelinePage({
 
     pipelineApps.push({
       id: app.id,
-      candidateId: app.candidate ? app.candidate.id : null,
+      candidateId: candidate ? candidate.id : null,
 
       fullName: app.fullName,
       email: app.email,
       location: app.location,
+      currentTitle: candidate?.currentTitle ?? null,
+      currentCompany: candidate?.currentCompany ?? null,
+
       source: app.source,
       stage: app.stage,
       status: app.status,
+
       matchScore: score,
-      matchReason: app.matchReason,
+      matchReason: app.matchReason ?? null,
       tier,
+      scoreReason,
+
       appliedAt: app.createdAt.toISOString(),
       skillTags,
       // Future: derive from candidate profile once you collect it
@@ -511,8 +533,11 @@ export default async function JobPipelinePage({
       <section className="flex-1 px-5 py-4">
         <JobPipelineBoard
           jobId={job.id}
-          stageOptions={stageOptions}
-          apps={pipelineApps}
+          stages={job.stages.map((s) => ({
+            id: s.id,
+            name: s.name || "UNASSIGNED",
+          }))}
+          applications={pipelineApps}
         />
       </section>
     </div>
