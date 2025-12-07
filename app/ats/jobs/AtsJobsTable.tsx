@@ -113,18 +113,22 @@ export default function AtsJobsTable({ initialJobs }: Props) {
 
       const data = await res.json().catch(() => null);
 
-      if (!res.ok || !data?.ok) {
+      if (!res.ok || !data || data.ok === false) {
         throw new Error(data?.error || "Failed to run bulk action.");
       }
 
       if (bulkAction === "delete") {
-        const deletedIds = new Set<string>(data.deletedIds || []);
-        setJobs((prev) => prev.filter((j) => !deletedIds.has(j.id)));
+        // This is a HARD delete in your route
+        const deletedIds: string[] = data.deletedIds || [];
+        const deletedSet = new Set<string>(deletedIds);
+
+        setJobs((prev) => prev.filter((j) => !deletedSet.has(j.id)));
         setSelectedIds(new Set());
-        setSuccess("Selected jobs removed from view.");
+        setSuccess("Selected jobs deleted permanently.");
         return;
       }
 
+      // publish / unpublish / close
       const updatedList: { id: string; status: string; visibility: string }[] =
         data.updatedJobs || [];
 
@@ -197,13 +201,13 @@ export default function AtsJobsTable({ initialJobs }: Props) {
           <select
             value={bulkAction}
             onChange={(e) => setBulkAction(e.target.value)}
-            className="h-8 w-[180px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            className="h-8 w-[200px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
           >
             <option value="">Select action…</option>
             <option value="publish">Publish (open + public)</option>
             <option value="unpublish">Unpublish (keep internal)</option>
             <option value="close">Mark as closed</option>
-            <option value="delete">Remove from view (soft delete)</option>
+            <option value="delete">Delete permanently</option>
           </select>
           <button
             type="button"
