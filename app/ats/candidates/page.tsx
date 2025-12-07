@@ -4,6 +4,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import CandidatesTable, {
+  type CandidateRowProps,
+} from "./CandidatesTable";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +22,7 @@ type CandidatesPageSearchParams = {
   stage?: string | string[];
   tier?: string | string[];
   view?: string | string[];
+  page?: string | string[];
 };
 
 type PageProps = {
@@ -32,91 +36,6 @@ type PageProps = {
 function firstString(value?: string | string[]): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
-}
-
-function scoreChipColor(score?: number | null) {
-  if (score == null) return "bg-slate-100 text-slate-600";
-  if (score >= 80) return "bg-emerald-100 text-emerald-700";
-  if (score >= 65) return "bg-sky-100 text-sky-700";
-  if (score >= 50) return "bg-amber-100 text-amber-700";
-  return "bg-rose-100 text-rose-700";
-}
-
-function tierChipColor(tier?: string | null) {
-  if (!tier) return "bg-slate-100 text-slate-600";
-  const upper = tier.toUpperCase();
-  if (upper === "A") return "bg-emerald-100 text-emerald-700";
-  if (upper === "B") return "bg-sky-100 text-sky-700";
-  if (upper === "C") return "bg-amber-100 text-amber-700";
-  return "bg-slate-100 text-slate-600";
-}
-
-function scoreColorHex(score: number | null | undefined) {
-  if (score == null) return "#64748b"; // slate-500
-  if (score >= 80) return "#16a34a"; // emerald-600
-  if (score >= 65) return "#2563eb"; // blue-600
-  if (score >= 50) return "#f59e0b"; // amber-500
-  return "#475569"; // slate-600
-}
-
-function ScoreRing({
-  score,
-  title,
-}: {
-  score: number | null;
-  title?: string;
-}) {
-  const value = score ?? 0;
-  const clamped = Math.max(0, Math.min(value, 100));
-  const radius = 16;
-  const circumference = 2 * Math.PI * radius;
-  const dash = (clamped / 100) * circumference;
-  const stroke = scoreColorHex(score);
-
-  return (
-    <div
-      className="relative inline-flex items-center justify-center"
-      title={title}
-      aria-label={
-        score != null ? `Match score ${score}` : "Match score not set"
-      }
-    >
-      <svg viewBox="0 0 40 40" className="h-11 w-11">
-        {/* track */}
-        <circle
-          cx="20"
-          cy="20"
-          r={radius}
-          fill="none"
-          stroke="#e5e7eb" // slate-200
-          strokeWidth="4"
-        />
-        {/* progress */}
-        <circle
-          cx="20"
-          cy="20"
-          r={radius}
-          fill="none"
-          stroke={stroke}
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circumference - dash}`}
-          strokeDashoffset={circumference * 0.25}
-          transform="rotate(-90 20 20)"
-        />
-      </svg>
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <span className="text-[11px] font-semibold text-slate-900">
-          {score != null ? score : "–"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function formatDate(d: Date | null | undefined) {
-  if (!d) return "";
-  return d.toISOString().slice(0, 10);
 }
 
 function derivePrimaryTier(apps: any[]): string | null {
@@ -304,6 +223,95 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
     }
     return counts;
   })();
+
+  // ---- Pagination ----------------------------------------------------------
+
+  const rawPage = parseInt(firstString(searchParams.page) || "1", 10);
+  const page = Number.isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const offset = (currentPage - 1) * pageSize;
+
+  const pageCandidates = filteredCandidates.slice(
+    offset,
+    offset + pageSize,
+  );
+
+  // ---- Map to flat rows for the client table -------------------------------
+
+  const candidateRows: CandidateRowProps[] = pageCandidates.map(
+    (candidate, idx) => {
+      const apps = candidate.applications as any[];
+
+      const primaryTier = derivePrimaryTier(apps);
+      const lastSeen = deriveLastSeen(apps, candidate.createdAt);
+
+      const latestApp = apps[0];
+      const latestScore = (() => {
+        if (!latestApp) return null;
+        const latest = latestApp.scoringEvents?.[0];
+        return (
+          (latest?.score as number | null | undefined) ??
+          (latestApp.matchScore as number | null | undefined) ??
+          null
+        );
+      })();
+
+      const latestJobTitle = latestApp?.job?.title || "—";
+      const latestClient = latestApp?.job?.clientCompany?.name || null;
+      const anySource =
+        latestApp?.source || (candidate as any).source || "";
+
+      const uniqueTags =
+        candidate.tags
+          ?.map((ct) => ct.tag)
+          .filter(
+            (t): t is NonNullable<typeof t> => Boolean(t),
+          ) ?? [];
+
+      return {
+        id: candidate.id,
+        index: offset + idx + 1,
+        fullName: candidate.fullName,
+        email: candidate.email,
+        location: candidate.location,
+        currentCompany: (candidate as any).currentCompany ?? null,
+        createdAt: candidate.createdAt.toISOString(),
+        tags: uniqueTags.map((t) => ({ id: t.id, name: t.name })),
+        pipelines: apps.map((app: any) => ({
+          id: app.id,
+          title: app.job?.title || "Untitled",
+          stage: app.stage || "APPLIED",
+        })),
+        primaryTier,
+        latestScore,
+        latestJobTitle,
+        latestClient,
+        source: anySource,
+        lastSeen: lastSeen.toISOString(),
+      };
+    },
+  );
+
+  function buildPageHref(targetPage: number) {
+    const params = new URLSearchParams();
+
+    if (filterQ) params.set("q", filterQ);
+    if (filterSource) params.set("source", filterSource);
+    if (filterStage) params.set("stage", filterStage);
+    if (filterTier) params.set("tier", filterTier);
+    if (activeView) params.set("view", activeView.id);
+
+    params.set("page", String(targetPage));
+
+    const query = params.toString();
+    return query ? `/ats/candidates?${query}` : "/ats/candidates";
+  }
+
+  // -------------------------------------------------------------------------
+  // UI
+  // -------------------------------------------------------------------------
 
   return (
     <div className="flex h-full flex-1 flex-col bg-slate-50">
@@ -534,7 +542,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
 
         {/* Candidates table / list */}
         <section className="flex-1 rounded-2xl border border-slate-200 bg-white">
-          {filteredCandidates.length === 0 ? (
+          {candidateRows.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center text-[11px] text-slate-500">
               <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white shadow-sm">
                 ATS
@@ -548,223 +556,54 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-separate border-spacing-y-1 px-2 text-[11px]">
-                <thead>
-                  <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2">Candidate</th>
-                    <th className="px-3 py-2">Pipelines</th>
-                    <th className="px-3 py-2 text-right">Match score</th>
-                    <th className="px-3 py-2">Latest role</th>
-                    <th className="px-3 py-2">Source</th>
-                    <th className="px-3 py-2 text-right">Last touch</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCandidates.map((candidate) => {
-                    const apps = candidate.applications as any[];
-                    const primaryTier = derivePrimaryTier(apps);
-                    const lastSeen = deriveLastSeen(
-                      apps,
-                      candidate.createdAt,
-                    );
+            <>
+              <CandidatesTable rows={candidateRows} />
 
-                    const latestApp = apps[0];
-                    const latestScore = (() => {
-                      if (!latestApp) return null;
-                      const latest = latestApp.scoringEvents?.[0];
-                      return (
-                        (latest?.score as number | null | undefined) ??
-                        (latestApp.matchScore as
-                          | number
-                          | null
-                          | undefined) ??
-                        null
-                      );
-                    })();
-
-                    const latestJobTitle =
-                      latestApp?.job?.title || "—";
-                    const latestClient =
-                      latestApp?.job?.clientCompany?.name || null;
-                    const anySource =
-                      latestApp?.source || (candidate as any).source || "";
-
-                    const uniqueTags =
-                      candidate.tags
-                        ?.map((ct) => ct.tag)
-                        .filter(
-                          (t): t is NonNullable<typeof t> => Boolean(t),
-                        ) ?? [];
-
-                    return (
-                      <tr key={candidate.id}>
-                        {/* Candidate */}
-                        <td className="align-top px-3 py-2">
-                          <div className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <Link
-                                  href={`/ats/candidates/${candidate.id}`}
-                                  className="text-[11px] font-semibold text-slate-900 hover:text-indigo-700 hover:underline"
-                                >
-                                  {candidate.fullName}
-                                </Link>
-                                <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                                  {candidate.email && (
-                                    <span>{candidate.email}</span>
-                                  )}
-                                  {candidate.location && (
-                                    <>
-                                      <span className="text-slate-300">
-                                        •
-                                      </span>
-                                      <span>{candidate.location}</span>
-                                    </>
-                                  )}
-                                  {(candidate as any).currentCompany && (
-                                    <>
-                                      <span className="text-slate-300">
-                                        •
-                                      </span>
-                                      <span>
-                                        {(candidate as any).currentCompany}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end text-[10px] text-slate-500">
-                                <span>
-                                  Added {formatDate(candidate.createdAt)}
-                                </span>
-                              </div>
-                            </div>
-
-                            {uniqueTags.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {uniqueTags.slice(0, 3).map((tag) => (
-                                  <span
-                                    key={tag.id}
-                                    className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-700"
-                                  >
-                                    {tag.name}
-                                  </span>
-                                ))}
-                                {uniqueTags.length > 3 && (
-                                  <span className="text-[9px] text-slate-400">
-                                    +{uniqueTags.length - 3} more
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Pipelines */}
-                        <td className="align-top px-3 py-2 text-[10px] text-slate-600">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium text-slate-900">
-                              {apps.length}{" "}
-                              {apps.length === 1
-                                ? "pipeline"
-                                : "pipelines"}
-                            </span>
-                            {apps.slice(0, 2).map((app) => (
-                              <div
-                                key={app.id}
-                                className="flex items-center gap-1 text-[10px]"
-                              >
-                                <span className="truncate text-slate-700">
-                                  {app.job?.title || "Untitled"}
-                                </span>
-                                <span className="text-slate-300">•</span>
-                                <span className="text-slate-500">
-                                  {app.stage || "APPLIED"}
-                                </span>
-                              </div>
-                            ))}
-                            {apps.length > 2 && (
-                              <span className="text-[9px] text-slate-400">
-                                +{apps.length - 2} more
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Match score (ring + tier) */}
-                        <td className="align-top px-3 py-2 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="flex flex-col items-center">
-                              <ScoreRing
-                                score={latestScore}
-                                title={
-                                  latestScore != null
-                                    ? `Match score ${latestScore}`
-                                    : "Match score not set"
-                                }
-                              />
-                              <span className="mt-1 text-[10px] text-slate-500">
-                                Match score
-                              </span>
-                            </div>
-                            <div className="flex flex-col items-end gap-1">
-                              {primaryTier && (
-                                <span
-                                  className={[
-                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                                    tierChipColor(primaryTier),
-                                  ].join(" ")}
-                                >
-                                  {primaryTier.toUpperCase() === "A" && (
-                                    <span className="mr-1">★</span>
-                                  )}
-                                  Tier {primaryTier}
-                                </span>
-                              )}
-                              {latestScore != null && (
-                                <span
-                                  className={[
-                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
-                                    scoreChipColor(latestScore),
-                                  ].join(" ")}
-                                >
-                                  Score {latestScore}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Latest role */}
-                        <td className="align-top px-3 py-2 text-[10px] text-slate-600">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-slate-900">
-                              {latestJobTitle}
-                            </span>
-                            {latestClient && (
-                              <span className="text-slate-500">
-                                {latestClient}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Source */}
-                        <td className="align-top px-3 py-2 text-[10px] text-slate-600">
-                          {anySource || "—"}
-                        </td>
-
-                        {/* Last seen */}
-                        <td className="align-top px-3 py-2 text-right text-[10px] text-slate-600">
-                          {formatDate(lastSeen)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+              {/* Pagination bar */}
+              <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 text-[11px] text-slate-600">
+                <span>
+                  Showing{" "}
+                  <span className="font-semibold">
+                    {totalFiltered === 0 ? 0 : offset + 1}–
+                    {Math.min(offset + pageSize, totalFiltered)}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-semibold">{totalFiltered}</span>{" "}
+                  candidates
+                </span>
+                <div className="inline-flex items-center gap-1">
+                  <Link
+                    href={buildPageHref(Math.max(1, currentPage - 1))}
+                    className={[
+                      "inline-flex items-center rounded-full border px-3 py-1 text-[10px]",
+                      currentPage === 1
+                        ? "cursor-not-allowed border-slate-200 text-slate-300"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-100",
+                    ].join(" ")}
+                    aria-disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Link>
+                  <span className="text-[10px] text-slate-400">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Link
+                    href={buildPageHref(
+                      Math.min(totalPages, currentPage + 1),
+                    )}
+                    className={[
+                      "inline-flex items-center rounded-full border px-3 py-1 text-[10px]",
+                      currentPage === totalPages
+                        ? "cursor-not-allowed border-slate-200 text-slate-300"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-100",
+                    ].join(" ")}
+                    aria-disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Link>
+                </div>
+              </div>
+            </>
           )}
         </section>
       </main>
