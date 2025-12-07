@@ -107,7 +107,7 @@ function ScoreRing({ score, title }: { score: number | null; title?: string }) {
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circumference - dash}`}
-          strokeDashoffset={circumference * 0.25} // start at top-right for a softer feel
+          strokeDashoffset={circumference * 0.25}
           transform="rotate(-90 20 20)"
         />
       </svg>
@@ -230,7 +230,6 @@ export default function JobPipelineList({
         return;
       }
 
-      // Inline UI update: keep everything in line, no full reload
       setRows((prev) =>
         prev.map((row) => {
           if (!selectedIds.includes(row.id)) return row;
@@ -252,15 +251,17 @@ export default function JobPipelineList({
     }
   }
 
+  // ✅ Inline status update – supports BOTH API contracts:
+  // - action + status
+  // - nextStatus (like bulk)
   async function handleInlineStatusChange(
     applicationId: string,
     nextStatus: string,
   ) {
-    // Remember current status so we can revert on failure
     const originalStatus =
       rows.find((row) => row.id === applicationId)?.status ?? null;
 
-    // Optimistic update for snappy UX
+    // Optimistic UI update
     setRows((prev) =>
       prev.map((row) =>
         row.id === applicationId ? { ...row, status: nextStatus } : row,
@@ -272,17 +273,23 @@ export default function JobPipelineList({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "SET_STATUS",      // ✅ match API contract
-          status: nextStatus,        // ✅ same key as backend
+          action: "SET_STATUS",
+          status: nextStatus,
+          nextStatus: nextStatus,
           applicationIds: [applicationId],
         }),
       });
 
       if (!res.ok) {
-        console.error("Status update failed", await res.text());
-        alert("Failed to update status. Please try again.");
+        const text = await res.text();
+        console.error("Status update failed", res.status, text);
+        alert(
+          `Failed to update status. (${res.status}) ${
+            text || "Please try again."
+          }`,
+        );
 
-        // Revert to original status on failure
+        // Revert
         setRows((prev) =>
           prev.map((row) =>
             row.id === applicationId ? { ...row, status: originalStatus } : row,
@@ -293,7 +300,7 @@ export default function JobPipelineList({
       console.error(err);
       alert("Something went wrong while updating status.");
 
-      // Revert to original status on error
+      // Revert
       setRows((prev) =>
         prev.map((row) =>
           row.id === applicationId ? { ...row, status: originalStatus } : row,
