@@ -38,7 +38,7 @@ type PipelineApp = {
 type Props = {
   jobId: string;
   applications: PipelineApp[];
-  stageOptions: string[];
+  stageOptions: string[]; // from server: ["APPLIED", "SCREENING", ...]
 };
 
 function tierColour(tier: string | null | undefined) {
@@ -56,10 +56,10 @@ function tierColour(tier: string | null | undefined) {
 
 function scoreColorHex(score: number | null | undefined) {
   if (score == null) return "#64748b"; // slate-500
-  if (score >= 80) return "#16a34a";
-  if (score >= 65) return "#2563eb";
-  if (score >= 50) return "#f59e0b";
-  return "#475569";
+  if (score >= 80) return "#16a34a"; // emerald-600
+  if (score >= 65) return "#2563eb"; // blue-600
+  if (score >= 50) return "#f59e0b"; // amber-500
+  return "#475569"; // slate-600
 }
 
 function formatDate(iso: string | null | undefined) {
@@ -88,14 +88,16 @@ function ScoreRing({ score, title }: { score: number | null; title?: string }) {
       aria-label={score != null ? `Match score ${score}` : "Match score not set"}
     >
       <svg viewBox="0 0 40 40" className="h-11 w-11">
+        {/* track */}
         <circle
           cx="20"
           cy="20"
           r={radius}
           fill="none"
-          stroke="#e5e7eb"
+          stroke="#e5e7eb" // slate-200
           strokeWidth="4"
         />
+        {/* progress */}
         <circle
           cx="20"
           cy="20"
@@ -105,7 +107,7 @@ function ScoreRing({ score, title }: { score: number | null; title?: string }) {
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circumference - dash}`}
-          strokeDashoffset={circumference * 0.25}
+          strokeDashoffset={circumference * 0.25} // start at top-right for a softer feel
           transform="rotate(-90 20 20)"
         />
       </svg>
@@ -187,8 +189,7 @@ export default function JobPipelineList({
   const [bulkStage, setBulkStage] = useState<string>("");
   const [bulkStatus, setBulkStatus] = useState<string>("");
 
-  const allSelected =
-    rows.length > 0 && selectedIds.length === rows.length;
+  const allSelected = rows.length > 0 && selectedIds.length === rows.length;
   const anySelected = selectedIds.length > 0;
 
   function toggleSelectAll() {
@@ -212,69 +213,47 @@ export default function JobPipelineList({
     setIsSubmittingBulk(true);
 
     try {
-      // 1) Move stage, if requested
+      // Normalise + send both legacy and new field shapes so the API is happy
+      const payload: any = {
+        jobId,
+        applicationIds: selectedIds,
+      };
+
       if (bulkStage) {
-        const resStage = await fetch(
-          `/api/ats/jobs/${jobId}/pipeline/bulk`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jobId,
-              applicationIds: selectedIds,
-              action: "move_stage",
-              stage: bulkStage.toUpperCase(),
-            }),
-          },
-        );
-
-        if (!resStage.ok) {
-          console.error(
-            "Bulk move_stage failed",
-            resStage.status,
-            await resStage.text(),
-          );
-          alert("Failed to update stage for selected candidates.");
-          setIsSubmittingBulk(false);
-          return;
-        }
+        const normalisedStage = bulkStage.toUpperCase().trim();
+        payload.stage = normalisedStage;
+        payload.nextStage = normalisedStage; // legacy shape
+        payload.action = "move_stage";
       }
 
-      // 2) Set status, if requested
       if (bulkStatus) {
-        const resStatus = await fetch(
-          `/api/ats/jobs/${jobId}/pipeline/bulk`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              jobId,
-              applicationIds: selectedIds,
-              action: "set_status",
-              status: bulkStatus.toUpperCase(),
-            }),
-          },
-        );
-
-        if (!resStatus.ok) {
-          console.error(
-            "Bulk set_status failed",
-            resStatus.status,
-            await resStatus.text(),
-          );
-          alert("Failed to update status for selected candidates.");
-          setIsSubmittingBulk(false);
-          return;
-        }
+        const normalisedStatus = bulkStatus.toUpperCase().trim();
+        payload.status = normalisedStatus;
+        payload.nextStatus = normalisedStatus; // legacy shape
+        // If both are set, last one wins in action, which is fine.
+        payload.action = "set_status";
       }
 
+      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        console.error("Bulk update failed", await res.text());
+        alert("Failed to apply bulk update. Please try again.");
+        return;
+      }
+
+      // Inline UI update: keep everything in line, no full reload
       setRows((prev) =>
         prev.map((row) => {
           if (!selectedIds.includes(row.id)) return row;
           return {
             ...row,
-            stage: bulkStage ? bulkStage.toUpperCase() : row.stage,
-            status: bulkStatus ? bulkStatus.toUpperCase() : row.status,
+            stage: bulkStage || row.stage,
+            status: bulkStatus || row.status,
           };
         }),
       );
@@ -292,52 +271,46 @@ export default function JobPipelineList({
   async function handleInlineStatusChange(
     applicationId: string,
     nextStatus: string,
+    previousStatus: string | null,
   ) {
-    const normalised = nextStatus.toUpperCase();
-    const originalStatus =
-      rows.find((row) => row.id === applicationId)?.status ?? null;
+    const normalisedNext = (nextStatus || "PENDING").toUpperCase();
+    const normalisedPrev = (previousStatus || "PENDING").toUpperCase();
 
+    // Optimistic update
     setRows((prev) =>
       prev.map((row) =>
-        row.id === applicationId ? { ...row, status: normalised } : row,
+        row.id === applicationId ? { ...row, status: normalisedNext } : row,
       ),
     );
 
     try {
-      const res = await fetch(
-        `/api/ats/jobs/${jobId}/pipeline/bulk`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jobId,
-            applicationIds: [applicationId],
-            action: "set_status",
-            status: normalised,
-          }),
-        },
-      );
+      const payload: any = {
+        jobId,
+        applicationIds: [applicationId],
+        status: normalisedNext,
+        nextStatus: normalisedNext, // legacy shape
+        action: "set_status",
+      };
+
+      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
       if (!res.ok) {
         const text = await res.text();
-        console.error("Status update failed", res.status, text);
-        alert(
-          `Failed to update status. (${res.status}) ${
-            text || "Please try again."
-          }`,
-        );
-        setRows((prev) =>
-          prev.map((row) =>
-            row.id === applicationId ? { ...row, status: originalStatus } : row,
-          ),
-        );
+        console.error("Status update failed", text);
+        throw new Error(text);
       }
     } catch (err) {
       console.error(err);
-      alert("Something went wrong while updating status.");
+      alert("Failed to update status. Please try again.");
+
+      // Roll back UI if API fails
       setRows((prev) =>
         prev.map((row) =>
-          row.id === applicationId ? { ...row, status: originalStatus } : row,
+          row.id === applicationId ? { ...row, status: normalisedPrev } : row,
         ),
       );
     }
@@ -356,9 +329,7 @@ export default function JobPipelineList({
               onChange={toggleSelectAll}
             />
             <span>
-              {anySelected
-                ? `${selectedIds.length} selected`
-                : "Select all"}
+              {anySelected ? `${selectedIds.length} selected` : "Select all"}
             </span>
           </label>
 
@@ -517,10 +488,7 @@ export default function JobPipelineList({
                   <td className="px-3 py-3 align-top">
                     <div className="flex items-center gap-2">
                       <div className="flex flex-col items-center">
-                        <ScoreRing
-                          score={app.matchScore}
-                          title={scoreReason}
-                        />
+                        <ScoreRing score={app.matchScore} title={scoreReason} />
                         <span className="mt-1 text-[10px] text-slate-500">
                           Match score
                         </span>
@@ -549,12 +517,16 @@ export default function JobPipelineList({
                     />
                   </td>
 
-                  {/* Status – inline pill buttons */}
+                  {/* Status – icon buttons only */}
                   <td className="px-3 py-3 align-top">
                     <StatusCell
                       status={app.status}
                       onChangeStatus={(next) =>
-                        handleInlineStatusChange(app.id, next)
+                        handleInlineStatusChange(
+                          app.id,
+                          next,
+                          app.status ?? null,
+                        )
                       }
                     />
                   </td>
