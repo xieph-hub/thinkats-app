@@ -166,10 +166,9 @@ function StatusCell({
             ].join(" ")}
           >
             <span
-              className={[
-                "h-1.5 w-1.5 rounded-full",
-                dotClass(opt.value),
-              ].join(" ")}
+              className={["h-1.5 w-1.5 rounded-full", dotClass(opt.value)].join(
+                " ",
+              )}
             />
             <span>{opt.label}</span>
           </button>
@@ -215,18 +214,15 @@ export default function JobPipelineList({
     setIsSubmittingBulk(true);
 
     try {
-      const res = await fetch(
-        `/api/ats/jobs/${jobId}/pipeline/bulk`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            applicationIds: selectedIds,
-            nextStage: bulkStage || null,
-            nextStatus: bulkStatus || null,
-          }),
-        },
-      );
+      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          applicationIds: selectedIds,
+          nextStage: bulkStage || null,
+          nextStatus: bulkStatus || null,
+        }),
+      });
 
       if (!res.ok) {
         console.error("Bulk update failed", await res.text());
@@ -260,6 +256,10 @@ export default function JobPipelineList({
     applicationId: string,
     nextStatus: string,
   ) {
+    // Remember current status so we can revert on failure
+    const originalStatus =
+      rows.find((row) => row.id === applicationId)?.status ?? null;
+
     // Optimistic update for snappy UX
     setRows((prev) =>
       prev.map((row) =>
@@ -268,25 +268,37 @@ export default function JobPipelineList({
     );
 
     try {
-      const res = await fetch(
-        `/api/ats/jobs/${jobId}/pipeline/bulk`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            applicationIds: [applicationId],
-            nextStatus,
-          }),
-        },
-      );
+      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "SET_STATUS",      // ✅ match API contract
+          status: nextStatus,        // ✅ same key as backend
+          applicationIds: [applicationId],
+        }),
+      });
 
       if (!res.ok) {
         console.error("Status update failed", await res.text());
         alert("Failed to update status. Please try again.");
+
+        // Revert to original status on failure
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === applicationId ? { ...row, status: originalStatus } : row,
+          ),
+        );
       }
     } catch (err) {
       console.error(err);
       alert("Something went wrong while updating status.");
+
+      // Revert to original status on error
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === applicationId ? { ...row, status: originalStatus } : row,
+        ),
+      );
     }
   }
 
@@ -347,7 +359,9 @@ export default function JobPipelineList({
             <button
               type="button"
               onClick={runBulkUpdate}
-              disabled={!anySelected || (!bulkStage && !bulkStatus) || isSubmittingBulk}
+              disabled={
+                !anySelected || (!bulkStage && !bulkStatus) || isSubmittingBulk
+              }
               className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition enabled:hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
               {isSubmittingBulk ? "Applying…" : "Apply to selected"}
