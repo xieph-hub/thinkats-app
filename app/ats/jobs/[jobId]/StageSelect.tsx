@@ -9,6 +9,7 @@ type StageSelectProps = {
   currentStage: string | null;
 };
 
+// Fallback defaults – your job-specific stages will usually map to these
 const DEFAULT_STAGES = [
   "APPLIED",
   "SCREENING",
@@ -29,41 +30,44 @@ export function StageSelect({
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  // Keep in sync if server-side stage changes
   useEffect(() => {
     setValue((currentStage || "APPLIED").toUpperCase());
   }, [currentStage]);
 
   async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const nextStage = e.target.value.toUpperCase();
-    const previous = value;
+    const nextStage = e.target.value;
+    const normalised = nextStage.toUpperCase().trim();
 
-    setValue(nextStage);
+    setValue(normalised);
     setIsSaving(true);
 
     try {
-      const res = await fetch(
-        `/api/ats/jobs/${jobId}/pipeline/bulk`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            jobId,
-            applicationIds: [applicationId],
-            action: "move_stage",
-            stage: nextStage,
-          }),
+      const payload: any = {
+        jobId,
+        applicationIds: [applicationId],
+        stage: normalised,
+        nextStage: normalised, // legacy shape so API always has a stage
+        action: "move_stage",
+      };
+
+      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
       if (!res.ok) {
-        console.error("Failed to update stage", res.status, await res.text());
-        setValue(previous);
+        console.error("Failed to update stage", await res.text());
+        throw new Error("Failed to update stage");
       }
+      // no page refresh – stays inline
     } catch (err) {
       console.error(err);
-      setValue(previous);
+      // revert if it failed
+      setValue((currentStage || "APPLIED").toUpperCase());
     } finally {
       setIsSaving(false);
     }
