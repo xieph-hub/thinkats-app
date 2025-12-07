@@ -1,10 +1,7 @@
 // app/page.tsx
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { getHostContext } from "@/lib/host";
-import { getServerUser } from "@/lib/auth/getServerUser";
-
-export const dynamic = "force-dynamic";
+import LoginPageClient from "./login/LoginPageClient";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Hiring workspaces & careers",
@@ -12,24 +9,26 @@ export const metadata: Metadata = {
     "ThinkATS powers modern hiring workspaces, shared pipelines and branded careers sites for companies and agencies.",
 };
 
-export default async function HomePage() {
+export default function HomePage() {
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // 🔹 Tenant subdomain root (e.g. resourcin.thinkats.com)
-  // If logged out → go to login on this host with callback to /ats
-  // If logged in  → straight into /ats dashboard on this host
+  // 🔹 On tenant subdomains (e.g. resourcin.thinkats.com),
+  // treat "/" as *their* entry point: render the login UI directly
+  // instead of redirecting and risking loops.
   if (!isPrimaryHost && tenantSlugFromHost) {
-    const { supabaseUser } = await getServerUser();
-
-    if (!supabaseUser) {
-      redirect("/login?callbackUrl=/ats");
-    }
-
-    redirect("/ats");
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <div className="mx-auto flex min-h-screen max-w-5xl items-center px-4 py-12">
+          <div className="w-full">
+            <LoginPageClient />
+          </div>
+        </div>
+      </main>
+    );
   }
 
   // 🔹 Primary host (thinkats.com / www.thinkats.com):
-  // your marketing homepage lives here.
+  // your marketing homepage lives here, unchanged.
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
       <div className="mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-16 pt-20 lg:flex-row lg:items-center lg:pt-24">
@@ -72,8 +71,8 @@ export default async function HomePage() {
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
               <p className="font-semibold text-slate-50">Shared pipelines</p>
               <p className="mt-1 text-[11px] text-slate-400">
-                Track every role from brief to offer with structured stages and
-                notes.
+                Track every role from brief to offer with structured stages
+                and notes.
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
@@ -90,7 +89,8 @@ export default async function HomePage() {
                 Candidate-first flows
               </p>
               <p className="mt-1 text-[11px] text-slate-400">
-                Candidates apply once and can be matched across suitable roles.
+                Candidates apply once and can be matched across suitable
+                roles.
               </p>
             </div>
           </div>
@@ -130,8 +130,8 @@ export default async function HomePage() {
                     Careers · resourcin.thinkats.com/careers
                   </p>
                   <p className="mt-0.5 text-slate-400">
-                    Candidates see Resourcin&apos;s brand, while the underlying
-                    ATS runs on ThinkATS.
+                    Candidates see Resourcin&apos;s brand, while the
+                    underlying ATS runs on ThinkATS.
                   </p>
                 </div>
               </div>
