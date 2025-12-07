@@ -147,6 +147,32 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
     },
   });
 
+  // ---- Derive source & stage options for structured filters ----------------
+
+  const sourceSet = new Set<string>();
+  const stageSet = new Set<string>();
+
+  for (const c of candidates as any[]) {
+    const candidateSource = (c as any).source as string | undefined;
+    if (candidateSource && candidateSource.trim()) {
+      sourceSet.add(candidateSource.trim());
+    }
+
+    for (const app of c.applications as any[]) {
+      if (app.source && (app.source as string).trim()) {
+        sourceSet.add((app.source as string).trim());
+      }
+      if (app.stage && (app.stage as string).trim()) {
+        stageSet.add((app.stage as string).trim().toUpperCase());
+      }
+    }
+  }
+
+  const sourceOptions = Array.from(sourceSet).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase()),
+  );
+  const stageOptions = Array.from(stageSet).sort();
+
   // ---- In-memory filters for source / stage / tier -------------------------
 
   const filteredCandidates = candidates.filter((candidate) => {
@@ -198,16 +224,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
     ),
   ).length;
 
-  const uniqueSources = (() => {
-    const set = new Set<string>();
-    for (const c of candidates) {
-      if ((c as any).source) set.add((c as any).source.trim().toLowerCase());
-      for (const app of c.applications as any[]) {
-        if (app.source) set.add((app.source as string).trim().toLowerCase());
-      }
-    }
-    return set.size;
-  })();
+  const uniqueSources = sourceOptions.length;
 
   const tierCounts = (() => {
     const counts: Record<string, number> = { A: 0, B: 0, C: 0, OTHER: 0 };
@@ -420,6 +437,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
             </div>
 
             <form className="flex flex-wrap items-center gap-2">
+              {/* Text search */}
               <input
                 type="text"
                 name="q"
@@ -427,27 +445,47 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                 placeholder="Search by name, email, company…"
                 className="h-8 min-w-[180px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
               />
-              <input
-                type="text"
+
+              {/* Source dropdown */}
+              <select
                 name="source"
                 defaultValue={filterSource}
-                placeholder="Source (e.g. LinkedIn, Referral…)"
-                className="h-8 min-w-[140px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-              />
-              <input
-                type="text"
+                className="h-8 min-w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              >
+                <option value="">All sources</option>
+                {sourceOptions.map((src) => (
+                  <option key={src} value={src}>
+                    {src}
+                  </option>
+                ))}
+              </select>
+
+              {/* Stage dropdown */}
+              <select
                 name="stage"
                 defaultValue={filterStage}
-                placeholder="Stage (e.g. APPLIED, INTERVIEW…)"
-                className="h-8 min-w-[140px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-              />
-              <input
-                type="text"
+                className="h-8 min-w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              >
+                <option value="">All stages</option>
+                {stageOptions.map((stg) => (
+                  <option key={stg} value={stg}>
+                    {stg}
+                  </option>
+                ))}
+              </select>
+
+              {/* Tier dropdown */}
+              <select
                 name="tier"
                 defaultValue={filterTier}
-                placeholder="Tier (A, B, C…)"
-                className="h-8 min-w-[100px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
-              />
+                className="h-8 min-w-[120px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+              >
+                <option value="">All tiers</option>
+                <option value="A">Tier A</option>
+                <option value="B">Tier B</option>
+                <option value="C">Tier C</option>
+              </select>
+
               {activeView && (
                 <input type="hidden" name="view" value={activeView.id} />
               )}
