@@ -1,6 +1,6 @@
 // app/careers/page.tsx
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { prisma } from "@/lib/prisma";
@@ -53,8 +53,8 @@ function formatDate(value: string | Date | null | undefined) {
 export default async function HostAwareCareersPage() {
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // If we're on thinkats.com / www.thinkats.com or any host
-  // that is NOT a tenant subdomain, just send to global jobs.
+  // 🔹 Primary host (thinkats.com / www.thinkats.com / any non-tenant host):
+  // Treat /careers as an alias for the global jobs marketplace.
   if (isPrimaryHost || !tenantSlugFromHost) {
     redirect("/jobs");
   }
@@ -66,8 +66,33 @@ export default async function HostAwareCareersPage() {
     where: { slug },
   });
 
+  // If the tenant doesn't exist at all, show a soft message — no 404, no redirects.
   if (!tenant) {
-    notFound();
+    return (
+      <main className="min-h-screen bg-[#F5F6FA]">
+        <div className="mx-auto max-w-xl px-4 pb-12 pt-16 sm:px-6 lg:px-0">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
+            <h1 className="text-lg font-semibold text-slate-900">
+              Careers site not available
+            </h1>
+            <p className="mt-2 text-sm text-slate-600">
+              We couldn&apos;t find an active hiring workspace for this
+              subdomain.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              If you&apos;re expecting a careers site here, please contact{" "}
+              <a
+                href="mailto:support@thinkats.com"
+                className="font-medium text-[#172965] hover:underline"
+              >
+                support@thinkats.com
+              </a>{" "}
+              so we can help you get set up.
+            </p>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   // 2) Load careersite settings (branding, copy, marketplace flag, etc.)
@@ -75,13 +100,38 @@ export default async function HostAwareCareersPage() {
     where: { tenantId: tenant.id },
   });
 
-  // If tenant explicitly turned off their careers page, hide it
+  // If tenant explicitly turned off their careers page, show a gentle message.
   if (settings && settings.isPublic === false) {
-    notFound();
+    return (
+      <main className="min-h-screen bg-[#F5F6FA]">
+        <div className="mx-auto max-w-xl px-4 pb-12 pt-16 sm:px-6 lg:px-0">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
+            <h1 className="text-lg font-semibold text-slate-900">
+              Careers page currently unavailable
+            </h1>
+            <p className="mt-2 text-sm text-slate-600">
+              {tenant.name || slug} is not displaying a public careers page at
+              the moment.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              If you&apos;re an admin for this workspace, you can turn the
+              careers page back on from your ATS settings. Otherwise, please
+              contact{" "}
+              <a
+                href="mailto:support@thinkats.com"
+                className="font-medium text-[#172965] hover:underline"
+              >
+                support@thinkats.com
+              </a>{" "}
+              for assistance.
+            </p>
+          </section>
+        </div>
+      </main>
+    );
   }
 
-  // 3) Load this tenant's public, open jobs (careers site should show them
-  //    even if they are NOT in the global marketplace)
+  // 3) Load this tenant's public, open jobs
   const jobs = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -113,7 +163,7 @@ export default async function HostAwareCareersPage() {
   const accentColor = settings?.accentColorHex || "#FFC000"; // yellow
   const heroBackground = settings?.heroBackgroundHex || "#F5F6FA"; // soft grey
 
-  // Tracking source for job detail (so /jobs/[id] knows it came from this careers page)
+  // 🔹 Tracking source for job detail (so /jobs/[id] knows it came from THIS tenant careers page)
   const trackingSource = `CAREERS_${(tenant.slug || tenant.id).toUpperCase()}`;
 
   function jobPublicUrl(job: any) {
