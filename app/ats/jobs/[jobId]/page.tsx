@@ -1,16 +1,33 @@
-// app/ats/jobs/[jobId]/JobPipelineBoard.tsx
+// app/ats/jobs/[jobId]/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
-import { StageSelect } from "./StageSelect";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
+import { matchesBooleanQuery } from "@/lib/booleanSearch";
+import JobPipelineList from "./JobPipelineList";
 
-type SkillTag = {
-  id: string;
-  label: string;
-  color?: string | null;
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "ThinkATS | Job pipeline",
+  description: "Pipeline view of candidates for this job.",
 };
 
-type PipelineApp = {
-  id: string;
-  candidateId: string | null;
+type PageProps = {
+  params: { jobId: string };
+  searchParams?: {
+    q?: string;
+    stage?: string;
+    status?: string;
+    tier?: string;
+    viewId?: string;
+  };
+};
+
+type PipelineAppRow = {
+  id: string; // application id
+  candidateId: string | null; // for linking to candidate profile
 
   fullName: string;
   email: string;
@@ -28,400 +45,497 @@ type PipelineApp = {
   scoreReason: string | null;
 
   appliedAt: string; // ISO
-  skillTags: SkillTag[];
+  skillTags: { id: string; label: string; color?: string | null }[];
   experienceLabel: string | null;
 };
 
-type StageInfo = {
-  id: string;
-  name: string;
-};
+export default async function JobPipelinePage({
+  params,
+  searchParams = {},
+}: PageProps) {
+  const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
 
-type JobPipelineBoardProps = {
-  jobId: string;
-  stages: StageInfo[];
-  applications: PipelineApp[];
-};
+  const job = await prisma.job.findFirst({
+    where: {
+      id: params.jobId,
+      tenantId: tenant.id,
+    },
+    include: {
+      clientCompany: true,
+      stages: {
+        orderBy: { position: "asc" },
+      },
+      applications: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          candidate: {
+            include: {
+              tags: {
+                include: {
+                  tag: {
+                    select: {
+                      id: true,
+                      name: true,
+                      color: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          scoringEvents: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
 
-function tierColour(tier: string | null | undefined) {
-  switch ((tier || "").toUpperCase()) {
-    case "A":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "B":
-      return "bg-sky-50 text-sky-700 ring-sky-200";
-    case "C":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
-    default:
-      return "bg-slate-50 text-slate-600 ring-slate-200";
-  }
-}
-
-function scoreColour(score: number | null | undefined) {
-  if (score == null) return "text-slate-500";
-  if (score >= 80) return "text-emerald-700";
-  if (score >= 65) return "text-sky-700";
-  if (score >= 50) return "text-amber-700";
-  return "text-slate-600";
-}
-
-function statusChipClasses(status: string | null | undefined) {
-  const v = (status || "PENDING").toUpperCase();
-  if (v === "ON_HOLD") {
-    return "bg-amber-50 text-amber-700 border border-amber-200";
-  }
-  if (v === "REJECTED") {
-    return "bg-rose-50 text-rose-700 border border-rose-200";
-  }
-  // PENDING / default
-  return "bg-emerald-50 text-emerald-700 border border-emerald-200";
-}
-
-function statusLabel(status: string | null | undefined) {
-  const v = (status || "PENDING").toUpperCase();
-  if (v === "ON_HOLD") return "On hold";
-  if (v === "REJECTED") return "Rejected";
-  return "Active";
-}
-
-function formatDateFromIso(iso: string | null | undefined) {
-  if (!iso) return "";
-  // yyyy-mm-dd
-  return iso.slice(0, 10);
-}
-
-export default function JobPipelineBoard({
-  jobId,
-  stages,
-  applications,
-}: JobPipelineBoardProps) {
-  const totalApplications = applications.length;
-
-  // Stage distribution (using job stages if present)
-  const effectiveStages: StageInfo[] =
-    stages && stages.length > 0
-      ? stages
-      : [
-          { id: "v-APPLIED", name: "APPLIED" },
-          { id: "v-SCREENING", name: "SCREENING" },
-          { id: "v-SHORTLISTED", name: "SHORTLISTED" },
-          { id: "v-INTERVIEW", name: "INTERVIEW" },
-          { id: "v-OFFER", name: "OFFER" },
-          { id: "v-HIRED", name: "HIRED" },
-          { id: "v-REJECTED", name: "REJECTED" },
-        ];
-
-  const stageCounts = new Map<string, number>();
-  for (const s of effectiveStages) {
-    stageCounts.set(s.name.toUpperCase(), 0);
-  }
-  for (const app of applications) {
-    const key = (app.stage || "APPLIED").toUpperCase();
-    stageCounts.set(key, (stageCounts.get(key) ?? 0) + 1);
+  if (!job) {
+    notFound();
   }
 
-  const scores = applications
-    .map((a) => a.matchScore)
-    .filter((s): s is number => typeof s === "number");
+  // ---------------------------------------------------------------------------
+  // Saved views (per job)
+  // ---------------------------------------------------------------------------
 
-  const avgScore =
-    scores.length > 0
-      ? Math.round(
-          scores.reduce((sum, v) => sum + v, 0) / Math.max(scores.length, 1),
-        )
+  const rawViewId =
+    typeof searchParams.viewId === "string" ? searchParams.viewId : "";
+
+  const savedViewsRaw = await prisma.savedView.findMany({
+    where: {
+      tenantId: tenant.id,
+      scope: "job_pipeline",
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const jobViews = savedViewsRaw.filter((v) => {
+    const params = (v.filters || {}) as any;
+    return params.jobId === job.id;
+  });
+
+  const viewFromId =
+    rawViewId && jobViews.length
+      ? jobViews.find((v) => v.id === rawViewId) || null
       : null;
 
-  const exportCsvHref = `/api/ats/jobs/${jobId}/pipeline/export?format=csv`;
-  const exportXlsHref = `/api/ats/jobs/${jobId}/pipeline/export?format=xls`;
+  const defaultView = jobViews.find((v) => v.isDefault) || null;
+
+  const activeView = viewFromId || defaultView || null;
+
+  // ---------------------------------------------------------------------------
+  // Filters (search, stage, status, tier)
+  // ---------------------------------------------------------------------------
+
+  let filterQ = "";
+  let filterStage = "ALL";
+  let filterStatus = "ALL"; // maps to PENDING / ON_HOLD / REJECTED
+  let filterTier = "ALL";
+
+  if (activeView) {
+    const params = (activeView.filters || {}) as any;
+    if (typeof params.q === "string") filterQ = params.q;
+    if (typeof params.stage === "string") filterStage = params.stage;
+    if (typeof params.status === "string") filterStatus = params.status;
+    if (typeof params.tier === "string") filterTier = params.tier;
+  }
+
+  if (typeof searchParams.q === "string") {
+    filterQ = searchParams.q;
+  }
+
+  if (typeof searchParams.stage === "string" && searchParams.stage !== "") {
+    filterStage = searchParams.stage;
+  }
+
+  if (typeof searchParams.status === "string" && searchParams.status !== "") {
+    filterStatus = searchParams.status;
+  }
+
+  if (typeof searchParams.tier === "string" && searchParams.tier !== "") {
+    filterTier = searchParams.tier;
+  }
+
+  const stageNames =
+    job.stages.length > 0
+      ? job.stages.map((s) => s.name || "UNASSIGNED")
+      : ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
+
+  // ---------------------------------------------------------------------------
+  // Build filtered pipeline list (server-side)
+  // ---------------------------------------------------------------------------
+
+  const pipelineApps: PipelineAppRow[] = [];
+
+  for (const app of job.applications) {
+    const latestScore = app.scoringEvents[0] ?? null;
+    const score =
+      (latestScore?.score as number | null | undefined) ??
+      (app.matchScore as number | null | undefined) ??
+      null;
+    const tier = (latestScore?.tier as string | null | undefined) ?? null;
+    const engine = (latestScore?.engine as string | null | undefined) ?? null;
+    const scoreReason =
+      (latestScore?.reason as string | null | undefined) ??
+      (app.matchReason as string | null | undefined) ??
+      null;
+
+    const candidate = app.candidate ?? null;
+
+    // Boolean / keyword search
+    const haystack = [
+      app.fullName,
+      app.email,
+      app.location,
+      app.linkedinUrl,
+      app.source,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const matchesQuery = matchesBooleanQuery(filterQ, {
+      haystack,
+      fields: {
+        name: app.fullName || "",
+        email: app.email || "",
+        location: app.location || "",
+        source: app.source || "",
+        stage: app.stage || "",
+        status: app.status || "",
+        tier: tier || "",
+        engine: engine || "",
+      },
+    });
+
+    if (!matchesQuery) continue;
+
+    // Status filter (PENDING / ON_HOLD / REJECTED)
+    if (
+      filterStatus !== "ALL" &&
+      (app.status || "PENDING").toUpperCase() !== filterStatus.toUpperCase()
+    ) {
+      continue;
+    }
+
+    // Tier filter
+    if (
+      filterTier !== "ALL" &&
+      (tier || "").toUpperCase() !== filterTier.toUpperCase()
+    ) {
+      continue;
+    }
+
+    // Stage filter
+    const stageName = (app.stage || "APPLIED").toUpperCase();
+    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
+      continue;
+    }
+
+    // Candidate tags → chips
+    const skillTags =
+      candidate?.tags?.map((ct) => ({
+        id: ct.tag.id,
+        label: ct.tag.name,
+        color: ct.tag.color,
+      })) ?? [];
+
+    pipelineApps.push({
+      id: app.id,
+      candidateId: candidate ? candidate.id : null,
+
+      fullName: app.fullName,
+      email: app.email,
+      location: app.location,
+      currentTitle: candidate?.currentTitle ?? null,
+      currentCompany: candidate?.currentCompany ?? null,
+
+      source: app.source,
+      stage: app.stage,
+      status: app.status,
+
+      matchScore: score,
+      matchReason: app.matchReason ?? null,
+      tier,
+      scoreReason,
+
+      appliedAt: app.createdAt.toISOString(),
+      skillTags,
+      // Future: derive from candidate profile once you collect it
+      experienceLabel: null,
+    });
+  }
+
+  const allVisibleApplicationIds = pipelineApps.map((a) => a.id);
+
+  const uniqueTiers = Array.from(
+    new Set(
+      job.applications
+        .flatMap((a) => a.scoringEvents)
+        .map((e) => (e?.tier as string | null | undefined) || null)
+        .filter(Boolean) as string[],
+    ),
+  ).sort();
+
+  const currentViewId =
+    typeof searchParams.viewId === "string"
+      ? searchParams.viewId
+      : activeView?.id || "";
+
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
 
   return (
-    <section className="mt-6 space-y-4">
-      {/* Header + legend + exports */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-            Pipeline
-          </h2>
-          <p className="text-xs text-slate-500">
-            {totalApplications} application
-            {totalApplications === 1 ? "" : "s"} in the current view, shown as a
-            sortable list instead of columns.
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Tier A
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-              Tier B
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              Tier C
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-              Tier D / unscored
-            </span>
-            {avgScore != null && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700">
-                Avg score: {avgScore}
-              </span>
-            )}
-          </div>
+    <div className="flex h-full flex-1 flex-col bg-slate-50">
+      {/* Job header */}
+      <header className="border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur">
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Link href="/ats/jobs" className="hover:text-slate-700 hover:underline">
+            Jobs
+          </Link>
+          <span>/</span>
+          {job.clientCompany && (
+            <>
+              <span className="text-slate-500">{job.clientCompany.name}</span>
+              <span>/</span>
+            </>
+          )}
+          <span className="font-medium text-slate-800">{job.title}</span>
         </div>
 
-        <div className="flex flex-col items-end gap-2 text-[11px] text-slate-500">
-          {/* Stage summary */}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {effectiveStages.slice(0, 4).map((s) => {
-              const count = stageCounts.get(s.name.toUpperCase()) ?? 0;
-              return (
-                <span
-                  key={s.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-medium text-slate-600 ring-1 ring-slate-200"
-                >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-lg font-semibold text-slate-900">
+              {job.title}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+              {job.clientCompany && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                  {s.name}
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-800">{count}</span>
+                  {job.clientCompany.name}
                 </span>
-              );
-            })}
-            {effectiveStages.length > 4 && (
-              <span className="text-[10px] text-slate-400">
-                +{effectiveStages.length - 4} more stages
+              )}
+              {job.location && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                  {job.location}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                {job.applications.length} total applications
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {allVisibleApplicationIds.length} in current view
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-1 text-right text-[11px] text-slate-500">
+            <span className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+              Tenant plan:{" "}
+              <span className="ml-1 capitalize">
+                {(tenant as any).plan ?? "free"}
+              </span>
+            </span>
+            {activeView && (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                Active view: {activeView.name}
+                {activeView.isDefault ? " · default" : ""}
               </span>
             )}
           </div>
+        </div>
+      </header>
 
-          {/* Export buttons */}
-          <div className="flex items-center gap-2">
-            <a
-              href={exportCsvHref}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+      {/* Filters + view management */}
+      <section className="border-b border-slate-200 bg-slate-50/80 px-5 py-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          {/* Filters */}
+          <form
+            className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
+            method="GET"
+          >
+            {/* View selector */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                View
+              </label>
+              <select
+                name="viewId"
+                defaultValue={currentViewId}
+                className="h-8 min-w-[140px] rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="">All candidates</option>
+                {jobViews.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                    {v.isDefault ? " · default" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Search
+              </label>
+              <input
+                type="text"
+                name="q"
+                defaultValue={filterQ}
+                placeholder='e.g. "senior engineer" source:linkedin -contract'
+                className="h-8 w-56 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              />
+            </div>
+
+            {/* Stage filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Stage
+              </label>
+              <select
+                name="stage"
+                defaultValue={filterStage}
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="ALL">All</option>
+                {stageNames.map((s) => (
+                  <option key={s} value={s.toUpperCase()}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Decision
+              </label>
+              <select
+                name="status"
+                defaultValue={filterStatus}
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="ALL">All</option>
+                <option value="PENDING">Accepted / active</option>
+                <option value="ON_HOLD">On hold</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            {/* Tier filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Tier
+              </label>
+              <select
+                name="tier"
+                defaultValue={filterTier}
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="ALL">All</option>
+                {uniqueTiers.map((t) => (
+                  <option key={t} value={t.toUpperCase()}>
+                    Tier {t.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="mt-5 inline-flex h-8 items-center rounded-full bg-indigo-600 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700"
             >
-              <span>⬇</span>
-              <span>Export CSV</span>
-            </a>
-            <a
-              href={exportXlsHref}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+              Apply filters
+            </button>
+            <Link
+              href={`/ats/jobs/${job.id}`}
+              className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 transition hover:bg-slate-100"
             >
-              <span>⬇</span>
-              <span>Export XLS</span>
-            </a>
+              Reset
+            </Link>
+          </form>
+
+          {/* Visible count + hint */}
+          <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
+            <span>
+              Visible applications:{" "}
+              <span className="font-semibold text-slate-800">
+                {allVisibleApplicationIds.length}
+              </span>
+            </span>
+            <span className="max-w-xs text-right text-[10px]">
+              Use the filters and saved views to keep your shortlists and
+              interview-ready candidates one click away.
+            </span>
           </div>
         </div>
-      </div>
 
-      {/* List / table view */}
-      {applications.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center text-[11px] text-slate-500">
-          <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white shadow-sm">
-            ATS
+        {/* Save current filters as view */}
+        <form
+          action="/api/ats/views"
+          method="POST"
+          className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
+        >
+          <input type="hidden" name="scope" value="job_pipeline" />
+          <input type="hidden" name="jobId" value={job.id} />
+          <input
+            type="hidden"
+            name="redirectTo"
+            value={`/ats/jobs/${job.id}`}
+          />
+          <input type="hidden" name="q" value={filterQ} />
+          <input type="hidden" name="stage" value={filterStage} />
+          <input type="hidden" name="status" value={filterStatus} />
+          <input type="hidden" name="tier" value={filterTier} />
+
+          <div className="flex flex-col">
+            <label className="mb-1 text-[11px] font-medium text-slate-600">
+              Save current filters as view
+            </label>
+            <input
+              type="text"
+              name="name"
+              required
+              placeholder="e.g. Tier A · Interview-ready"
+              className="h-8 w-64 rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+            />
           </div>
-          <p className="mb-1 text-[12px] font-medium text-slate-800">
-            No candidates in this view.
-          </p>
-          <p className="max-w-sm mx-auto text-[11px] text-slate-500">
-            Adjust the filters above, or expand the search to see more of the
-            pipeline.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full border-separate border-spacing-y-1 text-[11px]">
-            <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-2">Candidate</th>
-                <th className="px-4 py-2">Stage</th>
-                <th className="px-4 py-2">Decision</th>
-                <th className="px-4 py-2 text-right">Tier / score</th>
-                <th className="px-4 py-2">Source</th>
-                <th className="px-4 py-2 text-right">Applied</th>
-              </tr>
-            </thead>
-            <tbody>
-              {applications.map((app) => {
-                const topSkills = app.skillTags.slice(0, 3);
-                const extraSkillCount =
-                  app.skillTags.length > 3
-                    ? app.skillTags.length - 3
-                    : 0;
 
-                const appliedDate = formatDateFromIso(app.appliedAt);
+          <label className="mb-1 mt-4 flex items-center gap-1 text-[11px] text-slate-600 md:mt-0">
+            <input
+              type="checkbox"
+              name="setDefault"
+              className="h-3 w-3 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500/40"
+            />
+            <span>Set as default view for this job</span>
+          </label>
 
-                const tier = app.tier;
-                const score = app.matchScore;
-                const scoreReason =
-                  app.scoreReason ||
-                  app.matchReason ||
-                  "Scored by semantic CV/JD engine.";
+          <button
+            type="submit"
+            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            Save view
+          </button>
+        </form>
+      </section>
 
-                return (
-                  <tr key={app.id}>
-                    {/* Candidate */}
-                    <td className="align-top px-4 py-2">
-                      <div className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <Link
-                                href={
-                                  app.candidateId
-                                    ? `/ats/candidates/${app.candidateId}`
-                                    : "#"
-                                }
-                                className="truncate text-[11px] font-semibold text-slate-900 hover:underline"
-                              >
-                                {app.fullName}
-                              </Link>
-                              {app.source && (
-                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600">
-                                  {app.source}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                              {app.email && <span>{app.email}</span>}
-                              {app.location && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span>{app.location}</span>
-                                </>
-                              )}
-                              {app.currentCompany && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span>{app.currentCompany}</span>
-                                </>
-                              )}
-                              {app.currentTitle && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span>{app.currentTitle}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end text-[10px] text-slate-500">
-                            <span>Applied {appliedDate}</span>
-                          </div>
-                        </div>
-
-                        {topSkills.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {topSkills.map((tag) => (
-                              <span
-                                key={tag.id}
-                                className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[9px] text-slate-700"
-                              >
-                                {tag.label}
-                              </span>
-                            ))}
-                            {extraSkillCount > 0 && (
-                              <span className="text-[9px] text-slate-400">
-                                +{extraSkillCount} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Stage (inline StageSelect + label) */}
-                    <td className="align-top px-4 py-2 text-[10px] text-slate-600">
-                      <div className="flex flex-col gap-1">
-                        <StageSelect
-                          jobId={jobId}
-                          applicationId={app.id}
-                          currentStage={app.stage}
-                        />
-                        <span className="text-[10px] text-slate-400">
-                          Current: {(app.stage || "APPLIED").toUpperCase()}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Status / decision */}
-                    <td className="align-top px-4 py-2 text-[10px] text-slate-600">
-                      <span
-                        className={[
-                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                          statusChipClasses(app.status),
-                        ].join(" ")}
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                        {statusLabel(app.status)}
-                      </span>
-                    </td>
-
-                    {/* Tier / score */}
-                    <td className="align-top px-4 py-2 text-right">
-                      <div className="flex flex-col items-end gap-1">
-                        {tier && (
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
-                              tierColour(tier),
-                            ].join(" ")}
-                          >
-                            Tier {tier.toUpperCase()}
-                          </span>
-                        )}
-                        {score != null && (
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium",
-                              scoreColour(score),
-                            ].join(" ")}
-                            title={scoreReason}
-                          >
-                            Score {score}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Source */}
-                    <td className="align-top px-4 py-2 text-[10px] text-slate-600">
-                      {app.source || "—"}
-                    </td>
-
-                    {/* Applied / quick actions */}
-                    <td className="align-top px-4 py-2 text-right text-[10px] text-slate-600">
-                      <div className="flex flex-col items-end gap-1">
-                        <span>{appliedDate}</span>
-                        <div className="flex flex-wrap items-center justify-end gap-1">
-                          {app.email && (
-                            <a
-                              href={`mailto:${app.email}`}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              <span>✉</span>
-                              <span>Email</span>
-                            </a>
-                          )}
-                          {app.candidateId && (
-                            <Link
-                              href={`/ats/candidates/${app.candidateId}`}
-                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              <span>👤</span>
-                              <span>Profile</span>
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
+      {/* Pipeline list (with bulk selection/actions) */}
+      <section className="flex-1 px-5 py-4">
+        <JobPipelineList
+          jobId={job.id}
+          applications={pipelineApps}
+          stageOptions={stageNames}
+        />
+      </section>
+    </div>
   );
 }
