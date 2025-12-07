@@ -182,16 +182,24 @@ export async function POST(req: Request) {
       });
 
       if (existingCandidateSkill) {
+        // Build update payload as `any` to avoid Prisma union type quirks
+        const updateData: any = {
+          source: existingCandidateSkill.source ?? "talent_network",
+        };
+
+        if (level != null) {
+          updateData.level = level;
+        }
+        if (yearsExperience != null) {
+          updateData.yearsExperience = yearsExperience;
+        }
+
         await prisma.candidateSkill.update({
           where: { id: existingCandidateSkill.id },
-          data: {
-            level: level ?? existingCandidateSkill.level,
-            yearsExperience:
-              yearsExperience ?? existingCandidateSkill.yearsExperience,
-            source: existingCandidateSkill.source ?? "talent_network",
-          },
+          data: updateData,
         });
       } else {
+        // Create new candidate skill (this shape matches your schema)
         await prisma.candidateSkill.create({
           data: {
             tenantId: tenant.id,
@@ -202,7 +210,7 @@ export async function POST(req: Request) {
             lastUsedYear: null,
             source: "talent_network",
             isPrimary: false,
-          },
+          } as any,
         });
       }
     }
