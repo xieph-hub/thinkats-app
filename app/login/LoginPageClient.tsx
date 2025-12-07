@@ -4,7 +4,15 @@
 import { useState, FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { LoginBrandConfig } from "./page";
+
+type LoginBrandConfig = {
+  context: "primary" | "tenant";
+  pillLabel: string;
+  heading: string;
+  description: string;
+  tenantName: string | null;
+  tenantSlug: string | null;
+};
 
 type Props = {
   brand: LoginBrandConfig;
@@ -19,7 +27,7 @@ export default function LoginPageClient({ brand }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Where to go after login – defaults to /ats
+  // Where to go after login – defaults to /ats (host-aware)
   const callbackUrl = searchParams.get("callbackUrl") || "/ats";
 
   async function handleSubmit(e: FormEvent) {
@@ -30,9 +38,7 @@ export default function LoginPageClient({ brand }: Props) {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           password,
@@ -41,15 +47,16 @@ export default function LoginPageClient({ brand }: Props) {
 
       const data = await res.json().catch(() => ({} as any));
 
-      if (!res.ok || (data && (data as any).error)) {
+      if (!res.ok || data?.error) {
         setError(
-          (data as any)?.error ||
+          data?.error ||
             "Unable to login. Please check your details and try again.",
         );
         setSubmitting(false);
         return;
       }
 
+      // Successful login: send user into ATS on this host
       router.push(callbackUrl);
       router.refresh();
     } catch (err) {
@@ -61,27 +68,44 @@ export default function LoginPageClient({ brand }: Props) {
     }
   }
 
-  const isPrimary = brand.isPrimaryHost;
-  const heading = brand.heading;
-  const subheading = brand.subheading;
-  const tagline = brand.tagline;
+  const isTenantHost = brand.context === "tenant";
+  const tenantLabel = brand.tenantName ?? brand.tenantSlug ?? "your workspace";
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] items-center bg-slate-50 px-4 py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center">
-        {/* Left: brand copy */}
+        {/* Left: brand copy (host-aware) */}
         <section className="flex-1 space-y-4">
-          <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-            {tagline}
+          <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            {brand.pillLabel}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            {heading}
+            {brand.heading}
           </h1>
           <p className="max-w-xl text-sm text-slate-600 sm:text-base">
-            {subheading}
+            {brand.description}
           </p>
 
-          {isPrimary ? (
+          {isTenantHost ? (
+            <ul className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+              <li className="flex items-start gap-2">
+                <span className="mt-1 text-xs">●</span>
+                <span>Review candidates and stages for {tenantLabel}.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 text-xs">●</span>
+                <span>Collaborate with hiring managers in one pipeline.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 text-xs">●</span>
+                <span>Keep all feedback, notes and offers in one place.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1 text-xs">●</span>
+                <span>Powered quietly by ThinkATS in the background.</span>
+              </li>
+            </ul>
+          ) : (
             <ul className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
               <li className="flex items-start gap-2">
                 <span className="mt-1 text-xs">●</span>
@@ -97,33 +121,9 @@ export default function LoginPageClient({ brand }: Props) {
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 text-xs">●</span>
-                <span>Power your career sites with ThinkATS.</span>
+                <span>Power client careers sites from one ATS.</span>
               </li>
             </ul>
-          ) : (
-            <ul className="mt-4 space-y-1.5 text-xs text-slate-600">
-              <li className="flex items-start gap-2">
-                <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span>
-                  This login is for admins and hiring managers at{" "}
-                  {brand.tenantName || brand.tenantSlug}.
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-sky-400" />
-                <span>
-                  Candidates can browse and apply via the public careers and
-                  jobs pages without an account.
-                </span>
-              </li>
-            </ul>
-          )}
-
-          {!isPrimary && (
-            <p className="mt-4 text-[11px] text-slate-400">
-              Powered by{" "}
-              <span className="font-medium text-slate-600">ThinkATS</span>.
-            </p>
           )}
         </section>
 
@@ -131,10 +131,14 @@ export default function LoginPageClient({ brand }: Props) {
         <section className="flex-1">
           <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
             <h2 className="text-lg font-semibold text-slate-900">
-              {isPrimary ? "Login to ThinkATS" : "Admin login"}
+              {isTenantHost
+                ? `Login to ${tenantLabel}`
+                : "Login to ThinkATS"}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Use your work email and password to access your ATS workspace.
+              {isTenantHost
+                ? "Use your work email and password to access this hiring workspace."
+                : "Use your work email and password to access your ThinkATS workspace."}
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -199,17 +203,41 @@ export default function LoginPageClient({ brand }: Props) {
               </button>
             </form>
 
-            {isPrimary && (
-              <p className="mt-4 text-center text-xs text-slate-500">
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="font-medium text-[#1E40AF] hover:underline"
-                >
-                  Start a free trial
-                </Link>
-              </p>
-            )}
+            <p className="mt-4 text-center text-xs text-slate-500">
+              {isTenantHost ? (
+                <>
+                  Admin access only. Candidates should apply via the{" "}
+                  <Link
+                    href="/careers"
+                    className="font-medium text-[#1E40AF] hover:underline"
+                  >
+                    public careers page
+                  </Link>
+                  .{" "}
+                  <span className="block mt-1 text-[10px] text-slate-400">
+                    Powered by{" "}
+                    <a
+                      href="https://www.thinkats.com"
+                      className="font-medium text-[#1E40AF] hover:underline"
+                    >
+                      ThinkATS
+                    </a>
+                    .
+                  </span>
+                </>
+              ) : (
+                <>
+                  Don&apos;t have a workspace?{" "}
+                  <Link
+                    href="/signup"
+                    className="font-medium text-[#1E40AF] hover:underline"
+                  >
+                    Request access
+                  </Link>
+                  .
+                </>
+              )}
+            </p>
           </div>
         </section>
       </div>
