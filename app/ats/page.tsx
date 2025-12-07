@@ -51,7 +51,7 @@ async function getCurrentAppUser() {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        // For SSR we only need read access here
+        // For SSR we only need read access
         set() {},
         remove() {},
       },
@@ -80,13 +80,12 @@ async function getCurrentAppUser() {
 }
 
 export default async function AtsLandingPage() {
-  // Gate behind OTP like other ATS admin surfaces
+  // OTP gate like other ATS admin surfaces
   await ensureOtpVerified("/ats");
 
   const appUser = await getCurrentAppUser();
 
   if (!appUser) {
-    // Safety net: if for some reason there is no app-level User row
     redirect("/login?returnTo=/ats");
   }
 
@@ -100,17 +99,9 @@ export default async function AtsLandingPage() {
 
   const count = memberships.length;
 
-  // CASE 1: Exactly one workspace -> drop them straight into ATS jobs
-  if (count === 1) {
-    const only = memberships[0];
-    return redirect(
-      `/ats/jobs?tenantId=${encodeURIComponent(only.tenantId)}`,
-    );
-  }
-
-  // CASE 2: No workspace yet
+  // CASE 1: No workspace at all
   if (count === 0) {
-    // SUPER_ADMIN can go to the full tenants admin
+    // SUPER_ADMIN can go to full tenants admin
     if (appUser.globalRole === "SUPER_ADMIN") {
       return redirect("/ats/tenants");
     }
@@ -138,9 +129,9 @@ export default async function AtsLandingPage() {
           <ul className="list-disc space-y-1 pl-5 text-[11px] text-slate-600">
             <li>
               Ask your team to invite{" "}
-              <span className="font-mono text-[11px]">
-                {appUser.email ?? "your email"}
-              </span>{" "}
+                <span className="font-mono text-[11px]">
+                  {appUser.email ?? "your email"}
+                </span>{" "}
               to the correct workspace.
             </li>
             <li>
@@ -176,7 +167,7 @@ export default async function AtsLandingPage() {
     );
   }
 
-  // CASE 3: Multiple workspaces -> show a neat workspace switcher
+  // CASE 2: One or many workspaces -> show picker ALWAYS (no redirect)
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 lg:px-0">
       <header className="space-y-1">
@@ -187,8 +178,8 @@ export default async function AtsLandingPage() {
           Choose a workspace
         </h1>
         <p className="text-xs text-slate-600">
-          Your account has access to multiple ATS workspaces. Pick where you
-          want to work.
+          Your account has access to {count} ATS workspace
+          {count === 1 ? "" : "s"}. Pick where you want to work.
         </p>
       </header>
 
