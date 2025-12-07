@@ -1,3 +1,4 @@
+// app/ats/layout.tsx
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
@@ -13,16 +14,15 @@ export const metadata = {
 };
 
 export default async function AtsLayout({ children }: { children: ReactNode }) {
-  // 1) Primary auth – must have a Supabase session
-  const { supabaseUser, user: appUser } = await getServerUser();
+  // 1) Primary auth – must be logged in
+  const { supabaseUser, user } = await getServerUser();
 
-  // No Supabase session at all → send to login
-  if (!supabaseUser) {
+  // No Supabase session → send to login for ATS
+  if (!supabaseUser || !supabaseUser.email) {
     redirect("/login?callbackUrl=/ats");
   }
 
   // 2) Email policy – only official / whitelisted users allowed in ATS
-  // isOfficialUser is assumed to inspect supabaseUser.email
   if (!isOfficialUser(supabaseUser)) {
     redirect("/access-denied");
   }
@@ -34,15 +34,11 @@ export default async function AtsLayout({ children }: { children: ReactNode }) {
   //    - Authenticated (Supabase)
   //    - Official (email policy)
   //    - OTP-verified (cookie)
-  // We prefer the Prisma user object in the topbar if present,
-  // otherwise fall back to the Supabase user.
-  const topbarUser = appUser ?? supabaseUser;
-
   return (
     <div className="flex min-h-screen bg-slate-50">
       <AtsSidebar />
       <div className="flex min-h-screen flex-1 flex-col">
-        <AtsTopbar user={topbarUser} />
+        <AtsTopbar user={user ?? supabaseUser} />
         <main className="flex-1 px-4 py-4 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
