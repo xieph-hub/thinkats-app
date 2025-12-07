@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ interface JobsPageSearchParams {
   department?: string | string[];
   workMode?: string | string[];
   tenant?: string | string[];
+  tenantSlug?: string | string[]; // optional alias for tenant filter
   src?: string | string[]; // carry tracking source through
 }
 
@@ -67,11 +69,50 @@ function formatDate(value: string | Date | null | undefined) {
   });
 }
 
+// Infer tenant slug from subdomain, e.g. resourcin.thinkats.com → "resourcin"
+function inferTenantSlugFromHost(host: string): string | null {
+  if (!host) return null;
+  const hostname = host.split(":")[0].toLowerCase();
+
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://thinkats.com";
+
+  let primaryHostname = "thinkats.com";
+  try {
+    primaryHostname = new URL(siteUrl).hostname.toLowerCase();
+  } catch {
+    // fallback to default if NEXT_PUBLIC_SITE_URL is malformed
+  }
+
+  if (!hostname) return null;
+
+  // Treat root domain and www as global, not scoped
+  if (hostname === primaryHostname) return null;
+  if (hostname === `www.${primaryHostname}`) return null;
+
+  // If host ends with ".thinkats.com", grab the subdomain part
+  if (hostname.endsWith(`.${primaryHostname}`)) {
+    const sub = hostname.slice(
+      0,
+      hostname.length - primaryHostname.length - 1,
+    );
+    if (sub && sub !== "www") {
+      return sub;
+    }
+  }
+
+  return null;
+}
+
 export default async function PublicJobsPage({
   searchParams,
 }: {
   searchParams?: JobsPageSearchParams;
 }) {
+  const headerList = headers();
+  const host = headerList.get("host") || "";
+  const inferredTenantSlugFromHost = inferTenantSlugFromHost(host);
+
   // -----------------------------
   // Resolve search params
   // -----------------------------
@@ -107,9 +148,15 @@ export default async function PublicJobsPage({
       ? rawWorkMode
       : "all";
 
-  const tenantFilter = asStringParam(searchParams?.tenant, "all");
+  // Accept either ?tenant=slug or ?tenantSlug=slug from rewrites
+  const tenantFromQuery =
+    asStringParam(searchParams?.tenant) ||
+    asStringParam(searchParams?.tenantSlug);
 
-  // 🔹 Tracking source (for attribution)
+  const hasExplicitTenantFilter = !!tenantFromQuery;
+  let tenantFilter = tenantFromQuery || "all";
+
+  // Tracking source (for attribution / analytics)
   const rawSrcParam =
     typeof searchParams?.src === "string"
       ? searchParams.src
@@ -158,19 +205,49 @@ export default async function PublicJobsPage({
               Jobs on ThinkATS
             </h1>
             <p className="mt-3">
-              No companies have published their roles to the ThinkATS marketplace
-              yet.
+              No companies have published their roles to the ThinkATS
+              marketplace yet.
             </p>
             <p className="mt-2 text-xs text-slate-500">
               Once tenants enable{" "}
-              <span className="font-medium">“Include this tenant in the global
-              marketplace”</span> in their careers site settings, their public,
-              open roles will appear here automatically.
+              <span className="font-medium">
+                “Include this tenant in the global marketplace”
+              </span>{" "}
+              in their careers site settings, their public, open roles
+              will appear here automatically.
             </p>
           </section>
         </div>
       </div>
     );
+  }
+
+  // If we’re on a tenant subdomain, and there’s a matching marketplace tenant,
+  // auto-scope to that tenant (unless a tenant filter was explicitly provided).
+  const marketplaceSlugSet = new Set(
+    marketplaceSettings
+      .map((s) => s.tenant.slug)
+      .filter((slug): slug is string => !!slug),
+  );
+
+  let isSubdomainScoped = false;
+  if (
+    !hasExplicitTenantFilter &&
+    inferredTenantSlugFromHost &&
+    marketplaceSlugSet.has(inferredTenantSlugFromHost)
+  ) {
+    tenantFilter = inferredTenantSlugFromHost;
+    isSubdomainScoped = true;
+  }
+
+  let scopedTenantName: string | null = null;
+  if (isSubdomainScoped) {
+    const match = marketplaceSettings.find(
+      (s) => s.tenant.slug === tenantFilter,
+    );
+    if (match) {
+      scopedTenantName = match.tenant.name || match.tenant.slug || null;
+    }
   }
 
   // -----------------------------
@@ -267,7 +344,6 @@ export default async function PublicJobsPage({
         (job.clientCompany?.name || "") +
         " " +
         (job.overview || "") +
-        " " +
         (job.description || "") +
         " " +
         (job.tenant.name || job.tenant.slug || "")
@@ -284,17 +360,28 @@ export default async function PublicJobsPage({
   const totalJobs = jobs.length;
   const visibleJobs = filteredJobs.length;
 
+  // Effective tracking source:
+  // - Use explicit ?src when present
+  // - Otherwise, tag tenant subdomains as SUBDOMAIN_TENANTSLUG
+  const effectiveTrackingSource =
+    trackingSourceParam ||
+    (isSubdomainScoped &&
+    tenantFilter &&
+    tenantFilter !== "all"
+      ? `SUBDOMAIN_${tenantFilter.toUpperCase()}`
+      : undefined);
+
   // Helper for public URL (slug if present, else id) + carry src if set
   function jobPublicUrl(job: any) {
     const basePath = job.slug
       ? `/jobs/${encodeURIComponent(job.slug)}`
       : `/jobs/${job.id}`;
 
-    if (!trackingSourceParam) return basePath;
+    if (!effectiveTrackingSource) return basePath;
 
     const connector = basePath.includes("?") ? "&" : "?";
     return `${basePath}${connector}src=${encodeURIComponent(
-      trackingSourceParam,
+      effectiveTrackingSource,
     )}`;
   }
 
@@ -303,7 +390,7 @@ export default async function PublicJobsPage({
     locationFilter !== "all" ||
     departmentFilter !== "all" ||
     workModeFilter !== "all" ||
-    tenantFilter !== "all";
+    (!isSubdomainScoped && tenantFilter !== "all");
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
@@ -319,13 +406,24 @@ export default async function PublicJobsPage({
                 Roles across companies hiring on ThinkATS
               </h1>
               <p className="mt-3 text-sm text-slate-600">
-                Live mandates from companies and agencies using ThinkATS. These
-                roles are managed directly in each employer&apos;s ATS workspace
-                with structured pipelines and clear expectations.
+                Live mandates from companies and agencies using ThinkATS.
+                These roles are managed directly in each employer&apos;s ATS
+                workspace with structured pipelines and clear expectations.
               </p>
+
+              {isSubdomainScoped && scopedTenantName && (
+                <p className="mt-2 text-xs text-slate-600">
+                  Showing roles for{" "}
+                  <span className="font-semibold">
+                    {scopedTenantName}
+                  </span>{" "}
+                  on their ThinkATS-powered jobs page.
+                </p>
+              )}
+
               <p className="mt-2 text-xs text-slate-500">
-                {visibleJobs} of {totalJobs} open roles currently visible based
-                on your filters.
+                {visibleJobs} of {totalJobs} open roles currently visible
+                based on your filters.
               </p>
             </div>
 
@@ -336,7 +434,10 @@ export default async function PublicJobsPage({
               <ul className="space-y-1.5">
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>No blanket “CV pools” – you&apos;re matched to real roles.</span>
+                  <span>
+                    No blanket “CV pools” – you&apos;re matched to real
+                    roles.
+                  </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
@@ -347,7 +448,9 @@ export default async function PublicJobsPage({
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-[2px] h-1.5 w-1.5 rounded-full bg-[#64C247]" />
-                  <span>Employers never see your details without your consent.</span>
+                  <span>
+                    Employers never see your details without your consent.
+                  </span>
                 </li>
               </ul>
             </div>
@@ -453,28 +556,30 @@ export default async function PublicJobsPage({
                 </select>
               </div>
 
-              {/* Company */}
-              <div className="sm:w-40">
-                <label
-                  htmlFor="tenant"
-                  className="mb-1 block text-[11px] font-medium text-slate-600"
-                >
-                  Company
-                </label>
-                <select
-                  id="tenant"
-                  name="tenant"
-                  defaultValue={tenantFilter || "all"}
-                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                >
-                  <option value="all">All companies</option>
-                  {distinctTenants.map((t) => (
-                    <option key={t.key} value={t.key}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Company – hidden on subdomain-scoped views */}
+              {!isSubdomainScoped && (
+                <div className="sm:w-40">
+                  <label
+                    htmlFor="tenant"
+                    className="mb-1 block text-[11px] font-medium text-slate-600"
+                  >
+                    Company
+                  </label>
+                  <select
+                    id="tenant"
+                    name="tenant"
+                    defaultValue={tenantFilter || "all"}
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  >
+                    <option value="all">All companies</option>
+                    {distinctTenants.map((t) => (
+                      <option key={t.key} value={t.key}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -502,7 +607,8 @@ export default async function PublicJobsPage({
           <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             <p>No roles match the current filters.</p>
             <p className="mt-1 text-[11px]">
-              Try removing some filters or check back soon as new roles go live.
+              Try removing some filters or check back soon as new roles go
+              live.
             </p>
           </section>
         ) : (
@@ -673,7 +779,9 @@ function BrandCluster({
           {primary}
         </span>
         {secondary && (
-          <span className="text-[10px] text-slate-500">{secondary}</span>
+          <span className="text-[10px] text-slate-500">
+            {secondary}
+          </span>
         )}
       </div>
     </div>
