@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { StageSelect } from "./StageSelect";
 
@@ -10,7 +10,7 @@ type SkillTag = {
   color?: string | null;
 };
 
-type PipelineAppRow = {
+type PipelineApp = {
   id: string; // application id
   candidateId: string | null; // for linking to candidate profile
 
@@ -36,8 +36,8 @@ type PipelineAppRow = {
 
 type JobPipelineListProps = {
   jobId: string;
-  applications: PipelineAppRow[];
-  stageOptions: string[];
+  applications: PipelineApp[];
+  stageOptions: string[]; // currently not used directly, but kept for API compatibility
 };
 
 function tierColour(tier: string | null | undefined) {
@@ -61,42 +61,30 @@ function scoreColour(score: number | null | undefined) {
   return "text-slate-600";
 }
 
-function formatDate(iso: string | null | undefined) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
+function formatApplied(atIso: string) {
+  try {
+    const d = new Date(atIso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
 }
 
 export default function JobPipelineList({
   jobId,
   applications,
-  stageOptions,
 }: JobPipelineListProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStage, setBulkStage] = useState<string>("");
-  const [isRunning, setIsRunning] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [isBulkRunning, setIsBulkRunning] = useState(false);
 
-  const allSelected = useMemo(
-    () => applications.length > 0 && selectedIds.length === applications.length,
-    [applications.length, selectedIds.length],
-  );
-
-  const selectedCount = selectedIds.length;
-
-  function toggleSelectAll() {
-    if (allSelected) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(applications.map((a) => a.id));
-    }
-  }
+  const hasSelection = selectedIds.length > 0;
 
   function toggleRow(id: string) {
     setSelectedIds((prev) =>
@@ -104,52 +92,62 @@ export default function JobPipelineList({
     );
   }
 
-  async function runBulkStageUpdate() {
-    if (!bulkStage || selectedIds.length === 0) return;
-
-    setIsRunning(true);
-    setError(null);
-    setFeedback(null);
-
-    try {
-      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobId,
-          applicationIds: selectedIds,
-          action: "move_stage",
-          stage: bulkStage,
-        }),
-      });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(
-          text || `Bulk stage update failed with status ${res.status}`,
-        );
-      }
-
-      setFeedback("Stage updated for selected candidates. Refreshing…");
-      // simplest: reload to pull fresh server data
-      window.location.reload();
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Something went wrong updating stages.";
-      setError(msg);
-    } finally {
-      setIsRunning(false);
+  function toggleAll() {
+    if (selectedIds.length === applications.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(applications.map((a) => a.id));
     }
   }
 
-  async function runBulkStatusUpdate(nextStatus: "PENDING" | "ON_HOLD" | "REJECTED") {
-    if (selectedIds.length === 0) return;
+  async function runBulkUpdate(action: "move_stage" | "set_status") {
+    if (!hasSelection) return;
 
-    setIsRunning(true);
-    setError(null);
-    setFeedback(null);
+    if (action === "move_stage" && !bulkStage.trim()) return;
+    if (action === "set_status" && !bulkStatus.trim()) return;
+
+    try {
+      setIsBulkRunning(true);
+
+      const body: any = {
+        jobId,
+        applicationIds: selectedIds,
+        action,
+      };
+
+      if (action === "move_stage") {
+        body.stage = bulkStage;
+      } else if (action === "set_status") {
+        body.status = bulkStatus;
+      }
+
+      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        console.error("Bulk update failed", await res.text());
+        return;
+      }
+
+      // Keep it simple for now – refresh to pick up latest values
+      window.location.reload();
+    } catch (err) {
+      console.error("Bulk update error", err);
+    } finally {
+      setIsBulkRunning(false);
+    }
+  }
+
+  async function handleInlineStatusChange(
+    applicationId: string,
+    nextStatus: string,
+  ) {
+    if (!nextStatus) return;
 
     try {
       const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
@@ -159,336 +157,328 @@ export default function JobPipelineList({
         },
         body: JSON.stringify({
           jobId,
-          applicationIds: selectedIds,
+          applicationIds: [applicationId],
           action: "set_status",
           status: nextStatus,
         }),
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(
-          text || `Bulk status update failed with status ${res.status}`,
-        );
+        console.error("Inline status update failed", await res.text());
+        return;
       }
 
-      setFeedback("Status updated for selected candidates. Refreshing…");
+      // For now, just refresh; you can swap to in-memory updates later
       window.location.reload();
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong updating candidate status.";
-      setError(msg);
-    } finally {
-      setIsRunning(false);
+      console.error("Inline status update error", err);
     }
   }
 
-  if (applications.length === 0) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-        No candidates in this view yet.
-        <div className="mt-1 text-[11px] text-slate-400">
-          Once applications land for this role, they will appear here with full
-          pipeline controls.
-        </div>
-      </div>
-    );
-  }
-
-  const topStageOptions = stageOptions.length
-    ? stageOptions
-    : ["APPLIED", "SCREENING", "INTERVIEW", "OFFER", "HIRED", "REJECTED"];
-
   return (
-    <div className="space-y-3">
-      {/* Bulk actions bar */}
-      <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-slate-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-            Pipeline · List
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* Top bar: summary + bulk actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-xs">
+        <div className="flex flex-col gap-1 text-slate-600">
+          <span className="font-medium">
+            {applications.length} candidate
+            {applications.length === 1 ? "" : "s"} in this view
           </span>
-          <span className="text-[11px] text-slate-600">
-            Selected:{" "}
-            <span className="font-semibold text-slate-900">
-              {selectedCount}
-            </span>{" "}
-            / {applications.length}
+          <span className="text-[11px] text-slate-500">
+            Use checkboxes for bulk stage moves or decision changes.
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Legend */}
-          <div className="hidden items-center gap-1.5 text-[10px] text-slate-400 md:flex">
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Tier A
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
-              Tier B
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              Tier C
-            </span>
-          </div>
-
-          <div className="h-4 w-px bg-slate-200" />
-
-          {/* Bulk stage */}
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Bulk move stage */}
+          <div className="flex items-center gap-1">
             <select
               value={bulkStage}
               onChange={(e) => setBulkStage(e.target.value)}
               className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
             >
-              <option value="">Move selected to stage…</option>
-              {topStageOptions.map((s) => (
-                <option key={s} value={s.toUpperCase()}>
-                  {s}
-                </option>
-              ))}
+              <option value="">Move to stage…</option>
+              <option value="APPLIED">Applied</option>
+              <option value="SCREENING">Screening</option>
+              <option value="SHORTLISTED">Shortlisted</option>
+              <option value="INTERVIEW">Interview</option>
+              <option value="OFFER">Offer</option>
+              <option value="HIRED">Hired</option>
+              <option value="REJECTED">Rejected</option>
             </select>
             <button
               type="button"
-              onClick={runBulkStageUpdate}
-              disabled={!bulkStage || selectedCount === 0 || isRunning}
-              className="inline-flex h-8 items-center rounded-full bg-indigo-600 px-3 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              disabled={!hasSelection || !bulkStage || isBulkRunning}
+              onClick={() => runBulkUpdate("move_stage")}
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {isRunning ? "Updating…" : "Move"}
+              Apply
             </button>
           </div>
 
-          <div className="hidden h-4 w-px bg-slate-200 md:block" />
-
-          {/* Bulk status */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] text-slate-400">Set status:</span>
+          {/* Bulk set status */}
+          <div className="flex items-center gap-1">
+            <select
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+            >
+              <option value="">Set decision…</option>
+              <option value="PENDING">Accepted / active</option>
+              <option value="ON_HOLD">On hold</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
             <button
               type="button"
-              onClick={() => runBulkStatusUpdate("PENDING")}
-              disabled={selectedCount === 0 || isRunning}
-              className="inline-flex h-7 items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
+              disabled={!hasSelection || !bulkStatus || isBulkRunning}
+              onClick={() => runBulkUpdate("set_status")}
+              className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              Accepted / active
-            </button>
-            <button
-              type="button"
-              onClick={() => runBulkStatusUpdate("ON_HOLD")}
-              disabled={selectedCount === 0 || isRunning}
-              className="inline-flex h-7 items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 text-[10px] font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              On hold
-            </button>
-            <button
-              type="button"
-              onClick={() => runBulkStatusUpdate("REJECTED")}
-              disabled={selectedCount === 0 || isRunning}
-              className="inline-flex h-7 items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 text-[10px] font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
-            >
-              Reject
+              Apply
             </button>
           </div>
         </div>
       </div>
 
-      {(feedback || error) && (
-        <div
-          className={`rounded-lg border px-3 py-2 text-[11px] ${
-            error
-              ? "border-rose-200 bg-rose-50 text-rose-700"
-              : "border-emerald-200 bg-emerald-50 text-emerald-700"
-          }`}
-        >
-          {error || feedback}
-        </div>
-      )}
-
-      {/* List table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full border-collapse text-xs">
-          <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="w-10 px-3 py-2 text-left">
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-separate border-spacing-y-2 text-xs">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wide text-slate-500">
+              <th className="w-10 px-4 text-left">
                 <input
                   type="checkbox"
-                  checked={allSelected}
-                  onChange={toggleSelectAll}
+                  aria-label="Select all"
+                  checked={
+                    applications.length > 0 &&
+                    selectedIds.length === applications.length
+                  }
+                  onChange={toggleAll}
                   className="h-3.5 w-3.5 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500/40"
                 />
               </th>
-              <th className="px-3 py-2 text-left">Candidate</th>
-              <th className="px-3 py-2 text-left">Tags</th>
-              <th className="px-3 py-2 text-left">Tier / Score</th>
-              <th className="px-3 py-2 text-left">Stage</th>
-              <th className="px-3 py-2 text-left">Status</th>
-              <th className="px-3 py-2 text-left">Source</th>
-              <th className="px-3 py-2 text-left">Applied</th>
-              <th className="px-3 py-2 text-right">Actions</th>
+              <th className="w-[40%] px-2 py-1 text-left">Candidate</th>
+              <th className="w-[15%] px-2 py-1 text-left">Match score</th>
+              <th className="w-[20%] px-2 py-1 text-left">Stage</th>
+              <th className="w-[15%] px-2 py-1 text-left">Status</th>
             </tr>
           </thead>
           <tbody>
-            {applications.map((app) => {
-              const isSelected = selectedIds.includes(app.id);
-              const score = app.matchScore;
-              const tier = app.tier;
-              const scoreReason =
-                app.scoreReason ||
-                app.matchReason ||
-                "Scored by semantic CV/JD engine.";
+            {applications.map((app) => (
+              <tr key={app.id} className="align-top">
+                {/* Checkbox */}
+                <td className="px-4 py-1">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${app.fullName}`}
+                    checked={selectedIds.includes(app.id)}
+                    onChange={() => toggleRow(app.id)}
+                    className="h-3.5 w-3.5 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500/40"
+                  />
+                </td>
 
-              const topTags = app.skillTags.slice(0, 4);
+                {/* Candidate card cell */}
+                <td className="px-2 py-1">
+                  <CandidateCell app={app} />
+                </td>
 
-              return (
-                <tr
-                  key={app.id}
-                  className={`border-t border-slate-100 ${
-                    isSelected ? "bg-indigo-50/40" : "hover:bg-slate-50/60"
-                  }`}
+                {/* Match score */}
+                <td className="px-2 py-1 align-middle">
+                  <MatchScoreCell app={app} />
+                </td>
+
+                {/* Stage inline (StageSelect) */}
+                <td className="px-2 py-1 align-middle">
+                  <StageSelect
+                    jobId={jobId}
+                    applicationId={app.id}
+                    currentStage={app.stage}
+                  />
+                </td>
+
+                {/* Status inline */}
+                <td className="px-2 py-1 align-middle">
+                  <StatusCell
+                    app={app}
+                    onChangeStatus={(status) =>
+                      handleInlineStatusChange(app.id, status)
+                    }
+                  />
+                </td>
+              </tr>
+            ))}
+
+            {applications.length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-[11px] text-slate-500"
                 >
-                  <td className="px-3 py-2 align-top">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleRow(app.id)}
-                      className="mt-1 h-3.5 w-3.5 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500/40"
-                    />
-                  </td>
-
-                  {/* Candidate */}
-                  <td className="max-w-xs px-3 py-2 align-top">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-[13px] font-medium text-slate-900">
-                          {app.fullName}
-                        </span>
-                        {app.email && (
-                          <a
-                            href={`mailto:${app.email}`}
-                            className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-200"
-                          >
-                            ✉ Email
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                        {app.currentTitle && (
-                          <span className="truncate">{app.currentTitle}</span>
-                        )}
-                        {app.currentCompany && (
-                          <span className="truncate">
-                            {" · "}
-                            {app.currentCompany}
-                          </span>
-                        )}
-                        {app.location && (
-                          <span className="truncate">
-                            {" · "}
-                            {app.location}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Tags */}
-                  <td className="px-3 py-2 align-top">
-                    <div className="flex flex-wrap gap-1">
-                      {topTags.map((tag) => (
-                        <span
-                          key={tag.id}
-                          className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-                        >
-                          {tag.label}
-                        </span>
-                      ))}
-                      {app.skillTags.length > topTags.length && (
-                        <span className="text-[10px] text-slate-400">
-                          +{app.skillTags.length - topTags.length} more
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Tier / score */}
-                  <td className="px-3 py-2 align-top">
-                    <div className="flex flex-col items-start gap-0.5">
-                      <div
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tierColour(
-                          tier,
-                        )}`}
-                      >
-                        <span className={scoreColour(score)}>
-                          {score != null ? score : "–"}
-                        </span>
-                        {tier && (
-                          <span className="text-[10px] uppercase text-slate-500">
-                            · {tier}
-                          </span>
-                        )}
-                      </div>
-                      <span
-                        className="cursor-help text-[10px] text-slate-400"
-                        title={scoreReason}
-                      >
-                        Why this score?
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Stage */}
-                  <td className="px-3 py-2 align-top">
-                    <StageSelect
-                      jobId={jobId}
-                      applicationId={app.id}
-                      currentStage={app.stage}
-                    />
-                  </td>
-
-                  {/* Status */}
-                  <td className="px-3 py-2 align-top">
-                    <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                      {(app.status || "PENDING").replace(/_/g, " ")}
-                    </span>
-                  </td>
-
-                  {/* Source */}
-                  <td className="px-3 py-2 align-top">
-                    {app.source ? (
-                      <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                        {app.source}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400">—</span>
-                    )}
-                  </td>
-
-                  {/* Applied */}
-                  <td className="px-3 py-2 align-top text-[11px] text-slate-500">
-                    {formatDate(app.appliedAt)}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-3 py-2 align-top text-right">
-                    <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                      {app.candidateId && (
-                        <Link
-                          href={`/ats/candidates/${app.candidateId}`}
-                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          👤 Profile
-                        </Link>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                  No candidates found for this view. Adjust filters or save a
+                  new view for this job.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function CandidateCell({ app }: { app: PipelineApp }) {
+  const appliedOn = formatApplied(app.appliedAt);
+  const topSkills = app.skillTags.slice(0, 3);
+
+  return (
+    <div className="flex min-w-0 justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+      <div className="min-w-0 space-y-1">
+        {/* Name + email / link */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            {app.candidateId ? (
+              <Link
+                href={`/ats/candidates/${app.candidateId}`}
+                className="block truncate text-[13px] font-semibold text-slate-900 hover:text-indigo-700"
+              >
+                {app.fullName}
+              </Link>
+            ) : (
+              <span className="block truncate text-[13px] font-semibold text-slate-900">
+                {app.fullName}
+              </span>
+            )}
+            {app.email && (
+              <p className="truncate text-[11px] text-slate-500">
+                {app.email}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Meta: role / company / location */}
+        <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+          {app.currentTitle && (
+            <span className="truncate">{app.currentTitle}</span>
+          )}
+          {app.currentCompany && (
+            <span className="truncate">
+              {" · "}
+              {app.currentCompany}
+            </span>
+          )}
+          {app.location && (
+            <span className="truncate">
+              {" · "}
+              {app.location}
+            </span>
+          )}
+        </div>
+
+        {/* Tags + applied */}
+        <div className="flex flex-wrap items-center gap-2">
+          {topSkills.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {topSkills.map((skill) => (
+                <span
+                  key={skill.id}
+                  className="inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 shadow-sm ring-1 ring-slate-200"
+                >
+                  {skill.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {appliedOn && (
+            <span className="text-[10px] text-slate-500">
+              Applied · {appliedOn}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Email icon floated so it stays neat regardless of text length */}
+      {app.email && (
+        <div className="flex items-start">
+          <a
+            href={`mailto:${app.email}`}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-[12px] text-slate-600 shadow-sm hover:bg-slate-50"
+            title={`Email ${app.fullName}`}
+          >
+            ✉
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchScoreCell({ app }: { app: PipelineApp }) {
+  const score = app.matchScore;
+  const tier = app.tier;
+  const scoreReason =
+    app.scoreReason || app.matchReason || "Scored by semantic CV/JD engine.";
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <div
+        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tierColour(
+          tier,
+        )}`}
+        title={scoreReason}
+      >
+        <span className={scoreColour(score)}>
+          {score != null ? `${score}` : "–"}
+        </span>
+        {tier && (
+          <span className="text-[10px] uppercase text-slate-500">
+            · {tier}
+          </span>
+        )}
+      </div>
+      <span className="text-[10px] text-slate-500">Match score</span>
+    </div>
+  );
+}
+
+function StatusCell({
+  app,
+  onChangeStatus,
+}: {
+  app: PipelineApp;
+  onChangeStatus: (status: string) => void;
+}) {
+  const value = (app.status || "PENDING").toUpperCase();
+
+  return (
+    <div className="inline-flex items-center gap-2">
+      <span
+        className={[
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium",
+          value === "REJECTED"
+            ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+            : value === "ON_HOLD"
+              ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+              : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+        ].join(" ")}
+      >
+        {value === "PENDING"
+          ? "Accepted / active"
+          : value === "ON_HOLD"
+            ? "On hold"
+            : "Rejected"}
+      </span>
+
+      <select
+        value={value}
+        onChange={(e) => onChangeStatus(e.target.value)}
+        className="h-7 rounded-md border border-slate-200 bg-slate-50 px-2 text-[10px] text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+      >
+        <option value="PENDING">Accepted / active</option>
+        <option value="ON_HOLD">On hold</option>
+        <option value="REJECTED">Rejected</option>
+      </select>
     </div>
   );
 }
