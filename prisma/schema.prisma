@@ -67,7 +67,7 @@ model Tenant {
   userTenantRoles    UserTenantRole[]
   tags               Tag[]
 
-  // NEW: skills + junctions
+  // skills + junctions
   skills          Skill[]
   candidateSkills CandidateSkill[]
   jobSkills       JobSkill[]
@@ -99,10 +99,10 @@ model User {
   createdAt    DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  userTenantRoles    UserTenantRole[]
-  loginOtps          LoginOtp[]
-  savedViews         SavedView[]       // back-relation for SavedView.owner
-  tenantInvitations  TenantInvitation[]
+  userTenantRoles   UserTenantRole[]
+  loginOtps         LoginOtp[]
+  savedViews        SavedView[]       // back-relation for SavedView.owner
+  tenantInvitations TenantInvitation[]
 
   @@map("users")
 }
@@ -140,7 +140,7 @@ model LoginOtp {
 }
 
 // --------------------------------------------------------------------------
-// TENANT INVITATIONS (NEW)
+// TENANT INVITATIONS
 // --------------------------------------------------------------------------
 
 model TenantInvitation {
@@ -173,7 +173,7 @@ model ClientCompany {
   slug     String?
   logoUrl  String? @map("logo_url")
 
-  // New richer fields
+  // richer fields
   website  String? @map("website")
   industry String? @map("industry")
 
@@ -244,7 +244,7 @@ model Job {
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
 
-  // NEW: normalized skills attached to job
+  // normalized skills attached to job
   skills JobSkill[]
 
   applications  JobApplication[]
@@ -285,7 +285,7 @@ model Candidate {
   notes        Note[]
   sentEmails   SentEmail[]
 
-  // NEW: structured skills for this candidate
+  // structured skills for this candidate
   skills CandidateSkill[]
 
   @@map("candidates")
@@ -299,7 +299,6 @@ model Tag {
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  // NEW
   kind     TagKind @map("kind") @default(GENERAL)
   isSystem Boolean @map("is_system") @default(false)
 
@@ -327,7 +326,7 @@ model CandidateTag {
 }
 
 // --------------------------------------------------------------------------
-// SKILLS & PROFICIENCY (NEW)
+// SKILLS & PROFICIENCY
 // --------------------------------------------------------------------------
 
 model Skill {
@@ -560,7 +559,7 @@ model CareerSiteSettings {
   accentColorHex    String? @map("accent_color_hex")    // e.g. "#FFC000"
   heroBackgroundHex String? @map("hero_background_hex") // e.g. "#F5F6FA"
 
-  // Legacy non-hex fields (keep if you already have data or want a soft migration path)
+  // Legacy non-hex fields
   primaryColor String? @map("primary_color")
   accentColor  String? @map("accent_color")
 
@@ -706,7 +705,7 @@ model SavedView {
   name      String
   isShared  Boolean  @map("is_shared") @default(false)
   isDefault Boolean  @map("is_default") @default(false)
-  filters   Json?    @map("filters") // persisted filters (stage, status, tier, query, etc.)
+  filters   Json?    @map("filters") // persisted filters
   sort      Json?    @map("sort")    // sort config
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
