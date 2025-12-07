@@ -1,3 +1,4 @@
+// app/ats/jobs/AtsJobsTable.tsx
 "use client";
 
 import { useState } from "react";
@@ -15,6 +16,14 @@ export type AtsJobRow = {
   visibility: string;
   applicationsCount: number;
   createdAt: string; // ISO string from server
+
+  // extra fields you’re already shaping in page.tsx
+  shortDescription: string | null;
+  overview: string | null;
+  department: string | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
 };
 
 type Props = {
@@ -294,8 +303,10 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                       className="h-3 w-3 rounded border-slate-300 text-slate-900"
                     />
                   </td>
+
+                  {/* Title / client + quick actions */}
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-1">
                       <Link
                         href={`/ats/jobs/${job.id}`}
                         className="text-[12px] font-semibold text-slate-900 hover:underline"
@@ -303,9 +314,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                         {job.title}
                       </Link>
                       <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                        {job.clientName && (
-                          <span>{job.clientName}</span>
-                        )}
+                        {job.clientName && <span>{job.clientName}</span>}
                         {isPublished && (
                           <>
                             <span className="text-slate-300">•</span>
@@ -315,25 +324,36 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                           </>
                         )}
                       </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                        <Link
+                          href={`/ats/jobs/${job.id}`}
+                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
+                        >
+                          Open pipeline
+                        </Link>
+                        <Link
+                          href={`/ats/jobs/${job.id}/edit`}
+                          className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-slate-800"
+                        >
+                          Edit job
+                        </Link>
+                      </div>
                     </div>
                   </td>
+
+                  {/* Function / experience */}
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[11px] font-medium text-slate-800">
-                        {/* “Function” label, backed by department/experience */}
-                        {job.experienceLevel
-                          ? job.experienceLevel
-                          : "—"}
+                        {job.department || "—"}
                       </span>
                       <span className="text-[10px] text-slate-500">
-                        {/* You can swap this out later if you add a separate “function” field */}
-                        Function:{" "}
-                        {job.experienceLevel
-                          ? job.experienceLevel
-                          : "Not specified"}
+                        {job.experienceLevel || "Experience not set"}
                       </span>
                     </div>
                   </td>
+
+                  {/* Location & mode */}
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[11px] text-slate-800">
@@ -344,16 +364,22 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                       </span>
                     </div>
                   </td>
+
+                  {/* Type */}
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
                     <span className="text-[10px] text-slate-700">
                       {job.employmentType || "—"}
                     </span>
                   </td>
+
+                  {/* Apps */}
                   <td className="border-b border-slate-100 px-3 py-2 text-right align-top">
                     <span className="text-[11px] font-medium text-slate-800">
                       {job.applicationsCount}
                     </span>
                   </td>
+
+                  {/* Status */}
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
                     <div className="flex flex-col gap-0.5">
                       <span
@@ -366,7 +392,8 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                           ? "Open"
                           : job.status.toLowerCase() === "closed"
                           ? "Closed"
-                          : "Draft"}
+                          : job.status.charAt(0).toUpperCase() +
+                            job.status.slice(1)}
                       </span>
                       <span className="text-[10px] text-slate-500">
                         {job.visibility.toLowerCase() === "public"
@@ -375,6 +402,8 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                       </span>
                     </div>
                   </td>
+
+                  {/* Created */}
                   <td className="border-b border-slate-100 px-3 py-2 text-right align-top">
                     <span className="text-[10px] text-slate-500">
                       {formatDate(job.createdAt)}
