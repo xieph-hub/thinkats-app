@@ -179,7 +179,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    await prisma.tenantInvitation.create({
+    const invite = await prisma.tenantInvitation.create({
       data: {
         tenantId,
         userId: existingUser?.id ?? null,
@@ -190,14 +190,16 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       },
     });
 
-    // 8) Send email via Resend (if configured)
+    // 8) Build invite URL – we now use tokenHash so UI can easily copy it
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.thinkats.com";
 
+    const inviteToken = invite.tokenHash;
     const inviteUrl = `${baseUrl}/login?inviteToken=${encodeURIComponent(
-      rawToken,
+      inviteToken,
     )}&tenantId=${encodeURIComponent(tenantId)}`;
 
+    // 9) Send email via Resend (if configured)
     if (process.env.RESEND_API_KEY) {
       await resend.emails.send({
         from: `ThinkATS <hello@thinkats.com>`,
@@ -221,8 +223,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
       });
     }
 
-    // 9) Done
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, inviteUrl });
   } catch (err) {
     console.error("Invite user error", err);
     return NextResponse.json(
