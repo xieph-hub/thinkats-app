@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import { matchesBooleanQuery } from "@/lib/booleanSearch";
 import JobPipelineList from "./JobPipelineList";
+import JobPipelineBoard from "./JobPipelineBoard";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ type PageProps = {
     status?: string;
     tier?: string;
     viewId?: string;
+    viewType?: string; // "list" | "board"
   };
 };
 
@@ -285,6 +287,49 @@ export default async function JobPipelinePage({
       : activeView?.id || "";
 
   // ---------------------------------------------------------------------------
+  // View type (board / list) + URL helpers
+  // ---------------------------------------------------------------------------
+
+  const rawViewType =
+    typeof searchParams.viewType === "string"
+      ? searchParams.viewType.toLowerCase()
+      : "list"; // default to list
+
+  const isBoardView = rawViewType === "board";
+
+  const baseQuery: Record<string, string> = {};
+
+  if (filterQ) baseQuery.q = filterQ;
+  if (filterStage && filterStage !== "ALL") baseQuery.stage = filterStage;
+  if (filterStatus && filterStatus !== "ALL") baseQuery.status = filterStatus;
+  if (filterTier && filterTier !== "ALL") baseQuery.tier = filterTier;
+  if (currentViewId) baseQuery.viewId = currentViewId;
+
+  function buildViewUrl(nextViewType: "board" | "list") {
+    const params = new URLSearchParams(baseQuery);
+    params.set("viewType", nextViewType);
+    const qs = params.toString();
+    return qs ? `/ats/jobs/${job.id}?${qs}` : `/ats/jobs/${job.id}`;
+  }
+
+  // Map stages into the shape JobPipelineBoard expects
+  const pipelineStages =
+    job.stages.length > 0
+      ? job.stages.map((s) => ({
+          id: s.id,
+          name: s.name || "UNASSIGNED",
+        }))
+      : [
+          { id: "v-APPLIED", name: "APPLIED" },
+          { id: "v-SCREENING", name: "SCREENING" },
+          { id: "v-SHORTLISTED", name: "SHORTLISTED" },
+          { id: "v-INTERVIEW", name: "INTERVIEW" },
+          { id: "v-OFFER", name: "OFFER" },
+          { id: "v-HIRED", name: "HIRED" },
+          { id: "v-REJECTED", name: "REJECTED" },
+        ];
+
+  // ---------------------------------------------------------------------------
   // UI
   // ---------------------------------------------------------------------------
 
@@ -464,17 +509,43 @@ export default async function JobPipelinePage({
             </Link>
           </form>
 
-          {/* Visible count + hint */}
-          <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
+          {/* Visible count + view toggle + hint */}
+          <div className="flex flex-col items-end gap-2 text-[11px] text-slate-500">
             <span>
               Visible applications:{" "}
               <span className="font-semibold text-slate-800">
                 {allVisibleApplicationIds.length}
               </span>
             </span>
+
+            <div className="inline-flex items-center rounded-full bg-slate-100 p-1 text-[11px] shadow-inner">
+              <Link
+                href={buildViewUrl("board")}
+                className={[
+                  "inline-flex items-center rounded-full px-3 py-1 transition",
+                  isBoardView
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800",
+                ].join(" ")}
+              >
+                Board
+              </Link>
+              <Link
+                href={buildViewUrl("list")}
+                className={[
+                  "inline-flex items-center rounded-full px-3 py-1 transition",
+                  !isBoardView
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800",
+                ].join(" ")}
+              >
+                List
+              </Link>
+            </div>
+
             <span className="max-w-xs text-right text-[10px]">
-              Use the filters and saved views to keep your shortlists and
-              interview-ready candidates one click away.
+              Use filters, saved views and the Board/List toggle to keep
+              shortlists and interview-ready candidates one click away.
             </span>
           </div>
         </div>
@@ -528,13 +599,21 @@ export default async function JobPipelinePage({
         </form>
       </section>
 
-      {/* Pipeline list (with bulk selection/actions) */}
+      {/* Pipeline list / board (with shared filtered applications) */}
       <section className="flex-1 px-5 py-4">
-        <JobPipelineList
-          jobId={job.id}
-          applications={pipelineApps}
-          stageOptions={stageNames}
-        />
+        {isBoardView ? (
+          <JobPipelineBoard
+            jobId={job.id}
+            stages={pipelineStages}
+            applications={pipelineApps}
+          />
+        ) : (
+          <JobPipelineList
+            jobId={job.id}
+            applications={pipelineApps}
+            stageOptions={stageNames}
+          />
+        )}
       </section>
     </div>
   );
