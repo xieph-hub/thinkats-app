@@ -522,19 +522,28 @@ model JobStage {
 // --------------------------------------------------------------------------
 
 model CareerSiteSettings {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  logoUrl      String?  @map("logo_url")
-  primaryColor String?  @map("primary_color")
-  accentColor  String?  @map("accent_color")
-  heroTitle    String?  @map("hero_title")
-  heroSubtitle String?  @map("hero_subtitle")
-  aboutHtml    String?  @map("about_html")
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
 
-  // NEW
+  // logo specifically for careers site (overrides Tenant.logoUrl if set)
+  logoUrl String? @map("logo_url")
+
+  // Hex-based brand colours for careers microsite
+  primaryColorHex   String? @map("primary_color_hex")   // e.g. "#172965"
+  accentColorHex    String? @map("accent_color_hex")    // e.g. "#FFC000"
+  heroBackgroundHex String? @map("hero_background_hex") // e.g. "#F5F6FA"
+
+  // Legacy non-hex fields (keep if you already have data or want a soft migration path)
+  primaryColor String? @map("primary_color")
+  accentColor  String? @map("accent_color")
+
+  heroTitle    String? @map("hero_title")
+  heroSubtitle String? @map("hero_subtitle")
+  aboutHtml    String? @map("about_html")
+
   includeInMarketplace Boolean @map("include_in_marketplace") @default(false)
+  isPublic             Boolean @map("is_public") @default(true)
 
-  isPublic  Boolean  @map("is_public") @default(true)
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
