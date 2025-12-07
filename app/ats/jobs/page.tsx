@@ -1,3 +1,4 @@
+// app/ats/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -34,6 +35,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   if (!tenant) notFound();
 
   const filterQ = firstString(searchParams.q).trim();
+
   const rawStatus = firstString(searchParams.status).trim().toUpperCase();
   const filterStatus =
     rawStatus === "PUBLISHED" || rawStatus === "UNPUBLISHED"
@@ -119,6 +121,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
     }),
   ]);
 
+  // 🔧 Map Prisma model -> AtsJobRow (Decimal → number here)
   const jobs: AtsJobRow[] = jobsRaw.map((job) => {
     const anyJob = job as any;
 
@@ -141,12 +144,17 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       visibility,
       applicationsCount: job._count.applications ?? 0,
       createdAt: job.createdAt.toISOString(),
-      // extra fields for preview
+
+      // extra fields for preview / future use
       shortDescription: job.shortDescription ?? null,
       overview: job.overview ?? null,
       department: job.department ?? null,
-      salaryMin: job.salaryMin ?? null,
-      salaryMax: job.salaryMax ?? null,
+
+      // 👇 FIX: Prisma Decimal → number | null
+      salaryMin:
+        job.salaryMin != null ? Number(job.salaryMin) : null,
+      salaryMax:
+        job.salaryMax != null ? Number(job.salaryMax) : null,
       salaryCurrency: job.salaryCurrency ?? null,
     };
   });
@@ -270,7 +278,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
           </div>
         </section>
 
-        {/* Jobs table + preview + bulk actions */}
+        {/* Jobs table + bulk actions */}
         <AtsJobsTable initialJobs={jobs} />
       </main>
     </div>
