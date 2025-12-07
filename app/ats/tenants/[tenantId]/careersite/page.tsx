@@ -45,8 +45,14 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
   const careersPath = tenant.slug ? `/careers/${tenant.slug}` : null;
   const tenantStatus = normaliseStatus(tenant.status);
   const isActive = tenantStatus === "active";
+
   const isPublic = settings?.isPublic ?? true;
   const includeInMarketplace = settings?.includeInMarketplace ?? false;
+
+  const primaryColor = settings?.primaryColorHex || "#172965"; // deep blue
+  const accentColor = settings?.accentColorHex || "#FFC000"; // yellow
+  const heroBackground = settings?.heroBackgroundHex || "#F9FAFB"; // soft grey
+  const logoUrl = settings?.logoUrl || null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 lg:px-0">
@@ -141,7 +147,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
           </div>
 
           {/* Tenant status chip */}
-          <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <span className="text-[11px] text-slate-500">Tenant status:</span>
             <span
               className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ${
@@ -151,6 +157,14 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
               }`}
             >
               {isActive ? "Active" : "Inactive"}
+            </span>
+
+            <span className="ml-auto flex items-center gap-2 text-[10px] text-slate-400">
+              <span
+                className="inline-block h-3 w-3 rounded-full border border-slate-200"
+                style={{ backgroundColor: heroBackground }}
+              />
+              <span>Hero background preview</span>
             </span>
           </div>
         </div>
@@ -167,8 +181,8 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
             Branding & content
           </p>
           <p className="text-xs text-slate-600">
-            Update the headline and about section that candidates see on the
-            public careers page.
+            Update the headline, brand colours and about section that candidates
+            see on the public careers page.
           </p>
         </div>
 
@@ -215,8 +229,110 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
           </div>
         </div>
 
+        {/* Brand colours & logo */}
+        <div className="grid gap-4 sm:grid-cols-2 border-t border-slate-100 pt-4">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="primaryColorHex"
+              className="block text-[11px] font-medium text-slate-700"
+            >
+              Primary brand colour (hex)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="primaryColorHex"
+                name="primaryColorHex"
+                defaultValue={settings?.primaryColorHex ?? ""}
+                placeholder="#172965"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              />
+              <span
+                className="inline-block h-6 w-6 rounded-full border border-slate-200"
+                style={{ backgroundColor: primaryColor }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Buttons and key accents on the careers page. Use a hex like{" "}
+              <code>#172965</code>.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="accentColorHex"
+              className="block text-[11px] font-medium text-slate-700"
+            >
+              Accent colour (hex)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="accentColorHex"
+                name="accentColorHex"
+                defaultValue={settings?.accentColorHex ?? ""}
+                placeholder="#FFC000"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              />
+              <span
+                className="inline-block h-6 w-6 rounded-full border border-slate-200"
+                style={{ backgroundColor: accentColor }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Used for chips and small highlights. Leave blank to use ThinkATS
+              yellow.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="heroBackgroundHex"
+              className="block text-[11px] font-medium text-slate-700"
+            >
+              Hero background colour (hex)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="heroBackgroundHex"
+                name="heroBackgroundHex"
+                defaultValue={settings?.heroBackgroundHex ?? ""}
+                placeholder="#F5F6FA"
+                className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+              />
+              <span
+                className="inline-block h-6 w-6 rounded-md border border-slate-200"
+                style={{ backgroundColor: heroBackground }}
+              />
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Background panel behind the hero section. Soft neutrals work best.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="logoUrl"
+              className="block text-[11px] font-medium text-slate-700"
+            >
+              Careers logo URL (optional)
+            </label>
+            <input
+              id="logoUrl"
+              name="logoUrl"
+              defaultValue={settings?.logoUrl ?? ""}
+              placeholder="https://.../company-logo.png"
+              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+            />
+            <p className="text-[11px] text-slate-500">
+              Overrides the workspace logo on the public careers page. Leave
+              blank to use the workspace logo.
+            </p>
+          </div>
+        </div>
+
         {/* About section */}
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 border-t border-slate-100 pt-4">
           <label
             htmlFor="aboutHtml"
             className="block text-[11px] font-medium text-slate-700"
