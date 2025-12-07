@@ -14,13 +14,20 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: { tenantId: string };
+  searchParams?: {
+    updated?: string;
+    error?: string;
+  };
 };
 
 function normaliseStatus(status: string | null | undefined): string {
   return (status || "").toLowerCase();
 }
 
-export default async function TenantCareerSitePage({ params }: PageProps) {
+export default async function TenantCareerSitePage({
+  params,
+  searchParams,
+}: PageProps) {
   const tenantId = params.tenantId;
 
   const tenant = await prisma.tenant.findUnique({
@@ -52,7 +59,20 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
   const primaryColor = settings?.primaryColorHex || "#172965"; // deep blue
   const accentColor = settings?.accentColorHex || "#FFC000"; // yellow
   const heroBackground = settings?.heroBackgroundHex || "#F9FAFB"; // soft grey
+
   const logoUrl = settings?.logoUrl || null;
+
+  // Banners from API redirect query params
+  const updated = searchParams?.updated === "1";
+  const errorCode = searchParams?.error;
+
+  let errorMessage: string | null = null;
+  if (errorCode === "tenant_not_found") {
+    errorMessage = "Tenant not found. Please refresh and try again.";
+  } else if (errorCode === "save_failed") {
+    errorMessage =
+      "Something went wrong while saving careersite settings. Please try again.";
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 lg:px-0">
@@ -70,6 +90,18 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
           <span className="font-medium">Jobs on ThinkATS</span>.
         </p>
       </header>
+
+      {/* Alerts */}
+      {updated && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+          Career site settings updated successfully.
+        </div>
+      )}
+      {errorMessage && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+          {errorMessage}
+        </div>
+      )}
 
       {/* Public URLs & visibility */}
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -173,7 +205,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
       {/* Branding & content form */}
       <form
         method="POST"
-        action={`/ats/tenants/${tenantId}/careersite`}
+        action={`/api/ats/tenants/${tenantId}/careersite`}
         className="space-y-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
       >
         <div className="space-y-1">
@@ -230,7 +262,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
         </div>
 
         {/* Brand colours & logo */}
-        <div className="grid gap-4 sm:grid-cols-2 border-t border-slate-100 pt-4">
+        <div className="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label
               htmlFor="primaryColorHex"
@@ -320,7 +352,7 @@ export default async function TenantCareerSitePage({ params }: PageProps) {
             <input
               id="logoUrl"
               name="logoUrl"
-              defaultValue={settings?.logoUrl ?? ""}
+              defaultValue={logoUrl ?? ""}
               placeholder="https://.../company-logo.png"
               className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
             />
