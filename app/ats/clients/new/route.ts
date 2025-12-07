@@ -42,12 +42,53 @@ async function uploadLogoToStorage(file: any, folder: "client-logos") {
 
 export async function POST(req: Request) {
   const formData = await req.formData();
+
   const nameRaw = formData.get("name");
   const tenantIdRaw = formData.get("tenantId");
+
+  const websiteRaw = formData.get("website");
+  const industryRaw = formData.get("industry");
+  const logoUrlRaw = formData.get("logoUrl");
+
+  const careersiteEnabledRaw = formData.get("careersiteEnabled");
+  const careersiteSlugRaw = formData.get("careersiteSlug");
+  const careersiteCustomDomainRaw = formData.get("careersiteCustomDomain");
+  const notesRaw = formData.get("notes");
+
   const logoFile = formData.get("logo") as any;
 
   const name = typeof nameRaw === "string" ? nameRaw.trim() : "";
-  const tenantId = typeof tenantIdRaw === "string" ? tenantIdRaw.trim() : "";
+  const tenantId =
+    typeof tenantIdRaw === "string" ? tenantIdRaw.trim() : "";
+
+  const website =
+    typeof websiteRaw === "string" && websiteRaw.trim().length > 0
+      ? websiteRaw.trim()
+      : null;
+  const industry =
+    typeof industryRaw === "string" && industryRaw.trim().length > 0
+      ? industryRaw.trim()
+      : null;
+  const logoUrlText =
+    typeof logoUrlRaw === "string" && logoUrlRaw.trim().length > 0
+      ? logoUrlRaw.trim()
+      : "";
+
+  const careersiteEnabled = careersiteEnabledRaw != null;
+  const careersiteSlug =
+    typeof careersiteSlugRaw === "string" &&
+    careersiteSlugRaw.trim().length > 0
+      ? careersiteSlugRaw.trim()
+      : null;
+  const careersiteCustomDomain =
+    typeof careersiteCustomDomainRaw === "string" &&
+    careersiteCustomDomainRaw.trim().length > 0
+      ? careersiteCustomDomainRaw.trim()
+      : null;
+  const notes =
+    typeof notesRaw === "string" && notesRaw.trim().length > 0
+      ? notesRaw.trim()
+      : null;
 
   if (!name) {
     const url = new URL("/ats/clients", req.url);
@@ -62,9 +103,16 @@ export async function POST(req: Request) {
     return NextResponse.redirect(url, 303);
   }
 
-  let logoUrl: string | null = null;
+  let finalLogoUrl: string | null = null;
+
+  // Prefer uploaded file if present
   if (logoFile && typeof (logoFile as any).arrayBuffer === "function") {
-    logoUrl = await uploadLogoToStorage(logoFile, "client-logos");
+    finalLogoUrl = await uploadLogoToStorage(logoFile, "client-logos");
+  }
+
+  // Otherwise fall back to plain URL input
+  if (!finalLogoUrl && logoUrlText) {
+    finalLogoUrl = logoUrlText;
   }
 
   try {
@@ -72,7 +120,13 @@ export async function POST(req: Request) {
       data: {
         name,
         tenantId,
-        ...(logoUrl ? { logoUrl } : {}),
+        website,
+        industry,
+        logoUrl: finalLogoUrl,
+        careersiteEnabled,
+        careersiteSlug,
+        careersiteCustomDomain,
+        notes,
       },
     });
 
