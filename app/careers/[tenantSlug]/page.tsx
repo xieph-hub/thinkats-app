@@ -1,53 +1,34 @@
 // app/careers/[tenantSlug]/page.tsx
-import type { Metadata } from "next";
-import { redirect, notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getBaseDomain } from "@/lib/tenantHost";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Careers | ThinkATS",
-  description: "Company careers sites powered by ThinkATS.",
-};
-
-type PageProps = {
+type TenantCareersRedirectProps = {
   params: { tenantSlug: string };
 };
 
-export default async function CareersSlugRedirectPage({ params }: PageProps) {
-  const slug = decodeURIComponent(params.tenantSlug || "").trim();
-
-  if (!slug) {
-    notFound();
+function getBaseDomain(): string {
+  // Optional: you can set NEXT_PUBLIC_BASE_DOMAIN="thinkats.com"
+  // to avoid parsing the URL.
+  const explicit = process.env.NEXT_PUBLIC_BASE_DOMAIN;
+  if (explicit) {
+    return explicit.replace(/^www\./, "");
   }
 
-  // Only redirect if there is a PUBLIC careers site for an ACTIVE tenant
-  const settings = await prisma.careerSiteSettings.findFirst({
-    where: {
-      isPublic: true,
-      tenant: {
-        slug,
-        status: "active",
-      },
-    },
-    select: {
-      tenant: {
-        select: {
-          slug: true,
-        },
-      },
-    },
-  });
-
-  const tenantSlug = settings?.tenant?.slug;
-
-  if (!tenantSlug) {
-    notFound();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://thinkats.com";
+  try {
+    const url = new URL(siteUrl);
+    return url.hostname.replace(/^www\./, "");
+  } catch {
+    return "thinkats.com";
   }
+}
 
+export default function TenantCareersRedirect({
+  params,
+}: TenantCareersRedirectProps) {
   const baseDomain = getBaseDomain();
-  const target = `https://${tenantSlug}.${baseDomain}/careers`;
+  const slug = decodeURIComponent(params.tenantSlug);
 
-  redirect(target);
+  // e.g. https://thinkats.com/careers/resourcin
+  //  → https://resourcin.thinkats.com/careers
+  redirect(`https://${slug}.${baseDomain}/careers`);
 }
