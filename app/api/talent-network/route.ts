@@ -117,6 +117,7 @@ export async function POST(req: Request) {
       const name = (raw.name || "").trim();
       if (!name) continue;
 
+      const normalizedName = normaliseSkillName(name);
       const skillSlug = slugifySkillName(name);
 
       // Prefer a tenant-local skill; fall back to global skill (tenantId = null)
@@ -125,11 +126,11 @@ export async function POST(req: Request) {
           OR: [
             {
               tenantId: tenant.id,
-              slug: skillSlug,
+              normalizedName,
             },
             {
               tenantId: null,
-              slug: skillSlug,
+              normalizedName,
             },
           ],
         },
@@ -140,6 +141,7 @@ export async function POST(req: Request) {
         skill = await prisma.skill.create({
           data: {
             name,
+            normalizedName,
             slug: skillSlug,
             category: null,
             description: null,
