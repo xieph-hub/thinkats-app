@@ -38,7 +38,7 @@ type PipelineApp = {
 type Props = {
   jobId: string;
   applications: PipelineApp[];
-  stageOptions: string[]; // from server: ["APPLIED", "SCREENING", ...]
+  stageOptions: string[];
 };
 
 function tierColour(tier: string | null | undefined) {
@@ -55,11 +55,11 @@ function tierColour(tier: string | null | undefined) {
 }
 
 function scoreColorHex(score: number | null | undefined) {
-  if (score == null) return "#64748b"; // slate-500
-  if (score >= 80) return "#16a34a"; // emerald-600
-  if (score >= 65) return "#2563eb"; // blue-600
-  if (score >= 50) return "#f59e0b"; // amber-500
-  return "#475569"; // slate-600
+  if (score == null) return "#64748b";
+  if (score >= 80) return "#16a34a";
+  if (score >= 65) return "#2563eb";
+  if (score >= 50) return "#f59e0b";
+  return "#475569";
 }
 
 function formatDate(iso: string | null | undefined) {
@@ -88,7 +88,6 @@ function ScoreRing({ score, title }: { score: number | null; title?: string }) {
       aria-label={score != null ? `Match score ${score}` : "Match score not set"}
     >
       <svg viewBox="0 0 40 40" className="h-11 w-11">
-        {/* track */}
         <circle
           cx="20"
           cy="20"
@@ -97,7 +96,6 @@ function ScoreRing({ score, title }: { score: number | null; title?: string }) {
           stroke="#e5e7eb"
           strokeWidth="4"
         />
-        {/* progress */}
         <circle
           cx="20"
           cy="20"
@@ -207,6 +205,7 @@ export default function JobPipelineList({
     );
   }
 
+  // Bulk toolbar: call the backend exactly as defined in route.ts
   async function runBulkUpdate() {
     if (!anySelected) return;
     if (!bulkStage && !bulkStatus) return;
@@ -214,29 +213,70 @@ export default function JobPipelineList({
     setIsSubmittingBulk(true);
 
     try {
-      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          applicationIds: selectedIds,
-          nextStage: bulkStage || null,
-          nextStatus: bulkStatus || null,
-        }),
-      });
+      // 1) Move stage, if requested
+      if (bulkStage) {
+        const resStage = await fetch(
+          `/api/ats/jobs/${jobId}/pipeline/bulk`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jobId,
+              applicationIds: selectedIds,
+              action: "move_stage",
+              stage: bulkStage.toUpperCase(),
+            }),
+          },
+        );
 
-      if (!res.ok) {
-        console.error("Bulk update failed", await res.text());
-        alert("Failed to apply bulk update. Please try again.");
-        return;
+        if (!resStage.ok) {
+          console.error(
+            "Bulk move_stage failed",
+            resStage.status,
+            await resStage.text(),
+          );
+          alert("Failed to update stage for selected candidates.");
+          setIsSubmittingBulk(false);
+          return;
+        }
       }
 
+      // 2) Set status, if requested
+      if (bulkStatus) {
+        const resStatus = await fetch(
+          `/api/ats/jobs/${jobId}/pipeline/bulk`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jobId,
+              applicationIds: selectedIds,
+              action: "set_status",
+              status: bulkStatus.toUpperCase(),
+            }),
+          },
+        );
+
+        if (!resStatus.ok) {
+          console.error(
+            "Bulk set_status failed",
+            resStatus.status,
+            await resStatus.text(),
+          );
+          alert("Failed to update status for selected candidates.");
+          setIsSubmittingBulk(false);
+          return;
+        }
+      }
+
+      // If both calls succeeded, update UI optimistically
       setRows((prev) =>
         prev.map((row) => {
           if (!selectedIds.includes(row.id)) return row;
           return {
             ...row,
-            stage: bulkStage || row.stage,
-            status: bulkStatus || row.status,
+            stage: bulkStage ? bulkStage.toUpperCase() : row.stage,
+            status: bulkStatus ? bulkStatus.toUpperCase() : row.status,
           };
         }),
       );
@@ -251,33 +291,36 @@ export default function JobPipelineList({
     }
   }
 
-  // Inline status update — matches the bulk API, but for a single id.
+  // Inline status: single-item version of the same API
   async function handleInlineStatusChange(
     applicationId: string,
     nextStatus: string,
   ) {
+    const normalised = nextStatus.toUpperCase();
     const originalStatus =
       rows.find((row) => row.id === applicationId)?.status ?? null;
 
     // Optimistic UI
     setRows((prev) =>
       prev.map((row) =>
-        row.id === applicationId ? { ...row, status: nextStatus } : row,
+        row.id === applicationId ? { ...row, status: normalised } : row,
       ),
     );
 
     try {
-      const res = await fetch(`/api/ats/jobs/${jobId}/pipeline/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // single-item "bulk"
-          applicationIds: [applicationId],
-          action: "SET_STATUS",
-          status: nextStatus,
-          nextStatus: nextStatus,
-        }),
-      });
+      const res = await fetch(
+        `/api/ats/jobs/${jobId}/pipeline/bulk`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId,
+            applicationIds: [applicationId],
+            action: "set_status",
+            status: normalised,
+          }),
+        },
+      );
 
       if (!res.ok) {
         const text = await res.text();
@@ -297,7 +340,6 @@ export default function JobPipelineList({
     } catch (err) {
       console.error(err);
       alert("Something went wrong while updating status.");
-
       // revert
       setRows((prev) =>
         prev.map((row) =>
