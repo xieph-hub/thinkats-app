@@ -1,173 +1,202 @@
 // app/api/ats/tenants/[tenantId]/users/invite/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
-import { resend } from "@/lib/resendClient";
+import { Resend } from "resend";
+import { randomBytes, createHash } from "crypto";
 
-export const runtime = "nodejs";
+const resend = new Resend(process.env.RESEND_API_KEY);
+const APP_NAME = "ThinkATS";
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://www.thinkats.com";
-
-const RESEND_FROM_EMAIL =
-  process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@mail.thinkats.com>";
-
-function normaliseRole(raw: FormDataEntryValue | null): "OWNER" | "ADMIN" | "RECRUITER" | "VIEWER" {
-  const s = (raw || "").toString().trim().toUpperCase();
-  if (s === "OWNER" || s === "ADMIN" || s === "RECRUITER" || s === "VIEWER") {
-    return s;
-  }
-  return "RECRUITER";
-}
+type RouteContext = {
+  params: { tenantId: string };
+};
 
 function hashToken(token: string): string {
-  return crypto.createHash("sha256").update(token).digest("hex");
+  return createHash("sha256").update(token).digest("hex");
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { tenantId: string } },
-) {
-  const tenantId = params.tenantId;
-
-  const supabase = createSupabaseRouteClient();
-  const {
-    data: { user: supaUser },
-    error: supaError,
-  } = await supabase.auth.getUser();
-
-  if (supaError || !supaUser || !supaUser.email) {
-    return NextResponse.json(
-      { ok: false, error: "unauthenticated" },
-      { status: 401 },
-    );
-  }
-
-  const actingEmail = supaUser.email.toLowerCase();
-
-  // Load acting app user
-  const actingUser = await prisma.user.findUnique({
-    where: { email: actingEmail },
-  });
-
-  if (!actingUser) {
-    return NextResponse.json(
-      { ok: false, error: "no_app_user" },
-      { status: 403 },
-    );
-  }
-
-  // Load tenant
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-    },
-  });
-
-  if (!tenant) {
-    const url = new URL(`/ats/tenants`, req.url);
-    url.searchParams.set("error", "tenant_not_found");
-    return NextResponse.redirect(url, 303);
-  }
-
-  // Permission: superadmin OR OWNER/ADMIN of this tenant
-  let isAllowed = false;
-
-  if (actingUser.isSuperAdmin) {
-    isAllowed = true;
-  } else {
-    const membership = await prisma.tenantMembership.findFirst({
-      where: {
-        tenantId,
-        userId: actingUser.id,
-        status: "ACTIVE",
-      },
-      select: { role: true },
-    });
-
-    if (membership && (membership.role === "OWNER" || membership.role === "ADMIN")) {
-      isAllowed = true;
-    }
-  }
-
-  if (!isAllowed) {
-    return NextResponse.json(
-      { ok: false, error: "forbidden" },
-      { status: 403 },
-    );
-  }
-
-  const formData = await req.formData();
-  const emailRaw = formData.get("email");
-  const fullNameRaw = formData.get("fullName");
-  const roleRaw = formData.get("role");
-
-  const invitedEmail = (emailRaw || "").toString().trim().toLowerCase();
-  const fullName = (fullNameRaw || "").toString().trim();
-  const role = normaliseRole(roleRaw);
-
-  if (!invitedEmail) {
-    const url = new URL(`/ats/tenants/${tenantId}/users`, req.url);
-    url.searchParams.set("error", "missing_email");
-    return NextResponse.redirect(url, 303);
-  }
-
+export async function POST(req: NextRequest, { params }: RouteContext) {
   try {
-    // Upsert user
-    let invitedUser = await prisma.user.findUnique({
-      where: { email: invitedEmail },
-    });
-
-    if (!invitedUser) {
-      invitedUser = await prisma.user.create({
-        data: {
-          email: invitedEmail,
-          fullName: fullName || null,
-          isSuperAdmin: false,
-        },
-      });
-    } else if (fullName && !invitedUser.fullName) {
-      invitedUser = await prisma.user.update({
-        where: { id: invitedUser.id },
-        data: { fullName },
-      });
+    const tenantId = params.tenantId;
+    if (!tenantId) {
+      return NextResponse.json(
+        { ok: false, error: "missing_tenant_id" },
+        { status: 400 },
+      );
     }
 
-    // Upsert membership
-    await prisma.tenantMembership.upsert({
-      where: {
-        tenantId_userId: {
-          tenantId,
-          userId: invitedUser.id,
-        },
-      },
-      create: {
-        tenantId,
-        userId: invitedUser.id,
-        role,
-        status: "INVITED",
-        invitedByUserId: actingUser.id,
-      },
-      update: {
-        role,
-        status: "INVITED",
-        invitedByUserId: actingUser.id,
+    // -------------------------------------------------------------------
+    // 1) Who is acting?
+    // -------------------------------------------------------------------
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user: supaUser },
+      error: supaError,
+    } = await supabase.auth.getUser();
+
+    if (supaError || !supaUser || !supaUser.email) {
+      return NextResponse.json(
+        { ok: false, error: "unauthenticated" },
+        { status: 401 },
+      );
+    }
+
+    const actingEmail = supaUser.email.toLowerCase();
+
+    const actingUser = await prisma.user.findUnique({
+      where: { email: actingEmail },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        globalRole: true,
+        isActive: true,
       },
     });
 
-    // Create invitation token
-    const rawToken = crypto.randomBytes(32).toString("hex");
+    if (!actingUser || !actingUser.isActive) {
+      return NextResponse.json(
+        { ok: false, error: "user_not_found" },
+        { status: 401 },
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // 2) Check tenant exists
+    // -------------------------------------------------------------------
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    if (!tenant) {
+      return NextResponse.json(
+        { ok: false, error: "tenant_not_found" },
+        { status: 404 },
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // 3) Authorisation: SUPER_ADMIN or tenant owner/admin
+    // -------------------------------------------------------------------
+    const isSuperAdmin = actingUser.globalRole === "SUPER_ADMIN";
+    let isAllowed = false;
+
+    if (isSuperAdmin) {
+      isAllowed = true;
+    } else {
+      const membership = await prisma.userTenantRole.findFirst({
+        where: {
+          userId: actingUser.id,
+          tenantId,
+          role: { in: ["owner", "admin"] },
+        },
+      });
+
+      if (membership) {
+        isAllowed = true;
+      }
+    }
+
+    if (!isAllowed) {
+      return NextResponse.json(
+        { ok: false, error: "forbidden" },
+        { status: 403 },
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // 4) Parse request body (JSON only for now)
+    // -------------------------------------------------------------------
+    const body = await req.json().catch(() => null);
+
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { ok: false, error: "invalid_body" },
+        { status: 400 },
+      );
+    }
+
+    const rawEmail = (body as any).email as string | undefined;
+    const rawRole = (body as any).role as string | undefined;
+
+    if (!rawEmail || !rawEmail.trim()) {
+      return NextResponse.json(
+        { ok: false, error: "invalid_email" },
+        { status: 400 },
+      );
+    }
+
+    const invitedEmail = rawEmail.trim().toLowerCase();
+    const role = (rawRole || "admin").trim() || "admin";
+
+    if (invitedEmail === actingEmail) {
+      return NextResponse.json(
+        { ok: false, error: "cannot_invite_self" },
+        { status: 400 },
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // 5) Check if user already exists + already a member
+    // -------------------------------------------------------------------
+    const existingUser = await prisma.user.findUnique({
+      where: { email: invitedEmail },
+      select: { id: true },
+    });
+
+    if (existingUser) {
+      const existingMembership = await prisma.userTenantRole.findFirst({
+        where: {
+          userId: existingUser.id,
+          tenantId,
+        },
+      });
+
+      if (existingMembership) {
+        return NextResponse.json(
+          { ok: false, error: "already_member" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // 6) Check for existing active invite
+    // -------------------------------------------------------------------
+    const now = new Date();
+
+    const activeInvite = await prisma.tenantInvitation.findFirst({
+      where: {
+        tenantId,
+        email: invitedEmail,
+        usedAt: null,
+        expiresAt: { gt: now },
+      },
+    });
+
+    if (activeInvite) {
+      return NextResponse.json(
+        { ok: false, error: "invite_already_sent" },
+        { status: 400 },
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // 7) Create new invite (+ hashed token)
+    // -------------------------------------------------------------------
+    const rawToken = randomBytes(32).toString("hex");
     const tokenHash = hashToken(rawToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     await prisma.tenantInvitation.create({
       data: {
         tenantId,
-        userId: invitedUser.id,
+        userId: existingUser?.id ?? null,
         email: invitedEmail,
         role,
         tokenHash,
@@ -175,47 +204,48 @@ export async function POST(
       },
     });
 
-    const inviteUrl = `${SITE_URL}/login?inviteToken=${encodeURIComponent(
+    // -------------------------------------------------------------------
+    // 8) Send email via Resend (if configured)
+    // -------------------------------------------------------------------
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.thinkats.com";
+
+    const inviteUrl = `${baseUrl}/login?inviteToken=${encodeURIComponent(
       rawToken,
     )}&tenantId=${encodeURIComponent(tenantId)}`;
 
-    // Send invite email
-    const tenantName = tenant.name || tenant.slug || "a ThinkATS workspace";
+    if (process.env.RESEND_API_KEY) {
+      await resend.emails.send({
+        from: `ThinkATS <hello@thinkats.com>`,
+        to: [invitedEmail],
+        subject: `You've been invited to ${tenant.name} on ThinkATS`,
+        html: `
+          <p>Hi,</p>
+          <p>${
+            actingUser.fullName ?? "A workspace admin"
+          } has invited you to join the <strong>${tenant.name}</strong> ATS workspace on <strong>${APP_NAME}</strong>.</p>
+          <p>Click the button below to accept the invitation and sign in:</p>
+          <p>
+            <a href="${inviteUrl}" style="display:inline-block;padding:10px 16px;border-radius:999px;background-color:#172965;color:#ffffff;text-decoration:none;font-weight:600;">
+              Accept invitation
+            </a>
+          </p>
+          <p>Or paste this link into your browser:</p>
+          <p><a href="${inviteUrl}">${inviteUrl}</a></p>
+          <p>This link will expire in 7 days.</p>
+        `,
+      });
+    }
 
-    const html = `
-      <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #0f172a;">
-        <p>Hi${fullName ? ` ${fullName}` : ""},</p>
-        <p><strong>${tenantName}</strong> has invited you to collaborate on their ATS workspace on ThinkATS.</p>
-        <p>You can accept your invitation and sign in using the button below:</p>
-        <p>
-          <a href="${inviteUrl}"
-             style="display:inline-block;padding:10px 18px;border-radius:999px;background:#172965;color:#ffffff;font-weight:600;text-decoration:none;">
-            Accept invitation
-          </a>
-        </p>
-        <p>If the button doesn't work, copy and paste this link into your browser:</p>
-        <p style="word-break:break-all;"><a href="${inviteUrl}">${inviteUrl}</a></p>
-        <p style="color:#6b7280;font-size:12px;margin-top:24px;">
-          This link will expire in 7 days. If you weren't expecting this, you can safely ignore this email.
-        </p>
-      </div>
-    `.trim();
-
-    await resend.emails.send({
-      from: RESEND_FROM_EMAIL,
-      to: invitedEmail,
-      subject: `You’ve been invited to ThinkATS – ${tenantName}`,
-      html,
-    });
-
-    const url = new URL(`/ats/tenants/${tenantId}/users`, req.url);
-    url.searchParams.set("invited", "1");
-    url.searchParams.set("email", invitedEmail);
-    return NextResponse.redirect(url, 303);
+    // -------------------------------------------------------------------
+    // 9) Done
+    // -------------------------------------------------------------------
+    return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("Error inviting tenant user:", err);
-    const url = new URL(`/ats/tenants/${tenantId}/users`, req.url);
-    url.searchParams.set("error", "invite_failed");
-    return NextResponse.redirect(url, 303);
+    console.error("Invite user error", err);
+    return NextResponse.json(
+      { ok: false, error: "unexpected_error" },
+      { status: 500 },
+    );
   }
 }
