@@ -69,35 +69,27 @@ export default async function TenantCareersPage({
     notFound();
   }
 
-  // 2) Load careersite settings (branding, copy, marketplace flag, etc.)
+  // 2) Load careersite settings
   const settings = await prisma.careerSiteSettings.findFirst({
     where: { tenantId: tenant.id },
+    orderBy: { createdAt: "asc" },
   });
 
-  // Respect the "Careers page is public" toggle from /ats/tenants/[id]/careersite
+  // Respect "Careers page is public" toggle
   const isPublic = settings?.isPublic ?? true;
   if (!isPublic) {
     notFound();
   }
 
-  // 3) Brand customisation — safe even if these fields don't exist yet.
-  const settingsAny = settings as any;
+  // Brand configuration from settings (with ThinkATS defaults)
+  const primaryColor = settings?.primaryColorHex || "#172965";
+  const accentColor = settings?.accentColorHex || "#FFC000";
+  const heroBackground = settings?.heroBackgroundHex || "#FFFFFF";
 
-  const primaryColor: string =
-    settingsAny?.primaryColorHex || "#172965"; // ThinkATS deep blue
-  const accentColor: string =
-    settingsAny?.accentColorHex || "#FFC000"; // ThinkATS yellow
-  const heroBackground: string =
-    settingsAny?.heroBackgroundHex || "#ffffff";
-
-  // Prefer a careersite-specific logo, then tenant-level logo, then an initial
   const logoUrl: string | null =
-    (settingsAny?.logoUrl as string | undefined) ||
-    (tenant.logoUrl as string | null) ||
-    null;
+    settings?.logoUrl || tenant.logoUrl || null;
 
-  // 4) Load this tenant's public, open jobs (careers site always shows them
-  //    if they are public + open, regardless of marketplace flag)
+  // 3) Jobs for this tenant (open + public)
   const jobs = await prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -122,6 +114,8 @@ export default async function TenantCareersPage({
     settings?.aboutHtml ||
     `<p>We use ThinkATS to manage our hiring process. Every application is reviewed by a real hiring team member, and you can expect a structured, respectful interview experience.</p>`;
 
+  const companyLabel = tenant.name || tenant.slug || "Company";
+
   // Tracking source for job detail (so /jobs/[id] knows it came from this careers page)
   const trackingSource = `CAREERS_${(tenant.slug || tenant.id).toUpperCase()}`;
 
@@ -133,8 +127,6 @@ export default async function TenantCareersPage({
     const connector = basePath.includes("?") ? "&" : "?";
     return `${basePath}${connector}src=${encodeURIComponent(trackingSource)}`;
   }
-
-  const companyLabel = tenant.name || tenant.slug || "Company";
 
   return (
     <div
@@ -299,7 +291,7 @@ export default async function TenantCareersPage({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-slate-900">
+                      <h2 className="truncate text-sm font-semibold text-slate-900">
                         {job.title}
                       </h2>
                       <span
