@@ -1,16 +1,30 @@
 // app/ats/page.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 import { prisma } from "@/lib/prisma";
 import { ensureOtpVerified } from "@/lib/requireOtp";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "ThinkATS | Workspaces",
-  description: "Switch between ATS workspaces you have access to.",
+  title: "ATS workspaces | ThinkATS",
+  description:
+    "Choose which ATS workspace to work in, or see how to get access.",
 };
+
+function roleLabel(raw: string | null | undefined): string {
+  if (!raw) return "Member";
+  const r = raw.toLowerCase();
+  if (r === "owner") return "Owner";
+  if (r === "admin") return "Admin";
+  if (r === "recruiter") return "Recruiter";
+  if (r === "hiring_manager") return "Hiring manager";
+  if (r === "viewer") return "Viewer";
+  return r.charAt(0).toUpperCase() + r.slice(1);
+}
 
 function formatDate(value: any): string {
   if (!value) return "";
@@ -26,140 +40,247 @@ function formatDate(value: any): string {
   });
 }
 
-function roleLabel(raw: string | null | undefined): string {
-  if (!raw) return "Member";
-  const r = raw.toLowerCase();
-  if (r === "owner") return "Owner";
-  if (r === "admin") return "Admin";
-  if (r === "recruiter") return "Recruiter";
-  if (r === "hiring_manager") return "Hiring manager";
-  return r.charAt(0).toUpperCase() + r.slice(1);
+async function getCurrentAppUser() {
+  const cookieStore = cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        // For SSR we only need read access here
+        set() {},
+        remove() {},
+      },
+    },
+  );
+
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user || !data.user.email) {
+    return null;
+  }
+
+  const email = data.user.email.toLowerCase();
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      globalRole: true,
+    },
+  });
+
+  return user;
 }
 
 export default async function AtsLandingPage() {
-  // Enforce OTP verification before letting someone into ATS.
+  // Gate behind OTP like other ATS admin surfaces
   await ensureOtpVerified("/ats");
 
-  // Map Supabase user -> app-level user
-  const supabase = createSupabaseRouteClient();
-  const {
-    data: { user: supaUser },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !supaUser || !supaUser.email) {
-    redirect("/login?next=/ats");
-  }
-
-  const email = supaUser.email.toLowerCase();
-
-  let appUser = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, fullName: true },
-  });
+  const appUser = await getCurrentAppUser();
 
   if (!appUser) {
-    appUser = await prisma.user.create({
-      data: {
-        email,
-        fullName:
-          (supaUser.user_metadata as any)?.full_name ??
-          supaUser.email.split("@")[0] ??
-          null,
-        globalRole: "USER",
-        isActive: true,
-      },
-      select: { id: true, fullName: true },
-    });
+    // Safety net: if for some reason there is no app-level User row
+    redirect("/login?returnTo=/ats");
   }
 
   const memberships = await prisma.userTenantRole.findMany({
     where: { userId: appUser.id },
     include: {
-      tenant: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          plan: true,
-          createdAt: true,
-          status: true,
-        },
-      },
+      tenant: true,
     },
     orderBy: { createdAt: "asc" },
   });
 
-  // 0 workspaces – helpful empty state
-  if (memberships.length === 0) {
+  const count = memberships.length;
+
+  // CASE 1: Exactly one workspace -> drop them straight into ATS jobs
+  if (count === 1) {
+    const only = memberships[0];
+    return redirect(
+      `/ats/jobs?tenantId=${encodeURIComponent(only.tenantId)}`,
+    );
+  }
+
+  // CASE 2: No workspace yet
+  if (count === 0) {
+    // SUPER_ADMIN can go to the full tenants admin
+    if (appUser.globalRole === "SUPER_ADMIN") {
+      return redirect("/ats/tenants");
+    }
+
     return (
-      <div className="mx-auto flex min-h-[60vh] max-w-3xl flex-col justify-center px-4 py-10 text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS · Workspaces
-        </p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-          No workspaces yet
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Your account is active, but you don&apos;t belong to any ATS
-          workspace yet. Ask your team to send you an invitation, or contact
-          ThinkATS support to get a workspace created.
-        </p>
-        <div className="mt-6 flex justify-center">
-          <a
-            href="mailto:hello@thinkats.com"
-            className="inline-flex items-center rounded-full bg-[#172965] px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#101d4a]"
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-10 lg:px-0">
+        <header className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            ATS
+          </p>
+          <h1 className="text-2xl font-semibold text-slate-900">
+            No ATS workspace yet
+          </h1>
+          <p className="text-xs text-slate-600">
+            Your ThinkATS account is active, but you don&apos;t have access to
+            any ATS workspaces yet.
+          </p>
+        </header>
+
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 text-xs shadow-sm">
+          <p className="text-[11px] text-slate-600">
+            To start using the ATS, you&apos;ll need to be added to a workspace
+            by an owner or admin.
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-[11px] text-slate-600">
+            <li>
+              Ask your team to invite{" "}
+              <span className="font-mono text-[11px]">
+                {appUser.email ?? "your email"}
+              </span>{" "}
+              to the correct workspace.
+            </li>
+            <li>
+              If you think this is a mistake, contact your workspace admin or
+              reach out to{" "}
+              <a
+                href="mailto:hello@thinkats.com"
+                className="font-medium text-[#172965] underline-offset-2 hover:underline"
+              >
+                hello@thinkats.com
+              </a>
+              .
+            </li>
+          </ul>
+
+          <div className="pt-2 text-[11px] text-slate-500">
+            <span className="font-medium text-slate-700">Tip:</span> Once
+            you&apos;re invited, email links will take you straight into the
+            correct workspace.
+          </div>
+        </section>
+
+        <div className="pt-2 text-[11px]">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800"
           >
-            Contact support
-          </a>
+            <span className="text-xs">←</span>
+            Back to home
+          </Link>
         </div>
       </div>
     );
   }
 
-  // 1 workspace – go straight in
-  if (memberships.length === 1) {
-    const only = memberships[0];
-    return redirect(`/ats/tenants/${only.tenantId}/jobs`);
-  }
-
-  // Multiple workspaces – chooser
+  // CASE 3: Multiple workspaces -> show a neat workspace switcher
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <header className="mb-6 border-b border-slate-200 pb-4">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-10 lg:px-0">
+      <header className="space-y-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS · Workspaces
+          ATS
         </p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+        <h1 className="text-2xl font-semibold text-slate-900">
           Choose a workspace
         </h1>
-        <p className="mt-1 text-xs text-slate-600">
-          Your account has access to multiple ATS workspaces. Pick one to
-          continue.
+        <p className="text-xs text-slate-600">
+          Your account has access to multiple ATS workspaces. Pick where you
+          want to work.
         </p>
       </header>
 
-      <div className="space-y-3">
-        {memberships.map((m) => (
-          <a
-            key={m.id}
-            href={`/ats/tenants/${m.tenantId}/jobs`}
-            className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm transition hover:border-[#172965] hover:shadow-md"
-          >
-            <div>
-              <p className="font-semibold text-slate-900">
-                {m.tenant?.name ?? "Workspace"}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                Role: {roleLabel(m.role)} · Since{" "}
-                {formatDate(m.tenant?.createdAt ?? null)}
-              </p>
-            </div>
-            <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-600">
-              Open workspace →
-            </span>
-          </a>
-        ))}
+      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-xs shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-slate-500">
+              Workspaces
+            </p>
+            <p className="text-[11px] text-slate-600">
+              You have access to {count} ATS workspace
+              {count === 1 ? "" : "s"}.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-2 grid gap-3 md:grid-cols-2">
+          {memberships.map((membership) => {
+            const t = membership.tenant;
+            if (!t) return null;
+
+            const slug = t.slug;
+            const status = (t.status || "").toLowerCase();
+            const isActive = status === "active";
+
+            return (
+              <Link
+                key={membership.id}
+                href={`/ats/jobs?tenantId=${encodeURIComponent(
+                  membership.tenantId,
+                )}`}
+                className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-slate-50/60 p-4 transition hover:border-[#172965] hover:bg-white hover:shadow-sm"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      {t.name}
+                    </h2>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${
+                        isActive
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          : "bg-slate-50 text-slate-500 ring-slate-200"
+                      }`}
+                    >
+                      {isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    Role:{" "}
+                    <span className="font-medium">
+                      {roleLabel(membership.role)}
+                    </span>
+                    {membership.isPrimary && (
+                      <span className="ml-2 rounded-full bg-slate-900/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                        Primary
+                      </span>
+                    )}
+                  </p>
+
+                  {slug && (
+                    <p className="text-[11px] text-slate-500">
+                      Slug:{" "}
+                      <code className="rounded bg-slate-100 px-1 py-0.5">
+                        {slug}
+                      </code>
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Joined {formatDate(membership.createdAt)}</span>
+                  <span className="inline-flex items-center gap-1 text-[#172965] group-hover:text-[#0f193e]">
+                    Open workspace
+                    <span className="text-[9px]">↗</span>
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="pt-2 text-[11px]">
+        <Link
+          href="/ats/tenants"
+          className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800"
+        >
+          <span className="text-xs">⚙</span>
+          Manage all workspaces
+        </Link>
       </div>
     </div>
   );
