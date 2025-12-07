@@ -212,7 +212,7 @@ export default async function TenantUsersPage({ params }: PageProps) {
                   .split(" ")
                   .map((part: string) => part.charAt(0).toUpperCase())
                   .slice(0, 2)
-                  .join("") || "?";
+                  .join("") || "?"
 
               return (
                 <div
@@ -301,7 +301,9 @@ export default async function TenantUsersPage({ params }: PageProps) {
                 {invitations.map((inv) => {
                   const isUsed = Boolean(inv.usedAt);
                   const isExpired =
-                    !isUsed && inv.expiresAt && new Date(inv.expiresAt) < new Date();
+                    !isUsed &&
+                    inv.expiresAt &&
+                    new Date(inv.expiresAt as any) < new Date();
 
                   return (
                     <tr key={inv.id}>
