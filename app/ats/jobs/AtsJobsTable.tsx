@@ -17,7 +17,7 @@ export type AtsJobRow = {
   applicationsCount: number;
   createdAt: string; // ISO string from server
 
-  // extra fields you’re already shaping in page.tsx
+  // extra metadata (from Prisma job model)
   shortDescription: string | null;
   overview: string | null;
   department: string | null;
@@ -99,6 +99,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
 
     try {
       setIsSubmitting(true);
+
       const res = await fetch("/api/ats/jobs/bulk-actions", {
         method: "POST",
         headers: {
@@ -110,23 +111,20 @@ export default function AtsJobsTable({ initialJobs }: Props) {
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.ok) {
         throw new Error(data?.error || "Failed to run bulk action.");
       }
 
-      const data = await res.json();
-
-      // If action is delete
       if (bulkAction === "delete") {
         const deletedIds = new Set<string>(data.deletedIds || []);
         setJobs((prev) => prev.filter((j) => !deletedIds.has(j.id)));
         setSelectedIds(new Set());
-        setSuccess("Selected jobs deleted.");
+        setSuccess("Selected jobs removed from view.");
         return;
       }
 
-      // Otherwise, update status/visibility
       const updatedList: { id: string; status: string; visibility: string }[] =
         data.updatedJobs || [];
 
@@ -199,13 +197,13 @@ export default function AtsJobsTable({ initialJobs }: Props) {
           <select
             value={bulkAction}
             onChange={(e) => setBulkAction(e.target.value)}
-            className="h-8 w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+            className="h-8 w-[180px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
           >
             <option value="">Select action…</option>
             <option value="publish">Publish (open + public)</option>
-            <option value="unpublish">Unpublish</option>
+            <option value="unpublish">Unpublish (keep internal)</option>
             <option value="close">Mark as closed</option>
-            <option value="delete">Delete</option>
+            <option value="delete">Remove from view (soft delete)</option>
           </select>
           <button
             type="button"
@@ -230,15 +228,9 @@ export default function AtsJobsTable({ initialJobs }: Props) {
       {/* Feedback strip */}
       {(error || success) && (
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px]">
-          {error && (
-            <p className="text-[11px] text-rose-600">
-              {error}
-            </p>
-          )}
+          {error && <p className="text-[11px] text-rose-600">{error}</p>}
           {success && !error && (
-            <p className="text-[11px] text-emerald-600">
-              {success}
-            </p>
+            <p className="text-[11px] text-emerald-600">{success}</p>
           )}
         </div>
       )}
@@ -304,16 +296,16 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                     />
                   </td>
 
-                  {/* Title / client + quick actions */}
+                  {/* Title / client + quick links */}
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-0.5">
                       <Link
                         href={`/ats/jobs/${job.id}`}
                         className="text-[12px] font-semibold text-slate-900 hover:underline"
                       >
                         {job.title}
                       </Link>
-                      <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
                         {job.clientName && <span>{job.clientName}</span>}
                         {isPublished && (
                           <>
@@ -323,19 +315,12 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                             </span>
                           </>
                         )}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
-                        <Link
-                          href={`/ats/jobs/${job.id}`}
-                          className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 hover:bg-slate-50"
-                        >
-                          Open pipeline
-                        </Link>
+                        <span className="text-slate-300">•</span>
                         <Link
                           href={`/ats/jobs/${job.id}/edit`}
-                          className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-slate-800"
+                          className="text-indigo-600 hover:text-indigo-800 hover:underline"
                         >
-                          Edit job
+                          Edit role
                         </Link>
                       </div>
                     </div>
@@ -345,10 +330,10 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[11px] font-medium text-slate-800">
-                        {job.department || "—"}
+                        {job.experienceLevel || "—"}
                       </span>
                       <span className="text-[10px] text-slate-500">
-                        {job.experienceLevel || "Experience not set"}
+                        Function: {job.department || "Not specified"}
                       </span>
                     </div>
                   </td>
@@ -372,7 +357,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                     </span>
                   </td>
 
-                  {/* Apps */}
+                  {/* Applications count */}
                   <td className="border-b border-slate-100 px-3 py-2 text-right align-top">
                     <span className="text-[11px] font-medium text-slate-800">
                       {job.applicationsCount}
@@ -392,8 +377,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                           ? "Open"
                           : job.status.toLowerCase() === "closed"
                           ? "Closed"
-                          : job.status.charAt(0).toUpperCase() +
-                            job.status.slice(1)}
+                          : "Draft"}
                       </span>
                       <span className="text-[10px] text-slate-500">
                         {job.visibility.toLowerCase() === "public"
@@ -403,7 +387,7 @@ export default function AtsJobsTable({ initialJobs }: Props) {
                     </div>
                   </td>
 
-                  {/* Created */}
+                  {/* Created date */}
                   <td className="border-b border-slate-100 px-3 py-2 text-right align-top">
                     <span className="text-[10px] text-slate-500">
                       {formatDate(job.createdAt)}
