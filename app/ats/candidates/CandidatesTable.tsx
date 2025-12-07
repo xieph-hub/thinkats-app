@@ -99,14 +99,24 @@ function formatDateFromIso(iso: string) {
   return d.toISOString().slice(0, 10);
 }
 
+function csvEscape(value: string | number | null | undefined): string {
+  if (value == null) return "";
+  const str = String(value);
+  if (!/[",\n]/.test(str)) return str;
+  return `"${str.replace(/"/g, '""')}"`;
+}
+
 export default function CandidatesTable({
   rows,
 }: {
   rows: CandidateRowProps[];
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
-  const allSelected = rows.length > 0 && selectedIds.length === rows.length;
+  const selectedRows = rows.filter((r) => selectedIds.includes(r.id));
+  const anySelected = selectedRows.length > 0;
+  const allSelected = rows.length > 0 && selectedRows.length === rows.length;
 
   function toggleAll() {
     if (allSelected) {
@@ -114,36 +124,164 @@ export default function CandidatesTable({
     } else {
       setSelectedIds(rows.map((r) => r.id));
     }
+    setFeedback(null);
   }
 
   function toggleRow(id: string) {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+    setFeedback(null);
+  }
+
+  async function handleCopyEmails() {
+    if (!anySelected) return;
+
+    const emails = Array.from(
+      new Set(
+        selectedRows
+          .map((r) => r.email?.trim())
+          .filter((e): e is string => Boolean(e)),
+      ),
+    );
+
+    if (emails.length === 0) {
+      setFeedback("No emails on selected candidates.");
+      return;
+    }
+
+    const text = emails.join(", ");
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for older browsers
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setFeedback(`Copied ${emails.length} email${emails.length === 1 ? "" : "s"} to clipboard.`);
+    } catch (err) {
+      console.error("Failed to copy emails", err);
+      setFeedback("Could not copy emails. Please try again.");
+    }
+  }
+
+  function handleExportCsv() {
+    if (!anySelected) return;
+
+    const headers = [
+      "Full name",
+      "Email",
+      "Location",
+      "Current company",
+      "Primary tier",
+      "Latest score",
+      "Latest job title",
+      "Latest client",
+      "Source",
+      "Last seen",
+      "Tags",
+      "Pipelines count",
+    ];
+
+    const lines: string[] = [];
+    lines.push(headers.map(csvEscape).join(","));
+
+    for (const row of selectedRows) {
+      const tagNames = row.tags.map((t) => t.name).join(" | ");
+      const values = [
+        row.fullName,
+        row.email ?? "",
+        row.location ?? "",
+        row.currentCompany ?? "",
+        row.primaryTier ?? "",
+        row.latestScore ?? "",
+        row.latestJobTitle ?? "",
+        row.latestClient ?? "",
+        row.source ?? "",
+        formatDateFromIso(row.lastSeen),
+        tagNames,
+        row.pipelines.length,
+      ];
+
+      lines.push(values.map(csvEscape).join(","));
+    }
+
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "thinkats-candidates.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setFeedback(
+      `Exported ${selectedRows.length} candidate${selectedRows.length === 1 ? "" : "s"} as CSV.`,
+    );
   }
 
   return (
     <div className="overflow-x-auto">
       {/* Bulk selection toolbar */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-2 text-[10px] text-slate-600">
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/40"
-            checked={allSelected}
-            onChange={toggleAll}
-          />
-          <span>
-            {allSelected ? "Clear selection" : "Select all on this page"}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[10px] text-slate-600">
+        <div className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/40"
+              checked={allSelected}
+              onChange={toggleAll}
+            />
+            <span>
+              {allSelected
+                ? "Clear selection"
+                : "Select all on this page"}
+            </span>
+          </label>
+
+          <span className="text-slate-500">
+            {anySelected
+              ? `${selectedRows.length} candidate${
+                  selectedRows.length === 1 ? "" : "s"
+                } selected`
+              : "No candidates selected"}
           </span>
-        </label>
-        <span>
-          {selectedIds.length
-            ? `${selectedIds.length} candidate${
-                selectedIds.length === 1 ? "" : "s"
-              } selected`
-            : "No candidates selected"}
-        </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyEmails}
+            disabled={!anySelected}
+            className="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-[10px] font-medium text-slate-700 shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 hover:bg-slate-100"
+          >
+            Copy emails
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!anySelected}
+            className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-[10px] font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-slate-400 hover:bg-slate-800"
+          >
+            Export selected as CSV
+          </button>
+          {feedback && (
+            <span className="text-[10px] text-slate-500">
+              {feedback}
+            </span>
+          )}
+        </div>
       </div>
 
       <table className="w-full border-separate border-spacing-y-1 text-[11px]">
