@@ -1,246 +1,147 @@
 // app/login/LoginPageClient.tsx
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-type LoginBrandConfig = {
-  context: "primary" | "tenant";
-  pillLabel: string;
-  heading: string;
-  description: string;
-  tenantName: string | null;
-  tenantSlug: string | null;
-};
+type Status = "idle" | "loading" | "error";
 
-type Props = {
-  brand: LoginBrandConfig;
-};
-
-export default function LoginPageClient({ brand }: Props) {
+export default function LoginPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Only allow internal callback paths, otherwise default to /ats
+  const rawCallback = searchParams.get("callbackUrl");
+  const callbackUrl =
+    rawCallback && rawCallback.startsWith("/") ? rawCallback : "/ats";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
 
-  // Where to go after login – defaults to /ats (host-aware)
-  const callbackUrl = searchParams.get("callbackUrl") || "/ats";
-
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setStatus("loading");
     setError(null);
-    setSubmitting(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          password,
-        }),
-      });
+      const res = await fetch(
+        `/api/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+          }),
+        },
+      );
 
-      const data = await res.json().catch(() => ({} as any));
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        redirectTo?: string;
+        error?: string;
+      };
 
-      if (!res.ok || data?.error) {
-        setError(
-          data?.error ||
-            "Unable to login. Please check your details and try again.",
-        );
-        setSubmitting(false);
+      if (!res.ok || !data.success) {
+        setStatus("error");
+        setError(data.error || "Invalid email or password.");
         return;
       }
 
-      // Successful login: send user into ATS on this host
-      router.push(callbackUrl);
-      router.refresh();
-    } catch (err) {
-      console.error("Login error", err);
-      setError(
-        "Something went wrong while logging you in. Please try again.",
-      );
-      setSubmitting(false);
+      router.push(data.redirectTo || callbackUrl);
+    } catch {
+      setStatus("error");
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setStatus((prev) => (prev === "loading" ? "idle" : prev));
     }
   }
 
-  const isTenantHost = brand.context === "tenant";
-  const tenantLabel = brand.tenantName ?? brand.tenantSlug ?? "your workspace";
-
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center bg-slate-50 px-4 py-12">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center">
-        {/* Left: brand copy (host-aware) */}
-        <section className="flex-1 space-y-4">
-          <p className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-            {brand.pillLabel}
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            {brand.heading}
-          </h1>
-          <p className="max-w-xl text-sm text-slate-600 sm:text-base">
-            {brand.description}
-          </p>
+    <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-10 sm:py-14 lg:px-10">
+      <header className="pb-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+          Sign in
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+          Sign in to your ATS workspace.
+        </h1>
+        <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600">
+          Use the work email you registered with. After signing in, we&apos;ll
+          ask for a one-time code to unlock the ATS.
+        </p>
+      </header>
 
-          {isTenantHost ? (
-            <ul className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Review candidates and stages for {tenantLabel}.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Collaborate with hiring managers in one pipeline.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Keep all feedback, notes and offers in one place.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Powered quietly by ThinkATS in the background.</span>
-              </li>
-            </ul>
-          ) : (
-            <ul className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Track every role from brief to offer.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>See candidate history and notes in one place.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Share live pipelines with hiring managers.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 text-xs">●</span>
-                <span>Power client careers sites from one ATS.</span>
-              </li>
-            </ul>
-          )}
-        </section>
-
-        {/* Right: login card */}
-        <section className="flex-1">
-          <div className="mx-auto w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <h2 className="text-lg font-semibold text-slate-900">
-              {isTenantHost
-                ? `Login to ${tenantLabel}`
-                : "Login to ThinkATS"}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              {isTenantHost
-                ? "Use your work email and password to access this hiring workspace."
-                : "Use your work email and password to access your ThinkATS workspace."}
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="email"
-                  className="block text-xs font-medium text-slate-700"
-                >
-                  Work email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 transition hover:border-slate-300 focus:border-[#1E40AF] focus:bg-white focus:ring-2 focus:ring-[#1E40AF]/20"
-                  placeholder="you@company.com"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="password"
-                    className="block text-xs font-medium text-slate-700"
-                  >
-                    Password
-                  </label>
-                  <Link
-                    href="/auth/reset"
-                    className="text-xs font-medium text-[#1E40AF] hover:underline"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm outline-none ring-0 transition hover:border-slate-300 focus:border-[#1E40AF] focus:bg-white focus:ring-2 focus:ring-[#1E40AF]/20"
-                  placeholder="Enter your password"
-                />
-              </div>
-
-              {error && (
-                <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex w-full items-center justify-center rounded-full bg-[#1E40AF] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1D3A9A] disabled:cursor-not-allowed disabled:opacity-70"
+      <section className="lg:max-w-md">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-[11px] font-medium uppercase tracking-wide text-slate-500"
               >
-                {submitting ? "Logging in…" : "Login"}
-              </button>
-            </form>
+                Work email
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="you@company.com"
+              />
+            </div>
 
-            <p className="mt-4 text-center text-xs text-slate-500">
-              {isTenantHost ? (
-                <>
-                  Admin access only. Candidates should apply via the{" "}
-                  <Link
-                    href="/careers"
-                    className="font-medium text-[#1E40AF] hover:underline"
-                  >
-                    public careers page
-                  </Link>
-                  .{" "}
-                  <span className="block mt-1 text-[10px] text-slate-400">
-                    Powered by{" "}
-                    <a
-                      href="https://www.thinkats.com"
-                      className="font-medium text-[#1E40AF] hover:underline"
-                    >
-                      ThinkATS
-                    </a>
-                    .
-                  </span>
-                </>
-              ) : (
-                <>
-                  Don&apos;t have a workspace?{" "}
-                  <Link
-                    href="/signup"
-                    className="font-medium text-[#1E40AF] hover:underline"
-                  >
-                    Request access
-                  </Link>
-                  .
-                </>
-              )}
-            </p>
-          </div>
-        </section>
-      </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-[11px] font-medium uppercase tracking-wide text-slate-500"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <p className="text-[11px] text-red-500">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={status === "loading"}
+              className="mt-2 inline-flex w-full items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {status === "loading" ? "Signing you in…" : "Sign in"}
+            </button>
+          </form>
+
+          <p className="mt-4 text-[11px] text-slate-500">
+            Forgot your password?{" "}
+            <Link
+              href="/auth/forgot"
+              className="font-medium text-indigo-600 underline underline-offset-4 hover:text-indigo-700"
+            >
+              Reset it
+            </Link>
+          </p>
+        </div>
+      </section>
     </div>
   );
 }
