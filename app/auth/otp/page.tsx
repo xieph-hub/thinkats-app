@@ -20,7 +20,8 @@ function OtpPageInner() {
     setInfo(null);
     setLoadingSend(true);
     try {
-      const res = await fetch("/api/otp/request", {
+      // NOTE: path updated to /api/auth/otp/request
+      const res = await fetch("/api/auth/otp/request", {
         method: "POST",
       });
 
@@ -51,7 +52,8 @@ function OtpPageInner() {
     setLoadingVerify(true);
 
     try {
-      const res = await fetch("/api/otp/verify", {
+      // NOTE: path updated to /api/auth/otp/verify
+      const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
