@@ -1,6 +1,6 @@
 // emails/CandidateApplicationReceived.tsx
 import * as React from "react";
-import ResourcinEmailLayout from "./ResourcinEmailLayout";
+import ThinkATSEmailLayout from "./ThinkATSEmailLayout";
 
 export interface CandidateApplicationReceivedProps {
   candidateName: string;
@@ -29,7 +29,7 @@ export default function CandidateApplicationReceived(
     : jobTitle || "this role";
 
   return (
-    <ResourcinEmailLayout
+    <ThinkATSEmailLayout
       title="Application received"
       preheader={`We've received your application for ${jobTitle}`}
     >
@@ -109,12 +109,12 @@ export default function CandidateApplicationReceived(
       >
         Best regards,
         <br />
-        Resourcin Recruitment Team
+        ThinkATS team
         <br />
         <span style={{ fontSize: 12, color: "#6B7280" }}>
-          Executive search &amp; recruitment
+          Applicant tracking &amp; careers sites
         </span>
       </p>
-    </ResourcinEmailLayout>
+    </ThinkATSEmailLayout>
   );
 }
