@@ -20,8 +20,8 @@ function OtpPageInner() {
     setInfo(null);
     setLoadingSend(true);
     try {
-      // ✅ use the auth namespaced endpoint
-      const res = await fetch("/api/auth/otp/request", {
+      // ✅ match your API route: /api/otp/request
+      const res = await fetch("/api/otp/request", {
         method: "POST",
       });
 
@@ -52,8 +52,8 @@ function OtpPageInner() {
     setLoadingVerify(true);
 
     try {
-      // ✅ use the auth namespaced endpoint
-      const res = await fetch("/api/auth/otp/verify", {
+      // ✅ match your API route: /api/otp/verify
+      const res = await fetch("/api/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
