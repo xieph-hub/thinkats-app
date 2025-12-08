@@ -2,19 +2,17 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 type Status = "idle" | "loading" | "error";
 
-export default function LoginPageClient() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+type Props = {
+  callbackUrl: string;
+};
 
-  // Only allow internal callback paths, otherwise default to /ats
-  const rawCallback = searchParams.get("callbackUrl");
-  const callbackUrl =
-    rawCallback && rawCallback.startsWith("/") ? rawCallback : "/ats";
+export default function LoginPageClient({ callbackUrl }: Props) {
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,6 +49,7 @@ export default function LoginPageClient() {
         return;
       }
 
+      // server returns redirectTo or we fall back to callbackUrl
       router.push(data.redirectTo || callbackUrl);
     } catch {
       setStatus("error");
@@ -61,7 +60,7 @@ export default function LoginPageClient() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-10 sm:py-14 lg:px-10">
+    <>
       <header className="pb-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
           Sign in
@@ -142,6 +141,6 @@ export default function LoginPageClient() {
           </p>
         </div>
       </section>
-    </div>
+    </>
   );
 }
