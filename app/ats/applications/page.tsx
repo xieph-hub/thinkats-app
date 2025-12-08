@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
+import { getServerUser } from "@/lib/auth/getServerUser";
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +35,14 @@ export default async function AtsApplicationsPage({
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
 
-  // 🔐 Tenant membership / role gate
-  await requireTenantMembership(tenant.id, {
-    allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
-  });
+  const { isSuperAdmin } = await getServerUser();
+
+  // 🔐 Tenant membership / role gate (bypass for super admin)
+  if (!isSuperAdmin) {
+    await requireTenantMembership(tenant.id, {
+      allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
+    });
+  }
 
   const filterQ = firstString(searchParams.q).trim();
   const rawStatus = firstString(searchParams.status).trim().toUpperCase();
