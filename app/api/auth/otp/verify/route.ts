@@ -2,13 +2,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => null) as
+    const body = (await req.json().catch(() => null)) as
       | { code?: string }
       | null;
 
@@ -16,12 +17,11 @@ export async function POST(req: NextRequest) {
 
     if (!code || code.length !== 6) {
       return NextResponse.json(
-        { ok: false, error: "Please enter the 6-digit code we emailed you." },
+        { ok: false, error: "missing_code" },
         { status: 400 },
       );
     }
 
-    // Find a non-expired, non-consumed OTP with this code
     const now = new Date();
 
     const otp = await prisma.loginOtp.findFirst({
@@ -37,11 +37,7 @@ export async function POST(req: NextRequest) {
 
     if (!otp || !otp.user) {
       return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "That code is invalid or has expired. Please request a new one.",
-        },
+        { ok: false, error: "invalid_or_expired" },
         { status: 400 },
       );
     }
@@ -55,8 +51,7 @@ export async function POST(req: NextRequest) {
     // Mark this session as OTP-verified via cookie
     const res = NextResponse.json({ ok: true });
 
-    // For now: 24h cookie, strict, sameSite=lax
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
     res.cookies.set(OTP_COOKIE_NAME, "true", {
       httpOnly: true,
@@ -70,11 +65,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[ThinkATS OTP] Verify error:", err);
     return NextResponse.json(
-      {
-        ok: false,
-        error:
-          "Something went wrong while checking your code. Please try again.",
-      },
+      { ok: false, error: "server_error" },
       { status: 500 },
     );
   }
