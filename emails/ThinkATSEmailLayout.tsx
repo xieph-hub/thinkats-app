@@ -1,24 +1,24 @@
-// emails/ResourcinEmailLayout.tsx
+// emails/ThinkATSEmailLayout.tsx
 import * as React from "react";
 
-export interface ResourcinEmailLayoutProps {
+export interface ThinkATSEmailLayoutProps {
   title: string;
   children: React.ReactNode;
   /** New name */
   previewText?: string;
-  /** Backwards-compatible alias used by existing templates */
+  /** Backwards-compatible alias if you ever pass preheader */
   preheader?: string;
 }
 
 const brandBlue = "#172965";
 const brandYellow = "#FFC000";
 
-export default function ResourcinEmailLayout({
+export default function ThinkATSEmailLayout({
   title,
   previewText,
   preheader,
   children,
-}: ResourcinEmailLayoutProps) {
+}: ThinkATSEmailLayoutProps) {
   // Use previewText if provided, otherwise fall back to preheader
   const effectivePreview = previewText ?? preheader ?? "";
 
@@ -106,7 +106,7 @@ export default function ResourcinEmailLayout({
                             color: "#6b7280",
                           }}
                         >
-                          RESOURCIN
+                          THINKATS
                         </div>
                         <div
                           style={{
@@ -126,8 +126,8 @@ export default function ResourcinEmailLayout({
                             color: "#6b7280",
                           }}
                         >
-                          Executive search &amp; recruitment for founders,
-                          leaders and hiring managers.
+                          Modern applicant tracking &amp; careers sites for
+                          growing teams.
                         </div>
                       </td>
                     </tr>
@@ -157,10 +157,9 @@ export default function ResourcinEmailLayout({
                           }}
                         >
                           <strong style={{ color: brandBlue }}>
-                            Resourcin
+                            ThinkATS
                           </strong>{" "}
-                          · Connecting Talent with Opportunity, Redefining
-                          Workplaces and Careers
+                          · Hiring infrastructure for modern teams.
                         </div>
 
                         {/* Website + email (clickable text) */}
@@ -172,7 +171,7 @@ export default function ResourcinEmailLayout({
                           }}
                         >
                           <a
-                            href="https://www.resourcin.com"
+                            href="https://www.thinkats.com"
                             style={{
                               color: brandBlue,
                               textDecoration: "none",
@@ -180,20 +179,20 @@ export default function ResourcinEmailLayout({
                               marginRight: "10px",
                             }}
                           >
-                            resourcin.com
+                            thinkats.com
                           </a>
                           <span style={{ marginRight: "8px", color: "#9ca3af" }}>
                             ·
                           </span>
                           <a
-                            href="mailto:hello@resourcin.com"
+                            href="mailto:hello@thinkats.com"
                             style={{
                               color: brandBlue,
                               textDecoration: "none",
                               fontWeight: 500,
                             }}
                           >
-                            hello@resourcin.com
+                            hello@thinkats.com
                           </a>
                         </div>
 
@@ -218,7 +217,7 @@ export default function ResourcinEmailLayout({
 
                           {/* LinkedIn */}
                           <a
-                            href="https://www.linkedin.com/company/resourcin"
+                            href="https://www.linkedin.com/company/thinkats"
                             target="_blank"
                             rel="noreferrer"
                             style={{
@@ -249,7 +248,7 @@ export default function ResourcinEmailLayout({
 
                           {/* X */}
                           <a
-                            href="https://x.com/resourcinhq"
+                            href="https://x.com/thinkats"
                             target="_blank"
                             rel="noreferrer"
                             style={{
@@ -280,7 +279,7 @@ export default function ResourcinEmailLayout({
 
                           {/* Website (globe) */}
                           <a
-                            href="https://www.resourcin.com"
+                            href="https://www.thinkats.com"
                             target="_blank"
                             rel="noreferrer"
                             style={{
@@ -321,7 +320,7 @@ export default function ResourcinEmailLayout({
 
                           {/* Email (envelope) */}
                           <a
-                            href="mailto:hello@resourcin.com"
+                            href="mailto:hello@thinkats.com"
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
@@ -377,7 +376,7 @@ export default function ResourcinEmailLayout({
                   }}
                 >
                   You’re receiving this email because you interacted with a role
-                  managed by Resourcin.
+                  managed via ThinkATS.
                 </div>
               </td>
             </tr>
