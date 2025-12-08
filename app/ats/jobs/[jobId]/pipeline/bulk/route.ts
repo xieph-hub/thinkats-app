@@ -1,7 +1,6 @@
 // app/api/ats/jobs/[jobId]/pipeline/bulk/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
 import { getServerUser } from "@/lib/auth/getServerUser";
 
 type BulkPipelineBody = {
@@ -30,19 +29,16 @@ export async function POST(
       );
     }
 
-    // 2) Tenant scope
-    const tenant = await getResourcinTenant();
-    if (!tenant) {
-      return NextResponse.json(
-        { ok: false, error: "tenant_not_found" },
-        { status: 404 },
-      );
-    }
+    const { isSuperAdmin, tenantRoles } = ctx;
 
-    // 3) Parse body
+    // 2) Parse body safely
     const body = (await req.json().catch(() => null)) as BulkPipelineBody | null;
 
-    if (!body || !Array.isArray(body.applicationIds) || body.applicationIds.length === 0) {
+    if (
+      !body ||
+      !Array.isArray(body.applicationIds) ||
+      body.applicationIds.length === 0
+    ) {
       return NextResponse.json(
         { ok: false, error: "No applicationIds provided." },
         { status: 400 },
@@ -51,8 +47,7 @@ export async function POST(
 
     const { applicationIds } = body;
 
-    // Build update payload in a tolerant way so it works with
-    // both the "old" and "new" client code.
+    // 3) Build update payload in a tolerant way
     const updateData: Record<string, any> = {};
 
     // If client sends an `updates` object, start from that
@@ -80,27 +75,37 @@ export async function POST(
       );
     }
 
-    // 4) Ensure the job belongs to this tenant (extra safety)
-    const job = await prisma.job.findFirst({
-      where: { id: jobId, tenantId: tenant.id },
-      select: { id: true },
+    // 4) Load job and make sure user has access
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { id: true, tenantId: true },
     });
 
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: "job_not_found_for_tenant" },
+        { ok: false, error: "job_not_found" },
         { status: 404 },
       );
     }
 
-    // 5) Apply bulk update, scoped by tenant + job
+    if (!isSuperAdmin) {
+      const canAccessTenant = tenantRoles.some(
+        (r) => r.tenantId === job.tenantId,
+      );
+
+      if (!canAccessTenant) {
+        return NextResponse.json(
+          { ok: false, error: "no_access_to_job_tenant" },
+          { status: 403 },
+        );
+      }
+    }
+
+    // 5) Apply bulk update, scoped to this job (and implicitly tenant)
     const result = await prisma.jobApplication.updateMany({
       where: {
         id: { in: applicationIds },
-        jobId: jobId,
-        job: {
-          tenantId: tenant.id,
-        },
+        jobId: job.id,
       },
       data: updateData,
     });
@@ -110,8 +115,7 @@ export async function POST(
       updatedCount: result.count,
     });
   } catch (err) {
-    // ⚠️ IMPORTANT: we never rethrow redirects here –
-    // only log and return JSON so inline updates don’t blow up.
+    // ⚠️ We never rethrow redirects here – only log and return JSON
     console.error("Bulk pipeline update error", err);
     return NextResponse.json(
       {
