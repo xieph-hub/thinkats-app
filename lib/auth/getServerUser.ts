@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-// 🔐 IMPORTANT: set this to whatever cookie name your /api/auth/login sets
+// 🔐 IMPORTANT: this must match whatever your /api/auth/login sets
 const AUTH_COOKIE_NAME = "thinkats_user_id";
 
 export type TenantRoleSummary = {
@@ -27,6 +27,12 @@ export type ServerUserContext = {
   primaryTenantPlanTier: string | null;
 };
 
+// ✨ Shape used by ATS UI (e.g. AtsLayoutClient)
+// Kept compatible with ServerUserContext.user, with an optional tenants field
+export type AppUserWithTenants = ServerUserContext["user"] & {
+  tenants?: TenantRoleSummary[];
+};
+
 export async function getServerUser(): Promise<ServerUserContext | null> {
   const cookieStore = cookies();
 
@@ -49,13 +55,15 @@ export async function getServerUser(): Promise<ServerUserContext | null> {
     return null;
   }
 
-  const tenantRoles: TenantRoleSummary[] = dbUser.userTenantRoles.map((utr) => ({
-    tenantId: utr.tenantId,
-    tenantSlug: utr.tenant.slug,
-    role: utr.role,
-    isPrimary: utr.isPrimary,
-    planTier: utr.tenant.planTier,
-  }));
+  const tenantRoles: TenantRoleSummary[] = dbUser.userTenantRoles.map(
+    (utr) => ({
+      tenantId: utr.tenantId,
+      tenantSlug: utr.tenant.slug,
+      role: utr.role,
+      isPrimary: utr.isPrimary,
+      planTier: utr.tenant.planTier,
+    }),
+  );
 
   const primary =
     tenantRoles.find((r) => r.isPrimary) || tenantRoles[0] || null;
