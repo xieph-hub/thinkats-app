@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
+import { getResourcinTenant } from "@/lib/tenant";
 import CareerLinks from "./CareerLinks";
 
 export const dynamic = "force-dynamic";
@@ -95,11 +95,6 @@ export default async function EditJobPage({
     notFound();
   }
 
-  // 🔐 Only allowed roles can edit jobs
-  await requireTenantMembership(currentTenant.id, {
-    allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
-  });
-
   const job = await prisma.job.findUnique({
     where: { id: jobId, tenantId: currentTenant.id },
     include: {
@@ -145,7 +140,8 @@ export default async function EditJobPage({
         <div>
           <Link
             href="/ats/jobs"
-            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-slate-800"
+            className="inline-flex items-center text-xs font-medium text-slate-500 hover:text-s
+late-800"
           >
             <span className="mr-1.5">←</span>
             Back to all jobs
@@ -230,7 +226,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.title}
                   required
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -241,7 +238,8 @@ export default async function EditJobPage({
                 <select
                   name="clientCompanyId"
                   defaultValue={job.clientCompanyId ?? ""}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 >
                   <option value="">Resourcin (no client)</option>
                   {clientCompanies.map((c) => (
@@ -261,7 +259,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.department ?? ""}
                   placeholder="e.g. Operations, Product, Finance"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -274,7 +273,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.location ?? ""}
                   placeholder="e.g. Lagos, Nairobi, Remote"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -287,7 +287,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.locationType ?? ""}
                   placeholder="On-site, Hybrid, Remote"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -300,7 +301,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.employmentType ?? ""}
                   placeholder="Full time, Contract, Interim"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -313,7 +315,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.experienceLevel ?? ""}
                   placeholder="Mid, Senior, Lead, Exec"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -326,7 +329,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.workMode ?? ""}
                   placeholder="In-office, Hybrid, Remote"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
             </div>
@@ -340,7 +344,8 @@ export default async function EditJobPage({
                 defaultValue={job.shortDescription ?? ""}
                 rows={3}
                 placeholder="One or two paragraphs summarising the mandate."
-                className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
               />
             </div>
           </section>
@@ -364,7 +369,8 @@ export default async function EditJobPage({
                   name="overview"
                   defaultValue={job.overview ?? ""}
                   rows={4}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -376,7 +382,8 @@ export default async function EditJobPage({
                   name="aboutClient"
                   defaultValue={job.aboutClient ?? ""}
                   rows={4}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -389,7 +396,8 @@ export default async function EditJobPage({
                   defaultValue={job.responsibilities ?? ""}
                   rows={6}
                   placeholder="Use bullet-style text. You can paste from your working doc."
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -401,7 +409,8 @@ export default async function EditJobPage({
                   name="requirements"
                   defaultValue={job.requirements ?? ""}
                   rows={6}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -413,7 +422,8 @@ export default async function EditJobPage({
                   name="benefits"
                   defaultValue={job.benefits ?? ""}
                   rows={4}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
             </div>
@@ -433,7 +443,8 @@ export default async function EditJobPage({
                 <select
                   name="status"
                   defaultValue={normaliseStatus(job.status as any) || "open"}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 >
                   <option value="draft">Draft</option>
                   <option value="open">Open</option>
@@ -450,7 +461,8 @@ export default async function EditJobPage({
                   name="salaryCurrency"
                   type="text"
                   defaultValue={job.salaryCurrency ?? "NGN"}
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -463,7 +475,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.externalId ?? ""}
                   placeholder="Optional reference ID"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
             </div>
@@ -478,7 +491,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.salaryMin ? job.salaryMin.toString() : ""}
                   placeholder="e.g. 15000000"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -491,7 +505,8 @@ export default async function EditJobPage({
                   type="text"
                   defaultValue={job.salaryMax ? job.salaryMax.toString() : ""}
                   placeholder="e.g. 25000000"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
 
@@ -526,7 +541,8 @@ export default async function EditJobPage({
                       : ""
                   }
                   placeholder="Comma-separated: e.g. fintech, Lagos, GM"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 />
                 <p className="mt-1 text-[10px] text-slate-500">
                   Used for internal search and reporting.
@@ -546,7 +562,8 @@ export default async function EditJobPage({
                       : ""
                   }
                   placeholder="Comma-separated: e.g. P&L, stakeholder mgmt"
-                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                 />
               </div>
             </div>
@@ -624,7 +641,8 @@ export default async function EditJobPage({
                     type="text"
                     defaultValue={job.slug ?? ""}
                     placeholder="e.g. gm-bpo-nairobi"
-                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-s
+late-900"
                   />
                   <p className="mt-1 text-[10px] text-slate-500">
                     Used in the job URL. We&apos;ll enforce
