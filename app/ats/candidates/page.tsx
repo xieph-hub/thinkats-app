@@ -68,8 +68,10 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
 
-  // Enforce membership before reading any tenant-scoped data
+  // Membership gate for the candidate list
   await requireTenantMembership(tenant.id);
+  // For role-specific access:
+  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
 
   // ---- URL filters ---------------------------------------------------------
 
@@ -564,7 +566,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                       className={[
                         "inline-flex items-center rounded-full px-3 py-1 text-[10px]",
                         isActive
-                          ? "bg-slate-900 text-slate-50shadow-sm"
+                          ? "bg-slate-900 text-slate-50 shadow-sm"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200",
                       ].join(" ")}
                     >
