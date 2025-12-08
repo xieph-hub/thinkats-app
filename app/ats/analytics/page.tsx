@@ -1,7 +1,9 @@
 // app/ats/analytics/page.tsx
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,12 @@ type PageProps = {
 
 export default async function AnalyticsPage({ searchParams }: PageProps) {
   const tenant = await getResourcinTenant();
+  if (!tenant) {
+    notFound();
+  }
+
+  // Enforce membership for this tenant before touching tenant-scoped data
+  await requireTenantMembership(tenant.id);
 
   // ---------------------------------------------------------------------------
   // Time window: "all" (default) vs "30d"
