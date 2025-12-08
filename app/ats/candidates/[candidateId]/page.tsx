@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 import ApplicationInterviewDrawer from "@/components/ats/candidates/ApplicationInterviewDrawer";
 
 export const dynamic = "force-dynamic";
@@ -78,10 +79,16 @@ export default async function CandidateProfilePage({
   const tenantIdFromUrl =
     typeof searchParams?.tenantId === "string" ? searchParams.tenantId : undefined;
 
+  // 1) Resolve tenant (host + ?tenantId logic lives in getResourcinTenant)
   const tenant = await getResourcinTenant({ tenantIdFromUrl });
   if (!tenant) {
     notFound();
   }
+
+  // 2) Enforce membership for this tenant BEFORE touching tenant data
+  await requireTenantMembership(tenant.id);
+  // If you later want role-based gates for some pages:
+  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
 
   const candidate = await prisma.candidate.findFirst({
     where: {
@@ -626,6 +633,126 @@ export default async function CandidateProfilePage({
                 <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Notes &amp; comments
                 </h2>
-                <span className="text-[11px] text-s
+                <span className="text-[11px] text-slate-400">
+                  {candidate.notes.length} notes
+                </span>
+              </div>
 
-::contentReference[oaicite:0]{index=0}
+              <form
+                action={`/api/ats/candidates/${candidate.id}/notes`}
+                method="POST"
+                className="mb-3 space-y-2"
+              >
+                <textarea
+                  name="body"
+                  rows={3}
+                  placeholder="Drop a quick note for your team..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">
+                    Notes are visible to your internal team only.
+                  </span>
+                  <button
+                    type="submit"
+                    className="inline-flex h-8 items-center rounded-full bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+                  >
+                    Add note
+                  </button>
+                </div>
+              </form>
+
+              {candidate.notes.length === 0 ? (
+                <p className="text-[11px] text-slate-400">
+                  No notes yet. Leave the first one.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {candidate.notes.map((note) => (
+                    <article
+                      key={note.id}
+                      className="rounded-xl border border-slate-100 bg-slate-50 p-2"
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-slate-700">
+                          {note.authorName || "Someone on your team"}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {formatDateTime(note.createdAt)}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-[11px] text-slate-700">
+                        {note.body}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Email history */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Email history
+                </h2>
+                <span className="text-[11px] text-slate-400">
+                  {emails.length} sent
+                </span>
+              </div>
+
+              {emails.length === 0 ? (
+                <p className="text-[11px] text-slate-400">
+                  No tracked emails yet for this candidate in this tenant.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {emails.map((mail) => (
+                    <article
+                      key={mail.id}
+                      className="rounded-xl border border-slate-100 bg-slate-50 p-2"
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-medium text-slate-700">
+                            {mail.subject || "(no subject)"}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            To: {mail.toEmail}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">
+                          {formatDateTime(mail.sentAt)}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                        {mail.templateName && (
+                          <span className="rounded-full bg-slate-100 px-1.5 py-0.5">
+                            Template: {mail.templateName}
+                          </span>
+                        )}
+                        {mail.job && (
+                          <span className="rounded-full bg-slate-100 px-1.5 py-0.5">
+                            Related role: {mail.job.title}
+                            {mail.job.clientCompany &&
+                              ` · ${mail.job.clientCompany.name}`}
+                          </span>
+                        )}
+                        {mail.providerMessageId && (
+                          <span className="rounded-full bg-slate-100 px-1.5 py-0.5">
+                            Provider ID: {mail.providerMessageId.slice(0, 10)}
+                            …
+                          </span>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+  );
+}
