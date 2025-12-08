@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +19,28 @@ type PageProps = {
 export default async function AnalyticsPage({ searchParams }: PageProps) {
   const tenant = await getResourcinTenant();
 
-  // Membership gate for analytics
-  await requireTenantMembership(tenant.id);
-  // For role-specific gating later:
-  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
+  if (!tenant) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-md text-center">
+          <h1 className="text-base font-semibold text-slate-900">
+            Analytics not available
+          </h1>
+          <p className="mt-2 text-xs text-slate-600">
+            No default tenant configured. Check{" "}
+            <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
+              RESOURCIN_TENANT_ID
+            </code>{" "}
+            or{" "}
+            <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
+              RESOURCIN_TENANT_SLUG
+            </code>{" "}
+            in your environment.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Time window: "all" (default) vs "30d"
@@ -261,9 +278,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         {/* Summary cards */}
         <section className="grid gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="text-[11px] text-slate-500">
-              Open jobs
-            </div>
+            <div className="text-[11px] text-slate-500">Open jobs</div>
             <div className="mt-1 text-2xl font-semibold text-slate-900">
               {openJobs.length}
             </div>
