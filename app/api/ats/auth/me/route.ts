@@ -1,4 +1,6 @@
 // app/api/ats/auth/me/route.ts
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
