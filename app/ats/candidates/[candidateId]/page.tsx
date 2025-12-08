@@ -15,6 +15,7 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: { candidateId: string };
+  searchParams?: { tenantId?: string };
 };
 
 function scoreChipColor(score?: number | null) {
@@ -50,7 +51,6 @@ function formatInterviewStatus(status: string | null | undefined) {
   return status
     .toLowerCase()
     .split(/[_\s]+/)
-
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }
@@ -71,9 +71,17 @@ function derivePrimaryTier(apps: any[]): string | null {
   return Array.from(tiers)[0];
 }
 
-export default async function CandidateProfilePage({ params }: PageProps) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) notFound();
+export default async function CandidateProfilePage({
+  params,
+  searchParams,
+}: PageProps) {
+  const tenantIdFromUrl =
+    typeof searchParams?.tenantId === "string" ? searchParams.tenantId : undefined;
+
+  const tenant = await getResourcinTenant({ tenantIdFromUrl });
+  if (!tenant) {
+    notFound();
+  }
 
   const candidate = await prisma.candidate.findFirst({
     where: {
@@ -116,7 +124,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
     notFound();
   }
 
-  // NEW: candidate-level email history, including job + client company
+  // Email history for this candidate in this tenant
   const emails = await prisma.sentEmail.findMany({
     where: {
       tenantId: tenant.id,
@@ -151,7 +159,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
       ?.map((ct) => ct.tag)
       .filter((t): t is NonNullable<typeof t> => Boolean(t)) ?? [];
 
-  // Derive “competencies highlighted in interviews” across this candidate’s pipelines
+  // Competencies highlighted across all interviews for this candidate
   const competencyFrequency = new Map<string, number>();
   for (const app of candidate.applications) {
     for (const iv of app.interviews ?? []) {
@@ -168,6 +176,8 @@ export default async function CandidateProfilePage({ params }: PageProps) {
     .slice(0, 12)
     .map(([label]) => label);
 
+  const tenantQuery = `tenantId=${encodeURIComponent(tenant.id)}`;
+
   return (
     <div className="flex h-full flex-1 flex-col">
       {/* Header */}
@@ -175,7 +185,10 @@ export default async function CandidateProfilePage({ params }: PageProps) {
         {/* Breadcrumb + Back button */}
         <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <Link href="/ats/candidates" className="hover:underline">
+            <Link
+              href={`/ats/candidates?${tenantQuery}`}
+              className="hover:underline"
+            >
               Candidates
             </Link>
             <span>/</span>
@@ -185,7 +198,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
           </div>
 
           <Link
-            href="/ats/candidates"
+            href={`/ats/candidates?${tenantQuery}`}
             className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] text-slate-600 hover:bg-slate-50"
           >
             ← Back to all candidates
@@ -354,7 +367,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                   </button>
                 </form>
 
-                {/* Competencies surfaced from interview feedback */}
+                {/* Competencies from interviews */}
                 {competencyTags.length > 0 && (
                   <div className="mt-4">
                     <div className="mb-1 flex items-center justify-between">
@@ -420,7 +433,7 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
                               <Link
-                                href={`/ats/jobs/${app.jobId}`}
+                                href={`/ats/jobs/${app.jobId}?${tenantQuery}`}
                                 className="text-[13px] font-semibold text-slate-900 hover:underline"
                               >
                                 {app.job?.title || "Untitled role"}
@@ -613,136 +626,6 @@ export default async function CandidateProfilePage({ params }: PageProps) {
                 <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   Notes &amp; comments
                 </h2>
-                <span className="text-[11px] text-slate-400">
-                  {candidate.notes.length}{" "}
-                  {candidate.notes.length === 1 ? "note" : "notes"}
-                </span>
-              </div>
+                <span className="text-[11px] text-s
 
-              {candidate.notes.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500">
-                  No internal notes yet. Use the box below to add context from
-                  calls, interviews or client feedback.
-                  <br />
-                  Notes are only visible to your internal team.
-                </div>
-              ) : (
-                <div className="mb-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {candidate.notes.map((note) => (
-                    <article
-                      key={note.id}
-                      className="rounded-lg border border-slate-100 bg-slate-50 p-2.5"
-                    >
-                      <div className="mb-1 flex items-center justify-between text-[10px] text-slate-500">
-                        <span className="font-medium">
-                          Internal note
-                          {note.noteType && note.noteType !== "general"
-                            ? ` · ${note.noteType}`
-                            : ""}
-                        </span>
-                        <span>{formatDate(note.createdAt)}</span>
-                      </div>
-                      <p className="whitespace-pre-wrap text-[11px] text-slate-700">
-                        {note.body}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              )}
-
-              <form
-                action={`/api/ats/candidates/${candidate.id}/notes`}
-                method="POST"
-                className="mt-3 space-y-2"
-              >
-                <label className="text-[11px] text-slate-500">
-                  Add internal note
-                </label>
-                <textarea
-                  name="noteBody"
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-800"
-                  placeholder="Interview impressions, client feedback, red flags, next steps…"
-                  required
-                />
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="submit"
-                    className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
-                  >
-                    Save note
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            {/* NEW: Email history */}
-            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Email history
-                </h2>
-                <span className="text-[11px] text-slate-400">
-                  {emails.length}{" "}
-                  {emails.length === 1 ? "email" : "emails"}
-                </span>
-              </div>
-
-              {emails.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500">
-                  No outbound emails logged for this candidate yet.
-                  <br />
-                  Future candidate updates and templates sent from the ATS will
-                  appear here.
-                </div>
-              ) : (
-                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {emails.map((email) => {
-                    const jobTitle = email.job?.title ?? null;
-                    const clientName =
-                      email.job?.clientCompany?.name ?? null;
-
-                    return (
-                      <article
-                        key={email.id}
-                        className="rounded-lg border border-slate-100 bg-slate-50 p-2.5"
-                      >
-                        <div className="mb-1 flex items-center justify-between text-[10px] text-slate-500">
-                          <span className="font-medium">
-                            {email.subject || "(no subject)"}
-                          </span>
-                          <span>{formatDateTime(email.sentAt)}</span>
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5">
-                            {email.status || "sent"}
-                          </span>
-                          {jobTitle && (
-                            <>
-                              <span className="mx-1 text-slate-300">•</span>
-                              <span>{jobTitle}</span>
-                            </>
-                          )}
-                          {clientName && (
-                            <>
-                              <span className="mx-1 text-slate-300">•</span>
-                              <span>{clientName}</span>
-                            </>
-                          )}
-                        </div>
-                        <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">
-                          {email.body.slice(0, 260)}
-                          {email.body.length > 260 ? "…" : ""}
-                        </p>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </aside>
-        </div>
-      </main>
-    </div>
-  );
-}
+::contentReference[oaicite:0]{index=0}
