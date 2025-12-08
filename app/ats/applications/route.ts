@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -27,6 +28,9 @@ export async function POST(req: NextRequest) {
     }
     tenantId = defaultTenant.id;
   }
+
+  // Enforce membership for the effective tenant before mutating anything
+  await requireTenantMembership(tenantId);
 
   // Make sure this application belongs to that tenant via its job
   const appRecord = await prisma.jobApplication.findFirst({
