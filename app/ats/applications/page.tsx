@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
+import { getResourcinTenant } from "@/lib/tenant";
 import { getServerUser } from "@/lib/auth/getServerUser";
 
 export const dynamic = "force-dynamic";
