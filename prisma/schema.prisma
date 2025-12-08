@@ -19,6 +19,13 @@ enum TagKind {
   PIPELINE
 }
 
+enum PlanTier {
+  STARTER
+  GROWTH
+  AGENCY
+  ENTERPRISE
+}
+
 // --------------------------------------------------------------------------
 // TENANTS
 // --------------------------------------------------------------------------
@@ -31,11 +38,18 @@ model Tenant {
   primaryContactEmail String?     @map("primary_contact_email")
   notificationEmail   String?     @map("notification_email") // where digests / ATS alerts can go
   plan                String      @default("free") @db.Text   // free, pro, enterprise, etc.
+  planTier            PlanTier    @map("plan_tier") @default(GROWTH)
+  seats               Int?        @map("seats")
+  maxSeats            Int?        @map("max_seats")
   trialEndsAt         DateTime?   @map("trial_ends_at") @db.Timestamptz(6)
 
   // Scoring + hiring configuration
   hiringMode    String @map("hiring_mode") @default("balanced") // volume | executive | balanced
   scoringConfig Json?  @map("scoring_config")                    // tenant-level weights/thresholds
+
+  // Workspace defaults
+  defaultTimezone String? @map("default_timezone")
+  defaultCurrency String? @map("default_currency")
 
   // KYC / compliance-lite fields (mapped to existing Supabase columns)
   registrationNumber String? @map("registration_number")
@@ -397,7 +411,7 @@ model JobSkill {
 
 // --------------------------------------------------------------------------
 // JOB APPLICATIONS, EVENTS & INTERVIEWS
-// --------------------------------------------------------------------------
+// -------------------------------------------------------------------------- */
 
 model JobApplication {
   id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
