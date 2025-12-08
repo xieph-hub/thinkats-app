@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { requireTenantMembership } from "@/lib/requireTenantMembership";
 import ApplicationInterviewDrawer from "@/components/ats/candidates/ApplicationInterviewDrawer";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +15,6 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: { candidateId: string };
-  searchParams?: { tenantId?: string };
 };
 
 function scoreChipColor(score?: number | null) {
@@ -72,23 +70,12 @@ function derivePrimaryTier(apps: any[]): string | null {
   return Array.from(tiers)[0];
 }
 
-export default async function CandidateProfilePage({
-  params,
-  searchParams,
-}: PageProps) {
-  const tenantIdFromUrl =
-    typeof searchParams?.tenantId === "string" ? searchParams.tenantId : undefined;
-
-  // 1) Resolve tenant (host + ?tenantId logic lives in getResourcinTenant)
-  const tenant = await getResourcinTenant(tenantIdFromUrl);
+export default async function CandidateProfilePage({ params }: PageProps) {
+  // 1) Resolve tenant from host context only
+  const tenant = await getResourcinTenant();
   if (!tenant) {
     notFound();
   }
-
-  // 2) Enforce membership for this tenant BEFORE touching tenant data
-  await requireTenantMembership(tenant.id);
-  // If you later want role-based gates for some pages:
-  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
 
   const candidate = await prisma.candidate.findFirst({
     where: {
@@ -183,8 +170,6 @@ export default async function CandidateProfilePage({
     .slice(0, 12)
     .map(([label]) => label);
 
-  const tenantQuery = `tenantId=${encodeURIComponent(tenant.id)}`;
-
   return (
     <div className="flex h-full flex-1 flex-col">
       {/* Header */}
@@ -192,10 +177,7 @@ export default async function CandidateProfilePage({
         {/* Breadcrumb + Back button */}
         <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
-            <Link
-              href={`/ats/candidates?${tenantQuery}`}
-              className="hover:underline"
-            >
+            <Link href="/ats/candidates" className="hover:underline">
               Candidates
             </Link>
             <span>/</span>
@@ -205,7 +187,7 @@ export default async function CandidateProfilePage({
           </div>
 
           <Link
-            href={`/ats/candidates?${tenantQuery}`}
+            href="/ats/candidates"
             className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] text-slate-600 hover:bg-slate-50"
           >
             ← Back to all candidates
@@ -440,7 +422,7 @@ export default async function CandidateProfilePage({
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
                               <Link
-                                href={`/ats/jobs/${app.jobId}?${tenantQuery}`}
+                                href={`/ats/jobs/${app.jobId}`}
                                 className="text-[13px] font-semibold text-slate-900 hover:underline"
                               >
                                 {app.job?.title || "Untitled role"}
