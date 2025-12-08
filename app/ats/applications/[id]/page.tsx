@@ -192,6 +192,7 @@ export default async function ApplicationDetailPage({
   }
 
   const appAny = application as any;
+  const candidateAny = (application.candidate ?? null) as any;
 
   const candidateName =
     application.fullName ||
@@ -209,12 +210,21 @@ export default async function ApplicationDetailPage({
 
   const linkedinUrl =
     appAny.linkedinUrl || appAny.linkedin || application.candidate?.linkedinUrl;
+
   const portfolioUrl =
     appAny.portfolioUrl ||
     appAny.website ||
-    application.candidate?.portfolioUrl;
+    candidateAny?.portfolioUrl ||
+    candidateAny?.website ||
+    candidateAny?.cvUrl ||
+    null;
+
   const resumeUrl =
-    appAny.resumeUrl || appAny.cvUrl || application.candidate?.resumeUrl;
+    appAny.resumeUrl ||
+    appAny.cvUrl ||
+    candidateAny?.resumeUrl ||
+    candidateAny?.cvUrl ||
+    null;
 
   const source = application.source || "Not specified";
   const appliedAt = formatDate(application.createdAt);
