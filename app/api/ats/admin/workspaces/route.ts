@@ -1,117 +1,114 @@
 // app/api/ats/admin/workspaces/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { isSuperAdminUser } from "@/lib/officialEmail";
+import { prisma } from "@/lib/prisma";
+import { getServerUser } from "@/lib/auth/getServerUser";
 
-type Plan = "free" | "pro" | "enterprise";
-
-export const runtime = "nodejs";
-
-export async function GET(_req: NextRequest) {
-  try {
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !user || !isSuperAdminUser(user)) {
-      return NextResponse.json(
-        { ok: false, error: "Forbidden" },
-        { status: 403 },
-      );
-    }
-
-    const { data, error: dbError } = await supabaseAdmin
-      .from("ats_scoring_settings")
-      .select("workspace_slug, plan, hiring_mode, created_at, updated_at")
-      .order("workspace_slug");
-
-    if (dbError) {
-      console.error("GET admin/workspaces – error:", dbError);
-      return NextResponse.json(
-        { ok: false, error: "Failed to load workspaces" },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json({
-      ok: true,
-      workspaces: data ?? [],
-    });
-  } catch (err) {
-    console.error("GET admin/workspaces – unexpected:", err);
-    return NextResponse.json(
-      { ok: false, error: "Unexpected error" },
-      { status: 500 },
-    );
-  }
-}
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json().catch(() => ({}));
-    const workspaceSlug = (body.workspaceSlug as string | undefined)?.trim();
-    const plan = body.plan as Plan | undefined;
+  const user = await getServerUser();
 
-    if (!workspaceSlug || !plan) {
-      return NextResponse.json(
-        { ok: false, error: "workspaceSlug and plan are required" },
-        { status: 400 },
-      );
-    }
-
-    if (!["free", "pro", "enterprise"].includes(plan)) {
-      return NextResponse.json(
-        { ok: false, error: "Invalid plan" },
-        { status: 400 },
-      );
-    }
-
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !user || !isSuperAdminUser(user)) {
-      return NextResponse.json(
-        { ok: false, error: "Forbidden" },
-        { status: 403 },
-      );
-    }
-
-    const { data, error: dbError } = await supabaseAdmin
-      .from("ats_scoring_settings")
-      .upsert(
-        {
-          workspace_slug: workspaceSlug,
-          plan,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "workspace_slug" },
-      )
-      .select("workspace_slug, plan, hiring_mode")
-      .maybeSingle();
-
-    if (dbError || !data) {
-      console.error("POST admin/workspaces – error:", dbError);
-      return NextResponse.json(
-        { ok: false, error: "Failed to update plan" },
-        { status: 500 },
-      );
-    }
-
-    return NextResponse.json({
-      ok: true,
-      workspace: data,
-    });
-  } catch (err) {
-    console.error("POST admin/workspaces – unexpected:", err);
+  // 🔐 Only SUPER_ADMIN can create workspaces
+  if (!user || user.globalRole !== "SUPER_ADMIN") {
     return NextResponse.json(
-      { ok: false, error: "Unexpected error" },
-      { status: 500 },
+      { ok: false, error: "Forbidden: super admin only." },
+      { status: 403 },
+    );
+  }
+
+  const formData = await req.formData();
+
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "")
+    .trim()
+    .toLowerCase();
+
+  const primaryContactEmailRaw = formData.get("primaryContactEmail");
+  const primaryContactEmail =
+    typeof primaryContactEmailRaw === "string" &&
+    primaryContactEmailRaw.trim().length > 0
+      ? primaryContactEmailRaw.trim().toLowerCase()
+      : null;
+
+  const planTierRaw = String(formData.get("planTier") ?? "STARTER").toUpperCase();
+  const planTier =
+    planTierRaw === "GROWTH" ||
+    planTierRaw === "AGENCY" ||
+    planTierRaw === "ENTERPRISE"
+      ? planTierRaw
+      : "STARTER";
+
+  const seatsRaw = String(formData.get("seats") ?? "3");
+  const seatsParsed = parseInt(seatsRaw, 10);
+  const seats = Number.isNaN(seatsParsed) ? 3 : Math.max(seatsParsed, 1);
+
+  const maxOpenJobsRaw = formData.get("maxOpenJobs");
+  const maxOpenJobs =
+    typeof maxOpenJobsRaw === "string" && maxOpenJobsRaw.trim().length > 0
+      ? parseInt(maxOpenJobsRaw, 10)
+      : null;
+
+  const defaultTimezone =
+    String(formData.get("defaultTimezone") ?? "").trim() || "Africa/Lagos";
+  const defaultCurrency =
+    String(formData.get("defaultCurrency") ?? "").trim() || "USD";
+
+  if (!name || !slug) {
+    return NextResponse.redirect(
+      new URL(
+        `/ats/admin/tenants?error=${encodeURIComponent(
+          "Workspace name and slug are required.",
+        )}`,
+        req.url,
+      ),
+    );
+  }
+
+  try {
+    // Small helper: 14-day trial window
+    const now = new Date();
+    const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    await prisma.tenant.create({
+      data: {
+        name,
+        slug,
+        status: "active",
+        primaryContactEmail,
+        notificationEmail: primaryContactEmail,
+        // legacy "plan" field – keep in sync with tier if you still have it
+        plan: planTier.toLowerCase(),
+
+        // new billing/plan fields (added in your updated Prisma schema)
+        planTier, // mapped to tenants.plan_tier
+        seats, // tenants.seats
+        maxOpenJobs: maxOpenJobs ?? undefined, // tenants.max_open_jobs
+        defaultTimezone, // tenants.default_timezone
+        defaultCurrency, // tenants.default_currency
+        billingStatus: "trial", // tenants.billing_status
+        trialEndsAt,
+      },
+    });
+
+    return NextResponse.redirect(
+      new URL("/ats/admin/tenants?created=1", req.url),
+    );
+  } catch (error: any) {
+    console.error("[admin/workspaces] create workspace error", error);
+
+    let message = "Failed to create workspace.";
+
+    // Prisma unique constraint on slug
+    if (error?.code === "P2002") {
+      message =
+        "That workspace slug is already in use. Choose a different slug.";
+    }
+
+    return NextResponse.redirect(
+      new URL(
+        `/ats/admin/tenants?error=${encodeURIComponent(message)}`,
+        req.url,
+      ),
     );
   }
 }
