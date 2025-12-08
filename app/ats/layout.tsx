@@ -22,28 +22,26 @@ type Props = {
 };
 
 export default async function AtsLayout({ children }: Props) {
-  const { supabaseUser, user, isSuperAdmin } = await getServerUser();
+  const ctx = await getServerUser();
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // 1) Require Supabase session
-  if (!supabaseUser || !supabaseUser.email) {
+  // 1) Require app-level user context (cookie-based auth)
+  if (!ctx || !ctx.user) {
     redirect("/login?callbackUrl=/ats");
   }
 
-  // 2) Enforce "official email" policy
-  if (!isOfficialUser({ email: supabaseUser.email })) {
+  const { user, isSuperAdmin, tenantRoles } = ctx;
+
+  // 2) Enforce "official email" policy (unless super admin)
+  const email = user.email ?? "";
+  if (!isOfficialUser({ email }) && !isSuperAdmin) {
     redirect("/access-denied");
   }
 
-  // 3) Require app-level user row
-  if (!user) {
-    redirect("/access-denied?reason=no_app_user");
-  }
-
-  // 4) Tenant membership on tenant host (unless super admin)
+  // 3) Tenant access on tenant host (unless super admin)
   if (!isPrimaryHost && tenantSlugFromHost && !isSuperAdmin) {
-    const hasTenantAccess = user.userTenantRoles.some(
-      (role) => role.tenant?.slug === tenantSlugFromHost,
+    const hasTenantAccess = tenantRoles.some(
+      (role) => role.tenantSlug === tenantSlugFromHost,
     );
 
     if (!hasTenantAccess) {
@@ -51,11 +49,16 @@ export default async function AtsLayout({ children }: Props) {
     }
   }
 
+  // 4) Shape user object for the client layout
+  const appUser = {
+    ...user,
+    tenants: tenantRoles,
+  };
+
   // 5) Delegate OTP gating to client-side gate
   return (
     <OtpGateClient>
-      {/* Pass full user object down; AtsLayoutClient can decide what to render */}
-      <AtsLayoutClient user={user as any}>
+      <AtsLayoutClient user={appUser}>
         {children}
       </AtsLayoutClient>
     </OtpGateClient>
