@@ -1,35 +1,33 @@
 // app/api/ats/auth/me/route.ts
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+import { getServerUser } from "@/lib/auth/getServerUser";
 import { isSuperAdminUser } from "@/lib/officialEmail";
 
 const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   try {
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
+    const ctx = await getServerUser();
+    const cookieStore = cookies();
+    const otpCookie = cookieStore.get(OTP_COOKIE_NAME);
+    const isOtpVerified = !!otpCookie?.value;
 
-    if (error || !user || !user.email) {
+    // No app-level user (i.e. no thinkats_user_id cookie)
+    if (!ctx || !ctx.user || !ctx.user.email) {
       return NextResponse.json({
         ok: false,
         email: null,
         isSuperAdmin: false,
-        isOtpVerified: false,
+        isOtpVerified,
       });
     }
 
-    const email = user.email.toLowerCase();
-    const cookieStore = cookies();
-    const otpCookie = cookieStore.get(OTP_COOKIE_NAME);
-    const isOtpVerified = !!otpCookie?.value;
-    const isSuperAdmin = isSuperAdminUser({ email });
+    const email = ctx.user.email.toLowerCase();
+    // Combine DB globalRole flag + legacy email-based super admin helper
+    const isSuperAdmin = ctx.isSuperAdmin || isSuperAdminUser({ email });
 
     return NextResponse.json({
       ok: true,
