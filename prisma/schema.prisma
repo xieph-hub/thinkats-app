@@ -608,7 +608,7 @@ model SentEmail {
   tenantId          String   @map("tenant_id") @db.Uuid
   templateId        String?  @map("template_id") @db.Uuid
   // NEW: denormalised template label for quick UI chips
-  templateName      String?  @map("template_name")
+  templateName      String?  @map("template_name") // 👈 NEW: denormalised template name  
   toEmail           String   @map("to_email")
   candidateId       String?  @map("candidate_id") @db.Uuid
   jobId             String?  @map("job_id") @db.Uuid
@@ -639,7 +639,7 @@ model Note {
   applicationId String?   @map("application_id") @db.Uuid
   authorId      String    @map("author_id") @db.Uuid
   // NEW: denormalised author display for UI
-  authorName    String?   @map("author_name")
+  authorName    String?   @map("author_name") // 👈 NEW: denormalised display name
   noteType      String?   @map("note_type") @default("general")
   body          String
   isPrivate     Boolean   @map("is_private") @default(false)
