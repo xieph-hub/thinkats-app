@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
+import { getServerUser } from "@/lib/auth/getServerUser";
 import AtsJobsTable, { AtsJobRow } from "./AtsJobsTable";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +35,14 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
 
-  // 🔐 Tenant membership / role gate
-  await requireTenantMembership(tenant.id, {
-    allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
-  });
+  const { isSuperAdmin } = await getServerUser();
+
+  // 🔐 Tenant membership / role gate (bypass for super admin)
+  if (!isSuperAdmin) {
+    await requireTenantMembership(tenant.id, {
+      allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
+    });
+  }
 
   const filterQ = firstString(searchParams.q).trim();
 
@@ -155,7 +160,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       overview: job.overview ?? null,
       department: job.department ?? null,
 
-      // 👇 FIX: Prisma Decimal → number | null
+      // 👇 Prisma Decimal → number | null
       salaryMin:
         job.salaryMin != null ? Number(job.salaryMin) : null,
       salaryMax:
@@ -176,7 +181,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       {/* Header */}
       <header className="border-b border-slate-200 bg-white px-5 py-4">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/ats/jobs" className="hover:underline">
+          <Link href="/ats/dashboard" className="hover:underline">
             ATS
           </Link>
           <span>/</span>
