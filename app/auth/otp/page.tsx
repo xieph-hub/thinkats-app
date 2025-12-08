@@ -20,8 +20,8 @@ function OtpPageInner() {
     setInfo(null);
     setLoadingSend(true);
     try {
-      // ✅ match your API route: /api/otp/request
-      const res = await fetch("/api/otp/request", {
+      // ✅ use the real route: /api/auth/otp/request
+      const res = await fetch("/api/auth/otp/request", {
         method: "POST",
       });
 
@@ -29,7 +29,7 @@ function OtpPageInner() {
       try {
         data = await res.json();
       } catch {
-        // ignore
+        // ignore bad JSON
       }
 
       if (!res.ok || data?.ok === false) {
@@ -52,8 +52,8 @@ function OtpPageInner() {
     setLoadingVerify(true);
 
     try {
-      // ✅ match your API route: /api/otp/verify
-      const res = await fetch("/api/otp/verify", {
+      // ✅ use the real route: /api/auth/otp/verify
+      const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
@@ -63,12 +63,15 @@ function OtpPageInner() {
       try {
         data = await res.json();
       } catch {
-        // ignore
+        // ignore bad JSON
       }
 
       if (!res.ok || data?.ok === false) {
         const apiError = data?.error || `status_${res.status}`;
 
+        // These branches are still fine even though your API currently
+        // returns human-readable messages – worst case it falls back
+        // to the generic line below.
         if (apiError === "invalid_or_expired") {
           setError("That code is invalid or has expired. Try again.");
         } else if (apiError === "missing_code") {
