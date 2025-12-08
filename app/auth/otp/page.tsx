@@ -10,7 +10,6 @@ export default function LegacyOtpRedirectPage({
 }: {
   searchParams: SearchParams;
 }) {
-  // We receive ?returnTo=/ats (or something else) from the login flow
   const rawReturnTo = searchParams.returnTo;
   const returnTo =
     typeof rawReturnTo === "string" && rawReturnTo.trim()
@@ -18,7 +17,5 @@ export default function LegacyOtpRedirectPage({
       : "/ats";
 
   const target = `/ats/verify?callbackUrl=${encodeURIComponent(returnTo)}`;
-
-  // Immediately send the user into the canonical OTP screen
   redirect(target);
 }
