@@ -13,10 +13,40 @@ export const metadata: Metadata = {
   description: "Configure your ATS workspace, notifications, security and data.",
 };
 
-export default async function AtsSettingsPage() {
+const PLAN_LABELS: Record<string, string> = {
+  STARTER: "Starter",
+  GROWTH: "Growth",
+  AGENCY: "Agency (multi-tenant)",
+  ENTERPRISE: "Enterprise",
+};
+
+const PLAN_FEATURE_BLURB: Record<string, string> = {
+  STARTER:
+    "Core ATS: jobs, candidates, applications and basic pipelines for a single workspace.",
+  GROWTH:
+    "Adds multi-tenant readiness, richer careers sites and scoring controls for growing teams.",
+  AGENCY:
+    "Designed for agencies: multiple client workspaces, shared pipelines and marketplace-ready jobs.",
+  ENTERPRISE:
+    "Everything in Agency, plus SSO, higher seat limits and custom controls for larger organisations.",
+};
+
+type SettingsSearchParams = {
+  updated?: string;
+  error?: string;
+};
+
+export default async function AtsSettingsPage({
+  searchParams,
+}: {
+  searchParams?: SettingsSearchParams;
+}) {
+  const updatedSection = searchParams?.updated;
+  const errorMessage = searchParams?.error;
+
+  const { isSuperAdmin } = await getServerUser();
   const tenant = await getResourcinTenant();
 
-  // If there is no default tenant configured, show a clear message
   if (!tenant) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-8">
@@ -38,37 +68,49 @@ export default async function AtsSettingsPage() {
     );
   }
 
-  // 🔐 Gate: only OWNER / ADMIN or super admin can see workspace settings
-  const { isSuperAdmin } = await getServerUser();
   if (!isSuperAdmin) {
     await requireTenantMembership(tenant.id, {
       allowedRoles: ["OWNER", "ADMIN"],
     });
   }
 
-  // Load some workspace meta + careersite config
-  const [careerSettings, totalWorkspaces] = await Promise.all([
+  const anyTenant = tenant as any;
+
+  const [
+    careerSettings,
+    totalWorkspaces,
+    allTenantsForBilling,
+  ] = await Promise.all([
     prisma.careerSiteSettings.findFirst({
       where: { tenantId: tenant.id },
     }),
     prisma.tenant.count(),
+    isSuperAdmin
+      ? prisma.tenant.findMany({
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
-  const anyTenant = tenant as any;
+  const defaultTimezone: string =
+    anyTenant.defaultTimezone || "Africa/Lagos";
+  const defaultCurrency: string = anyTenant.defaultCurrency || "USD";
+
+  const planTier: string = (anyTenant.planTier as string) || "GROWTH";
+  const planLabel =
+    PLAN_LABELS[planTier] ||
+    anyTenant.planName ||
+    anyTenant.plan ||
+    "Growth";
+
+  const planBlurb =
+    PLAN_FEATURE_BLURB[planTier] ||
+    "Core ATS with multi-tenant agency features as you grow.";
 
   const seats: number | null =
-    typeof anyTenant.seats === "number"
-      ? anyTenant.seats
-      : typeof anyTenant.maxSeats === "number"
-      ? anyTenant.maxSeats
-      : null;
-
-  const planLabel: string =
-    typeof anyTenant.planName === "string"
-      ? anyTenant.planName
-      : typeof anyTenant.plan === "string"
-      ? anyTenant.plan
-      : "Growth (agency multi-tenant)";
+    typeof anyTenant.seats === "number" ? anyTenant.seats : null;
+  const maxSeats: number | null =
+    typeof anyTenant.maxSeats === "number" ? anyTenant.maxSeats : null;
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   const tenantSlug: string = anyTenant.slug || tenant.id;
@@ -82,35 +124,55 @@ export default async function AtsSettingsPage() {
   const workspaceName = tenant.name || "ATS workspace";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 lg:px-8">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
       {/* Page header */}
-      <header>
+      <header className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           ATS · Settings
         </p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Settings
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="text-sm text-slate-500">
           Configure your ThinkATS workspace, notifications, security and data
           controls. Most changes here apply to your entire ATS workspace.
         </p>
       </header>
 
+      {/* Global alerts */}
+      <div className="space-y-2">
+        {updatedSection && (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+            {updatedSection === "defaults" &&
+              "Workspace defaults updated successfully."}
+            {updatedSection === "billing" &&
+              "Billing & plan settings updated successfully."}
+            {updatedSection !== "defaults" &&
+              updatedSection !== "billing" &&
+              "Settings updated."}
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
+            {errorMessage}
+          </div>
+        )}
+      </div>
+
       <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         {/* LEFT: main settings */}
         <section className="space-y-6">
-          {/* Workspace basics */}
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
+          {/* Workspace basics + defaults */}
+          <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold text-slate-900">
                   Workspace basics
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  High-level identity and defaults for this ATS workspace. You
-                  can update fine-grained branding on the workspace and
-                  careers-site settings pages.
+                  Identity and defaults for this ATS workspace. Branding and
+                  careers-site configuration live on their own settings pages.
                 </p>
               </div>
               <Link
@@ -121,6 +183,7 @@ export default async function AtsSettingsPage() {
               </Link>
             </div>
 
+            {/* Identity (read-only here) */}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-700">
@@ -133,11 +196,11 @@ export default async function AtsSettingsPage() {
                   disabled
                 />
                 <p className="text-[11px] text-slate-400">
-                  Pulled from your primary ATS tenant. Edit directly on the{" "}
+                  Pulled from your primary ATS tenant. Edit on{" "}
                   <span className="font-medium text-slate-700">
                     Workspace settings
-                  </span>{" "}
-                  page.
+                  </span>
+                  .
                 </p>
               </div>
 
@@ -152,39 +215,88 @@ export default async function AtsSettingsPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Internal ATS URL for your team. Client-facing careers sites
-                  use their own URLs.
+                  Internal ATS URL for your team. Client careers sites use their
+                  own URLs.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            {/* Defaults form: timezone + currency */}
+            <form
+              method="POST"
+              action="/api/ats/settings/defaults"
+              className="mt-2 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-3"
+            >
+              <input type="hidden" name="tenantId" value={tenant.id} />
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-700">
+                <label
+                  htmlFor="timezone"
+                  className="text-xs font-medium text-slate-700"
+                >
                   Default timezone
                 </label>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  Africa/Lagos (UTC+1)
-                </div>
+                <input
+                  id="timezone"
+                  name="timezone"
+                  type="text"
+                  defaultValue={defaultTimezone}
+                  placeholder="Africa/Lagos"
+                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+                <p className="text-[11px] text-slate-400">
+                  IANA timezone ID, e.g.{" "}
+                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
+                    Africa/Lagos
+                  </code>{" "}
+                  or{" "}
+                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
+                    Europe/London
+                  </code>
+                  .
+                </p>
               </div>
+
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-700">
+                <label
+                  htmlFor="currency"
+                  className="text-xs font-medium text-slate-700"
+                >
                   Default currency
                 </label>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  USD (US Dollar)
-                </div>
+                <input
+                  id="currency"
+                  name="currency"
+                  type="text"
+                  defaultValue={defaultCurrency}
+                  placeholder="USD"
+                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Three-letter ISO code, e.g.{" "}
+                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
+                    USD
+                  </code>
+                  ,{" "}
+                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
+                    NGN
+                  </code>{" "}
+                  or{" "}
+                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
+                    EUR
+                  </code>
+                  .
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-700">
-                  Environment
-                </label>
-                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Live workspace
-                </div>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  className="w-full rounded-md bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
+                >
+                  Save defaults
+                </button>
               </div>
-            </div>
+            </form>
           </section>
 
           {/* Scoring & bias settings (live card) */}
@@ -203,7 +315,7 @@ export default async function AtsSettingsPage() {
                 href="/ats/settings/scoring"
                 className="hidden rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
               >
-                Open full scoring settings
+                Open scoring settings
               </Link>
             </div>
 
@@ -244,42 +356,6 @@ export default async function AtsSettingsPage() {
                 title="Security alerts"
                 description="Logins from new devices and critical account changes. Recommended on for all admins."
                 highlight
-              />
-            </div>
-          </section>
-
-          {/* Security & access */}
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Security &amp; access
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Guardrails for who can access your ATS and how they sign in.
-                  Connect these to real policies once SSO and 2FA are ready.
-                </p>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
-                Policy surface
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              <SimpleSettingRow
-                title="Workspace roles"
-                description="Use roles like Admin, Recruiter, Hiring manager and Viewer to control access."
-                badge="Coming soon"
-              />
-              <SimpleSettingRow
-                title="Two-factor authentication"
-                description="Require 2FA for admins and optionally for all workspace members."
-                badge="Recommended"
-              />
-              <SimpleSettingRow
-                title="Single sign-on (SSO)"
-                description="Connect Okta, Azure AD, Google Workspace or other identity providers."
-                badge="Enterprise"
               />
             </div>
           </section>
@@ -325,7 +401,7 @@ export default async function AtsSettingsPage() {
 
         {/* RIGHT: summary / meta */}
         <aside className="space-y-6">
-          {/* Workspace overview card, now backed by real data */}
+          {/* Workspace overview */}
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-900">
               Workspace overview
@@ -348,18 +424,165 @@ export default async function AtsSettingsPage() {
                 </dd>
               </div>
               <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Total seats</dt>
+                <dt className="text-slate-500">Default timezone</dt>
+                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
+                  {defaultTimezone}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between">
+                <dt className="text-slate-500">Default currency</dt>
+                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
+                  {defaultCurrency}
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          {/* Billing & plans card */}
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Billing &amp; plans
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Plan tier and seat limits for this workspace. Super admins can
+                  override plans for any tenant.
+                </p>
+              </div>
+              <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
+                {planLabel}
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-600">{planBlurb}</p>
+
+            <dl className="mt-2 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <dt className="text-slate-500">Seats (committed)</dt>
                 <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
                   {seats ?? "—"}
                 </dd>
               </div>
               <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Plan</dt>
+                <dt className="text-slate-500">Seat limit</dt>
                 <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {planLabel}
+                  {maxSeats ?? "—"}
                 </dd>
               </div>
             </dl>
+
+            <form
+              method="POST"
+              action="/api/ats/settings/billing"
+              className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-[11px]"
+            >
+              {isSuperAdmin ? (
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="tenantId"
+                    className="block text-[11px] font-medium text-slate-700"
+                  >
+                    Manage tenant (super admin)
+                  </label>
+                  <select
+                    id="tenantId"
+                    name="tenantId"
+                    defaultValue={tenant.id}
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  >
+                    {allTenantsForBilling.map((t) => {
+                      const tAny = t as any;
+                      const label =
+                        t.name || tAny.slug || t.id;
+                      return (
+                        <option key={t.id} value={t.id}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-[10px] text-slate-500">
+                    As a super admin, you can override plan tier and seat limits
+                    for any tenant, regardless of current limits.
+                  </p>
+                </div>
+              ) : (
+                <input type="hidden" name="tenantId" value={tenant.id} />
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="planTier"
+                    className="block text-[11px] font-medium text-slate-700"
+                  >
+                    Plan tier
+                  </label>
+                  <select
+                    id="planTier"
+                    name="planTier"
+                    defaultValue={planTier}
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  >
+                    <option value="STARTER">Starter</option>
+                    <option value="GROWTH">Growth</option>
+                    <option value="AGENCY">Agency</option>
+                    <option value="ENTERPRISE">Enterprise</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="seats"
+                    className="block text-[11px] font-medium text-slate-700"
+                  >
+                    Seats (committed)
+                  </label>
+                  <input
+                    id="seats"
+                    name="seats"
+                    type="number"
+                    min={0}
+                    defaultValue={seats ?? ""}
+                    placeholder="e.g. 5"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="maxSeats"
+                    className="block text-[11px] font-medium text-slate-700"
+                  >
+                    Seat limit
+                  </label>
+                  <input
+                    id="maxSeats"
+                    name="maxSeats"
+                    type="number"
+                    min={0}
+                    defaultValue={maxSeats ?? ""}
+                    placeholder="e.g. 10"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1">
+                <p className="max-w-xs text-[10px] text-slate-500">
+                  Feature access can key off <span className="font-medium">Plan tier</span> in
+                  your middleware or UI (e.g. marketplace, advanced scoring,
+                  client workspaces).
+                </p>
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
+                >
+                  Save billing
+                </button>
+              </div>
+            </form>
           </div>
 
           {/* Careers-site summary card, wired to real settings */}
@@ -470,30 +693,6 @@ function NotificationRow({
       <span className="inline-flex cursor-default items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
         UI only
       </span>
-    </div>
-  );
-}
-
-function SimpleSettingRow({
-  title,
-  description,
-  badge,
-}: {
-  title: string;
-  description: string;
-  badge?: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium text-slate-800">{title}</p>
-        <p className="mt-1 text-xs text-slate-500">{description}</p>
-      </div>
-      {badge && (
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-600">
-          {badge}
-        </span>
-      )}
     </div>
   );
 }
