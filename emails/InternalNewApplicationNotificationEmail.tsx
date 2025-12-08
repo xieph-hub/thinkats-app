@@ -1,6 +1,6 @@
 // emails/InternalNewApplicationNotificationEmail.tsx
 import * as React from "react";
-import ResourcinEmailLayout from "./ResourcinEmailLayout";
+import ThinkATSEmailLayout from "./ThinkATSEmailLayout";
 
 export interface InternalNewApplicationNotificationEmailProps {
   jobTitle: string;
@@ -36,7 +36,7 @@ export default function InternalNewApplicationNotificationEmail(
     : jobTitle || "role";
 
   return (
-    <ResourcinEmailLayout
+    <ThinkATSEmailLayout
       title="New application in your ATS"
       preheader={`New application received for ${jobTitle}`}
     >
@@ -44,7 +44,7 @@ export default function InternalNewApplicationNotificationEmail(
         <p style={{ margin: "0 0 12px 0" }}>Hi team,</p>
         <p style={{ margin: "0 0 12px 0" }}>
           A new candidate has applied for the{" "}
-          <strong>{roleLine}</strong> role via the Resourcin ATS.
+          <strong>{roleLine}</strong> role via ThinkATS.
         </p>
       </div>
 
@@ -55,7 +55,7 @@ export default function InternalNewApplicationNotificationEmail(
           borderRadius: 12,
           backgroundColor: "#F9FAFB",
           border: "1px solid #E5E7EB",
-          borderLeft: "4px solid #306B34",
+          borderLeft: "4px solid "#306B34",
           fontSize: 13,
           color: "#4B5563",
         }}
@@ -153,6 +153,6 @@ export default function InternalNewApplicationNotificationEmail(
           Open pipeline in ATS
         </a>
       </p>
-    </ResourcinEmailLayout>
+    </ThinkATSEmailLayout>
   );
 }
