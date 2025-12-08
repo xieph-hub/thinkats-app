@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -34,13 +35,16 @@ export async function POST(request: Request) {
 
   try {
     const tenant = await getResourcinTenant();
-
     if (!tenant) {
       const url = new URL(request.url);
       url.pathname = "/ats/jobs";
       url.search = "";
       return NextResponse.redirect(url, { status: 303 });
     }
+
+    await requireTenantMembership(tenant.id);
+    // For roles:
+    // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
 
     // Bulk update stage
     await prisma.jobApplication.updateMany({
@@ -57,7 +61,6 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("Bulk stage update error:", err);
-    // We still redirect – later you can add a flash message system if you want
   }
 
   const redirectUrl = new URL(request.url);
