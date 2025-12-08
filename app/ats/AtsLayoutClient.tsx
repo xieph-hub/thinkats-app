@@ -21,7 +21,7 @@ type NavGroup = {
   items: NavItem[];
 };
 
-// 🔹 Global ATS-style information architecture
+// 🔹 Global ATS-style IA with Admin → Plans
 const navGroups: NavGroup[] = [
   {
     label: "Hiring",
@@ -41,12 +41,12 @@ const navGroups: NavGroup[] = [
     label: "Admin",
     items: [
       { href: "/ats/tenants", label: "Workspaces" },
+      { href: "/ats/admin/plans", label: "Plans" },
       { href: "/ats/settings", label: "Settings" },
     ],
   },
 ];
 
-// Flatten for mobile nav pills
 const flatNavItems: NavItem[] = navGroups.flatMap((g) => g.items);
 
 function isActive(pathname: string, href: string) {
@@ -82,11 +82,10 @@ export default function AtsLayoutClient({ user, children }: Props) {
     .slice(0, 2)
     .toUpperCase();
 
-  // Brand-ish colours
-  const BRAND_ACTIVE = "#2563EB";    // active pill / item
-  const BRAND_BORDER = "#1F2937";    // shell borders
-  const SHELL_BG = "#020617";        // sidebar + header
-  const SURFACE_BG = "#F9FAFB";      // central canvas (light)
+  const BRAND_ACTIVE = "#2563EB";
+  const BRAND_BORDER = "#1F2937";
+  const SHELL_BG = "#020617";
+  const SURFACE_BG = "#F9FAFB";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
@@ -99,7 +98,6 @@ export default function AtsLayoutClient({ user, children }: Props) {
             borderColor: BRAND_BORDER,
           }}
         >
-          {/* Logo / product */}
           <div className="mb-6 flex items-center gap-2">
             <div
               className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
@@ -117,7 +115,6 @@ export default function AtsLayoutClient({ user, children }: Props) {
             </div>
           </div>
 
-          {/* Grouped nav */}
           <nav className="flex-1 space-y-5 text-sm">
             {navGroups.map((group) => (
               <div key={group.label} className="space-y-1">
@@ -150,7 +147,6 @@ export default function AtsLayoutClient({ user, children }: Props) {
             ))}
           </nav>
 
-          {/* Sign out */}
           <button
             type="button"
             onClick={handleSignOut}
@@ -175,7 +171,6 @@ export default function AtsLayoutClient({ user, children }: Props) {
               borderColor: BRAND_BORDER,
             }}
           >
-            {/* Mobile logo */}
             <div className="flex items-center gap-2 lg:hidden">
               <div
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
@@ -190,7 +185,6 @@ export default function AtsLayoutClient({ user, children }: Props) {
 
             <div className="flex-1" />
 
-            {/* User avatar */}
             <div className="flex items-center gap-3">
               <div className="hidden flex-col items-end text-right text-xs sm:flex">
                 <span className="max-w-[200px] truncate font-medium text-slate-100">
@@ -244,7 +238,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
             })}
           </nav>
 
-          {/* Page body – light center */}
+          {/* Light central canvas */}
           <main
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
             style={{ backgroundColor: SURFACE_BG }}
