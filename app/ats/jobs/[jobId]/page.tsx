@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
+import { getResourcinTenant } from "@/lib/tenant";
 import { matchesBooleanQuery } from "@/lib/booleanSearch";
 import JobPipelineList from "./JobPipelineList";
 
@@ -55,11 +55,6 @@ export default async function JobPipelinePage({
 }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
-
-  // 🔐 Tenant membership / role gate
-  await requireTenantMembership(tenant.id, {
-    allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
-  });
 
   const job = await prisma.job.findFirst({
     where: {
