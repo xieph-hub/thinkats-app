@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
 import CareerLinks from "./CareerLinks";
 
 export const dynamic = "force-dynamic";
@@ -89,8 +90,18 @@ export default async function EditJobPage({
 }) {
   const jobId = params.jobId;
 
+  const currentTenant = await getResourcinTenant();
+  if (!currentTenant) {
+    notFound();
+  }
+
+  // 🔐 Only allowed roles can edit jobs
+  await requireTenantMembership(currentTenant.id, {
+    allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
+  });
+
   const job = await prisma.job.findUnique({
-    where: { id: jobId },
+    where: { id: jobId, tenantId: currentTenant.id },
     include: {
       tenant: true,
       clientCompany: true,
@@ -463,12 +474,12 @@ export default async function EditJobPage({
                   Salary min
                 </label>
                 <input
-  name="salaryMin"
-  type="text"
-  defaultValue={job.salaryMin ? job.salaryMin.toString() : ""}
-  placeholder="e.g. 15000000"
-  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-/>
+                  name="salaryMin"
+                  type="text"
+                  defaultValue={job.salaryMin ? job.salaryMin.toString() : ""}
+                  placeholder="e.g. 15000000"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                />
               </div>
 
               <div>
@@ -476,12 +487,12 @@ export default async function EditJobPage({
                   Salary max
                 </label>
                 <input
-  name="salaryMax"
-  type="text"
-  defaultValue={job.salaryMax ? job.salaryMax.toString() : ""}
-  placeholder="e.g. 25000000"
-  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-/>
+                  name="salaryMax"
+                  type="text"
+                  defaultValue={job.salaryMax ? job.salaryMax.toString() : ""}
+                  placeholder="e.g. 25000000"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                />
               </div>
 
               <div className="flex items-center gap-2 pt-5">
