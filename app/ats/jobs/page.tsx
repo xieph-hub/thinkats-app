@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { getServerUser } from "@/lib/auth/getServerUser";
 import AtsJobsTable, { AtsJobRow } from "./AtsJobsTable";
 
 export const dynamic = "force-dynamic";
@@ -35,14 +34,9 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
 
-  const { isSuperAdmin } = await getServerUser();
-
-  // 🔐 Tenant membership / role gate (bypass for super admin)
-  if (!isSuperAdmin) {
-    await requireTenantMembership(tenant.id, {
-      allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
-    });
-  }
+  // 🔓 No per-page tenant membership check here.
+  // Access control is handled in app/ats/layout.tsx,
+  // and data is scoped by tenantId below.
 
   const filterQ = firstString(searchParams.q).trim();
 
