@@ -1,6 +1,8 @@
 // app/ats/applications/status/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -13,9 +15,7 @@ export async function POST(request: Request) {
   const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
   const applicationId =
     typeof applicationIdRaw === "string" ? applicationIdRaw : "";
-  const newStatus =
-    typeof newStatusRaw === "string" ? newStatusRaw : "";
-
+  const newStatus = typeof newStatusRaw === "string" ? newStatusRaw : "";
   const redirectTo =
     typeof redirectToRaw === "string" ? redirectToRaw : "";
 
@@ -27,15 +27,31 @@ export async function POST(request: Request) {
   }
 
   try {
-    await prisma.jobApplication.update({
-      where: { id: applicationId },
-      data: {
-        status: newStatus,
+    const tenant = await getResourcinTenant();
+    await requireTenantMembership(tenant.id);
+    // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
+
+    const appRecord = await prisma.jobApplication.findFirst({
+      where: {
+        id: applicationId,
+        jobId,
+        job: {
+          tenantId: tenant.id,
+        },
       },
+      select: { id: true },
     });
+
+    if (appRecord) {
+      await prisma.jobApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          status: newStatus,
+        },
+      });
+    }
   } catch (err) {
     console.error("Error updating application status:", err);
-    // Still redirect; add error UI later if you want.
   }
 
   const redirectPath =
