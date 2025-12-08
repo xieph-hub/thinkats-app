@@ -1,55 +1,49 @@
 // lib/auth/getServerUser.ts
+import type { User as SupabaseUser } from "@supabase/supabase-js";
+import type {
+  User as PrismaUser,
+  Tenant,
+  UserTenantRole,
+} from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
-export type ServerUserContext = {
-  supabaseUser: any | null; // Supabase user (or null)
-  user: any | null; // Prisma User (or null)
-  isSuperAdmin: boolean;
-  primaryTenant: any | null;
-  tenant: any | null; // alias for primaryTenant
+export type AppUserWithTenants = PrismaUser & {
+  userTenantRoles: (UserTenantRole & { tenant: Tenant | null })[];
 };
 
-function parseEmailList(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(/[,\s]+/)
-    .map((x) => x.trim().toLowerCase())
+export type ServerUserContext = {
+  supabaseUser: SupabaseUser | null;
+  user: AppUserWithTenants | null;
+  isSuperAdmin: boolean;
+  primaryTenant: Tenant | null;
+  tenant: Tenant | null;
+};
+
+/**
+ * Utility to normalise a comma-separated list of emails or domains
+ * from environment variables.
+ */
+function parseEnvList(raw?: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 }
 
-/**
- * Server-side helper to:
- * - Read the current Supabase auth user
- * - Map to our Prisma User row
- * - Resolve primary tenant + SUPER_ADMIN flag
- *
- * IMPORTANT:
- * - If there is *no* Supabase session, we treat it as "logged out"
- *   and do NOT log errors.
- */
 export async function getServerUser(): Promise<ServerUserContext> {
   const supabase = createSupabaseRouteClient();
 
-  let supabaseUser: any | null = null;
+  const {
+    data,
+    error,
+  } = await supabase.auth.getUser();
 
-  try {
-    const { data, error } = await supabase.auth.getUser();
+  const supabaseUser = error ? null : data.user;
 
-    if (error || !data?.user || !data.user.email) {
-      // Logged out / no session – totally normal
-      return {
-        supabaseUser: null,
-        user: null,
-        isSuperAdmin: false,
-        primaryTenant: null,
-        tenant: null,
-      };
-    }
-
-    supabaseUser = data.user;
-  } catch {
-    // Any unexpected auth error is treated as "no session"
+  // If there is no Supabase user or no email, treat as logged out.
+  if (!supabaseUser || !supabaseUser.email) {
     return {
       supabaseUser: null,
       user: null,
@@ -61,6 +55,7 @@ export async function getServerUser(): Promise<ServerUserContext> {
 
   const email = supabaseUser.email.toLowerCase();
 
+  // Fetch Prisma User with tenant roles
   const appUser = await prisma.user.findUnique({
     where: { email },
     include: {
@@ -72,45 +67,40 @@ export async function getServerUser(): Promise<ServerUserContext> {
     },
   });
 
-  // Super admin via Prisma role OR env-based override lists
+  // If no app-level user yet, we still return the Supabase user
+  if (!appUser) {
+    return {
+      supabaseUser,
+      user: null,
+      isSuperAdmin: false,
+      primaryTenant: null,
+      tenant: null,
+    };
+  }
+
+  // Gather env-based super admin / override emails
   const envSupers = [
-    ...parseEmailList(process.env.THINKATS_SUPER_ADMINS),
-    ...parseEmailList(process.env.THINKATS_ENTERPRISE_ADMINS),
-    ...parseEmailList(process.env.THINKATS_OVERRIDE_EMAILS),
+    ...parseEnvList(process.env.THINKATS_SUPER_ADMINS),
+    ...parseEnvList(process.env.THINKATS_ENTERPRISE_ADMINS),
+    ...parseEnvList(process.env.THINKATS_OVERRIDE_EMAILS),
   ];
 
   const emailIsEnvSuper = envSupers.includes(email);
   const isSuperAdmin =
-    emailIsEnvSuper || appUser?.globalRole === "SUPER_ADMIN";
+    emailIsEnvSuper || appUser.globalRole === "SUPER_ADMIN";
 
-  // Compute primary tenant (if any)
-  let primaryTenant: any | null = null;
+  // Resolve primary tenant
+  const primaryRole =
+    appUser.userTenantRoles.find((r) => r.isPrimary) ??
+    appUser.userTenantRoles[0];
 
-  if (appUser?.userTenantRoles && appUser.userTenantRoles.length > 0) {
-    const primaryRole =
-      appUser.userTenantRoles.find((r: any) => r.isPrimary) ??
-      appUser.userTenantRoles[0];
-
-    primaryTenant = primaryRole?.tenant ?? null;
-  }
+  const primaryTenant = primaryRole?.tenant ?? null;
 
   return {
     supabaseUser,
-    user: appUser ?? null,
+    user: appUser as AppUserWithTenants,
     isSuperAdmin,
     primaryTenant,
     tenant: primaryTenant,
   };
-}
-
-/**
- * Convenience helper if you want to *require* a Prisma User row.
- * Throws if there is no logged-in app user.
- */
-export async function requireServerUser() {
-  const ctx = await getServerUser();
-  if (!ctx.user) {
-    throw new Error("UNAUTHENTICATED");
-  }
-  return ctx;
 }
