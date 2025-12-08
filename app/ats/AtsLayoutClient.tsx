@@ -3,212 +3,133 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import type { CurrentUser } from "@/lib/auth";
+import { usePathname, useRouter } from "next/navigation";
+import type { AppUserWithTenants } from "@/lib/auth/getServerUser";
+
+type Props = {
+  user: AppUserWithTenants;
+  children: ReactNode;
+};
 
 const navItems = [
   { href: "/ats/dashboard", label: "Dashboard" },
   { href: "/ats/jobs", label: "Jobs" },
   { href: "/ats/candidates", label: "Candidates" },
-  { href: "/ats/clients", label: "Clients" },
   { href: "/ats/tenants", label: "Workspaces" },
+  { href: "/ats/settings", label: "Settings" },
 ];
 
-type Props = {
-  children: ReactNode;
-  user: CurrentUser;
-};
+function isActive(pathname: string, href: string) {
+  if (href === "/ats/dashboard") {
+    return pathname === "/ats" || pathname.startsWith("/ats/dashboard");
+  }
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
-export default function AtsLayoutClient({ children, user }: Props) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const tenantIdFromUrl = searchParams.get("tenantId");
+export default function AtsLayoutClient({ user, children }: Props) {
+  const pathname = usePathname() || "/ats";
+  const router = useRouter();
 
-  // For SUPER_ADMIN we let any tenantId through
-  // For others, tenantIdFromUrl is ignored if it doesn't belong to them.
-  const isSuperAdmin =
-    user.globalRole === "SUPER_ADMIN" ||
-    user.roles.some((r) => r.role === "SUPER_ADMIN");
+  async function handleSignOut() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      router.push("/login");
+    }
+  }
 
-  const allowedTenantIds = isSuperAdmin
-    ? null
-    : user.allowedTenantIds ?? [];
-
-  const effectiveTenantId =
-    isSuperAdmin || !allowedTenantIds?.length
-      ? tenantIdFromUrl || user.primaryTenantId || null
-      : tenantIdFromUrl && allowedTenantIds.includes(tenantIdFromUrl)
-        ? tenantIdFromUrl
-        : user.primaryTenantId || allowedTenantIds[0] || null;
-
-  const buildNavHref = (href: string) => {
-    if (!effectiveTenantId) return href;
-    const url = new URL(href, "http://ats.local");
-    url.searchParams.set("tenantId", effectiveTenantId);
-    return url.pathname + url.search;
-  };
-
-  const isActive = (href: string) => {
-    const baseHref = href.split("?")[0];
-    return pathname === baseHref || pathname.startsWith(`${baseHref}/`);
-  };
+  const displayName =
+    user.fullName ||
+    user.email ||
+    "ATS user";
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      <div className="mx-auto flex max-w-7xl">
+    <div className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="flex h-screen">
         {/* Sidebar */}
-        <aside className="hidden w-64 shrink-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-4 py-6 text-slate-100 md:flex md:flex-col md:gap-6">
-          {/* Brand */}
-          <div>
-            <Link
-              href={buildNavHref("/ats/dashboard")}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-2.5 py-2 text-xs ring-1 ring-white/5 hover:bg-white/10"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#172965] text-xs font-semibold text-white">
-                TA
-              </div>
-              <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold text-white">
-                  ThinkATS
-                </span>
-                <span className="text-[10px] text-slate-300">
-                  {isSuperAdmin ? "Super admin workspace" : "Admin workspace"}
-                </span>
-              </div>
-            </Link>
+        <aside className="hidden w-60 flex-col border-r border-slate-800 bg-slate-950/80 px-4 py-4 lg:flex">
+          <div className="mb-6 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/90 text-xs font-bold">
+              TA
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold">ThinkATS</span>
+              <span className="text-[11px] text-slate-500">
+                Multi-tenant ATS workspace
+              </span>
+            </div>
           </div>
 
-          {/* Nav */}
-          <nav className="mt-4 flex flex-1 flex-col gap-1 text-sm">
+          <nav className="flex-1 space-y-1 text-sm">
             {navItems.map((item) => {
-              const href = buildNavHref(item.href);
-              const active = isActive(item.href);
-
+              const active = isActive(pathname, item.href);
               return (
                 <Link
                   key={item.href}
-                  href={href}
-                  className={`group flex items-center justify-between rounded-lg px-3 py-2 text-[13px] transition ${
+                  href={item.href}
+                  className={[
+                    "flex items-center rounded-lg px-3 py-2 transition",
                     active
-                      ? "bg-white/10 text-white shadow-sm ring-1 ring-[#FFC000]/60"
-                      : "text-slate-300 hover:bg-white/5 hover:text-white"
-                  }`}
+                      ? "bg-slate-800 text-slate-50"
+                      : "text-slate-400 hover:bg-slate-900 hover:text-slate-100",
+                  ].join(" ")}
                 >
                   <span>{item.label}</span>
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full transition ${
-                      active
-                        ? "bg-[#FFC000]"
-                        : "bg-transparent group-hover:bg-slate-400"
-                    }`}
-                  />
                 </Link>
               );
             })}
-
-            <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] text-slate-200">
-              <p className="font-medium">Workspace tips</p>
-              <p className="mt-1">
-                Create & switch workspaces in{" "}
-                <code className="rounded bg-black/30 px-1 py-0.5">
-                  /ats/tenants
-                </code>{" "}
-                and link recruitment clients in{" "}
-                <code className="rounded bg-black/30 px-1 py-0.5">
-                  /ats/clients
-                </code>
-                .
-              </p>
-            </div>
           </nav>
 
-          {/* Footer: brand + sign out */}
-          <div className="mt-auto border-t border-white/10 pt-3 text-[11px] text-slate-400">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <p className="truncate">
-                Signed in as{" "}
-                <span className="font-medium text-slate-100">
-                  {user.fullName || user.email}
-                </span>
-              </p>
-            </div>
-            <form
-              method="POST"
-              action="/api/auth/logout"
-              className="flex items-center justify-between gap-2"
-            >
-              <p>
-                Powered by{" "}
-                <span className="font-medium text-[#64C247]">Resourcin</span>
-              </p>
-              <button
-                type="submit"
-                className="rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-slate-200 hover:border-[#FFC000]/80 hover:bg-[#172965]/60 hover:text-white"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="mt-4 w-full rounded-lg border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
+          >
+            Sign out
+          </button>
         </aside>
 
-        {/* Main content */}
-        <main className="flex-1 overflow-y-auto bg-slate-50">
-          {/* Top ribbon */}
-          <div className="border-b border-slate-200 bg-white/80 px-4 py-2 text-[11px] text-slate-600 backdrop-blur-sm sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full bg-[#172965]/5 px-2 py-0.5 font-medium text-[#172965]">
-                  {isSuperAdmin
-                    ? "Super admin – all workspaces"
-                    : effectiveTenantId
-                      ? "Workspace mode"
-                      : "No workspace linked"}
+        {/* Main content area */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Top bar */}
+          <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 py-3">
+            <div className="flex items-center gap-2 lg:hidden">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/90 text-xs font-bold">
+                TA
+              </div>
+              <span className="text-sm font-semibold">ThinkATS</span>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-3">
+              <div className="hidden flex-col items-end text-right text-xs sm:flex">
+                <span className="max-w-[180px] truncate font-medium text-slate-100">
+                  {displayName}
                 </span>
-                {effectiveTenantId && (
-                  <span className="font-mono text-[10px] text-slate-400">
-                    tenantId: {effectiveTenantId.slice(0, 8)}…
+                {user.email && (
+                  <span className="max-w-[180px] truncate text-[11px] text-slate-500">
+                    {user.email}
                   </span>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href="/ats/tenants"
-                  className="text-[11px] font-medium text-[#172965] hover:underline"
-                >
-                  Switch workspace
-                </Link>
-                <span className="text-slate-300">•</span>
-                <Link
-                  href="/jobs"
-                  className="text-[11px] text-slate-600 hover:text-[#172965] hover:underline"
-                >
-                  View career site as candidate
-                </Link>
-                <span className="text-slate-300">•</span>
-                {/* Mobile-visible sign out */}
-                <form
-                  method="POST"
-                  action="/api/auth/logout"
-                  className="inline"
-                >
-                  <button
-                    type="submit"
-                    className="text-[11px] font-medium text-slate-500 hover:text-[#172965] hover:underline"
-                  >
-                    Sign out
-                  </button>
-                </form>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-[11px] font-semibold uppercase">
+                {(user.fullName || user.email || "?")
+                  .split(" ")
+                  .map((p) => p[0])
+                  .join("")
+                  .slice(0, 2)}
               </div>
             </div>
-          </div>
+          </header>
 
           {/* Page body */}
-          <div className="bg-slate-50">
-            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-              {children}
-            </div>
-          </div>
-        </main>
+          <main className="min-h-0 flex-1 overflow-y-auto bg-slate-950 px-4 py-4 sm:px-6 sm:py-6">
+            <div className="mx-auto max-w-6xl">{children}</div>
+          </main>
+        </div>
       </div>
     </div>
   );
