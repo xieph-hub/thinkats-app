@@ -80,7 +80,7 @@ export default async function CandidateProfilePage({
     typeof searchParams?.tenantId === "string" ? searchParams.tenantId : undefined;
 
   // 1) Resolve tenant (host + ?tenantId logic lives in getResourcinTenant)
-  const tenant = await getResourcinTenant({ tenantIdFromUrl });
+  const tenant = await getResourcinTenant(tenantIdFromUrl);
   if (!tenant) {
     notFound();
   }
