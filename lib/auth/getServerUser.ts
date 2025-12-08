@@ -4,11 +4,19 @@ import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export type ServerUserContext = {
   supabaseUser: any | null; // Supabase user (or null)
-  user: any | null;         // Prisma User (or null)
+  user: any | null; // Prisma User (or null)
   isSuperAdmin: boolean;
   primaryTenant: any | null;
-  tenant: any | null;       // alias for primaryTenant
+  tenant: any | null; // alias for primaryTenant
 };
+
+function parseEmailList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,\s]+/)
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean);
+}
 
 /**
  * Server-side helper to:
@@ -17,8 +25,8 @@ export type ServerUserContext = {
  * - Resolve primary tenant + SUPER_ADMIN flag
  *
  * IMPORTANT:
- * - If there is *no* Supabase session (AuthSessionMissingError or similar),
- *   we *silently* treat it as "logged out" and DO NOT log anything.
+ * - If there is *no* Supabase session, we treat it as "logged out"
+ *   and do NOT log errors.
  */
 export async function getServerUser(): Promise<ServerUserContext> {
   const supabase = createSupabaseRouteClient();
@@ -29,7 +37,7 @@ export async function getServerUser(): Promise<ServerUserContext> {
     const { data, error } = await supabase.auth.getUser();
 
     if (error || !data?.user || !data.user.email) {
-      // Logged out / no session – totally normal, no logging
+      // Logged out / no session – totally normal
       return {
         supabaseUser: null,
         user: null,
@@ -41,7 +49,7 @@ export async function getServerUser(): Promise<ServerUserContext> {
 
     supabaseUser = data.user;
   } catch {
-    // Any error from auth.getUser is treated as "no session"
+    // Any unexpected auth error is treated as "no session"
     return {
       supabaseUser: null,
       user: null,
@@ -64,28 +72,31 @@ export async function getServerUser(): Promise<ServerUserContext> {
     },
   });
 
-  if (!appUser) {
-    // Supabase user exists but no Prisma user row yet
-    return {
-      supabaseUser,
-      user: null,
-      isSuperAdmin: false,
-      primaryTenant: null,
-      tenant: null,
-    };
+  // Super admin via Prisma role OR env-based override lists
+  const envSupers = [
+    ...parseEmailList(process.env.THINKATS_SUPER_ADMINS),
+    ...parseEmailList(process.env.THINKATS_ENTERPRISE_ADMINS),
+    ...parseEmailList(process.env.THINKATS_OVERRIDE_EMAILS),
+  ];
+
+  const emailIsEnvSuper = envSupers.includes(email);
+  const isSuperAdmin =
+    emailIsEnvSuper || appUser?.globalRole === "SUPER_ADMIN";
+
+  // Compute primary tenant (if any)
+  let primaryTenant: any | null = null;
+
+  if (appUser?.userTenantRoles && appUser.userTenantRoles.length > 0) {
+    const primaryRole =
+      appUser.userTenantRoles.find((r: any) => r.isPrimary) ??
+      appUser.userTenantRoles[0];
+
+    primaryTenant = primaryRole?.tenant ?? null;
   }
 
-  const isSuperAdmin = appUser.globalRole === "SUPER_ADMIN";
-
-  const primaryRole =
-    appUser.userTenantRoles.find((r) => r.isPrimary) ??
-    appUser.userTenantRoles[0];
-
-  const primaryTenant = primaryRole?.tenant ?? null;
-
   return {
-    supabaseUser,  // raw Supabase user
-    user: appUser, // Prisma User row
+    supabaseUser,
+    user: appUser ?? null,
     isSuperAdmin,
     primaryTenant,
     tenant: primaryTenant,
