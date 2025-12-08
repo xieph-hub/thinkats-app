@@ -5,6 +5,7 @@ import { getResourcinTenant } from "@/lib/tenant";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(
   req: NextRequest,
@@ -29,7 +30,8 @@ export async function POST(
 
     const formData = await req.formData();
     const noteBodyRaw = formData.get("noteBody");
-    const noteBody = typeof noteBodyRaw === "string" ? noteBodyRaw.trim() : "";
+    const noteBody =
+      typeof noteBodyRaw === "string" ? noteBodyRaw.trim() : "";
 
     if (!noteBody) {
       const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
@@ -46,10 +48,9 @@ export async function POST(
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user || !user.email) {
+    if (!user || !user.email) {
       return NextResponse.json(
         { ok: false, error: "Unauthenticated" },
         { status: 401 },
@@ -57,7 +58,6 @@ export async function POST(
     }
 
     const email = user.email.toLowerCase();
-    const metadata = (user.user_metadata ?? {}) as Record<string, any>;
 
     // Ensure we have an app-level User record
     const appUser = await prisma.user.upsert({
@@ -65,13 +65,10 @@ export async function POST(
       update: { isActive: true },
       create: {
         email,
-        fullName: metadata.full_name ?? metadata.name ?? null,
+        fullName: (user.user_metadata as any)?.full_name ?? null,
         globalRole: "USER",
       },
     });
-
-    const authorDisplayName =
-      appUser.fullName || metadata.full_name || metadata.name || email;
 
     // Sanity check candidate belongs to this tenant
     const candidate = await prisma.candidate.findFirst({
@@ -112,7 +109,7 @@ export async function POST(
         candidateId: candidate.id,
         applicationId: validatedApplicationId,
         authorId: appUser.id,
-        authorName: authorDisplayName, // 👈 NEW
+        authorName: appUser.fullName ?? appUser.email ?? null,
         noteType: "general",
         body: noteBody,
         isPrivate: true, // internal-only by default
