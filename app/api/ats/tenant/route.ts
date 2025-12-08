@@ -8,15 +8,15 @@ import { getHostContext } from "@/lib/host";
 
 export async function GET(_req: NextRequest) {
   try {
-    const { supabaseUser, user, isSuperAdmin, primaryTenant } =
-      await getServerUser();
+    const { user, isSuperAdmin, primaryTenant } = await getServerUser();
 
-    if (!supabaseUser || !supabaseUser.email) {
+    if (!user || !user.email) {
       return NextResponse.json(
         { ok: false, error: "unauthenticated" },
         { status: 401 },
       );
     }
+
 
     const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
