@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export const dynamic = "force-dynamic";
 
@@ -154,12 +153,7 @@ export default async function ApplicationDetailPage({
     );
   }
 
-  // Membership gate for viewing an application
-  await requireTenantMembership(tenant.id);
-  // For role-specific gating:
-  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
-
-  // We find the job that owns this application so we don't have to know the JobApplication model name directly.
+  // Tenant-scoped lookup, but no auth/membership gate
   const job = await prisma.job.findFirst({
     where: {
       tenantId: tenant.id,
