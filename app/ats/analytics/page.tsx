@@ -1,6 +1,5 @@
 // app/ats/analytics/page.tsx
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import { requireTenantMembership } from "@/lib/requireTenantMembership";
@@ -20,12 +19,11 @@ type PageProps = {
 
 export default async function AnalyticsPage({ searchParams }: PageProps) {
   const tenant = await getResourcinTenant();
-  if (!tenant) {
-    notFound();
-  }
 
-  // Enforce membership for this tenant before touching tenant-scoped data
+  // Membership gate for analytics
   await requireTenantMembership(tenant.id);
+  // If you want role-specific access later:
+  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
 
   // ---------------------------------------------------------------------------
   // Time window: "all" (default) vs "30d"
@@ -357,180 +355,3 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                           className="border-b border-slate-50 last:border-0"
                         >
                           <td className="py-1.5 pr-2 text-[11px] font-medium text-slate-700">
-                            {label}
-                          </td>
-                          <td className="py-1.5 pr-2 text-right">
-                            {count}
-                          </td>
-                          <td className="py-1.5 pr-2 text-right">
-                            {pct(count, totalApplications)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Scoring tiers */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                Scoring tiers
-              </h2>
-            </div>
-
-            {tierBuckets.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No scoring data in this time window. Once your auto-screening
-                engine runs, you&apos;ll see A/B/C distribution here.
-              </div>
-            ) : (
-              <ul className="space-y-1.5 text-[11px] text-slate-600">
-                {tierBuckets
-                  .slice()
-                  .sort((a, b) =>
-                    (a.tier || "").localeCompare(b.tier || ""),
-                  )
-                  .map((bucket) => {
-                    const label = (bucket.tier || "UNRATED").toUpperCase();
-                    const count = bucket._count._all;
-                    return (
-                      <li
-                        key={label}
-                        className="flex items-center justify-between"
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          <span className="inline-flex h-4 w-8 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
-                            {label}
-                          </span>
-                          <span className="text-slate-600">
-                            tier candidates
-                          </span>
-                        </span>
-                        <span className="text-xs font-medium text-slate-800">
-                          {count}
-                        </span>
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        {/* Source breakdown + top roles by volume */}
-        <section className="grid gap-4 lg:grid-cols-2">
-          {/* Source breakdown */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                Source breakdown
-              </h2>
-              <span className="text-[11px] text-slate-400">
-                Where applications in this window came from
-              </span>
-            </div>
-
-            {sourceBuckets.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No applications with a source set in this time window.
-                Once you tag sources (e.g. &quot;LinkedIn&quot;,
-                &quot;Referral&quot;), they will appear here.
-              </div>
-            ) : (
-              <table className="w-full table-fixed text-left text-[11px] text-slate-600">
-                <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400">
-                  <tr>
-                    <th className="py-1.5 pr-2">Source</th>
-                    <th className="py-1.5 pr-2 text-right">
-                      Applications
-                    </th>
-                    <th className="py-1.5 pr-2 text-right">
-                      % of total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sourceBuckets
-                    .slice()
-                    .sort((a, b) =>
-                      (a.source || "").localeCompare(b.source || ""),
-                    )
-                    .map((bucket) => {
-                      const label = bucket.source || "Unknown";
-                      const count = bucket._count._all;
-                      return (
-                        <tr
-                          key={label}
-                          className="border-b border-slate-50 last:border-0"
-                        >
-                          <td className="py-1.5 pr-2 text-[11px] font-medium text-slate-700">
-                            {label}
-                          </td>
-                          <td className="py-1.5 pr-2 text-right">
-                            {count}
-                          </td>
-                          <td className="py-1.5 pr-2 text-right">
-                            {pct(count, totalApplications)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Top roles by volume */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                Top roles by volume
-              </h2>
-              <span className="text-[11px] text-slate-400">
-                Roles attracting the most applications in this window
-              </span>
-            </div>
-
-            {jobsByVolume.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No applications in this time window. Once roles start
-                receiving candidates, you&apos;ll see their relative volume
-                here.
-              </div>
-            ) : (
-              <ul className="space-y-2 text-[11px] text-slate-600">
-                {jobsByVolume.map((job) => (
-                  <li
-                    key={job.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-[12px] font-medium text-slate-800">
-                        {job.title}
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        {job.clientCompany?.name || "Internal"} ·{" "}
-                        {(job.status || "open").toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-semibold text-slate-900">
-                        {job.applicationCount}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        applications
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      </main>
-    </div>
-  );
-}
