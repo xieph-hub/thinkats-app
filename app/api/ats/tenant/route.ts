@@ -1,14 +1,10 @@
 // app/api/ats/tenant/route.ts
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getServerUser } from "@/lib/auth/getServerUser";
-import { getHostContext } from "@/lib/host";
 
 export async function GET(_req: NextRequest) {
   try {
-    const { user, isSuperAdmin, primaryTenant } = await getServerUser();
+    const { user, isSuperAdmin } = await getServerUser();
 
     if (!user || !user.email) {
       return NextResponse.json(
@@ -17,43 +13,20 @@ export async function GET(_req: NextRequest) {
       );
     }
 
-
-    const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
-
-    let tenant = primaryTenant;
-
-    // If we’re on a tenant subdomain, prefer that tenant
-    if (!isPrimaryHost && tenantSlugFromHost) {
-      tenant = await prisma.tenant.findUnique({
-        where: { slug: tenantSlugFromHost },
-      });
-
-      if (!tenant) {
-        return NextResponse.json(
-          { ok: false, error: "tenant_not_found" },
-          { status: 404 },
-        );
-      }
-    }
-
-    // Shape this so it’s safe for client consumption
-    const safeUser = user
-      ? {
-          id: user.id,
-          email: user.email,
-          fullName: user.fullName,
-          globalRole: user.globalRole,
-        }
-      : null;
-
     return NextResponse.json({
       ok: true,
       isSuperAdmin,
-      tenant,
-      user: safeUser,
+      user: {
+        id: user.id,
+        email: user.email,
+        // adjust if your User model uses a different field name
+        name: (user as any).name ?? null,
+      },
+      // Keep a placeholder so callers that expect a "tenant" key don't crash.
+      tenant: null,
     });
-  } catch (err) {
-    console.error("/api/ats/tenant error:", err);
+  } catch (error) {
+    console.error("/api/ats/tenant GET error", error);
     return NextResponse.json(
       { ok: false, error: "internal_error" },
       { status: 500 },
