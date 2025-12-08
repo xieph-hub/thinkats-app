@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthRecoveryListener from "@/components/AuthRecoveryListener";
@@ -90,6 +91,7 @@ export default async function RootLayout({
         <Navbar currentUser={user} otpVerified={otpVerified} />
         <main className="min-h-screen">{children}</main>
         <Footer />
+        <Analytics />
       </body>
     </html>
   );
