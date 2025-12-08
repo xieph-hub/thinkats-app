@@ -11,16 +11,19 @@ type Props = {
   children: ReactNode;
 };
 
-// Left-nav items (desktop) + mobile nav
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+};
+
+const navItems: NavItem[] = [
   { href: "/ats/dashboard", label: "Dashboard" },
   { href: "/ats/jobs", label: "Jobs" },
-  { href: "/ats/candidates", label: "Candidates" },
-  { href: "/ats/tenants", label: "Workspaces" }, // existing /ats/tenants page
-  { href: "/ats/clients", label: "Clients" },
   { href: "/ats/applications", label: "Applications" },
+  { href: "/ats/candidates", label: "Candidates" },
+  { href: "/ats/clients", label: "Clients" },
   { href: "/ats/analytics", label: "Analytics" },
-  { href: "/ats/tenants/manage", label: "Tenants" }, // you can point this wherever later
+  { href: "/ats/tenants", label: "Workspaces" }, // main tenants page
   { href: "/ats/settings", label: "Settings" },
 ];
 
@@ -58,26 +61,25 @@ export default function AtsLayoutClient({ user, children }: Props) {
     .toUpperCase();
 
   // Brand colours
-  const BRAND_BG = "#111827"; // Deep Indigo
-  const BRAND_ACTIVE = "#2563EB"; // Electric Blue
-  const BRAND_BORDER = "#1F2933";
+  const BRAND_ACTIVE = "#2563EB";    // electric blue
+  const BRAND_BORDER = "#1F2937";    // slate-800-ish
+  const SHELL_BG = "#020617";        // near black / slate-950
+  const SURFACE_BG = "#F9FAFB";      // very light grey / almost white
 
   return (
-    <div
-      className="min-h-screen text-slate-50"
-      style={{ backgroundColor: BRAND_BG }}
-    >
+    <div className="min-h-screen bg-slate-950 text-slate-50">
       <div className="flex h-screen">
         {/* Sidebar (desktop) */}
         <aside
           className="hidden w-64 flex-col border-r px-4 py-4 lg:flex"
           style={{
-            backgroundColor: "#020617", // very dark surface over Deep Indigo
+            backgroundColor: SHELL_BG,
             borderColor: BRAND_BORDER,
           }}
         >
           <div className="mb-6 flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
               style={{ backgroundColor: BRAND_ACTIVE }}
             >
               TA
@@ -111,7 +113,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
                         }
                   }
                 >
-                  <span>{item.label}</span>
+                  {item.label}
                 </Link>
               );
             })}
@@ -122,7 +124,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
             onClick={handleSignOut}
             className="mt-4 w-full rounded-lg border px-3 py-2 text-xs font-medium transition"
             style={{
-              backgroundColor: "#020617",
+              backgroundColor: SHELL_BG,
               borderColor: BRAND_BORDER,
               color: "#E5E7EB",
             }}
@@ -137,7 +139,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
           <header
             className="flex items-center justify-between border-b px-4 py-3"
             style={{
-              backgroundColor: "#020617",
+              backgroundColor: SHELL_BG,
               borderColor: BRAND_BORDER,
             }}
           >
@@ -157,11 +159,11 @@ export default function AtsLayoutClient({ user, children }: Props) {
 
             <div className="flex items-center gap-3">
               <div className="hidden flex-col items-end text-right text-xs sm:flex">
-                <span className="max-w-[180px] truncate font-medium text-slate-100">
+                <span className="max-w-[200px] truncate font-medium text-slate-100">
                   {displayName}
                 </span>
                 {user.email && (
-                  <span className="max-w-[180px] truncate text-[11px] text-slate-400">
+                  <span className="max-w-[200px] truncate text-[11px] text-slate-400">
                     {user.email}
                   </span>
                 )}
@@ -175,11 +177,11 @@ export default function AtsLayoutClient({ user, children }: Props) {
             </div>
           </header>
 
-          {/* Mobile nav strip (so Jobs etc. are reachable on small screens) */}
+          {/* Mobile nav strip */}
           <nav
             className="flex gap-2 overflow-x-auto border-b px-3 py-2 text-xs lg:hidden"
             style={{
-              backgroundColor: "#020617",
+              backgroundColor: SHELL_BG,
               borderColor: BRAND_BORDER,
             }}
           >
@@ -197,7 +199,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
                           color: "#F9FAFB",
                         }
                       : {
-                          backgroundColor: "rgba(31,41,55,0.8)", // subtle pill
+                          backgroundColor: "rgba(31,41,55,0.9)",
                           color: "#E5E7EB",
                         }
                   }
@@ -208,9 +210,14 @@ export default function AtsLayoutClient({ user, children }: Props) {
             })}
           </nav>
 
-          {/* Page body */}
-          <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
-            <div className="mx-auto max-w-6xl">{children}</div>
+          {/* Page body – central area is light */}
+          <main
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
+            style={{ backgroundColor: SURFACE_BG }}
+          >
+            <div className="mx-auto max-w-6xl">
+              {children}
+            </div>
           </main>
         </div>
       </div>
