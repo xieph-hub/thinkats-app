@@ -1,63 +1,41 @@
 // lib/auth/getServerUser.ts
-import type { User as SupabaseUser } from "@supabase/supabase-js";
-import type {
-  User as PrismaUser,
-  Tenant,
-  UserTenantRole,
-} from "@prisma/client";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
-export type AppUserWithTenants = PrismaUser & {
-  userTenantRoles: (UserTenantRole & { tenant: Tenant | null })[];
+// 🔐 IMPORTANT: set this to whatever cookie name your /api/auth/login sets
+const AUTH_COOKIE_NAME = "thinkats_user_id";
+
+export type TenantRoleSummary = {
+  tenantId: string;
+  tenantSlug: string | null;
+  role: string;
+  isPrimary: boolean;
+  planTier: string | null;
 };
 
 export type ServerUserContext = {
-  supabaseUser: SupabaseUser | null;
-  user: AppUserWithTenants | null;
+  user: {
+    id: string;
+    email: string | null;
+    fullName: string | null;
+    globalRole: string;
+  };
   isSuperAdmin: boolean;
-  primaryTenant: Tenant | null;
-  tenant: Tenant | null;
+  tenantRoles: TenantRoleSummary[];
+  primaryTenantId: string | null;
+  primaryTenantSlug: string | null;
+  primaryTenantPlanTier: string | null;
 };
 
-/**
- * Utility to normalise a comma-separated list of emails or domains
- * from environment variables.
- */
-function parseEnvList(raw?: string | null): string[] {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
+export async function getServerUser(): Promise<ServerUserContext | null> {
+  const cookieStore = cookies();
 
-export async function getServerUser(): Promise<ServerUserContext> {
-  const supabase = createSupabaseRouteClient();
+  // ✅ READ-ONLY cookies – allowed in server components
+  const userId = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  if (!userId) return null;
 
-  const {
-    data,
-    error,
-  } = await supabase.auth.getUser();
-
-  const supabaseUser = error ? null : data.user;
-
-  // If there is no Supabase user or no email, treat as logged out.
-  if (!supabaseUser || !supabaseUser.email) {
-    return {
-      supabaseUser: null,
-      user: null,
-      isSuperAdmin: false,
-      primaryTenant: null,
-      tenant: null,
-    };
-  }
-
-  const email = supabaseUser.email.toLowerCase();
-
-  // Fetch Prisma User with tenant roles
-  const appUser = await prisma.user.findUnique({
-    where: { email },
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
     include: {
       userTenantRoles: {
         include: {
@@ -67,40 +45,34 @@ export async function getServerUser(): Promise<ServerUserContext> {
     },
   });
 
-  // If no app-level user yet, we still return the Supabase user
-  if (!appUser) {
-    return {
-      supabaseUser,
-      user: null,
-      isSuperAdmin: false,
-      primaryTenant: null,
-      tenant: null,
-    };
+  if (!dbUser || !dbUser.isActive) {
+    return null;
   }
 
-  // Gather env-based super admin / override emails
-  const envSupers = [
-    ...parseEnvList(process.env.THINKATS_SUPER_ADMINS),
-    ...parseEnvList(process.env.THINKATS_ENTERPRISE_ADMINS),
-    ...parseEnvList(process.env.THINKATS_OVERRIDE_EMAILS),
-  ];
+  const tenantRoles: TenantRoleSummary[] = dbUser.userTenantRoles.map((utr) => ({
+    tenantId: utr.tenantId,
+    tenantSlug: utr.tenant.slug,
+    role: utr.role,
+    isPrimary: utr.isPrimary,
+    planTier: utr.tenant.planTier,
+  }));
 
-  const emailIsEnvSuper = envSupers.includes(email);
-  const isSuperAdmin =
-    emailIsEnvSuper || appUser.globalRole === "SUPER_ADMIN";
+  const primary =
+    tenantRoles.find((r) => r.isPrimary) || tenantRoles[0] || null;
 
-  // Resolve primary tenant
-  const primaryRole =
-    appUser.userTenantRoles.find((r) => r.isPrimary) ??
-    appUser.userTenantRoles[0];
-
-  const primaryTenant = primaryRole?.tenant ?? null;
+  const isSuperAdmin = dbUser.globalRole === "SUPER_ADMIN";
 
   return {
-    supabaseUser,
-    user: appUser as AppUserWithTenants,
+    user: {
+      id: dbUser.id,
+      email: dbUser.email,
+      fullName: dbUser.fullName,
+      globalRole: dbUser.globalRole,
+    },
     isSuperAdmin,
-    primaryTenant,
-    tenant: primaryTenant,
+    tenantRoles,
+    primaryTenantId: primary?.tenantId ?? null,
+    primaryTenantSlug: primary?.tenantSlug ?? null,
+    primaryTenantPlanTier: primary?.planTier ?? null,
   };
 }
