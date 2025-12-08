@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export const dynamic = "force-dynamic";
 
@@ -52,11 +51,6 @@ async function getDashboardStats(): Promise<DashboardStats> {
   const tenant = await getResourcinTenant();
   const tenantId = tenant.id;
   const tenantName = tenant.name;
-
-  // Membership gate for dashboard
-  await requireTenantMembership(tenantId);
-  // For role-specific access:
-  // await requireTenantMembership(tenantId, { allowedRoles: ["owner", "admin", "recruiter"] });
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -384,7 +378,7 @@ function applicationStatusBadgeClass(value?: string | null) {
   if (key === "HIRED") {
     return "bg-emerald-50 text-emerald-700 border-emerald-100";
   }
-  if (key === "REJECTED" || key === "ARCHIVED") {
+  if (key === "REJECTED" || value === "ARCHIVED") {
     return "bg-rose-50 text-rose-700 border-rose-100";
   }
   return "bg-slate-50 text-slate-700 border-slate-200";
