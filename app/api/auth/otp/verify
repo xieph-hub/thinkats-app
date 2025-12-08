@@ -1,0 +1,75 @@
+// app/api/auth/otp/verify/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+const OTP_COOKIE_NAME = "thinkats_otp_verified";
+const OTP_COOKIE_TTL_HOURS = 24;
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const code = (body.code as string | undefined)?.trim();
+
+    if (!code || code.length !== 6) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Please provide a valid 6-digit code.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const now = new Date();
+
+    const otp = await prisma.loginOtp.findFirst({
+      where: {
+        code,
+        consumed: false,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!otp || !otp.user) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Invalid or expired code. Please request a new one.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Mark OTP as consumed
+    await prisma.loginOtp.update({
+      where: { id: otp.id },
+      data: { consumed: true },
+    });
+
+    // Set "verified" cookie
+    const res = NextResponse.json({ ok: true });
+
+    res.cookies.set(OTP_COOKIE_NAME, "true", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      expires: new Date(
+        Date.now() + OTP_COOKIE_TTL_HOURS * 60 * 60 * 1000,
+      ),
+    });
+
+    return res;
+  } catch (err) {
+    console.error("OTP verify error:", err);
+    return NextResponse.json(
+      { ok: false, error: "internal_error" },
+      { status: 500 },
+    );
+  }
+}
