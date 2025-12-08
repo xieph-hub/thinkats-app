@@ -1,6 +1,8 @@
 // app/ats/applications/actions/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 
 export async function POST(request: Request) {
   const formData = await request.formData();
@@ -13,11 +15,8 @@ export async function POST(request: Request) {
   const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
   const applicationId =
     typeof applicationIdRaw === "string" ? applicationIdRaw : "";
-  const newStage =
-    typeof newStageRaw === "string" ? newStageRaw : "";
-
-  const redirectTo =
-    typeof redirectToRaw === "string" ? redirectToRaw : "";
+  const newStage = typeof newStageRaw === "string" ? newStageRaw : "";
+  const redirectTo = typeof redirectToRaw === "string" ? redirectToRaw : "";
 
   if (!jobId || !applicationId || !newStage) {
     const fallbackUrl = new URL(request.url);
@@ -27,22 +26,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    await prisma.job.update({
-      where: { id: jobId },
-      data: {
-        applications: {
-          update: {
-            where: { id: applicationId },
-            data: {
-              stage: newStage,
-            },
-          },
+    const tenant = await getResourcinTenant();
+    await requireTenantMembership(tenant.id);
+    // For role-specific gating:
+    // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
+
+    // Make sure the application belongs to this job + tenant
+    const appRecord = await prisma.jobApplication.findFirst({
+      where: {
+        id: applicationId,
+        jobId,
+        job: {
+          tenantId: tenant.id,
         },
       },
+      select: { id: true },
     });
+
+    if (appRecord) {
+      await prisma.jobApplication.update({
+        where: { id: appRecord.id },
+        data: {
+          stage: newStage,
+        },
+      });
+    }
   } catch (err) {
     console.error("Error updating application stage:", err);
-    // We still redirect – you can add flash messaging later if needed.
   }
 
   const redirectPath =
