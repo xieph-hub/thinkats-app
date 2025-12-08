@@ -1,6 +1,5 @@
 // app/ats/dashboard/page.tsx
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import { requireTenantMembership } from "@/lib/requireTenantMembership";
@@ -49,10 +48,16 @@ function normaliseJobStatus(status: string | null | undefined) {
   return (status || "").toLowerCase();
 }
 
-async function getDashboardStats(
-  tenantId: string,
-  tenantName: string,
-): Promise<DashboardStats> {
+async function getDashboardStats(): Promise<DashboardStats> {
+  const tenant = await getResourcinTenant();
+  const tenantId = tenant.id;
+  const tenantName = tenant.name;
+
+  // Membership gate for dashboard
+  await requireTenantMembership(tenantId);
+  // For role-specific access:
+  // await requireTenantMembership(tenantId, { allowedRoles: ["owner", "admin", "recruiter"] });
+
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -138,15 +143,7 @@ async function getDashboardStats(
 }
 
 export default async function AtsDashboardPage() {
-  const tenant = await getResourcinTenant();
-  if (!tenant) {
-    notFound();
-  }
-
-  // Enforce membership before loading dashboard stats
-  await requireTenantMembership(tenant.id);
-
-  const stats = await getDashboardStats(tenant.id, tenant.name);
+  const stats = await getDashboardStats();
 
   return (
     <div className="flex flex-col gap-8">
