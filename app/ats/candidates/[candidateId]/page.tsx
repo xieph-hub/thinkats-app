@@ -675,7 +675,7 @@ export default async function CandidateProfilePage({
                     >
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-[10px] font-medium text-slate-700">
-                          {note.authorName || "Someone on your team"}
+                          {(note as any).authorName || "Someone on your team"}
                         </span>
                         <span className="text-[10px] text-slate-400">
                           {formatDateTime(note.createdAt)}
