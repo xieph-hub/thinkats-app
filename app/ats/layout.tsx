@@ -1,61 +1,63 @@
 // app/ats/layout.tsx
 import type { ReactNode } from "react";
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { isOfficialUser } from "@/lib/officialEmail";
 import { getHostContext } from "@/lib/host";
-import AtsLayoutClient from "./AtsLayoutClient";
 import OtpGateClient from "./OtpGateClient";
+import AtsLayoutClient from "./AtsLayoutClient";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "ThinkATS | ATS Workspace",
   description:
     "Manage tenants, jobs, candidates and clients from one shared ATS workspace.",
 };
+
+// Force this layout to be always dynamic so it can
+// reflect the current auth state on every request.
+export const dynamic = "force-dynamic";
 
 type Props = {
   children: ReactNode;
 };
 
 export default async function AtsLayout({ children }: Props) {
+  const { supabaseUser, user, isSuperAdmin } = await getServerUser();
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // 1) Supabase auth – must be logged in
-  const { supabaseUser, user, isSuperAdmin } = await getServerUser();
-
+  // 1) Require Supabase session
   if (!supabaseUser || !supabaseUser.email) {
     redirect("/login?callbackUrl=/ats");
   }
 
-  // 2) Email policy – only official / whitelisted users
-  if (!isOfficialUser(supabaseUser)) {
+  // 2) Enforce "official email" policy
+  if (!isOfficialUser({ email: supabaseUser.email })) {
     redirect("/access-denied");
   }
 
-  // 3) Require Prisma User row
+  // 3) Require app-level user row
   if (!user) {
     redirect("/access-denied?reason=no_app_user");
   }
 
-  // 4) Tenant membership checks on subdomains
+  // 4) Tenant membership on tenant host (unless super admin)
   if (!isPrimaryHost && tenantSlugFromHost && !isSuperAdmin) {
-    const roles = user.userTenantRoles ?? [];
-
-    const hasMembership = roles.some(
-      (r: any) => r.tenant && r.tenant.slug === tenantSlugFromHost,
+    const hasTenantAccess = user.userTenantRoles.some(
+      (role) => role.tenant?.slug === tenantSlugFromHost,
     );
 
-    if (!hasMembership) {
+    if (!hasTenantAccess) {
       redirect("/access-denied?reason=tenant_mismatch");
     }
   }
 
-  // 5) OTP is enforced in OtpGateClient (client-side),
-  //    using /api/ats/auth/me + the OTP cookie.
+  // 5) Delegate OTP gating to client-side gate
   return (
     <OtpGateClient>
-      <AtsLayoutClient user={user as any}>{children}</AtsLayoutClient>
+      {/* Pass full user object down; AtsLayoutClient can decide what to render */}
+      <AtsLayoutClient user={user as any}>
+        {children}
+      </AtsLayoutClient>
     </OtpGateClient>
   );
 }
