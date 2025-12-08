@@ -10,10 +10,15 @@ export const runtime = "nodejs";
 const resendApiKey = process.env.RESEND_API_KEY || "";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
+// Optional but nice to be explicit for anything that uses cookies/Supabase
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const tenant = await getResourcinTenant();
     if (!tenant) {
+      // For JSON callers, we return JSON; for form callers we’ll redirect later.
+      // Here, there is no redirectTo context yet, so just JSON error:
       return NextResponse.json(
         { ok: false, error: "No tenant configured" },
         { status: 400 },
@@ -26,18 +31,27 @@ export async function POST(req: NextRequest) {
     let toEmail = "";
     let subject = "";
     let body = "";
-
     let candidateId: string | null = null;
     let jobId: string | null = null;
     let applicationId: string | null = null;
     let templateId: string | null = null;
     let redirectTo: string | null = null;
 
-    // ------------------------------
-    // Parse JSON (QuickSend) or form
-    // ------------------------------
     if (isJson) {
-      const json = await req.json().catch(() => null);
+      // QuickSendEmailPanel and any JS clients
+      const json = (await req.json().catch(() => null)) as
+        | {
+            to?: string;
+            toEmail?: string;
+            subject?: string;
+            body?: string;
+            candidateId?: string;
+            jobId?: string;
+            applicationId?: string;
+            templateId?: string;
+          }
+        | null;
+
       if (!json || typeof json !== "object") {
         return NextResponse.json(
           { ok: false, error: "Invalid JSON body" },
@@ -45,22 +59,16 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const j = json as Record<string, unknown>;
-
-      const toRaw = (j.to ?? j.toEmail) as string | undefined;
-      const subjectRaw = j.subject as string | undefined;
-      const bodyRaw = j.body as string | undefined;
-
-      toEmail = (toRaw ?? "").trim().toLowerCase();
-      subject = (subjectRaw ?? "").trim();
-      body = (bodyRaw ?? "").trim();
-
-      candidateId = j.candidateId ? String(j.candidateId) : null;
-      jobId = j.jobId ? String(j.jobId) : null;
-      applicationId = j.applicationId ? String(j.applicationId) : null;
-      templateId = j.templateId ? String(j.templateId) : null;
-      redirectTo = j.redirectTo ? String(j.redirectTo) : null;
+      toEmail = (json.toEmail || json.to || "").trim().toLowerCase();
+      subject = (json.subject || "").trim();
+      body = (json.body || "").trim();
+      candidateId = json.candidateId || null;
+      jobId = json.jobId || null;
+      applicationId = json.applicationId || null;
+      templateId = json.templateId || null;
+      redirectTo = null; // JSON callers expect JSON, not redirects
     } else {
+      // Legacy / form-based callers (HTML <form> posts)
       const formData = await req.formData();
 
       const toRaw = formData.get("toEmail");
@@ -98,9 +106,7 @@ export async function POST(req: NextRequest) {
           : null;
     }
 
-    // ------------------------------
     // Basic validation
-    // ------------------------------
     if (!toEmail || !subject || !body) {
       const msg = "To, subject and body are required.";
 
@@ -119,64 +125,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.redirect(url, { status: 303 });
     }
 
-    // ------------------------------
     // Resolve current app user via Supabase session
-    // ------------------------------
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user || !user.email) {
-      if (isJson) {
-        return NextResponse.json(
-          { ok: false, error: "Unauthenticated" },
-          { status: 401 },
-        );
-      }
-      const loginUrl = new URL("/login", req.url);
-      return NextResponse.redirect(loginUrl, { status: 303 });
-    }
+    let appUser: Awaited<
+      ReturnType<typeof prisma.user.findUnique>
+    > | null = null;
 
-    const userEmail = user.email.toLowerCase();
-    const metadata = (user.user_metadata ?? {}) as Record<string, any>;
-
-    let appUser = await prisma.user.findUnique({
-      where: { email: userEmail },
-    });
-
-    if (!appUser) {
-      appUser = await prisma.user.create({
-        data: {
-          email: userEmail,
-          fullName: metadata.full_name ?? metadata.name ?? null,
-          globalRole: "USER",
-          isActive: true,
-        },
+    if (!userError && user && user.email) {
+      const email = user.email.toLowerCase();
+      appUser = await prisma.user.findUnique({
+        where: { email },
       });
+
+      if (!appUser) {
+        appUser = await prisma.user.create({
+          data: {
+            email,
+            fullName:
+              (user.user_metadata as any)?.full_name ??
+              (user.user_metadata as any)?.name ??
+              null,
+            globalRole: "USER",
+            isActive: true,
+          },
+        });
+      }
     }
 
-    // ------------------------------
-    // Optional: look up templateName
-    // ------------------------------
+    // Resolve template name (for chips) if provided
     let templateName: string | null = null;
     if (templateId) {
-      const tpl = await prisma.emailTemplate.findFirst({
-        where: { id: templateId, tenantId: tenant.id },
+      const tpl = await prisma.emailTemplate.findUnique({
+        where: { id: templateId },
         select: { name: true },
       });
       templateName = tpl?.name ?? null;
     }
 
-    // ------------------------------
-    // Send via Resend (best-effort)
-    // ------------------------------
     let status: string = "queued";
     let errorMessage: string | null = null;
     let providerMessageId: string | null = null;
 
-    if (resend) {
+    // Try to send via Resend if configured
+    if (resend && process.env.RESEND_FROM_EMAIL) {
       try {
         const result = await resend.emails.send({
           from:
@@ -188,17 +184,10 @@ export async function POST(req: NextRequest) {
           html: body.replace(/\n/g, "<br />"),
         });
 
-        // Resend SDK returns { data, error } in newer versions; keep it loose
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const castResult = result as any;
-        providerMessageId =
-          castResult?.id ||
-          castResult?.data?.id ||
-          null;
-        status = castResult?.error ? "failed" : "sent";
-        if (castResult?.error) {
-          errorMessage =
-            castResult.error.message ?? "Email provider error";
-        }
+        providerMessageId = castResult?.id ?? null;
+        status = "sent";
       } catch (err: any) {
         console.error("Email provider send error:", err);
         status = "failed";
@@ -206,19 +195,18 @@ export async function POST(req: NextRequest) {
           err?.message || "Failed to send via email provider.";
       }
     } else {
+      // No provider configured – keep record but mark as failed
       status = "failed";
       errorMessage =
-        "RESEND_API_KEY not configured; email was not actually sent.";
+        "RESEND_API_KEY / RESEND_FROM_EMAIL not configured; email was not actually sent.";
     }
 
-    // ------------------------------
-    // Persist sent email record (with templateName)
-    // ------------------------------
+    // Persist sent email record (including templateName + createdByName)
     const sentEmail = await prisma.sentEmail.create({
       data: {
         tenantId: tenant.id,
         templateId,
-        templateName, // 👈 NEW
+        templateName,
         toEmail,
         candidateId,
         jobId,
@@ -227,14 +215,13 @@ export async function POST(req: NextRequest) {
         status,
         errorMessage,
         providerMessageId,
-        createdById: appUser.id,
-        // sentAt has default now()
+        createdById: appUser?.id ?? null,
+        createdByName: appUser?.fullName ?? appUser?.email ?? null,
+        // sentAt defaults to now()
       },
     });
 
-    // ------------------------------
-    // If tied to a specific application, log an event
-    // ------------------------------
+    // If tied to a specific application, log an application event
     if (applicationId) {
       try {
         await prisma.applicationEvent.create({
@@ -259,14 +246,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ------------------------------
-    // Response: JSON for XHR, redirect for forms
-    // ------------------------------
+    // Response: JSON for JS callers, redirect for form posts
     if (isJson) {
       return NextResponse.json({
         ok: true,
-        emailId: sentEmail.id,
         status,
+        sentEmailId: sentEmail.id,
+        providerMessageId,
       });
     }
 
@@ -278,9 +264,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (err) {
     console.error("ATS email/send – unexpected error:", err);
-    return NextResponse.json(
-      { ok: false, error: "Unexpected error sending email" },
-      { status: 500 },
-    );
+
+    // For JSON callers
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      return NextResponse.json(
+        { ok: false, error: "Unexpected error sending email" },
+        { status: 500 },
+      );
+    }
+
+    // For form callers, bounce back to ATS root
+    const fallbackUrl = new URL("/ats", req.url);
+    fallbackUrl.searchParams.set("emailError", "Unexpected error sending email");
+    return NextResponse.redirect(fallbackUrl, { status: 303 });
   }
 }
