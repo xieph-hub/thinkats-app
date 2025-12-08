@@ -4,7 +4,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { requireTenantMembership } from "@/lib/requireTenantMembership";
 import CandidatesTable, {
   type CandidateRowProps,
 } from "./CandidatesTable";
@@ -67,11 +66,6 @@ function deriveLastSeen(apps: any[], fallback: Date): Date {
 export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
-
-  // Membership gate for the candidate list
-  await requireTenantMembership(tenant.id);
-  // For role-specific access:
-  // await requireTenantMembership(tenant.id, { allowedRoles: ["owner", "admin", "recruiter"] });
 
   // ---- URL filters ---------------------------------------------------------
 
