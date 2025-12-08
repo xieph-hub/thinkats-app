@@ -5,7 +5,6 @@ import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 import { Resend } from "resend";
 import { isOfficialUser } from "@/lib/officialEmail";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Create a single Resend instance if we have an API key
@@ -74,7 +73,9 @@ export async function POST(_req: NextRequest) {
         consumed: false,
         expiresAt: { gt: new Date() },
       },
-      data: { consumed: true },
+      data: {
+        consumed: true,
+      },
     });
 
     // 5) Create a fresh OTP
@@ -89,7 +90,7 @@ export async function POST(_req: NextRequest) {
       },
     });
 
-    // 6) Send via Resend (best-effort)
+    // 6) Send via Resend
     if (!resend || !process.env.RESEND_FROM_EMAIL) {
       console.warn(
         "[ThinkATS OTP] Missing RESEND config; OTP stored but no email sent.",
@@ -118,11 +119,11 @@ export async function POST(_req: NextRequest) {
         });
       } catch (err) {
         console.error("[ThinkATS OTP] Failed to send OTP email:", err);
-        // We *still* return ok: true because the OTP exists in DB.
+        // OTP still exists in DB, so we don't hard-fail the request
       }
     }
 
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[ThinkATS OTP] Request error:", err);
     return NextResponse.json(
