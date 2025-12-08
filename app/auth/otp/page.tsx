@@ -20,7 +20,7 @@ function OtpPageInner() {
     setInfo(null);
     setLoadingSend(true);
     try {
-      // NOTE: path updated to /api/auth/otp/request
+      // ✅ use the auth namespaced endpoint
       const res = await fetch("/api/auth/otp/request", {
         method: "POST",
       });
@@ -52,7 +52,7 @@ function OtpPageInner() {
     setLoadingVerify(true);
 
     try {
-      // NOTE: path updated to /api/auth/otp/verify
+      // ✅ use the auth namespaced endpoint
       const res = await fetch("/api/auth/otp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
