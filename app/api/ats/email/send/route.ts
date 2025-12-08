@@ -10,21 +10,17 @@ export const runtime = "nodejs";
 const resendApiKey = process.env.RESEND_API_KEY || "";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
-// Optional but nice to be explicit for anything that uses cookies/Supabase
-export const dynamic = "force-dynamic";
-
 export async function POST(req: NextRequest) {
   try {
     const tenant = await getResourcinTenant();
     if (!tenant) {
-      // For JSON callers, we return JSON; for form callers we’ll redirect later.
-      // Here, there is no redirectTo context yet, so just JSON error:
       return NextResponse.json(
         { ok: false, error: "No tenant configured" },
         { status: 400 },
       );
     }
 
+    // Support both JSON (QuickSend) and form posts
     const contentType = req.headers.get("content-type") || "";
     const isJson = contentType.includes("application/json");
 
@@ -38,7 +34,6 @@ export async function POST(req: NextRequest) {
     let redirectTo: string | null = null;
 
     if (isJson) {
-      // QuickSendEmailPanel and any JS clients
       const json = (await req.json().catch(() => null)) as
         | {
             to?: string;
@@ -52,33 +47,51 @@ export async function POST(req: NextRequest) {
           }
         | null;
 
-      if (!json || typeof json !== "object") {
-        return NextResponse.json(
-          { ok: false, error: "Invalid JSON body" },
-          { status: 400 },
-        );
-      }
+      const toRaw = json?.to ?? json?.toEmail ?? "";
+      const subjectRaw = json?.subject ?? "";
+      const bodyRaw = json?.body ?? "";
 
-      toEmail = (json.toEmail || json.to || "").trim().toLowerCase();
-      subject = (json.subject || "").trim();
-      body = (json.body || "").trim();
-      candidateId = json.candidateId || null;
-      jobId = json.jobId || null;
-      applicationId = json.applicationId || null;
-      templateId = json.templateId || null;
-      redirectTo = null; // JSON callers expect JSON, not redirects
+      toEmail =
+        typeof toRaw === "string" ? toRaw.trim().toLowerCase() : "";
+      subject =
+        typeof subjectRaw === "string" ? subjectRaw.trim() : "";
+      body = typeof bodyRaw === "string" ? bodyRaw.trim() : "";
+
+      candidateId =
+        typeof json?.candidateId === "string" &&
+        json.candidateId.trim().length > 0
+          ? json.candidateId.trim()
+          : null;
+
+      jobId =
+        typeof json?.jobId === "string" && json.jobId.trim().length > 0
+          ? json.jobId.trim()
+          : null;
+
+      applicationId =
+        typeof json?.applicationId === "string" &&
+        json.applicationId.trim().length > 0
+          ? json.applicationId.trim()
+          : null;
+
+      templateId =
+        typeof json?.templateId === "string" &&
+        json.templateId.trim().length > 0
+          ? json.templateId.trim()
+          : null;
     } else {
-      // Legacy / form-based callers (HTML <form> posts)
       const formData = await req.formData();
 
-      const toRaw = formData.get("toEmail");
+      const toRaw = formData.get("toEmail") ?? formData.get("to");
       const subjectRaw = formData.get("subject");
       const bodyRaw = formData.get("body");
 
       toEmail =
         typeof toRaw === "string" ? toRaw.trim().toLowerCase() : "";
-      subject = typeof subjectRaw === "string" ? subjectRaw.trim() : "";
-      body = typeof bodyRaw === "string" ? bodyRaw.trim() : "";
+      subject =
+        typeof subjectRaw === "string" ? subjectRaw.trim() : "";
+      body =
+        typeof bodyRaw === "string" ? bodyRaw.trim() : "";
 
       const candidateIdRaw = formData.get("candidateId");
       const jobIdRaw = formData.get("jobId");
@@ -108,11 +121,9 @@ export async function POST(req: NextRequest) {
 
     // Basic validation
     if (!toEmail || !subject || !body) {
-      const msg = "To, subject and body are required.";
-
       if (isJson) {
         return NextResponse.json(
-          { ok: false, error: msg },
+          { ok: false, error: "To, subject and body are required." },
           { status: 400 },
         );
       }
@@ -121,7 +132,10 @@ export async function POST(req: NextRequest) {
         redirectTo || (candidateId ? `/ats/candidates/${candidateId}` : "/ats"),
         req.url,
       );
-      url.searchParams.set("emailError", msg);
+      url.searchParams.set(
+        "emailError",
+        "To, subject and body are required.",
+      );
       return NextResponse.redirect(url, { status: 303 });
     }
 
@@ -132,18 +146,20 @@ export async function POST(req: NextRequest) {
       error: userError,
     } = await supabase.auth.getUser();
 
-    let appUser: Awaited<
-      ReturnType<typeof prisma.user.findUnique>
-    > | null = null;
+    let appUser: { id: string; fullName: string | null; email: string } | null =
+      null;
 
     if (!userError && user && user.email) {
       const email = user.email.toLowerCase();
-      appUser = await prisma.user.findUnique({
+      const existing = await prisma.user.findUnique({
         where: { email },
+        select: { id: true, fullName: true, email: true },
       });
 
-      if (!appUser) {
-        appUser = await prisma.user.create({
+      if (existing) {
+        appUser = existing;
+      } else {
+        const created = await prisma.user.create({
           data: {
             email,
             fullName:
@@ -153,11 +169,13 @@ export async function POST(req: NextRequest) {
             globalRole: "USER",
             isActive: true,
           },
+          select: { id: true, fullName: true, email: true },
         });
+        appUser = created;
       }
     }
 
-    // Resolve template name (for chips) if provided
+    // Denormalise templateName for chips, if templateId is present
     let templateName: string | null = null;
     if (templateId) {
       const tpl = await prisma.emailTemplate.findUnique({
@@ -172,7 +190,7 @@ export async function POST(req: NextRequest) {
     let providerMessageId: string | null = null;
 
     // Try to send via Resend if configured
-    if (resend && process.env.RESEND_FROM_EMAIL) {
+    if (resend) {
       try {
         const result = await resend.emails.send({
           from:
@@ -184,6 +202,7 @@ export async function POST(req: NextRequest) {
           html: body.replace(/\n/g, "<br />"),
         });
 
+        // Resend typically returns an { id } on success
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const castResult = result as any;
         providerMessageId = castResult?.id ?? null;
@@ -198,15 +217,15 @@ export async function POST(req: NextRequest) {
       // No provider configured – keep record but mark as failed
       status = "failed";
       errorMessage =
-        "RESEND_API_KEY / RESEND_FROM_EMAIL not configured; email was not actually sent.";
+        "RESEND_API_KEY not configured; email was not actually sent.";
     }
 
-    // Persist sent email record (including templateName + createdByName)
+    // Persist sent email record
     const sentEmail = await prisma.sentEmail.create({
       data: {
         tenantId: tenant.id,
         templateId,
-        templateName,
+        templateName, // <– chips can now safely use this
         toEmail,
         candidateId,
         jobId,
@@ -216,8 +235,7 @@ export async function POST(req: NextRequest) {
         errorMessage,
         providerMessageId,
         createdById: appUser?.id ?? null,
-        createdByName: appUser?.fullName ?? appUser?.email ?? null,
-        // sentAt defaults to now()
+        // sentAt has default now()
       },
     });
 
@@ -246,16 +264,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Response: JSON for JS callers, redirect for form posts
+    // JSON callers (QuickSend panel) get a JSON response
     if (isJson) {
-      return NextResponse.json({
-        ok: true,
-        status,
-        sentEmailId: sentEmail.id,
-        providerMessageId,
-      });
+      return NextResponse.json(
+        { ok: true, emailId: sentEmail.id, status },
+        { status: 200 },
+      );
     }
 
+    // Form posts keep existing redirect behaviour
     const redirectUrl = new URL(
       redirectTo || (candidateId ? `/ats/candidates/${candidateId}` : "/ats"),
       req.url,
@@ -265,18 +282,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("ATS email/send – unexpected error:", err);
 
-    // For JSON callers
-    const contentType = req.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      return NextResponse.json(
-        { ok: false, error: "Unexpected error sending email" },
-        { status: 500 },
-      );
-    }
-
-    // For form callers, bounce back to ATS root
-    const fallbackUrl = new URL("/ats", req.url);
-    fallbackUrl.searchParams.set("emailError", "Unexpected error sending email");
-    return NextResponse.redirect(fallbackUrl, { status: 303 });
+    // Best-effort JSON error; if this was a form, the browser will just show a generic error anyway
+    return NextResponse.json(
+      { ok: false, error: "Unexpected error sending email" },
+      { status: 500 },
+    );
   }
 }
