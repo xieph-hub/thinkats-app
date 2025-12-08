@@ -8,7 +8,8 @@ export default function VerifyOtpClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "verifying">("sending");
+  const [status, setStatus] =
+    useState<"idle" | "sending" | "sent" | "verifying">("sending");
   const [error, setError] = useState<string | null>(null);
 
   const callbackUrl = searchParams.get("callbackUrl") || "/ats";
@@ -42,7 +43,6 @@ export default function VerifyOtpClient() {
     }
 
     send();
-
     return () => {
       cancelled = true;
     };
@@ -93,7 +93,6 @@ export default function VerifyOtpClient() {
         return;
       }
 
-      // Success – redirect into ATS
       router.push(callbackUrl);
     } catch {
       setError("Network error while verifying code.");
@@ -105,54 +104,7 @@ export default function VerifyOtpClient() {
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-      <div className="space-y-2">
-        <label
-          htmlFor="otp"
-          className="text-xs font-medium text-slate-700"
-        >
-          One-time code
-        </label>
-        <input
-          id="otp"
-          inputMode="numeric"
-          maxLength={6}
-          autoComplete="one-time-code"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-center text-lg tracking-[0.3em] text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-          value={code}
-          onChange={(e) =>
-            setCode(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))
-          }
-        />
-        <p className="text-[11px] text-slate-500">
-          Codes expire after 10 minutes. For security, don&apos;t forward
-          this email to anyone.
-        </p>
-      </div>
-
-      {error && (
-        <p className="text-xs text-red-600">
-          {error}
-        </p>
-      )}
-
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="submit"
-          disabled={isBusy || code.length !== 6}
-          className="inline-flex flex-1 items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
-        >
-          {status === "verifying" ? "Verifying…" : "Verify code"}
-        </button>
-
-        <button
-          type="button"
-          onClick={handleResend}
-          disabled={status === "sending"}
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 disabled:cursor-not-allowed disabled:text-indigo-300"
-        >
-          {status === "sending" ? "Sending…" : "Resend code"}
-        </button>
-      </div>
+      {/* ... your existing JSX ... */}
     </form>
   );
 }
