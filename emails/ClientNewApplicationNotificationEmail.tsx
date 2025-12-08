@@ -1,6 +1,6 @@
 // emails/ClientNewApplicationNotificationEmail.tsx
 import * as React from "react";
-import ResourcinEmailLayout from "./ResourcinEmailLayout";
+import ThinkATSEmailLayout from "./ThinkATSEmailLayout";
 
 export interface ClientNewApplicationNotificationEmailProps {
   clientName: string;
@@ -31,7 +31,7 @@ export default function ClientNewApplicationNotificationEmail(
     : jobTitle || "your role";
 
   return (
-    <ResourcinEmailLayout
+    <ThinkATSEmailLayout
       title="New candidate for your role"
       preheader={`New candidate for ${jobTitle}`}
     >
@@ -39,7 +39,7 @@ export default function ClientNewApplicationNotificationEmail(
         <p style={{ margin: "0 0 12px 0" }}>Hi {safeClient},</p>
         <p style={{ margin: "0 0 12px 0" }}>
           You have a new candidate for the{" "}
-          <strong>{roleLine}</strong> role being managed by Resourcin.
+          <strong>{roleLine}</strong> role being managed via ThinkATS.
         </p>
       </div>
 
@@ -87,8 +87,8 @@ export default function ClientNewApplicationNotificationEmail(
           color: "#374151",
         }}
       >
-        You can review this candidate and others for the role via your Resourcin
-        ATS view:
+        You can review this candidate and others for the role via your ThinkATS
+        pipeline:
         <br />
         <a
           href={atsLink}
@@ -107,6 +107,6 @@ export default function ClientNewApplicationNotificationEmail(
           Open pipeline in ATS
         </a>
       </p>
-    </ResourcinEmailLayout>
+    </ThinkATSEmailLayout>
   );
 }
