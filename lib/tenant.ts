@@ -75,3 +75,7 @@ export async function getResourcinTenant(
 
   return fallback;
 }
+
+// Re-export so ATS surfaces can do:
+// import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
+export { requireTenantMembership };
