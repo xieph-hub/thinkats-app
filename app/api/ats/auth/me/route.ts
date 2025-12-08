@@ -1,10 +1,12 @@
 // app/api/ats/auth/me/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const runtime = "nodejs";
+// 🔧 Mark this route as always dynamic because it uses cookies/Supabase
+export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(_req: NextRequest) {
   try {
     const supabase = createSupabaseRouteClient();
 
@@ -26,8 +28,9 @@ export async function GET() {
 
     const email = data.user.email?.toLowerCase() ?? "";
 
-    // 🔑 Super admin rule – your Gmail
-    const isSuperAdmin = email === "resourcinhumancapitaladvisors@gmail.com";
+    // 🔑 SUPER ADMIN RULE – your Gmail
+    const isSuperAdmin =
+      email === "resourcinhumancapitaladvisors@gmail.com";
 
     return NextResponse.json(
       {
