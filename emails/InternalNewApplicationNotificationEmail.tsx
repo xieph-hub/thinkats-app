@@ -55,7 +55,7 @@ export default function InternalNewApplicationNotificationEmail(
           borderRadius: 12,
           backgroundColor: "#F9FAFB",
           border: "1px solid #E5E7EB",
-          borderLeft: "4px solid "#306B34",
+          borderLeft: "4px solid #306B34",
           fontSize: 13,
           color: "#4B5563",
         }}
