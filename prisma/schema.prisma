@@ -1,4 +1,4 @@
-generator client {
+generator client { 
   provider = "prisma-client-js"
 }
 
@@ -275,6 +275,9 @@ model Candidate {
   currentTitle   String?  @map("current_title")
   currentCompany String?  @map("current_company")
   cvUrl          String?  @map("cv_url")
+  // NEW: richer profile links for ATS views
+  portfolioUrl   String?  @map("portfolio_url")
+  resumeUrl      String?  @map("resume_url")
   source         String?
   createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
@@ -604,6 +607,8 @@ model SentEmail {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId          String   @map("tenant_id") @db.Uuid
   templateId        String?  @map("template_id") @db.Uuid
+  // NEW: denormalised template label for quick UI chips
+  templateName      String?  @map("template_name")
   toEmail           String   @map("to_email")
   candidateId       String?  @map("candidate_id") @db.Uuid
   jobId             String?  @map("job_id") @db.Uuid
@@ -633,6 +638,8 @@ model Note {
   candidateId   String?   @map("candidate_id") @db.Uuid
   applicationId String?   @map("application_id") @db.Uuid
   authorId      String    @map("author_id") @db.Uuid
+  // NEW: denormalised author display for UI
+  authorName    String?   @map("author_name")
   noteType      String?   @map("note_type") @default("general")
   body          String
   isPrivate     Boolean   @map("is_private") @default(false)
