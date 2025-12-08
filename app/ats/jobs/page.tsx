@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
 import AtsJobsTable, { AtsJobRow } from "./AtsJobsTable";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +33,11 @@ function firstString(value?: string | string[]): string {
 export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
+
+  // 🔐 Tenant membership / role gate
+  await requireTenantMembership(tenant.id, {
+    allowedRoles: ["OWNER", "ADMIN", "RECRUITER"],
+  });
 
   const filterQ = firstString(searchParams.q).trim();
 
