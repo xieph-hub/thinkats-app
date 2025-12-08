@@ -16,16 +16,38 @@ type NavItem = {
   label: string;
 };
 
-const navItems: NavItem[] = [
-  { href: "/ats/dashboard", label: "Dashboard" },
-  { href: "/ats/jobs", label: "Jobs" },
-  { href: "/ats/applications", label: "Applications" },
-  { href: "/ats/candidates", label: "Candidates" },
-  { href: "/ats/clients", label: "Clients" },
-  { href: "/ats/analytics", label: "Analytics" },
-  { href: "/ats/tenants", label: "Workspaces" }, // main tenants page
-  { href: "/ats/settings", label: "Settings" },
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
+
+// 🔹 Global ATS-style information architecture
+const navGroups: NavGroup[] = [
+  {
+    label: "Hiring",
+    items: [
+      { href: "/ats/dashboard", label: "Dashboard" },
+      { href: "/ats/jobs", label: "Jobs" },
+      { href: "/ats/applications", label: "Applications" },
+      { href: "/ats/candidates", label: "Candidates" },
+      { href: "/ats/clients", label: "Clients" },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [{ href: "/ats/analytics", label: "Analytics" }],
+  },
+  {
+    label: "Admin",
+    items: [
+      { href: "/ats/tenants", label: "Workspaces" },
+      { href: "/ats/settings", label: "Settings" },
+    ],
+  },
 ];
+
+// Flatten for mobile nav pills
+const flatNavItems: NavItem[] = navGroups.flatMap((g) => g.items);
 
 function isActive(pathname: string, href: string) {
   if (href === "/ats/dashboard") {
@@ -60,23 +82,24 @@ export default function AtsLayoutClient({ user, children }: Props) {
     .slice(0, 2)
     .toUpperCase();
 
-  // Brand colours
-  const BRAND_ACTIVE = "#2563EB";    // electric blue
-  const BRAND_BORDER = "#1F2937";    // slate-800-ish
-  const SHELL_BG = "#020617";        // near black / slate-950
-  const SURFACE_BG = "#F9FAFB";      // very light grey / almost white
+  // Brand-ish colours
+  const BRAND_ACTIVE = "#2563EB";    // active pill / item
+  const BRAND_BORDER = "#1F2937";    // shell borders
+  const SHELL_BG = "#020617";        // sidebar + header
+  const SURFACE_BG = "#F9FAFB";      // central canvas (light)
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
       <div className="flex h-screen">
         {/* Sidebar (desktop) */}
         <aside
-          className="hidden w-64 flex-col border-r px-4 py-4 lg:flex"
+          className="hidden w-68 flex-col border-r px-4 py-4 lg:flex"
           style={{
             backgroundColor: SHELL_BG,
             borderColor: BRAND_BORDER,
           }}
         >
+          {/* Logo / product */}
           <div className="mb-6 flex items-center gap-2">
             <div
               className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
@@ -94,31 +117,40 @@ export default function AtsLayoutClient({ user, children }: Props) {
             </div>
           </div>
 
-          <nav className="flex-1 space-y-1 text-sm">
-            {navItems.map((item) => {
-              const active = isActive(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition"
-                  style={
-                    active
-                      ? {
-                          backgroundColor: BRAND_ACTIVE,
-                          color: "#F9FAFB",
-                        }
-                      : {
-                          color: "#E5E7EB",
-                        }
-                  }
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+          {/* Grouped nav */}
+          <nav className="flex-1 space-y-5 text-sm">
+            {navGroups.map((group) => (
+              <div key={group.label} className="space-y-1">
+                <div className="px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {group.label}
+                </div>
+                {group.items.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition"
+                      style={
+                        active
+                          ? {
+                              backgroundColor: BRAND_ACTIVE,
+                              color: "#F9FAFB",
+                            }
+                          : {
+                              color: "#E5E7EB",
+                            }
+                      }
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
+          {/* Sign out */}
           <button
             type="button"
             onClick={handleSignOut}
@@ -143,6 +175,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
               borderColor: BRAND_BORDER,
             }}
           >
+            {/* Mobile logo */}
             <div className="flex items-center gap-2 lg:hidden">
               <div
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
@@ -157,6 +190,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
 
             <div className="flex-1" />
 
+            {/* User avatar */}
             <div className="flex items-center gap-3">
               <div className="hidden flex-col items-end text-right text-xs sm:flex">
                 <span className="max-w-[200px] truncate font-medium text-slate-100">
@@ -185,7 +219,7 @@ export default function AtsLayoutClient({ user, children }: Props) {
               borderColor: BRAND_BORDER,
             }}
           >
-            {navItems.map((item) => {
+            {flatNavItems.map((item) => {
               const active = isActive(pathname, item.href);
               return (
                 <Link
@@ -210,14 +244,12 @@ export default function AtsLayoutClient({ user, children }: Props) {
             })}
           </nav>
 
-          {/* Page body – central area is light */}
+          {/* Page body – light center */}
           <main
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
             style={{ backgroundColor: SURFACE_BG }}
           >
-            <div className="mx-auto max-w-6xl">
-              {children}
-            </div>
+            <div className="mx-auto max-w-6xl">{children}</div>
           </main>
         </div>
       </div>
