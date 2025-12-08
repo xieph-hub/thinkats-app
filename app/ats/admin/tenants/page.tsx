@@ -1,6 +1,5 @@
 // app/ats/admin/tenants/page.tsx
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getServerUser } from "@/lib/auth/getServerUser";
@@ -8,581 +7,462 @@ import { getServerUser } from "@/lib/auth/getServerUser";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "ThinkATS | Admin · Workspaces",
+  title: "Tenants & workspaces | ThinkATS",
   description:
-    "Super admin overview of all ATS workspaces, with tools to create new tenants and invite owners.",
+    "Super admin view of all tenants, with tools to create workspaces and invite owners.",
 };
 
-type PageSearchParams = {
-  created?: string;
-  invited?: string;
-  error?: string;
+const PLAN_LABELS: Record<string, string> = {
+  STARTER: "Starter",
+  GROWTH: "Growth",
+  AGENCY: "Agency",
+  ENTERPRISE: "Enterprise",
 };
 
-export default async function AdminTenantsPage({
-  searchParams,
-}: {
-  searchParams?: PageSearchParams;
-}) {
-  const user = await getServerUser();
+function formatPlanLabel(planTier: string | null | undefined) {
+  if (!planTier) return "Starter";
+  const upper = planTier.toUpperCase();
+  return PLAN_LABELS[upper] ?? planTier;
+}
+
+export default async function AdminTenantsPage() {
+  const ctx = await getServerUser();
 
   // 🔐 Super admin gate – only SUPER_ADMIN sees this
-  if (!user || user.globalRole !== "SUPER_ADMIN") {
+  if (!ctx || !ctx.isSuperAdmin) {
     notFound();
   }
 
-  const [tenants] = await Promise.all([
-    prisma.tenant.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: {
-          select: {
-            jobs: true,
-            candidates: true,
-            userTenantRoles: true,
-          },
-        },
-      },
-    }),
-  ]);
+  // Optional: you can still read the underlying user if needed
+  const { user } = ctx;
 
-  const created = searchParams?.created === "1";
-  const invited = searchParams?.invited === "1";
-  const errorMessage = searchParams?.error;
+  const tenants = await prisma.tenant.findMany({
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      primaryContactEmail: true,
+      planTier: true,
+      seats: true,
+      maxSeats: true,
+      maxOpenJobs: true,
+      defaultTimezone: true,
+      defaultCurrency: true,
+      status: true,
+      createdAt: true,
+    },
+  });
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-slate-50">
+    <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 lg:px-8">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-white px-5 py-4">
-        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/ats/dashboard" className="hover:underline">
-            ATS
-          </Link>
-          <span>/</span>
-          <span className="hover:underline">Admin</span>
-          <span>/</span>
-          <span className="font-medium text-slate-700">Workspaces</span>
+      <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Admin · Tenants
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+            Tenants & workspaces
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Create new ATS workspaces, assign plans and invite owners. This
+            surface is visible only to ThinkATS super admins.
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-base font-semibold text-slate-900">
-              Workspaces & tenants
-            </h1>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              Super admin–only view of all tenants running on ThinkATS. Create
-              new workspaces, assign plans and invite owners from one place.
-            </p>
+        {user?.email && (
+          <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] text-emerald-800">
+            Signed in as <span className="font-medium">{user.email}</span> ·
+            Super admin
           </div>
-
-          <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
-            <span className="font-medium text-slate-800">
-              {user.email ?? "Super admin"}
-            </span>
-            <span className="text-[10px] text-slate-400">
-              {tenants.length} workspace
-              {tenants.length === 1 ? "" : "s"} on this cluster
-            </span>
-          </div>
-        </div>
+        )}
       </header>
 
-      {/* Body */}
-      <main className="flex flex-1 flex-col px-5 py-4">
-        {/* Alerts */}
-        <div className="mx-auto mb-4 flex w-full max-w-6xl flex-col gap-2">
-          {created && (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
-              Workspace created. You can now invite an owner and wire billing
-              and careers settings.
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        {/* LEFT: Tenants table */}
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Existing workspaces
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                High-level overview of all tenants currently active in your
+                ThinkATS environment.
+              </p>
             </div>
-          )}
-          {invited && (
-            <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] text-sky-800">
-              Invitation sent to workspace owner. They&apos;ll receive an email
-              with next steps.
-            </div>
-          )}
-          {errorMessage && (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
-              {errorMessage}
-            </div>
-          )}
-        </div>
+            <span className="rounded-full bg-slate-50 px-3 py-1 text-[11px] text-slate-600">
+              {tenants.length} tenant{tenants.length === 1 ? "" : "s"}
+            </span>
+          </div>
 
-        <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)]">
-          {/* LEFT: Forms */}
-          <section className="space-y-6">
-            {/* Create workspace */}
-            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    Create workspace
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Spin up a new tenant for an agency or in-house team. You can
-                    refine plans and limits later from billing.
-                  </p>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-600">
-                  Admin only
-                </span>
+          <div className="overflow-hidden rounded-xl border border-slate-100">
+            <div className="max-h-[420px] overflow-auto">
+              <table className="min-w-full border-collapse text-xs">
+                <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Workspace</th>
+                    <th className="px-3 py-2 text-left font-medium">Plan</th>
+                    <th className="px-3 py-2 text-left font-medium">Seats</th>
+                    <th className="px-3 py-2 text-left font-medium">Open jobs</th>
+                    <th className="px-3 py-2 text-left font-medium">
+                      Timezone / currency
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
+                    <th className="px-3 py-2 text-left font-medium">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {tenants.map((t) => (
+                    <tr key={t.id} className="hover:bg-slate-50/60">
+                      <td className="px-3 py-2 align-top">
+                        <div className="max-w-[220px]">
+                          <div className="truncate text-[11px] font-semibold text-slate-900">
+                            {t.name || "Untitled workspace"}
+                          </div>
+                          <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                            {t.slug
+                              ? `${t.slug}.thinkats.com`
+                              : `tenant_${t.id.slice(0, 8)}`}
+                          </div>
+                          {t.primaryContactEmail && (
+                            <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                              {t.primaryContactEmail}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
+                          {formatPlanLabel(t.planTier)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 align-top text-[11px] text-slate-700">
+                        {t.seats ?? 0}/{t.maxSeats ?? 0}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[11px] text-slate-700">
+                        {t.maxOpenJobs ?? 0}
+                      </td>
+                      <td className="px-3 py-2 align-top text-[11px] text-slate-700">
+                        <div>
+                          {t.defaultTimezone || "Africa/Lagos"}
+                          <span className="mx-1 text-slate-400">·</span>
+                          {t.defaultCurrency || "USD"}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            t.status === "active"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 align-top text-[10px] text-slate-500">
+                        {t.createdAt.toISOString().slice(0, 10)}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {tenants.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-3 py-6 text-center text-[11px] text-slate-500"
+                      >
+                        No tenants found yet. Use the form on the right to create
+                        your first workspace.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-500">
+            Seats and job limits are enforced at the API layer via{" "}
+            <code className="rounded bg-slate-50 px-1 py-0.5">
+              planTier / seats / maxOpenJobs
+            </code>{" "}
+            on <code className="rounded bg-slate-50 px-1 py-0.5">Tenant</code>.
+          </p>
+        </section>
+
+        {/* RIGHT: Create workspace + Invite owner */}
+        <section className="space-y-4">
+          {/* Create workspace card */}
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Create workspace
+            </h2>
+            <p className="text-xs text-slate-500">
+              Spin up a new tenant with a default plan, limits and timezone. You
+              can always adjust the plan later in billing.
+            </p>
+
+            <form
+              method="POST"
+              action="/api/ats/admin/workspaces"
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label
+                  htmlFor="name"
+                  className="block text-[11px] font-medium text-slate-700"
+                >
+                  Workspace name
+                </label>
+                <input
+                  id="name"
+                  name="name"
+                  required
+                  placeholder="Acme Talent Partners"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
               </div>
 
-              <form
-                method="POST"
-                action="/api/ats/admin/workspaces"
-                className="space-y-4 text-xs text-slate-700"
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="name"
-                      className="block text-[11px] font-medium text-slate-700"
-                    >
-                      Workspace name
-                    </label>
-                    <input
-                      id="name"
-                      name="name"
-                      required
-                      placeholder="Resourcin Human Capital Advisors"
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                    />
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      Human-readable label used in the ATS header and emails.
-                    </p>
-                  </div>
+              <div>
+                <label
+                  htmlFor="slug"
+                  className="block text-[11px] font-medium text-slate-700"
+                >
+                  Workspace slug
+                </label>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="rounded-md bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+                    https://
+                  </span>
+                  <input
+                    id="slug"
+                    name="slug"
+                    required
+                    placeholder="acme-talent"
+                    className="block flex-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                  <span className="rounded-md bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
+                    .thinkats.com
+                  </span>
+                </div>
+              </div>
 
-                  <div>
-                    <label
-                      htmlFor="slug"
-                      className="block text-[11px] font-medium text-slate-700"
-                    >
-                      Workspace slug
-                    </label>
-                    <div className="mt-1 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                      <span className="hidden text-[11px] text-slate-400 sm:inline">
-                        *.thinkats.com /
-                      </span>
-                      <input
-                        id="slug"
-                        name="slug"
-                        required
-                        placeholder="resourcin"
-                        className="flex-1 border-none bg-transparent text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400"
-                      />
-                    </div>
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      Used for subdomains and routing. Lowercase, numbers and
-                      dashes only.
-                    </p>
-                  </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="planTier"
+                    className="block text-[11px] font-medium text-slate-700"
+                  >
+                    Plan
+                  </label>
+                  <select
+                    id="planTier"
+                    name="planTier"
+                    defaultValue="STARTER"
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  >
+                    <option value="STARTER">Starter</option>
+                    <option value="GROWTH">Growth</option>
+                    <option value="AGENCY">Agency</option>
+                    <option value="ENTERPRISE">Enterprise</option>
+                  </select>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label
-                      htmlFor="primaryContactEmail"
+                      htmlFor="seats"
                       className="block text-[11px] font-medium text-slate-700"
                     >
-                      Primary contact email
+                      Seats
                     </label>
                     <input
-                      id="primaryContactEmail"
-                      name="primaryContactEmail"
-                      type="email"
-                      placeholder="talent@client.com"
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                      id="seats"
+                      name="seats"
+                      type="number"
+                      min={1}
+                      defaultValue={3}
+                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                     />
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      Where owner invites and billing emails should go by
-                      default.
-                    </p>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label
-                        htmlFor="planTier"
-                        className="block text-[11px] font-medium text-slate-700"
-                      >
-                        Plan
-                      </label>
-                      <select
-                        id="planTier"
-                        name="planTier"
-                        defaultValue="STARTER"
-                        className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                      >
-                        <option value="STARTER">Starter</option>
-                        <option value="GROWTH">Growth</option>
-                        <option value="AGENCY">Agency</option>
-                        <option value="ENTERPRISE">Enterprise</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="seats"
-                        className="block text-[11px] font-medium text-slate-700"
-                      >
-                        Seats
-                      </label>
-                      <input
-                        id="seats"
-                        name="seats"
-                        type="number"
-                        min={1}
-                        defaultValue={3}
-                        className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                      />
-                      <p className="mt-1 text-[10px] text-slate-500">
-                        Initial seat limit for this workspace.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label
                       htmlFor="maxOpenJobs"
                       className="block text-[11px] font-medium text-slate-700"
                     >
-                      Max open jobs (optional)
+                      Max open jobs
                     </label>
                     <input
                       id="maxOpenJobs"
                       name="maxOpenJobs"
                       type="number"
-                      min={0}
-                      placeholder="Unlimited"
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                      min={1}
+                      defaultValue={10}
+                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label
-                        htmlFor="defaultTimezone"
-                        className="block text-[11px] font-medium text-slate-700"
-                      >
-                        Default timezone
-                      </label>
-                      <input
-                        id="defaultTimezone"
-                        name="defaultTimezone"
-                        placeholder="Africa/Lagos"
-                        className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="defaultCurrency"
-                        className="block text-[11px] font-medium text-slate-700"
-                      >
-                        Default currency
-                      </label>
-                      <input
-                        id="defaultCurrency"
-                        name="defaultCurrency"
-                        placeholder="USD"
-                        className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                      />
-                    </div>
-                  </div>
                 </div>
+              </div>
 
-                <div className="flex items-center justify-between pt-2">
-                  <p className="text-[10px] text-slate-500">
-                    This will create a new{" "}
-                    <span className="font-medium">Tenant</span> row, scoped to
-                    your ThinkATS cluster. No jobs or users are created yet.
-                  </p>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-slate-800"
-                  >
-                    + Create workspace
-                  </button>
-                </div>
-              </form>
-            </section>
-
-            {/* Invite owner */}
-            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    Invite workspace owner
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Send an owner-level invite into any tenant. This uses the{" "}
-                    <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
-                      /api/ats/tenants/[tenantId]/users/invite
-                    </code>{" "}
-                    endpoint.
-                  </p>
-                </div>
-                <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-[10px] font-medium text-indigo-700">
-                  Owner access
-                </span>
-              </div>
-
-              <form
-                method="POST"
-                // NOTE: tenantId comes from the select below as a field,
-                // backend should read `tenantId` from the body and route internally
-                action="/api/ats/tenants/owner-invite"
-                className="space-y-4 text-xs text-slate-700"
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="tenantId"
-                      className="block text-[11px] font-medium text-slate-700"
-                    >
-                      Workspace
-                    </label>
-                    <select
-                      id="tenantId"
-                      name="tenantId"
-                      required
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                    >
-                      <option value="">Select workspace…</option>
-                      {tenants.map((tenant) => (
-                        <option key={tenant.id} value={tenant.id}>
-                          {tenant.name}{" "}
-                          {tenant.slug ? ` (${tenant.slug})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="email"
-                      className="block text-[11px] font-medium text-slate-700"
-                    >
-                      Owner email
-                    </label>
-                    <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      required
-                      placeholder="owner@client.com"
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                    />
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      This user will receive an email to accept the invite and
-                      complete setup.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor="role"
-                      className="block text-[11px] font-medium text-slate-700"
-                    >
-                      Role
-                    </label>
-                    <select
-                      id="role"
-                      name="role"
-                      defaultValue="OWNER"
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                    >
-                      <option value="OWNER">Owner</option>
-                      <option value="ADMIN">Admin</option>
-                      <option value="RECRUITER">Recruiter</option>
-                      <option value="VIEWER">Viewer</option>
-                    </select>
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      You can downgrade later from the workspace members page.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label
-                      htmlFor="message"
-                      className="block text-[11px] font-medium text-slate-700"
-                    >
-                      Personal message (optional)
-                    </label>
-                    <input
-                      id="message"
-                      name="message"
-                      placeholder="Short note to include in the invite email"
-                      className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2">
-                  <p className="text-[10px] text-slate-500">
-                    The API will create a{" "}
-                    <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
-                      tenant_invitations
-                    </code>{" "}
-                    row and send via your email provider.
-                  </p>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center rounded-full bg-indigo-600 px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-indigo-700"
+                  <label
+                    htmlFor="defaultTimezone"
+                    className="block text-[11px] font-medium text-slate-700"
                   >
-                    Send owner invite
-                  </button>
+                    Default timezone
+                  </label>
+                  <input
+                    id="defaultTimezone"
+                    name="defaultTimezone"
+                    defaultValue="Africa/Lagos"
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
                 </div>
-              </form>
-            </section>
-          </section>
-
-          {/* RIGHT: Tenants overview */}
-          <aside className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Workspace inventory
-              </h2>
-              <p className="mt-1 text-[11px] text-slate-500">
-                High-level view of all tenants, plans and usage. This is read-
-                only; changes happen via billing and the admin APIs.
-              </p>
-
-              <div className="mt-3 max-h-[460px] overflow-y-auto rounded-xl border border-slate-100">
-                <table className="min-w-full border-separate border-spacing-0 text-[11px] text-slate-700">
-                  <thead>
-                    <tr className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-                      <th className="border-b border-slate-200 px-3 py-2 text-left">
-                        Workspace
-                      </th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-left">
-                        Plan
-                      </th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-center">
-                        Seats
-                      </th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-center">
-                        Jobs
-                      </th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-center">
-                        Candidates
-                      </th>
-                      <th className="border-b border-slate-200 px-3 py-2 text-right">
-                        Created
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tenants.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="px-3 py-6 text-center text-[11px] text-slate-500"
-                        >
-                          No workspaces yet. Use{" "}
-                          <span className="font-medium">
-                            Create workspace
-                          </span>{" "}
-                          to add your first tenant.
-                        </td>
-                      </tr>
-                    ) : (
-                      tenants.map((tenant, idx) => {
-                        const createdDate =
-                          tenant.createdAt.toISOString().slice(0, 10);
-                        const tierLabel = (tenant as any).planTier ?? "STARTER";
-                        const seats = (tenant as any).seats ?? 0;
-
-                        return (
-                          <tr
-                            key={tenant.id}
-                            className={
-                              idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"
-                            }
-                          >
-                            <td className="border-b border-slate-100 px-3 py-2 align-top">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="text-[11px] font-semibold text-slate-900">
-                                  {tenant.name}
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                  {tenant.slug
-                                    ? `${tenant.slug}.thinkats.com`
-                                    : tenant.id}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="border-b border-slate-100 px-3 py-2 align-top">
-                              <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-700">
-                                {formatPlanTier(tierLabel)}
-                              </span>
-                            </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center align-top">
-                              <span className="text-[10px] text-slate-700">
-                                {seats || "—"}
-                              </span>
-                            </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center align-top">
-                              <span className="text-[10px] text-slate-700">
-                                {tenant._count.jobs}
-                              </span>
-                            </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-center align-top">
-                              <span className="text-[10px] text-slate-700">
-                                {tenant._count.candidates}
-                              </span>
-                            </td>
-                            <td className="border-b border-slate-100 px-3 py-2 text-right align-top">
-                              <span className="text-[10px] text-slate-500">
-                                {createdDate}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                <div>
+                  <label
+                    htmlFor="defaultCurrency"
+                    className="block text-[11px] font-medium text-slate-700"
+                  >
+                    Default currency
+                  </label>
+                  <input
+                    id="defaultCurrency"
+                    name="defaultCurrency"
+                    defaultValue="USD"
+                    className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
               </div>
 
-              <p className="mt-3 text-[10px] text-slate-500">
-                For deeper metrics (conversion, time-to-hire, source
-                performance), use{" "}
-                <Link
-                  href="/ats/analytics"
-                  className="font-medium text-[#172965] hover:underline"
+              <div>
+                <label
+                  htmlFor="ownerEmail"
+                  className="block text-[11px] font-medium text-slate-700"
                 >
-                  ATS analytics
-                </Link>
-                .
-              </p>
-            </div>
-          </aside>
-        </div>
-      </main>
+                  Primary owner email (optional)
+                </label>
+                <input
+                  id="ownerEmail"
+                  name="ownerEmail"
+                  type="email"
+                  placeholder="founder@acme.com"
+                  className="mt-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">
+                  If provided, you can immediately send an owner invitation from
+                  the panel below.
+                </p>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-md bg-[#172965] px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
+                >
+                  Create workspace
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Invite owner card */}
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-900 p-4 text-slate-50 shadow-sm">
+            <h2 className="text-sm font-semibold">Invite workspace owner</h2>
+            <p className="text-[11px] text-slate-200/90">
+              Send an owner-level invite for an existing tenant. This uses the{" "}
+              <code className="rounded bg-slate-800 px-1 py-0.5 text-[10px]">
+                TenantInvitation
+              </code>{" "}
+              model under the hood.
+            </p>
+
+            <form
+              method="POST"
+              action="/api/ats/tenants/owner-invite"
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label
+                  htmlFor="tenantId"
+                  className="block text-[11px] font-medium text-slate-100"
+                >
+                  Workspace
+                </label>
+                <select
+                  id="tenantId"
+                  name="tenantId"
+                  className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-950/40 px-3 py-2 text-xs text-slate-50 outline-none focus:border-[#FFC000] focus:ring-1 focus:ring-[#FFC000]"
+                >
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || "Untitled"}{" "}
+                      {t.slug ? `(${t.slug}.thinkats.com)` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-[11px] font-medium text-slate-100"
+                >
+                  Owner email
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="owner@workspace.com"
+                  className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-950/40 px-3 py-2 text-xs text-slate-50 outline-none placeholder:text-slate-500 focus:border-[#FFC000] focus:ring-1 focus:ring-[#FFC000]"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="role"
+                  className="block text-[11px] font-medium text-slate-100"
+                >
+                  Role
+                </label>
+                <select
+                  id="role"
+                  name="role"
+                  defaultValue="owner"
+                  className="mt-1 block w-full rounded-md border border-slate-600 bg-slate-950/40 px-3 py-2 text-xs text-slate-50 outline-none focus:border-[#FFC000] focus:ring-1 focus:ring-[#FFC000]"
+                >
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="recruiter">Recruiter</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+              </div>
+
+              <div className="pt-1">
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-md bg-[#FFC000] px-4 py-2 text-[11px] font-semibold text-slate-950 shadow-sm hover:bg-[#e6ad00]"
+                >
+                  Send invite
+                </button>
+              </div>
+            </form>
+
+            <p className="text-[10px] text-slate-300/90">
+              Invites create a hashed token in{" "}
+              <code className="rounded bg-slate-800 px-1 py-0.5 text-[10px]">
+                tenant_invitations
+              </code>{" "}
+              and send an email via Resend (if configured).
+            </p>
+          </div>
+        </section>
+      </div>
     </div>
   );
-}
-
-// Small helper – keep labels nice even if planTier is null / lowercase
-function formatPlanTier(raw: string): string {
-  const upper = (raw || "").toUpperCase();
-  switch (upper) {
-    case "STARTER":
-      return "Starter";
-    case "GROWTH":
-      return "Growth";
-    case "AGENCY":
-      return "Agency";
-    case "ENTERPRISE":
-      return "Enterprise";
-    default:
-      return raw || "Starter";
-  }
 }
