@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { requireTenantMembership } from "@/lib/requireTenantMembership";
 import CandidatesTable, {
   type CandidateRowProps,
 } from "./CandidatesTable";
@@ -66,6 +67,9 @@ function deriveLastSeen(apps: any[], fallback: Date): Date {
 export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
+
+  // Enforce membership before reading any tenant-scoped data
+  await requireTenantMembership(tenant.id);
 
   // ---- URL filters ---------------------------------------------------------
 
@@ -560,7 +564,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                       className={[
                         "inline-flex items-center rounded-full px-3 py-1 text-[10px]",
                         isActive
-                          ? "bg-slate-900 text-slate-50 shadow-sm"
+                          ? "bg-slate-900 text-slate-50shadow-sm"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200",
                       ].join(" ")}
                     >
