@@ -26,16 +26,13 @@ export default function CareersSitePage({
     settings?.logoUrl || tenant.logoUrl || clientCompany?.logoUrl || null;
 
   const primaryColor =
-    settings?.primaryColorHex ||
-    settings?.primaryColor ||
-    "#172965"; // sensible default
+    settings?.primaryColorHex || settings?.primaryColor || "#172965";
   const accentColor =
     settings?.accentColorHex || settings?.accentColor || "#FFC000";
-  const heroBg = settings?.heroBackgroundHex || "#020617"; // slate-950 style
+  const heroBg = settings?.heroBackgroundHex || "#020617"; // slate-950-ish
 
   const heroTitle =
-    settings?.heroTitle ||
-    `Careers at ${brandName}`;
+    settings?.heroTitle || `Careers at ${brandName}`;
   const heroSubtitle =
     settings?.heroSubtitle ||
     `Explore opportunities to grow your career with ${brandName}.`;
@@ -57,7 +54,7 @@ export default function CareersSitePage({
         style={{ backgroundColor: heroBg }}
       >
         <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 pb-10 pt-10 lg:flex-row lg:items-center">
-          {/* Left: logo + text */}
+          {/* Left: logo + copy */}
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-3">
               {logoUrl ? (
@@ -105,7 +102,7 @@ export default function CareersSitePage({
               </div>
             )}
 
-            {/* Social links */}
+            {/* Socials */}
             {(linkedinUrl || twitterUrl || instagramUrl) && (
               <div className="mt-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
                 <span className="text-slate-400">Connect:</span>
@@ -143,7 +140,7 @@ export default function CareersSitePage({
             )}
           </div>
 
-          {/* Right: simple stats card */}
+          {/* Right: snapshot card */}
           <div className="flex-1">
             <div className="mx-auto w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg shadow-slate-900/40">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -168,7 +165,7 @@ export default function CareersSitePage({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-                  <span>Quick, candidate-first application flow.</span>
+                  <span>Candidate-first application flow.</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
@@ -207,8 +204,8 @@ export default function CareersSitePage({
               Open roles at {brandName}
             </h2>
             <p className="text-xs text-slate-400">
-              Roles listed here are managed in a single ATS workspace. Apply
-              once; your profile can be considered across suitable roles.
+              Apply once; your profile can be considered across suitable roles
+              in this workspace.
             </p>
           </div>
         </header>
@@ -218,7 +215,7 @@ export default function CareersSitePage({
             <p className="font-medium">No open roles right now</p>
             <p className="mt-1 text-xs text-slate-400">
               {brandName} doesn&apos;t have any public openings at the moment.
-              You can check back later or follow their updates on social media.
+              Check back later or follow their updates on social media.
             </p>
           </div>
         ) : (
