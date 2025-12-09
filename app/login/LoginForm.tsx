@@ -2,14 +2,24 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlReturnTo = searchParams?.get("returnTo") || "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Simple safety check so we don't redirect to external URLs
+  function getSafeReturnTo() {
+    if (!urlReturnTo) return "/ats";
+    if (!urlReturnTo.startsWith("/")) return "/ats";
+    if (urlReturnTo.startsWith("//")) return "/ats";
+    return urlReturnTo;
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,23 +44,25 @@ export default function LoginForm() {
       try {
         data = await res.json();
       } catch {
-        // ignore JSON parse errors
+        // ignore JSON parse errors (should not happen now)
       }
 
       if (!res.ok || !data?.ok) {
         const message =
           data?.error === "invalid_credentials"
             ? "Incorrect email or password."
-            : data?.error || "Unable to sign you in. Please try again.";
+            : data?.error === "missing_credentials"
+              ? "Email and password are required."
+              : data?.error || "Unable to sign you in. Please try again.";
         setError(message);
         return;
       }
 
       // Successful password auth:
-      // - session cookie should be set by /api/auth/login
-      // - /ats layout + ensureOtpVerified will now decide whether to redirect
-      //   to /ats/verify for OTP (only once per device/session)
-      router.push("/ats");
+      // - Supabase session cookie is now set by /api/auth/login
+      // - /ats layout + OtpGateClient will decide about OTP (/ats/verify)
+      const target = getSafeReturnTo();
+      router.push(target);
     } catch (err: any) {
       console.error("Login error", err);
       setError("Unexpected error signing in. Please try again.");
