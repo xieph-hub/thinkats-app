@@ -2,9 +2,23 @@
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
+export type HostContext = {
+  host: string;
+  baseDomain: string;
+  subdomain: string | null;
+  isAppHost: boolean;
+  isTenantHost: boolean;
+  isCareersiteHost: boolean;
+  tenant: any | null;
+  clientCompany: any | null;
+  careerSiteSettings: any | null;
+
+  // Backwards-compatibility with older code
+  isPrimaryHost: boolean;
+  tenantSlugFromHost: string | null;
+};
+
 function getBaseDomain() {
-  // If you later want to be super explicit, set:
-  // NEXT_PUBLIC_APP_DOMAIN=thinkats.com
   const explicit = process.env.NEXT_PUBLIC_APP_DOMAIN;
   if (explicit) {
     return explicit.replace(/^https?:\/\//, "").replace(/^www\./, "");
@@ -16,31 +30,12 @@ function getBaseDomain() {
       const url = new URL(siteUrl);
       return url.host.replace(/^www\./, "");
     } catch {
-      // If it's not a full URL, fall back to simple cleanup
       return siteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "");
     }
   }
 
-  // Last-resort fallback
   return "thinkats.com";
 }
-
-export type HostContext = {
-  host: string;
-  baseDomain: string;
-  subdomain: string | null;
-  isAppHost: boolean;
-  // Kept for backwards-compatibility; treat as "is careersite host"
-  isTenantHost: boolean;
-  // New explicit flag
-  isCareersiteHost: boolean;
-  // Workspace behind this host
-  tenant: any | null;
-  // End-client company (if this is a client careersite)
-  clientCompany: any | null;
-  // Tenant-level careersite settings
-  careerSiteSettings: any | null;
-};
 
 export async function getHostContext(): Promise<HostContext> {
   const hdrs = headers();
@@ -52,7 +47,6 @@ export async function getHostContext(): Promise<HostContext> {
     host.includes("localhost") || host.startsWith("127.0.0.1");
 
   if (isLocalhost) {
-    // Local dev or preview: treat as app host
     return {
       host,
       baseDomain,
@@ -63,6 +57,10 @@ export async function getHostContext(): Promise<HostContext> {
       tenant: null,
       clientCompany: null,
       careerSiteSettings: null,
+
+      // compat
+      isPrimaryHost: true,
+      tenantSlugFromHost: null,
     };
   }
 
@@ -77,10 +75,7 @@ export async function getHostContext(): Promise<HostContext> {
   let clientCompany: any | null = null;
   let careerSiteSettings: any | null = null;
 
-  // ---------------------------------------------------------------------------
-  // 1) If this is a subdomain of thinkats.com, first try as a CLIENT careersite
-  //    e.g. acme.thinkats.com → ClientCompany.careersiteSlug = "acme"
-  // ---------------------------------------------------------------------------
+  // 1) Subdomain → try as client careersite first (careersiteSlug)
   if (subdomain) {
     clientCompany = await prisma.clientCompany.findFirst({
       where: {
@@ -100,11 +95,8 @@ export async function getHostContext(): Promise<HostContext> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 2) If no clientCompany match but we DO have a subdomain, treat as TENANT
-  //    e.g. resourcin.thinkats.com → Tenant.slug = "resourcin"
-  // ---------------------------------------------------------------------------
-  if (!clientCompany && subdomain) {
+  // 2) If still nothing and we have a subdomain, treat as tenant slug
+  if (!clientCompany && subdomain && !tenant) {
     tenant = await prisma.tenant.findUnique({
       where: { slug: subdomain },
     });
@@ -116,11 +108,7 @@ export async function getHostContext(): Promise<HostContext> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 3) If it's not the app host AND not a subdomain of thinkats.com,
-  //    it might be a CUSTOM client careersite domain:
-  //    e.g. jobs.acme.com → ClientCompany.careersiteCustomDomain = "jobs.acme.com"
-  // ---------------------------------------------------------------------------
+  // 3) Non-thinkats host → try custom client careersite domain
   if (!isAppHost && !subdomain && !clientCompany) {
     clientCompany = await prisma.clientCompany.findFirst({
       where: {
@@ -141,7 +129,11 @@ export async function getHostContext(): Promise<HostContext> {
   }
 
   const isCareersiteHost = !!clientCompany || (!!tenant && !isAppHost);
-  const isTenantHost = isCareersiteHost; // alias
+  const isTenantHost = isCareersiteHost;
+
+  // Backwards-compat fields
+  const isPrimaryHost = isAppHost;
+  const tenantSlugFromHost = subdomain;
 
   return {
     host,
@@ -153,5 +145,7 @@ export async function getHostContext(): Promise<HostContext> {
     tenant,
     clientCompany,
     careerSiteSettings,
+    isPrimaryHost,
+    tenantSlugFromHost,
   };
 }
