@@ -557,7 +557,7 @@ model JobStage {
   @@map("job_stages")
 }
 
-// --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 // CAREER SITE SETTINGS
 // --------------------------------------------------------------------------
 
@@ -566,7 +566,10 @@ model CareerSiteSettings {
   tenantId String  @map("tenant_id") @db.Uuid
 
   // logo specifically for careers site (overrides Tenant.logoUrl if set)
-  logoUrl String? @map("logo_url")
+  logoUrl        String? @map("logo_url")
+
+  // Hero/banner image for the careers microsite
+  bannerImageUrl String? @map("banner_image_url")
 
   // Hex-based brand colours for careers microsite
   primaryColorHex   String? @map("primary_color_hex")   // e.g. "#172965"
@@ -580,6 +583,11 @@ model CareerSiteSettings {
   heroTitle    String? @map("hero_title")
   heroSubtitle String? @map("hero_subtitle")
   aboutHtml    String? @map("about_html")
+
+  // Social links for the public careers page
+  linkedinUrl  String? @map("linkedin_url")
+  twitterUrl   String? @map("twitter_url")
+  instagramUrl String? @map("instagram_url")
 
   includeInMarketplace Boolean @map("include_in_marketplace") @default(false)
   isPublic             Boolean @map("is_public") @default(true)
