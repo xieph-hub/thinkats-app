@@ -1,106 +1,84 @@
 // app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+import { isOfficialUser } from "@/lib/officialEmail";
 
-const AUTH_COOKIE_NAME = "thinkats_user_id";
+type ParsedCreds = {
+  email: string;
+  password: string;
+};
 
-function buildLoginRedirect(
-  req: NextRequest,
-  callbackUrl: string,
-  error?: string,
-) {
-  const url = new URL("/login", req.url);
-  if (callbackUrl) url.searchParams.set("callbackUrl", callbackUrl);
-  if (error) url.searchParams.set("error", error);
-  return url;
-}
+/**
+ * Gracefully parse credentials whether the caller sent:
+ * - application/json  (e.g. fetch("/api/auth/login", { body: JSON.stringify(...) }))
+ * - application/x-www-form-urlencoded (standard <form method="POST">)
+ * - multipart/form-data (FormData via fetch)
+ */
+async function parseCredentials(req: NextRequest): Promise<ParsedCreds> {
+  const contentType = req.headers.get("content-type") || "";
+  let email = "";
+  let password = "";
 
-function normalizeCallbackUrl(raw: string | null | undefined): string {
-  if (!raw) return "/ats";
-
-  // Allow relative URLs like "/ats" or "/ats/dashboard"
-  if (raw.startsWith("/")) return raw;
-
-  // Very defensive: only allow absolute URLs that match NEXT_PUBLIC_SITE_URL
   try {
-    const target = new URL(raw);
-    const site = process.env.NEXT_PUBLIC_SITE_URL;
-    if (site && target.origin === site) {
-      return (
-        target.pathname + target.search + target.hash
-      );
+    if (contentType.includes("application/json")) {
+      const body: any = await req.json().catch(() => ({}));
+      email = (body.email ?? "").toString().trim().toLowerCase();
+      password = (body.password ?? "").toString();
+    } else if (
+      contentType.includes("application/x-www-form-urlencoded") ||
+      contentType.includes("multipart/form-data")
+    ) {
+      const formData = await req.formData();
+      email = String(formData.get("email") ?? "").trim().toLowerCase();
+      password = String(formData.get("password") ?? "");
+    } else {
+      // Fallback: try formData but swallow the undici error if it doesn't match
+      const formData = await req.formData();
+      email = String(formData.get("email") ?? "").trim().toLowerCase();
+      password = String(formData.get("password") ?? "");
     }
   } catch {
-    // fall through
+    // If parsing fails for any reason, we'll treat it as missing credentials
+    email = "";
+    password = "";
   }
 
-  return "/ats";
+  return { email, password };
 }
 
 export async function POST(req: NextRequest) {
-  const form = await req.formData();
+  const { email, password } = await parseCredentials(req);
 
-  const emailRaw = form.get("email");
-  const nameRaw = form.get("name");
-  const callbackRaw = form.get("callbackUrl");
-
-  const email =
-    typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : "";
-  const fullName =
-    typeof nameRaw === "string" && nameRaw.trim().length > 0
-      ? nameRaw.trim()
-      : null;
-  const callbackUrl =
-    typeof callbackRaw === "string" && callbackRaw.length > 0
-      ? callbackRaw
-      : "/ats";
-
-  if (!email) {
-    const redirectUrl = buildLoginRedirect(
-      req,
-      callbackUrl,
-      "missing_email",
-    );
-    return NextResponse.redirect(redirectUrl);
+  // Basic validation
+  if (!email || !password) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "missing_credentials");
+    return NextResponse.redirect(url);
   }
 
-  // Look up (or create) the app-level User row
-  let user = await prisma.user.findFirst({
-    where: { email },
+  // Optional: keep the “official user” gate you’re already using elsewhere
+  if (!isOfficialUser(email)) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "unauthorised");
+    return NextResponse.redirect(url);
+  }
+
+  const supabase = createSupabaseRouteClient();
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
   });
 
-  if (!user) {
-    // Creates a minimal user that matches getServerUser's expectations
-    user = await prisma.user.create({
-      data: {
-        email,
-        fullName,
-        globalRole: "USER",
-        isActive: true,
-      },
-    });
+  if (error || !data.session) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("error", "invalid_credentials");
+    return NextResponse.redirect(url);
   }
 
-  if (!user.isActive) {
-    const redirectUrl = buildLoginRedirect(
-      req,
-      callbackUrl,
-      "inactive",
-    );
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  const dest = normalizeCallbackUrl(callbackUrl);
-  const res = NextResponse.redirect(new URL(dest, req.url));
-
-  // 🔐 Set the cookie that getServerUser() reads
-  res.cookies.set(AUTH_COOKIE_NAME, user.id, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  });
-
-  return res;
+  // At this point:
+  // - Supabase session cookie is set
+  // - /ats layout + ensureOtpVerified will handle the OTP step
+  const redirectUrl = new URL("/ats", req.url);
+  return NextResponse.redirect(redirectUrl);
 }
