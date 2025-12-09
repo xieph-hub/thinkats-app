@@ -24,11 +24,12 @@ function normaliseStatus(status: string | null | undefined): string {
   return (status || "").toLowerCase();
 }
 
-// Derive base domain from NEXT_PUBLIC_SITE_URL
+// Derive base domain from NEXT_PUBLIC_SITE_URL, stripping leading "www."
 function getBaseDomainFromEnv(): string {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://thinkats.com";
   try {
-    return new URL(siteUrl).hostname; // e.g. "thinkats.com"
+    const host = new URL(siteUrl).hostname; // e.g. "thinkats.com" or "www.thinkats.com"
+    return host.startsWith("www.") ? host.slice(4) : host;
   } catch {
     return "thinkats.com";
   }
@@ -60,6 +61,9 @@ export default async function TenantCareerSitePage({
   });
 
   const baseDomain = getBaseDomainFromEnv();
+
+  // Canonical public URL you share with clients:
+  // https://tenantSlug.thinkats.com/careers
   const careersUrl = tenant.slug
     ? `https://${tenant.slug}.${baseDomain}/careers`
     : null;
@@ -461,8 +465,9 @@ export default async function TenantCareerSitePage({
           </p>
           <p className="text-[11px] text-slate-500">
             This is a read-only preview using the latest saved settings. After
-            tweaking brand and copy, hit <span className="font-medium">Save</span> and refresh to
-            see the updated look.
+            tweaking brand and copy, hit{" "}
+            <span className="font-medium">Save</span> and refresh to see the
+            updated look.
           </p>
           <div className="mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             {/* Fake browser chrome */}
@@ -515,7 +520,9 @@ export default async function TenantCareerSitePage({
                     style={{ color: primaryColor }}
                   >
                     {settings?.heroTitle ||
-                      `Careers at ${tenant.name || tenant.slug || "your company"}`}
+                      `Careers at ${
+                        tenant.name || tenant.slug || "your company"
+                      }`}
                   </p>
                   <p className="text-[11px] text-slate-600">
                     {settings?.heroSubtitle ||
@@ -538,7 +545,10 @@ export default async function TenantCareerSitePage({
             <div className="divide-y divide-slate-100 bg-white">
               {["Product Designer", "People Operations Lead", "Senior Engineer"].map(
                 (title) => (
-                  <div key={title} className="flex items-center justify-between px-4 py-3">
+                  <div
+                    key={title}
+                    className="flex items-center justify-between px-4 py-3"
+                  >
                     <div className="min-w-0">
                       <p className="truncate text-[11px] font-semibold text-slate-900">
                         {title}
