@@ -1,3 +1,4 @@
+// app/auth/reset/page.tsx
 "use client";
 
 import { useEffect, useState, FormEvent } from "react";
@@ -17,18 +18,14 @@ export default function AuthResetPage() {
   useEffect(() => {
     async function initFromUrl() {
       try {
-        // Supabase sends tokens in the URL hash:
-        //   /auth/reset#access_token=...&refresh_token=...&type=recovery
-        let params: URLSearchParams | null = null;
-
         if (typeof window === "undefined") return;
 
         const { hash, search } = window.location;
+        let params: URLSearchParams | null = null;
 
         if (hash && hash.startsWith("#")) {
           params = new URLSearchParams(hash.slice(1));
         } else if (search && search.startsWith("?")) {
-          // Fallback if for some reason it comes as query params instead
           params = new URLSearchParams(search.slice(1));
         }
 
@@ -48,7 +45,6 @@ export default function AuthResetPage() {
           return;
         }
 
-        // Explicitly set the session using the tokens from the URL
         const { error: sessionError } = await supabaseBrowser.auth.setSession({
           access_token,
           refresh_token,
@@ -61,13 +57,11 @@ export default function AuthResetPage() {
           return;
         }
 
-        // If Supabase says this is a password recovery flow, show the password form
         if (type === "recovery") {
           setStage("password");
           return;
         }
 
-        // Any other type (magic link, normal sign-in) → just route into ATS
         setStage("done");
         router.replace("/ats");
       } catch (err: any) {
@@ -109,7 +103,6 @@ export default function AuthResetPage() {
       }
 
       setStage("done");
-      // After successful reset, drop user into the ATS workspace
       router.replace("/ats");
     } catch (err: any) {
       console.error("[auth/reset] unexpected error on submit:", err);
@@ -117,8 +110,6 @@ export default function AuthResetPage() {
       setIsSubmitting(false);
     }
   }
-
-  // --- UI states ---
 
   if (stage === "initializing") {
     return (
