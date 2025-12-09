@@ -1,23 +1,35 @@
 // lib/requireOtp.ts
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import {
-  AUTH_COOKIE_NAME,
-  OTP_COOKIE_NAME,
-} from "@/lib/auth/getServerUser";
+import type { ServerUserContext } from "@/lib/auth/getServerUser";
 
-export async function ensureOtpVerified(
-  returnTo: string = "/ats",
-): Promise<void> {
+const OTP_COOKIE_NAME = "thinkats_otp_verified";
+const OTP_MAX_AGE_MINUTES = 60;
+
+export async function ensureOtpVerified(userCtx: ServerUserContext | null) {
+  // If we're not logged in, ATS is not accessible
+  if (!userCtx) {
+    redirect("/login");
+  }
+
   const cookieStore = cookies();
+  const raw = cookieStore.get(OTP_COOKIE_NAME)?.value;
 
-  const userId = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  if (!userId) {
-    redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  if (!raw) {
+    redirect("/ats/verify");
   }
 
-  const otpVerified = cookieStore.get(OTP_COOKIE_NAME)?.value;
-  if (!otpVerified) {
-    redirect(`/ats/verify?returnTo=${encodeURIComponent(returnTo)}`);
+  const issuedAtMs = Number(raw);
+  if (!Number.isFinite(issuedAtMs)) {
+    redirect("/ats/verify");
   }
+
+  const ageMs = Date.now() - issuedAtMs;
+  const maxAgeMs = OTP_MAX_AGE_MINUTES * 60_000;
+
+  if (ageMs > maxAgeMs) {
+    redirect("/ats/verify");
+  }
+
+  // If we get here, OTP is fresh enough. Continue.
 }
