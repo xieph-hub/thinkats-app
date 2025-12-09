@@ -1,124 +1,167 @@
 // components/careers/CareersShell.tsx
 import type { ReactNode } from "react";
-import Image from "next/image";
-import type { Tenant, ClientCompany, CareerSiteSettings } from "@prisma/client";
+import Link from "next/link";
 
-type CareersShellProps = {
-  tenant: Tenant | null;
-  clientCompany?: ClientCompany | null;
-  settings?: CareerSiteSettings | null;
+type ActiveNav = "home" | "careers" | "jobs";
+
+interface CareersShellProps {
+  displayName: string;
+  logoUrl: string | null;
+
+  // Host + plan info (from getHostContext + tenant)
   host: string;
-  isAppHost: boolean;
-  isTenantHost: boolean;
-  isCareersiteHost: boolean;
-  children: ReactNode;
-};
+  baseDomain: string;
+  planTier: string; // e.g. "STARTER" | "GROWTH" | "AGENCY" | "ENTERPRISE"
 
-function getInitials(label: string): string {
-  if (!label) return "";
-  const parts = label.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+  // Branding (usually derived from CareerSiteSettings)
+  primaryColor: string; // hex, e.g. "#172965"
+  accentColor: string; // hex, e.g. "#0ea5e9"
+  heroBackground: string; // hex, e.g. "#F9FAFB"
+
+  // Optional public company site
+  websiteUrl?: string | null;
+
+  // Which tab to highlight
+  activeNav?: ActiveNav;
+
+  // Page content goes here
+  children: ReactNode;
 }
 
-export default function CareersShell({
-  tenant,
-  clientCompany,
-  settings,
-  host,
-  isAppHost,
-  isTenantHost,
-  isCareersiteHost,
-  children,
-}: CareersShellProps) {
-  const brandName =
-    clientCompany?.name ??
-    tenant?.name ??
-    (isAppHost ? "ThinkATS Careers" : host.replace(/^www\./i, ""));
+export default function CareersShell(props: CareersShellProps) {
+  const {
+    displayName,
+    logoUrl,
+    host,
+    baseDomain,
+    planTier,
+    primaryColor,
+    accentColor,
+    heroBackground,
+    websiteUrl,
+    activeNav = "careers",
+    children,
+  } = props;
 
-  const logoSrc =
-    settings?.logoUrl ?? clientCompany?.logoUrl ?? tenant?.logoUrl ?? null;
+  const isUnderMainDomain =
+    host === baseDomain || host.endsWith(`.${baseDomain}`);
 
-  const primaryColor = settings?.primaryColorHex ?? "#172965";
-  const accentColor = settings?.accentColorHex ?? "#FFC000";
-  const heroBackground = settings?.heroBackgroundHex ?? "#F4F5FB";
+  const upperTier = (planTier || "").toUpperCase();
+  const isEnterprisePlan = upperTier === "ENTERPRISE";
 
-  const onThinkatsDomain = host.endsWith("thinkats.com");
-  const planTier = (tenant as any)?.planTier ?? "STARTER";
+  // Only Enterprise + custom domain can fully remove "Powered by"
+  const canRemoveBranding = isEnterprisePlan && !isUnderMainDomain;
+  const showPoweredBy = !canRemoveBranding;
 
-  // Simple first-pass rule:
-  // - If on *.thinkats.com and NOT ENTERPRISE plan → show "Powered by ThinkATS"
-  // - If ENTERPRISE + custom domain → hide
-  const canHideBrand = planTier === "ENTERPRISE" && !onThinkatsDomain;
-  const showPoweredBy = onThinkatsDomain && !canHideBrand;
+  const navItemBase =
+    "rounded-full px-3 py-1 text-[11px] font-semibold transition";
 
-  const isTenantCareers =
-    isTenantHost || isCareersiteHost || (!!tenant && onThinkatsDomain);
+  const careersActive = activeNav === "careers";
+  const jobsActive = activeNav === "jobs";
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-900">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        {/* Top shell / nav */}
-        <header className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm text-slate-100 shadow-lg shadow-slate-950/40">
-          <div className="flex items-center gap-3">
-            <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-slate-800 ring-1 ring-slate-700">
-              {logoSrc ? (
-                <Image
-                  src={logoSrc}
-                  alt={brandName}
-                  fill
-                  sizes="36px"
-                  className="object-contain"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[11px] font-semibold text-slate-100">
-                  {getInitials(brandName)}
-                </div>
-              )}
-            </div>
-            <div>
-              <p className="text-xs font-semibold leading-tight text-slate-50">
-                {brandName}
-              </p>
-              {isTenantCareers && (
-                <p className="text-[11px] text-slate-400">
-                  Careers portal ·{" "}
-                  <span className="font-mono text-slate-300">{host}</span>
-                </p>
-              )}
-              {!isTenantCareers && (
-                <p className="text-[11px] text-slate-400">
-                  Global careers powered by ThinkATS
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {showPoweredBy && (
-              <span className="rounded-full bg-slate-800 px-3 py-1 text-[10px] font-medium text-slate-300">
-                Powered by <span className="font-semibold">ThinkATS</span>
-              </span>
-            )}
-          </div>
-        </header>
-
-        {/* Main white card with tenant branding */}
-        <main
-          className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-950/20"
+    <main className="min-h-screen bg-slate-100 text-slate-900">
+      <div className="mx-auto max-w-5xl px-4 py-10 lg:py-16">
+        <div
+          className="overflow-hidden rounded-3xl border bg-white shadow-xl"
           style={{
-            // use tenant hero background subtly at the top edge
-            backgroundImage: `linear-gradient(to bottom, ${heroBackground} 0, rgba(255,255,255,0.98) 140px)`,
+            borderColor: primaryColor,
+            boxShadow: "0 22px 60px rgba(15,23,42,0.16)",
           }}
         >
-          {/* Accent border strip */}
+          {/* Top bar: logo + mini-nav */}
           <div
-            className="h-1 rounded-t-2xl"
-            style={{ background: `linear-gradient(90deg, ${primaryColor}, ${accentColor})` }}
-          />
-          {children}
-        </main>
+            className="flex flex-col gap-4 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+            style={{ background: heroBackground }}
+          >
+            <div className="flex items-center gap-3">
+              {logoUrl ? (
+                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoUrl}
+                    alt={displayName}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {displayName}
+                </p>
+                <p className="text-[11px] text-slate-500">Careers</p>
+              </div>
+            </div>
+
+            {/* Tenant mini-nav – NOT the ThinkATS marketing nav */}
+            <nav className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
+              <Link
+                href="/careers"
+                className={`${navItemBase} ${
+                  careersActive
+                    ? "bg-white/80 text-slate-900 shadow-sm"
+                    : "hover:bg-white/60 hover:text-slate-900"
+                }`}
+              >
+                Careers home
+              </Link>
+
+              <Link
+                href="/jobs"
+                className={`${navItemBase} ${
+                  jobsActive
+                    ? "bg-white/80 text-slate-900 shadow-sm"
+                    : "hover:bg-white/60 hover:text-slate-900"
+                }`}
+              >
+                Open roles
+              </Link>
+
+              {websiteUrl && (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] font-medium text-slate-600 hover:text-slate-900"
+                >
+                  Company site
+                </a>
+              )}
+
+              <Link
+                href="/login"
+                className="rounded-full border px-3 py-1 text-[11px] font-semibold"
+                style={{ borderColor: primaryColor, color: primaryColor }}
+              >
+                Admin login
+              </Link>
+            </nav>
+          </div>
+
+          {/* Page content */}
+          <div className="px-6 py-7 lg:px-8 lg:py-9">
+            {children}
+
+            {showPoweredBy && (
+              <footer className="mt-6 border-t border-slate-200 pt-3 text-[10px] text-slate-400">
+                Powered by{" "}
+                <span
+                  className="font-medium"
+                  style={{ color: accentColor || "#0f172a" }}
+                >
+                  ThinkATS
+                </span>
+                .
+              </footer>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
