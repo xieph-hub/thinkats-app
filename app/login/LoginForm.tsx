@@ -2,23 +2,25 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
-export default function LoginForm() {
+type Props = {
+  returnTo: string;
+};
+
+export default function LoginForm({ returnTo }: Props) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const urlReturnTo = searchParams?.get("returnTo") || "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Simple safety check so we don't redirect to external URLs
+  // Extra defensive check, even though the server already sanitised it
   function getSafeReturnTo() {
-    if (!urlReturnTo) return "/ats";
-    if (!urlReturnTo.startsWith("/")) return "/ats";
-    if (urlReturnTo.startsWith("//")) return "/ats";
-    return urlReturnTo;
+    if (!returnTo) return "/ats";
+    if (!returnTo.startsWith("/")) return "/ats";
+    if (returnTo.startsWith("//")) return "/ats";
+    return returnTo;
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -44,7 +46,7 @@ export default function LoginForm() {
       try {
         data = await res.json();
       } catch {
-        // ignore JSON parse errors (should not happen now)
+        // ignore JSON parse errors
       }
 
       if (!res.ok || !data?.ok) {
@@ -58,9 +60,8 @@ export default function LoginForm() {
         return;
       }
 
-      // Successful password auth:
-      // - Supabase session cookie is now set by /api/auth/login
-      // - /ats layout + OtpGateClient will decide about OTP (/ats/verify)
+      // Supabase session cookie is set by /api/auth/login
+      // OtpGateClient will take over from here.
       const target = getSafeReturnTo();
       router.push(target);
     } catch (err: any) {
