@@ -1,134 +1,19 @@
 // components/careers/CareersSitePage.tsx
-import Image from "next/image";
+
+import type {
+  Tenant,
+  ClientCompany,
+  CareerSiteSettings,
+  Job,
+} from "@prisma/client";
 import Link from "next/link";
 
 type CareersSitePageProps = {
-  tenant: any;
-  clientCompany: any | null;
-  settings: any | null;
-  jobs: any[];
+  tenant: Tenant;
+  clientCompany: ClientCompany | null;
+  settings: CareerSiteSettings | null;
+  jobs: Job[];
 };
-
-function getBranding(
-  tenant: any,
-  clientCompany: any | null,
-  settings: any | null,
-) {
-  const companyName =
-    clientCompany?.name || tenant?.name || "this team";
-
-  const heroTitle =
-    settings?.heroTitle || `Careers at ${companyName}`;
-
-  const heroSubtitle =
-    settings?.heroSubtitle ||
-    `Join ${companyName} and help build what comes next.`;
-
-  const aboutHtml =
-    settings?.aboutHtml ||
-    `We’re building a high-trust, high-ownership environment where good people can do their best work.`;
-
-  const logoUrl =
-    settings?.logoUrl ||
-    clientCompany?.logoUrl ||
-    tenant?.logoUrl ||
-    null;
-
-  const primaryColorHex =
-    settings?.primaryColorHex || "#0f172a"; // slate-900
-  const accentColorHex =
-    settings?.accentColorHex || "#38bdf8"; // sky-400
-  const heroBackgroundHex =
-    settings?.heroBackgroundHex || "#020617"; // slate-950
-
-  const bannerImageUrl = settings?.bannerImageUrl || null;
-
-  const websiteUrl =
-    clientCompany?.website || tenant?.websiteUrl || null;
-
-  const linkedinUrl = settings?.linkedinUrl || null;
-  const twitterUrl = settings?.twitterUrl || null;
-  const instagramUrl = settings?.instagramUrl || null;
-
-  return {
-    companyName,
-    heroTitle,
-    heroSubtitle,
-    aboutHtml,
-    logoUrl,
-    primaryColorHex,
-    accentColorHex,
-    heroBackgroundHex,
-    bannerImageUrl,
-    websiteUrl,
-    linkedinUrl,
-    twitterUrl,
-    instagramUrl,
-  };
-}
-
-type JobCardProps = {
-  job: any;
-};
-
-function JobCard({ job }: JobCardProps) {
-  const createdAt = job.createdAt ? new Date(job.createdAt) : null;
-
-  const meta: string[] = [];
-  if (job.location) meta.push(job.location);
-  const employmentType =
-    job.employmentType || job.employment_type || null;
-  if (employmentType) meta.push(employmentType);
-  if (job.department) meta.push(job.department);
-
-  const metaLine = meta.join(" • ");
-
-  // Use relative URL so we stay on the same host (tenant/client careersite)
-  const href = `/jobs/${job.slug || job.id}`;
-
-  const shortDescription =
-    job.shortDescription || job.short_description || null;
-
-  return (
-    <article className="group rounded-2xl border border-slate-800 bg-slate-900/50 p-5 transition hover:border-sky-500/70 hover:bg-slate-900">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-base font-semibold text-slate-50 group-hover:text-sky-300">
-            {job.title}
-          </h3>
-          {metaLine && (
-            <p className="mt-1 text-xs text-slate-400">{metaLine}</p>
-          )}
-        </div>
-        {createdAt && (
-          <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">
-            Posted{" "}
-            {createdAt.toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
-          </span>
-        )}
-      </div>
-
-      {shortDescription && (
-        <p className="mt-3 line-clamp-2 text-sm text-slate-300">
-          {shortDescription}
-        </p>
-      )}
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <Link
-          href={href}
-          className="inline-flex items-center gap-2 text-sm font-medium text-sky-400 hover:text-sky-300"
-        >
-          View role
-          <span aria-hidden="true">↗</span>
-        </Link>
-      </div>
-    </article>
-  );
-}
 
 export default function CareersSitePage({
   tenant,
@@ -136,208 +21,268 @@ export default function CareersSitePage({
   settings,
   jobs,
 }: CareersSitePageProps) {
-  const {
-    companyName,
-    heroTitle,
-    heroSubtitle,
-    aboutHtml,
-    logoUrl,
-    heroBackgroundHex,
-    bannerImageUrl,
-    websiteUrl,
-    linkedinUrl,
-    twitterUrl,
-    instagramUrl,
-  } = getBranding(tenant, clientCompany, settings);
+  const brandName = clientCompany?.name || tenant.name;
+  const logoUrl =
+    settings?.logoUrl || tenant.logoUrl || clientCompany?.logoUrl || null;
 
-  const hasSocials = !!(linkedinUrl || twitterUrl || instagramUrl);
+  const primaryColor =
+    settings?.primaryColorHex ||
+    settings?.primaryColor ||
+    "#172965"; // sensible default
+  const accentColor =
+    settings?.accentColorHex || settings?.accentColor || "#FFC000";
+  const heroBg = settings?.heroBackgroundHex || "#020617"; // slate-950 style
+
+  const heroTitle =
+    settings?.heroTitle ||
+    `Careers at ${brandName}`;
+  const heroSubtitle =
+    settings?.heroSubtitle ||
+    `Explore opportunities to grow your career with ${brandName}.`;
+  const aboutHtml = settings?.aboutHtml || "";
+
+  const hasJobs = jobs && jobs.length > 0;
+
+  const linkedinUrl = settings?.linkedinUrl;
+  const twitterUrl = settings?.twitterUrl;
+  const instagramUrl = settings?.instagramUrl;
+
+  const isPublic = settings?.isPublic ?? true;
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
       {/* Hero */}
       <section
-        className="relative overflow-hidden border-b border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950"
-        style={{ backgroundColor: heroBackgroundHex }}
+        className="border-b border-slate-800"
+        style={{ backgroundColor: heroBg }}
       >
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.16),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(56,189,248,0.08),_transparent_55%)]" />
-        <div className="relative mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 md:flex-row md:items-center md:justify-between md:px-8 md:py-14">
-          <div className="max-w-xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs font-medium text-slate-300">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              Now hiring at {companyName}
-            </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-50 md:text-4xl">
-              {heroTitle}
-            </h1>
-            <p className="text-sm leading-relaxed text-slate-300 md:text-base">
-              {heroSubtitle}
-            </p>
-          </div>
-
-          <div className="relative h-48 w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 md:h-56">
-            {bannerImageUrl ? (
-              <>
-                {/* Banner image */}
-                <Image
-                  src={bannerImageUrl}
-                  alt={`${companyName} careers banner`}
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
-              </>
-            ) : (
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.35),_transparent_55%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.12),_transparent_60%)]" />
-            )}
-
-            {logoUrl && (
-              <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-xl bg-slate-950/80 px-3 py-2">
-                <div className="relative h-8 w-8 overflow-hidden rounded-lg bg-slate-800">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+        <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 pb-10 pt-10 lg:flex-row lg:items-center">
+          {/* Left: logo + text */}
+          <div className="flex-1 space-y-4">
+            <div className="flex items-center gap-3">
+              {logoUrl ? (
+                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-slate-900/70 ring-1 ring-slate-800">
                   <img
                     src={logoUrl}
-                    alt={companyName}
+                    alt={brandName}
                     className="h-full w-full object-contain"
                   />
                 </div>
-                <p className="text-xs font-medium text-slate-100">
-                  {companyName}
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900/70 text-sm font-semibold text-slate-100 ring-1 ring-slate-800">
+                  {brandName
+                    .split(" ")
+                    .map((p) => p.charAt(0))
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+              )}
+
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {tenant.name} · Careers
+                </p>
+                <p className="text-xs text-slate-300">
+                  Powered by ThinkATS, fully branded for {brandName}.
                 </p>
               </div>
+            </div>
+
+            <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
+              {heroTitle}
+            </h1>
+
+            <p className="max-w-xl text-sm text-slate-200 sm:text-base">
+              {heroSubtitle}
+            </p>
+
+            {aboutHtml && (
+              <div className="mt-3 max-w-2xl space-y-2 text-xs leading-relaxed text-slate-200">
+                {aboutHtml.split(/\r?\n\r?\n/).map((para, idx) => (
+                  <p key={idx}>{para}</p>
+                ))}
+              </div>
             )}
+
+            {/* Social links */}
+            {(linkedinUrl || twitterUrl || instagramUrl) && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+                <span className="text-slate-400">Connect:</span>
+                {linkedinUrl && (
+                  <a
+                    href={linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-slate-900/70 px-3 py-1 text-[11px] font-medium text-slate-100 ring-1 ring-slate-700 hover:bg-slate-900"
+                  >
+                    LinkedIn
+                  </a>
+                )}
+                {twitterUrl && (
+                  <a
+                    href={twitterUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-slate-900/70 px-3 py-1 text-[11px] font-medium text-slate-100 ring-1 ring-slate-700 hover:bg-slate-900"
+                  >
+                    X / Twitter
+                  </a>
+                )}
+                {instagramUrl && (
+                  <a
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-slate-900/70 px-3 py-1 text-[11px] font-medium text-slate-100 ring-1 ring-slate-700 hover:bg-slate-900"
+                  >
+                    Instagram
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: simple stats card */}
+          <div className="flex-1">
+            <div className="mx-auto w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg shadow-slate-900/40">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Snapshot
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-50">
+                Working at {brandName}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Roles listed here are managed in a structured ATS, but your
+                application goes straight to the hiring team at {brandName}.
+              </p>
+
+              <div className="mt-3 space-y-2 text-[11px] text-slate-300">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>
+                    {hasJobs
+                      ? `${jobs.length} open role${jobs.length === 1 ? "" : "s"}`
+                      : "No open roles listed right now"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span>Quick, candidate-first application flow.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  <span>Powered by ThinkATS — one workspace per client.</span>
+                </div>
+              </div>
+
+              {!isPublic && (
+                <p className="mt-3 rounded-md bg-amber-950/60 px-2 py-1.5 text-[10px] text-amber-200 ring-1 ring-amber-800/60">
+                  This careers site is currently marked as{" "}
+                  <span className="font-semibold">not public</span> in
+                  configuration. You are seeing it because the link is known.
+                </p>
+              )}
+
+              <p className="mt-4 border-t border-slate-800 pt-3 text-[10px] text-slate-500">
+                Powered by{" "}
+                <a
+                  href="https://www.thinkats.com"
+                  className="font-medium text-sky-400 hover:text-sky-300"
+                >
+                  ThinkATS
+                </a>
+                .
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Body */}
-      <section className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 md:flex-row md:px-8 md:py-12">
-        {/* Jobs list */}
-        <div className="flex-1 space-y-6">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-400">
-              Open roles
+      {/* Jobs list */}
+      <section className="mx-auto max-w-5xl px-4 py-8">
+        <header className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-50">
+              Open roles at {brandName}
             </h2>
-            <p className="text-sm text-slate-400">
-              Explore opportunities across teams and locations. Apply in a
-              few minutes – no account required.
+            <p className="text-xs text-slate-400">
+              Roles listed here are managed in a single ATS workspace. Apply
+              once; your profile can be considered across suitable roles.
             </p>
           </div>
+        </header>
 
-          {jobs.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-6 text-sm text-slate-400">
-              <p>
-                There are currently no open roles published for this
-                organisation. Please check back soon or follow their
-                announcements for updates.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {jobs.map((job) => (
-                <JobCard key={job.id} job={job} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <aside className="w-full max-w-sm space-y-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-slate-200">
-              Working at {companyName}
-            </h3>
-            {aboutHtml ? (
-              <div
-                className="text-sm leading-relaxed text-slate-400"
-                dangerouslySetInnerHTML={{ __html: aboutHtml }}
-              />
-            ) : (
-              <p className="text-sm leading-relaxed text-slate-400">
-                We focus on thoughtful work, clear communication and a
-                healthy pace. You&apos;ll join a team that values
-                ownership, curiosity and long-term thinking.
-              </p>
-            )}
-          </div>
-
-          {websiteUrl && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Learn more
-              </h4>
-              <Link
-                href={websiteUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 rounded-full bg-slate-800 px-4 py-2 text-sm font-medium text-slate-50 shadow-sm transition hover:bg-slate-700"
-              >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold uppercase">
-                  www
-                </span>
-                <span>Visit company website</span>
-              </Link>
-            </div>
-          )}
-
-          {hasSocials && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Connect
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {linkedinUrl && (
-                  <Link
-                    href={linkedinUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-full bg-[#0A66C2] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[#084b8a]"
-                  >
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold">
-                      in
-                    </span>
-                    <span>LinkedIn</span>
-                  </Link>
-                )}
-                {twitterUrl && (
-                  <Link
-                    href={twitterUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-900 shadow-sm hover:bg-slate-200"
-                  >
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-slate-50">
-                      X
-                    </span>
-                    <span>Twitter</span>
-                  </Link>
-                )}
-                {instagramUrl && (
-                  <Link
-                    href={instagramUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:brightness-110"
-                  >
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold">
-                      ig
-                    </span>
-                    <span>Instagram</span>
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-            <p className="text-xs font-medium text-slate-300">
-              Powered by ThinkATS
-            </p>
-            <p className="text-xs text-slate-500">
-              This careers site is hosted on ThinkATS – a modern applicant
-              tracking system for agencies and in-house teams.
+        {!hasJobs ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-sm text-slate-200">
+            <p className="font-medium">No open roles right now</p>
+            <p className="mt-1 text-xs text-slate-400">
+              {brandName} doesn&apos;t have any public openings at the moment.
+              You can check back later or follow their updates on social media.
             </p>
           </div>
-        </aside>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {jobs.map((job) => {
+              const jobSlugOrId = job.slug || job.id;
+              return (
+                <article
+                  key={job.id}
+                  className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-200 shadow-sm"
+                >
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                      {job.department || "Open role"}
+                    </p>
+                    <h3 className="text-sm font-semibold text-slate-50">
+                      {job.title}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {job.location || "Location flexible"}
+                      {job.locationType && (
+                        <>
+                          {" "}
+                          •{" "}
+                          {job.locationType
+                            .replace(/_/g, " ")
+                            .toLowerCase()}
+                        </>
+                      )}
+                    </p>
+                    {job.shortDescription && (
+                      <p className="mt-1 line-clamp-3 text-[11px] text-slate-300">
+                        {job.shortDescription}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                      {job.employmentType && (
+                        <span className="rounded-full bg-slate-900 px-2 py-0.5">
+                          {job.employmentType}
+                        </span>
+                      )}
+                      {job.experienceLevel && (
+                        <span className="rounded-full bg-slate-900 px-2 py-0.5">
+                          {job.experienceLevel}
+                        </span>
+                      )}
+                    </div>
+
+                    <Link
+                      href={`/jobs/${encodeURIComponent(jobSlugOrId)}`}
+                      className="inline-flex items-center rounded-full bg-sky-500 px-3 py-1 text-[11px] font-semibold text-slate-950 hover:bg-sky-400"
+                    >
+                      View role
+                      <span className="ml-1 text-[10px]">↗</span>
+                    </Link>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
     </main>
   );
