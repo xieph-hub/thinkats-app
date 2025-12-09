@@ -32,8 +32,8 @@ model Tenant {
   notificationEmail   String?     @map("notification_email") // where digests / ATS alerts can go
 
   // Legacy plan label (marketing / display)
-  plan          String    @default("free") @db.Text   // free, pro, enterprise, etc.
-  trialEndsAt   DateTime? @map("trial_ends_at") @db.Timestamptz(6)
+  plan        String    @default("free") @db.Text   // free, pro, enterprise, etc.
+  trialEndsAt DateTime? @map("trial_ends_at") @db.Timestamptz(6)
 
   // Billing & workspace limits (used for gating)
   planTier        String   @map("plan_tier") @default("STARTER") // STARTER, GROWTH, AGENCY, ENTERPRISE
@@ -59,10 +59,10 @@ model Tenant {
   industry           String? @map("industry")
   websiteUrl         String? @map("website_url")
 
-  internalNotes String?   @map("notes")
-  logoUrl       String?   @map("logo_url")
-  createdAt     DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime  @map("updated_at") @default(now()) @db.Timestamptz(6)
+  internalNotes String?  @map("notes")
+  logoUrl       String?  @map("logo_url")
+  createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
   // Relations
   jobs               Job[]
@@ -286,7 +286,7 @@ model Candidate {
   currentTitle   String?  @map("current_title")
   currentCompany String?  @map("current_company")
   cvUrl          String?  @map("cv_url")
-  // NEW: richer profile links for ATS views
+  // richer profile links for ATS views
   portfolioUrl   String?  @map("portfolio_url")
   resumeUrl      String?  @map("resume_url")
   source         String?
@@ -557,8 +557,8 @@ model JobStage {
   @@map("job_stages")
 }
 
-  // --------------------------------------------------------------------------
-// CAREER SITE SETTINGS
+// --------------------------------------------------------------------------
+// CAREER SITE SETTINGS (WHITE-LABEL CAREERS PORTAL)
 // --------------------------------------------------------------------------
 
 model CareerSiteSettings {
@@ -588,6 +588,28 @@ model CareerSiteSettings {
   linkedinUrl  String? @map("linkedin_url")
   twitterUrl   String? @map("twitter_url")
   instagramUrl String? @map("instagram_url")
+
+  // Theme + layout builder (serialized configs)
+  themeVariant  String?  @map("theme_variant")  // "corporate", "startup", "creative", etc.
+  themeConfig   Json?    @map("theme_config")   // full theme tokens/config
+  layoutConfig  Json?    @map("layout_config")  // sections / blocks for the page builder
+
+  // Localisation / language
+  defaultLocale    String?   @map("default_locale")
+  supportedLocales String[]  @map("supported_locales") @db.Text
+
+  // SEO / metadata
+  seoTitle       String? @map("seo_title")
+  seoDescription String? @map("seo_description")
+  seoImageUrl    String? @map("seo_image_url")
+
+  // Advanced embeds / integrations
+  customCss           String? @map("custom_css")
+  customJs            String? @map("custom_js")
+  googleAnalyticsId   String? @map("ga_measurement_id")
+  metaPixelId         String? @map("meta_pixel_id")
+  otherAnalyticsJson  Json?   @map("other_analytics_json")
+  chatWidgetEmbed     String? @map("chat_widget_embed")
 
   includeInMarketplace Boolean @map("include_in_marketplace") @default(false)
   isPublic             Boolean @map("is_public") @default(true)
@@ -626,8 +648,8 @@ model SentEmail {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId          String   @map("tenant_id") @db.Uuid
   templateId        String?  @map("template_id") @db.Uuid
-  // NEW: denormalised template label for quick UI chips
-  templateName      String?  @map("template_name") // denormalised template name
+  // denormalised template label for quick UI chips
+  templateName      String?  @map("template_name")
   toEmail           String   @map("to_email")
   candidateId       String?  @map("candidate_id") @db.Uuid
   jobId             String?  @map("job_id") @db.Uuid
@@ -657,8 +679,8 @@ model Note {
   candidateId   String?   @map("candidate_id") @db.Uuid
   applicationId String?   @map("application_id") @db.Uuid
   authorId      String    @map("author_id") @db.Uuid
-  // NEW: denormalised author display for UI
-  authorName    String?   @map("author_name") // denormalised display name
+  // denormalised author display for UI
+  authorName    String?   @map("author_name")
   noteType      String?   @map("note_type") @default("general")
   body          String
   isPrivate     Boolean   @map("is_private") @default(false)
