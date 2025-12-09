@@ -20,10 +20,7 @@ async function getPublicJobsForCareersSite(args: {
     tenantId: args.tenantId,
     status: "open",
     visibility: "public",
-    OR: [
-      { internalOnly: false },
-      { internalOnly: null },
-    ],
+    OR: [{ internalOnly: false }, { internalOnly: null }],
   };
 
   if (args.clientCompanyId) {
@@ -39,7 +36,19 @@ async function getPublicJobsForCareersSite(args: {
 }
 
 export default async function CareersPage() {
+  // 🔍 debug so we’re sure this route is being hit in Vercel
+  console.log("[CareersPage] hit");
+
   const hostCtx = await getHostContext();
+
+  console.log("[CareersPage] hostCtx", {
+    host: hostCtx.host,
+    isAppHost: hostCtx.isAppHost,
+    isCareersiteHost: hostCtx.isCareersiteHost,
+    hasTenant: !!hostCtx.tenant,
+    hasClientCompany: !!hostCtx.clientCompany,
+  });
+
   const {
     isAppHost,
     isCareersiteHost,
@@ -61,9 +70,8 @@ export default async function CareersPage() {
           </h1>
           <p className="mt-3 text-sm text-slate-400">
             We couldn&apos;t find a live careers configuration for{" "}
-            <span className="font-mono text-slate-200">{host}</span>. If
-            you expected to see open roles here, please contact ThinkATS
-            support.
+            <span className="font-mono text-slate-200">{host}</span>. If you
+            expected to see open roles here, please contact ThinkATS support.
           </p>
         </div>
       </main>
@@ -81,10 +89,10 @@ export default async function CareersPage() {
 
     return (
       <CareersSitePage
-        tenant={tenant}
-        clientCompany={clientCompany}
-        settings={careerSiteSettings}
-        jobs={jobs}
+        tenant={tenant as any}
+        clientCompany={clientCompany as any}
+        settings={careerSiteSettings as any}
+        jobs={jobs as any}
       />
     );
   }
@@ -100,17 +108,16 @@ export default async function CareersPage() {
 
     return (
       <CareersSitePage
-        tenant={tenant}
+        tenant={tenant as any}
         clientCompany={null}
-        settings={careerSiteSettings}
-        jobs={jobs}
+        settings={careerSiteSettings as any}
+        jobs={jobs as any}
       />
     );
   }
 
   // ---------------------------------------------------------------------------
-  // 4) Main app host (thinkats.com/careers) – keep this simple.
-  //    We are NOT touching app/page.tsx, so your main homepage stays as-is.
+  // 4) Main app host (thinkats.com/careers)
   // ---------------------------------------------------------------------------
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-50">
@@ -131,9 +138,9 @@ export default async function CareersPage() {
         </header>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
           <p>
-            You can turn this page into a marketplace of featured roles
-            later – for now, the primary experience is each client&apos;s
-            own careers microsite.
+            You can turn this page into a marketplace of featured roles later –
+            for now, the primary experience is each client&apos;s own careers
+            microsite.
           </p>
         </div>
       </div>
