@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { isOfficialUser } from "@/lib/officialEmail";
 import { getHostContext } from "@/lib/host";
-import OtpGateClient from "./OtpGateClient";
+import { ensureOtpVerified } from "@/lib/requireOtp";
 import AtsLayoutClient from "./AtsLayoutClient";
 
 export const metadata = {
@@ -49,18 +49,18 @@ export default async function AtsLayout({ children }: Props) {
     }
   }
 
-  // 4) Shape user object for the client layout
+  // 4) Server-side OTP gate for ATS (backed by LoginOtp + cookie)
+  await ensureOtpVerified(ctx);
+
+  // 5) Shape user object for the client layout
   const appUser = {
     ...user,
     tenants: tenantRoles,
   };
 
-  // 5) Delegate OTP gating to client-side gate
   return (
-    <OtpGateClient>
-      <AtsLayoutClient user={appUser}>
-        {children}
-      </AtsLayoutClient>
-    </OtpGateClient>
+    <AtsLayoutClient user={appUser}>
+      {children}
+    </AtsLayoutClient>
   );
 }
