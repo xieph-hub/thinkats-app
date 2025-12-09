@@ -3,26 +3,17 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Local helper to mirror the base-domain logic in lib/host.ts
- * without creating any circular imports.
+ * Local helper – mirrors the logic in app/ats/tenants/page.tsx
+ * for building tenantSlug.thinkats.com style URLs.
  */
 function getBaseDomainFromEnv(): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_DOMAIN;
-  if (explicit) {
-    return explicit.replace(/^https?:\/\//, "").replace(/^www\./, "");
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://thinkats.com";
+  try {
+    const hostname = new URL(siteUrl).hostname;
+    return hostname.replace(/^www\./i, "");
+  } catch {
+    return "thinkats.com";
   }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
-  if (siteUrl) {
-    try {
-      const url = new URL(siteUrl);
-      return url.host.replace(/^www\./, "");
-    } catch {
-      return siteUrl.replace(/^https?:\/\//, "").replace(/^www\./, "");
-    }
-  }
-
-  return "thinkats.com";
 }
 
 type PageProps = {
@@ -36,7 +27,7 @@ export const dynamic = "force-dynamic";
 export default async function TenantCareersiteRedirect({ params }: PageProps) {
   const { tenantId } = params;
 
-  // Look up the tenant by ID
+  // 1) Look up the tenant by ID
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: {
@@ -45,17 +36,24 @@ export default async function TenantCareersiteRedirect({ params }: PageProps) {
     },
   });
 
-  if (!tenant || !tenant.slug) {
-    // If the tenant doesn't exist, this really is a 404
+  // If the tenant truly doesn't exist, this *should* be a 404
+  if (!tenant) {
+    notFound();
+  }
+
+  // If there is no slug yet, we can't build a subdomain URL
+  if (!tenant.slug) {
+    // You can swap this to a soft page if you prefer,
+    // but notFound() keeps the behaviour honest.
     notFound();
   }
 
   const baseDomain = getBaseDomainFromEnv();
 
-  // Canonical careers URL for this tenant:
-  //   <slug>.thinkats.com/careers
+  // Canonical public careers URL for this tenant:
+  //   https://<slug>.<baseDomain>/careers
   const targetUrl = `https://${tenant.slug}.${baseDomain}/careers`;
 
-  // 🚀 Redirect to the public careers site, which is rendered by app/careers/page.tsx
+  // 🔁 Redirect to the public careers site, which is rendered by app/careers/page.tsx
   redirect(targetUrl);
 }
