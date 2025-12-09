@@ -36,19 +36,7 @@ async function getPublicJobsForCareersSite(args: {
 }
 
 export default async function CareersPage() {
-  // 🔍 debug so we’re sure this route is being hit in Vercel
-  console.log("[CareersPage] hit");
-
   const hostCtx = await getHostContext();
-
-  console.log("[CareersPage] hostCtx", {
-    host: hostCtx.host,
-    isAppHost: hostCtx.isAppHost,
-    isCareersiteHost: hostCtx.isCareersiteHost,
-    hasTenant: !!hostCtx.tenant,
-    hasClientCompany: !!hostCtx.clientCompany,
-  });
-
   const {
     isAppHost,
     isCareersiteHost,
@@ -56,11 +44,10 @@ export default async function CareersPage() {
     clientCompany,
     careerSiteSettings,
     host,
+    baseDomain,
   } = hostCtx;
 
-  // ---------------------------------------------------------------------------
-  // 1) Careersite host but nothing resolved → show a soft "not configured" page
-  // ---------------------------------------------------------------------------
+  // 1) Careersite-ish host but no tenant or client resolved → soft "not configured"
   if (isCareersiteHost && !tenant && !clientCompany) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-50">
@@ -78,47 +65,129 @@ export default async function CareersPage() {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // 2) Client-company careersite (ideal path)
-  // ---------------------------------------------------------------------------
-  if (clientCompany && tenant) {
+  // 2) Tenant / client careersite host (subdomain or custom domain)
+  if (tenant && (isCareersiteHost || !isAppHost)) {
+    const displayName =
+      clientCompany?.name || tenant.name || tenant.slug || host;
+
+    const logoUrl =
+      (careerSiteSettings as any)?.logoUrl ||
+      clientCompany?.logoUrl ||
+      tenant.logoUrl ||
+      null;
+
+    const primaryColor =
+      (careerSiteSettings as any)?.primaryColorHex || "#172965";
+    const accentColor =
+      (careerSiteSettings as any)?.accentColorHex || "#0ea5e9";
+    const heroBackground =
+      (careerSiteSettings as any)?.heroBackgroundHex || "#F9FAFB";
+
+    // Plan + domain based “Powered by ThinkATS”
+    const isUnderMainDomain =
+      host === baseDomain || host.endsWith(`.${baseDomain}`);
+    const planTier = (tenant.planTier || "").toUpperCase();
+    const isEnterprisePlan = planTier === "ENTERPRISE";
+    const canRemoveBranding = isEnterprisePlan && !isUnderMainDomain;
+    const showPoweredBy = !canRemoveBranding;
+
     const jobs = await getPublicJobsForCareersSite({
       tenantId: tenant.id,
-      clientCompanyId: clientCompany.id,
+      clientCompanyId: clientCompany?.id ?? null,
     });
 
     return (
-      <CareersSitePage
-        tenant={tenant as any}
-        clientCompany={clientCompany as any}
-        settings={careerSiteSettings as any}
-        jobs={jobs as any}
-      />
+      <main className="min-h-screen bg-slate-100 text-slate-900">
+        <div className="mx-auto max-w-5xl px-4 py-10 lg:py-16">
+          <div
+            className="overflow-hidden rounded-3xl border bg-white shadow-xl"
+            style={{
+              borderColor: primaryColor,
+              boxShadow: "0 22px 60px rgba(15,23,42,0.16)",
+            }}
+          >
+            {/* Top bar: logo + tenant mini-nav */}
+            <div
+              className="flex flex-col gap-4 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
+              style={{ background: heroBackground }}
+            >
+              <div className="flex items-center gap-3">
+                {logoUrl ? (
+                  <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white">
+                    <img
+                      src={logoUrl}
+                      alt={displayName}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {displayName}
+                  </p>
+                  <p className="text-[11px] text-slate-500">Careers</p>
+                </div>
+              </div>
+
+              {/* Tenant mini-nav (no ThinkATS marketing nav here) */}
+              <nav className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
+                <a href="/careers" className="hover:text-slate-900">
+                  Careers home
+                </a>
+                <a href="/jobs" className="hover:text-slate-900">
+                  Open roles
+                </a>
+                {tenant.websiteUrl && (
+                  <a
+                    href={tenant.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:text-slate-900"
+                  >
+                    Company site
+                  </a>
+                )}
+                <a
+                  href="/login"
+                  className="rounded-full border px-3 py-1 text-[11px] font-semibold"
+                  style={{ borderColor: primaryColor, color: primaryColor }}
+                >
+                  Admin login
+                </a>
+              </nav>
+            </div>
+
+            {/* Main careers microsite content */}
+            <div className="px-6 py-7 lg:px-8 lg:py-9">
+              <CareersSitePage
+                tenant={tenant}
+                clientCompany={clientCompany}
+                settings={careerSiteSettings}
+                jobs={jobs}
+              />
+
+              {showPoweredBy && (
+                <footer className="mt-6 border-t border-slate-200 pt-3 text-[10px] text-slate-400">
+                  Powered by{" "}
+                  <span className="font-medium text-slate-500">
+                    ThinkATS
+                  </span>
+                  .
+                </footer>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // 3) Direct-tenant careersite (tenant slug as subdomain)
-  // ---------------------------------------------------------------------------
-  if (tenant && !isAppHost) {
-    const jobs = await getPublicJobsForCareersSite({
-      tenantId: tenant.id,
-      clientCompanyId: null,
-    });
-
-    return (
-      <CareersSitePage
-        tenant={tenant as any}
-        clientCompany={null}
-        settings={careerSiteSettings as any}
-        jobs={jobs as any}
-      />
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // 4) Main app host (thinkats.com/careers)
-  // ---------------------------------------------------------------------------
+  // 3) Main app host (thinkats.com/careers) – simple global entry point
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-50">
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -138,9 +207,9 @@ export default async function CareersPage() {
         </header>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
           <p>
-            You can turn this page into a marketplace of featured roles later –
-            for now, the primary experience is each client&apos;s own careers
-            microsite.
+            You can turn this page into a marketplace of featured roles
+            later – for now, the primary experience is each client&apos;s
+            own careers microsite on a dedicated host.
           </p>
         </div>
       </div>
