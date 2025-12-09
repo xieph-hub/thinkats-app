@@ -1,168 +1,190 @@
 // app/ats/admin/plans/page.tsx
-"use client";
+import type { Metadata } from "next";
+import { prisma } from "@/lib/prisma";
+import { getServerUser } from "@/lib/auth/getServerUser";
 
-import { useEffect, useState } from "react";
+export const dynamic = "force-dynamic";
 
-type Plan = "free" | "pro" | "enterprise";
-
-type WorkspaceRow = {
-  workspace_slug: string;
-  plan: Plan;
-  hiring_mode?: string | null;
+export const metadata: Metadata = {
+  title: "ThinkATS | Admin · Client plans",
+  description:
+    "Manually upgrade or downgrade client workspaces between plan tiers.",
 };
 
-export default function AtsPlansAdminPage() {
-  const [loading, setLoading] = useState(true);
-  const [savingSlug, setSavingSlug] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([]);
+const PLAN_LABELS: Record<string, string> = {
+  STARTER: "Starter",
+  GROWTH: "Growth",
+  AGENCY: "Agency",
+  ENTERPRISE: "Enterprise",
+};
 
-  useEffect(() => {
-    let cancelled = false;
+export default async function AdminPlansPage() {
+  const { isSuperAdmin } = await getServerUser();
 
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/ats/admin/workspaces");
-        const data = await res.json();
-
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || "Failed to load workspaces");
-        }
-
-        if (cancelled) return;
-
-        setWorkspaces(
-          (data.workspaces || []).map((w: any) => ({
-            workspace_slug: w.workspace_slug,
-            plan: (w.plan || "free") as Plan,
-            hiring_mode: w.hiring_mode,
-          })),
-        );
-      } catch (err: any) {
-        if (cancelled) return;
-        setError(err?.message || "Failed to load workspaces");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function handlePlanChange(slug: string, newPlan: Plan) {
-    setSavingSlug(slug);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/ats/admin/workspaces", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workspaceSlug: slug, plan: newPlan }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Failed to update plan");
-      }
-
-      setWorkspaces((prev) =>
-        prev.map((w) =>
-          w.workspace_slug === slug ? { ...w, plan: newPlan } : w,
-        ),
-      );
-    } catch (err: any) {
-      setError(err?.message || "Failed to update plan");
-    } finally {
-      setSavingSlug(null);
-    }
-  }
-
-  return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 lg:px-8">
-      <header className="space-y-1">
+  if (!isSuperAdmin) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-8">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           ATS · Admin
         </p>
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
           Client plans &amp; tiers
         </h1>
-        <p className="text-xs text-slate-600">
+        <p className="mt-3 text-sm text-slate-600">
+          This area is only available to ThinkATS super admins. Ask your admin
+          to grant you access if you need to manage client plans.
+        </p>
+      </div>
+    );
+  }
+
+  const tenants = await prisma.tenant.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 py-6 lg:px-8">
+      {/* Header */}
+      <header className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          ATS · Admin
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Client plans &amp; tiers
+        </h1>
+        <p className="text-sm text-slate-500">
           Manually upgrade or downgrade client workspaces between Free, Pro and
           Enterprise. This controls access to NLP scoring and other premium
           features.
         </p>
       </header>
 
-      {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-          {error}
-        </div>
-      )}
+      <section className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-[11px] text-slate-500">
+          Changes apply immediately and flow through to feature gating and seat
+          limits in each workspace. All updates are routed via{" "}
+          <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
+            /api/ats/settings/billing
+          </code>
+          .
+        </p>
 
-      {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-xs text-slate-500">
-          Loading client workspaces…
-        </div>
-      ) : workspaces.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-xs text-slate-500">
-          No workspaces found yet. A row will be created automatically the first
-          time a client saves scoring settings.
-        </div>
-      ) : (
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-50/80 text-[11px] uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-2 text-left">Workspace</th>
-                <th className="px-4 py-2 text-left">Current plan</th>
-                <th className="px-4 py-2 text-left">Hiring mode</th>
-                <th className="px-4 py-2 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {workspaces.map((w) => (
-                <tr key={w.workspace_slug}>
-                  <td className="px-4 py-3">
-                    <p className="text-xs font-medium text-slate-900">
-                      {w.workspace_slug}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px]"
-                      value={w.plan}
-                      onChange={(e) =>
-                        handlePlanChange(
-                          w.workspace_slug,
-                          e.target.value as Plan,
-                        )
-                      }
-                      disabled={savingSlug === w.workspace_slug}
+        <div className="mt-4 divide-y divide-slate-100">
+          {tenants.map((tenant) => {
+            const tAny = tenant as any;
+            const planTier: string = (tAny.planTier as string) || "GROWTH";
+            const planLabel =
+              PLAN_LABELS[planTier] ||
+              tAny.planName ||
+              tAny.plan ||
+              "Growth";
+
+            const seats: number | "" =
+              typeof tAny.seats === "number" ? tAny.seats : "";
+            const maxSeats: number | "" =
+              typeof tAny.maxSeats === "number" ? tAny.maxSeats : "";
+
+            const displayName =
+              tenant.name || tAny.slug || tenant.id.slice(0, 8);
+
+            return (
+              <form
+                key={tenant.id}
+                method="POST"
+                action="/api/ats/settings/billing"
+                className="grid gap-3 py-4 text-[11px] md:grid-cols-[minmax(0,2.3fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto] md:items-center"
+              >
+                <input type="hidden" name="tenantId" value={tenant.id} />
+
+                {/* Tenant identity */}
+                <div className="space-y-1">
+                  <p className="text-[12px] font-semibold text-slate-900">
+                    {displayName}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    ID:{" "}
+                    <span className="font-mono text-[10px] text-slate-600">
+                      {tenant.id}
+                    </span>
+                  </p>
+                </div>
+
+                {/* Plan tier */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor={`planTier-${tenant.id}`}
+                    className="block text-[10px] font-medium text-slate-600"
+                  >
+                    Plan tier
+                  </label>
+                  <select
+                    id={`planTier-${tenant.id}`}
+                    name="planTier"
+                    defaultValue={planTier}
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  >
+                    <option value="STARTER">Starter</option>
+                    <option value="GROWTH">Growth</option>
+                    <option value="AGENCY">Agency</option>
+                    <option value="ENTERPRISE">Enterprise</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400">
+                    Currently: <span className="font-medium">{planLabel}</span>
+                  </p>
+                </div>
+
+                {/* Seats */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`seats-${tenant.id}`}
+                      className="block text-[10px] font-medium text-slate-600"
                     >
-                      <option value="free">Free</option>
-                      <option value="pro">Pro</option>
-                      <option value="enterprise">Enterprise</option>
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-[11px] text-slate-500">
-                    {w.hiring_mode || "balanced"}
-                  </td>
-                  <td className="px-4 py-3 text-right text-[11px] text-slate-500">
-                    {savingSlug === w.workspace_slug
-                      ? "Saving…"
-                      : "Changes save instantly"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+                      Seats (committed)
+                    </label>
+                    <input
+                      id={`seats-${tenant.id}`}
+                      name="seats"
+                      type="number"
+                      min={0}
+                      defaultValue={seats}
+                      placeholder="e.g. 5"
+                      className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`maxSeats-${tenant.id}`}
+                      className="block text-[10px] font-medium text-slate-600"
+                    >
+                      Seat limit
+                    </label>
+                    <input
+                      id={`maxSeats-${tenant.id}`}
+                      name="maxSeats"
+                      type="number"
+                      min={0}
+                      defaultValue={maxSeats}
+                      placeholder="e.g. 10"
+                      className="block w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                    />
+                  </div>
+                </div>
+
+                {/* Save */}
+                <div className="flex items-center justify-end">
+                  <button
+                    type="submit"
+                    className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
+                  >
+                    Save
+                  </button>
+                </div>
+              </form>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
