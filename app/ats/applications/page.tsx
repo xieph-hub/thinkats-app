@@ -49,11 +49,33 @@ type ApplicationsRow = {
   skillTags: { id: string; label: string; color?: string | null }[];
 };
 
+// Simple helpers to pretty-print stage/status labels
+function formatStageLabel(raw: string): string {
+  const upper = raw.toUpperCase();
+  return upper
+    .split(/[_\s-]+/)
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function formatStatusLabel(raw: string): string {
+  const upper = raw.toUpperCase();
+  if (upper === "PENDING") return "Active";
+  if (upper === "ON_HOLD") return "On hold";
+  if (upper === "REJECTED") return "Rejected";
+  return upper
+    .split(/[_\s-]+/)
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export default async function AtsApplicationsPage({
   searchParams = {},
 }: {
   searchParams?: ApplicationsPageSearchParams;
 }) {
+  // For now, use the Resourcin workspace as the default tenant
+  // (workspace switcher logic can override this later if needed)
   const tenant = await getResourcinTenant();
   if (!tenant) notFound();
 
@@ -87,7 +109,7 @@ export default async function AtsApplicationsPage({
 
   let filterQ = "";
   let filterStage = "ALL";
-  let filterStatus = "ALL"; // PENDING / ON_HOLD / REJECTED
+  let filterStatus = "ALL";
   let filterTier = "ALL";
 
   if (activeView) {
@@ -113,16 +135,6 @@ export default async function AtsApplicationsPage({
   if (typeof searchParams.tier === "string" && searchParams.tier !== "") {
     filterTier = searchParams.tier;
   }
-
-  // Canonical stage list for workspace-wide view
-  const stageNames = [
-    "APPLIED",
-    "SCREENING",
-    "INTERVIEW",
-    "OFFER",
-    "HIRED",
-    "REJECTED",
-  ];
 
   // ---------------------------------------------------------------------------
   // Load applications (tenant-wide) + build filtered list
@@ -164,6 +176,21 @@ export default async function AtsApplicationsPage({
   });
 
   const totalApplications = applicationsRaw.length;
+
+  // 🔹 Dynamically derive stages + statuses from actual data
+  const stageValueSet = new Set<string>();
+  const statusValueSet = new Set<string>();
+
+  for (const app of applicationsRaw) {
+    const stage = (app.stage || "APPLIED").toUpperCase();
+    const status = (app.status || "PENDING").toUpperCase();
+    stageValueSet.add(stage);
+    statusValueSet.add(status);
+  }
+
+  const stageNames = Array.from(stageValueSet).sort();
+  const statusNames = Array.from(statusValueSet).sort();
+
   const pipelineApps: ApplicationsRow[] = [];
 
   for (const app of applicationsRaw) {
@@ -224,10 +251,11 @@ export default async function AtsApplicationsPage({
 
     if (!matchesQuery) continue;
 
-    // Status filter (PENDING / ON_HOLD / REJECTED)
+    // Status filter (decision), using the real, current status
+    const statusValue = (app.status || "PENDING").toUpperCase();
     if (
       filterStatus !== "ALL" &&
-      (app.status || "PENDING").toUpperCase() !== filterStatus.toUpperCase()
+      statusValue !== filterStatus.toUpperCase()
     ) {
       continue;
     }
@@ -240,9 +268,12 @@ export default async function AtsApplicationsPage({
       continue;
     }
 
-    // Stage filter
-    const stageName = (app.stage || "APPLIED").toUpperCase();
-    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
+    // Stage filter, using the real, current stage
+    const stageValue = (app.stage || "APPLIED").toUpperCase();
+    if (
+      filterStage !== "ALL" &&
+      stageValue !== filterStage.toUpperCase()
+    ) {
       continue;
     }
 
@@ -260,6 +291,7 @@ export default async function AtsApplicationsPage({
       currentCompany: candidate?.currentCompany ?? null,
 
       source: app.source,
+      // 🔹 These two are the *actual* current values from DB
       stage: app.stage,
       status: app.status,
 
@@ -290,7 +322,7 @@ export default async function AtsApplicationsPage({
       : activeView?.id || "";
 
   // ---------------------------------------------------------------------------
-  // UI – header + filters matching job pipeline shell
+  // UI – header + filters
   // ---------------------------------------------------------------------------
 
   return (
@@ -385,7 +417,7 @@ export default async function AtsApplicationsPage({
               />
             </div>
 
-            {/* Stage filter */}
+            {/* Stage filter — driven by real stages in the data */}
             <div className="flex flex-col">
               <label className="mb-1 text-[11px] font-medium text-slate-600">
                 Stage
@@ -397,14 +429,14 @@ export default async function AtsApplicationsPage({
               >
                 <option value="ALL">All</option>
                 {stageNames.map((s) => (
-                  <option key={s} value={s.toUpperCase()}>
-                    {s}
+                  <option key={s} value={s}>
+                    {formatStageLabel(s)}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Status filter */}
+            {/* Status filter — driven by real statuses in the data */}
             <div className="flex flex-col">
               <label className="mb-1 text-[11px] font-medium text-slate-600">
                 Decision
@@ -415,9 +447,11 @@ export default async function AtsApplicationsPage({
                 className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="ALL">All</option>
-                <option value="PENDING">Accepted / active</option>
-                <option value="ON_HOLD">On hold</option>
-                <option value="REJECTED">Rejected</option>
+                {statusNames.map((s) => (
+                  <option key={s} value={s}>
+                    {formatStatusLabel(s)}
+                  </option>
+                ))}
               </select>
             </div>
 
