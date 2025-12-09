@@ -2,10 +2,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import {
-  AUTH_COOKIE_NAME,
-  OTP_COOKIE_NAME,
-} from "@/lib/auth/getServerUser";
+
+export const runtime = "nodejs";
+
+const AUTH_COOKIE_NAME = "thinkats_user_id";
+const OTP_COOKIE_NAME = "thinkats_otp_verified";
+// How long an OTP verification is valid for ATS usage (in minutes)
+const OTP_MAX_AGE_MINUTES = 60;
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,14 +22,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
+    const body = await req.json().catch(() => null);
+    const codeRaw = body?.code as string | undefined;
+
+    if (!codeRaw) {
+      return NextResponse.json(
+        { ok: false, error: "missing_code" },
+        { status: 400 },
+      );
     }
 
-    const code = typeof body.code === "string" ? body.code.trim() : "";
+    const code = codeRaw.trim();
     if (!code) {
       return NextResponse.json(
         { ok: false, error: "missing_code" },
@@ -41,42 +47,41 @@ export async function POST(req: NextRequest) {
         userId,
         code,
         consumed: false,
-        expiresAt: { gt: now },
+        expiresAt: {
+          gt: now,
+        },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     });
 
     if (!otp) {
       return NextResponse.json(
-        { ok: false, error: "invalid_or_expired" },
+        { ok: false, error: "invalid_or_expired_code" },
         { status: 400 },
       );
     }
 
-    // Mark this OTP as consumed
     await prisma.loginOtp.update({
       where: { id: otp.id },
       data: { consumed: true },
     });
 
-    // Set OTP-verified cookie for this session
     const res = NextResponse.json({ ok: true });
-    const isProd = process.env.NODE_ENV === "production";
 
-    res.cookies.set(OTP_COOKIE_NAME, "1", {
+    // Store timestamp in cookie so requireOtp can check freshness
+    const issuedAt = Date.now().toString();
+
+    res.cookies.set(OTP_COOKIE_NAME, issuedAt, {
       httpOnly: true,
-      secure: isProd,
+      secure: true,
       sameSite: "lax",
       path: "/",
-      // How long you want ATS to stay "OTP-verified" – tweak as you like
-      maxAge: 60 * 60 * 8, // 8 hours
+      maxAge: OTP_MAX_AGE_MINUTES * 60, // seconds
     });
 
     return res;
   } catch (err) {
-    console.error("OTP verify failed:", err);
+    console.error("OTP verify error", err);
     return NextResponse.json(
       { ok: false, error: "server_error" },
       { status: 500 },
