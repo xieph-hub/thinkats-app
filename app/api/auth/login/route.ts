@@ -1,81 +1,143 @@
 // app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { AUTH_COOKIE_NAME, OTP_COOKIE_NAME } from "@/lib/auth/getServerUser";
+import { getResourcinTenant } from "@/lib/tenant";
+import { isOfficialUser } from "@/lib/officialEmail";
+import bcrypt from "bcryptjs";
+
+const AUTH_COOKIE_NAME = "thinkats_user_id";
 
 export async function POST(req: NextRequest) {
   try {
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
+    const body = await req.json().catch(() => null);
 
-    const rawEmail = typeof body.email === "string" ? body.email.trim() : "";
-    const password =
-      typeof body.password === "string" ? body.password : "";
+    const emailRaw = body?.email as string | undefined;
+    const passwordRaw = body?.password as string | undefined;
 
-    if (!rawEmail || !password) {
+    if (!emailRaw || !passwordRaw) {
       return NextResponse.json(
         { ok: false, error: "missing_credentials" },
         { status: 400 },
       );
     }
 
-    const email = rawEmail.toLowerCase();
+    const email = emailRaw.trim().toLowerCase();
+    const password = passwordRaw.trim();
 
-    // Case-insensitive lookup, so you don't get bitten by casing
-    const user = await prisma.user.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: "insensitive",
-        },
+    if (!email || !password) {
+      return NextResponse.json(
+        { ok: false, error: "missing_credentials" },
+        { status: 400 },
+      );
+    }
+
+    // Try find existing user
+    let user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        userTenantRoles: true,
       },
     });
 
-    if (!user || !user.passwordHash || !user.isActive) {
-      return NextResponse.json(
-        { ok: false, error: "invalid_credentials" },
-        { status: 401 },
-      );
+    const official = isOfficialUser ? isOfficialUser(email) : false;
+
+    // 1) If user doesn't exist, auto-provision
+    if (!user) {
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      const globalRole = official ? "SUPER_ADMIN" : "USER";
+
+      user = await prisma.user.create({
+        data: {
+          email,
+          fullName: null,
+          passwordHash,
+          globalRole,
+          isActive: true,
+        },
+        include: {
+          userTenantRoles: true,
+        },
+      });
+
+      // Attach to default Resourcin tenant as primary workspace
+      try {
+        const defaultTenant = await getResourcinTenant();
+        if (defaultTenant) {
+          await prisma.userTenantRole.create({
+            data: {
+              userId: user.id,
+              tenantId: defaultTenant.id,
+              role: official ? "owner" : "admin",
+              isPrimary: true,
+            },
+          });
+        }
+      } catch (err) {
+        console.error("Failed to attach new user to default tenant", err);
+      }
+    } else {
+      // 2) Existing user: handle first-time password or validate existing password
+      if (!user.isActive) {
+        return NextResponse.json(
+          { ok: false, error: "user_inactive" },
+          { status: 403 },
+        );
+      }
+
+      if (!user.passwordHash) {
+        // First-time password set for an existing user:
+        // accept this password once and set the hash.
+        const passwordHash = await bcrypt.hash(password, 12);
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash },
+          include: { userTenantRoles: true },
+        });
+      } else {
+        const ok = await bcrypt.compare(password, user.passwordHash);
+        if (!ok) {
+          return NextResponse.json(
+            { ok: false, error: "invalid_credentials" },
+            { status: 401 },
+          );
+        }
+      }
+
+      // Make sure the user has at least one tenant role.
+      if (!user.userTenantRoles.length) {
+        try {
+          const defaultTenant = await getResourcinTenant();
+          if (defaultTenant) {
+            await prisma.userTenantRole.create({
+              data: {
+                userId: user.id,
+                tenantId: defaultTenant.id,
+                role: official ? "owner" : "admin",
+                isPrimary: true,
+              },
+            });
+          }
+        } catch (err) {
+          console.error("Failed to backfill tenant role for user", err);
+        }
+      }
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      return NextResponse.json(
-        { ok: false, error: "invalid_credentials" },
-        { status: 401 },
-      );
-    }
-
-    // ✅ Authenticated: set main auth cookie + clear OTP cookie so they must re-verify
+    // 3) Set auth cookie
     const res = NextResponse.json({ ok: true });
-
-    const isProd = process.env.NODE_ENV === "production";
 
     res.cookies.set(AUTH_COOKIE_NAME, user.id, {
       httpOnly: true,
-      secure: isProd,
       sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-    });
-
-    // Clear any previous OTP verification
-    res.cookies.set(OTP_COOKIE_NAME, "", {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0,
+      maxAge: 60 * 60 * 24 * 90, // 90 days
     });
 
     return res;
   } catch (err) {
-    console.error("Login handler error:", err);
+    console.error("Login error", err);
     return NextResponse.json(
       { ok: false, error: "server_error" },
       { status: 500 },
