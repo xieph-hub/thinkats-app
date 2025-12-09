@@ -31,23 +31,28 @@ export default function OtpGateClient({ children }: Props) {
           cache: "no-store",
         });
 
-        const data: AuthMeResponse = await res.json().catch(() => ({
-          ok: false,
-          email: null,
-          isSuperAdmin: false,
-          isOtpVerified: false,
-        }));
+        const data: AuthMeResponse = await res
+          .json()
+          .catch(
+            () =>
+              ({
+                ok: false,
+                email: null,
+                isSuperAdmin: false,
+                isOtpVerified: false,
+              }) as AuthMeResponse,
+          );
 
         const currentPath = pathname || "/ats";
-        const callbackUrl = currentPath.startsWith("/ats")
+        const returnTo = currentPath.startsWith("/ats")
           ? currentPath
           : "/ats";
 
-        // Not logged in → kick to /login
+        // Not logged in → kick to /login with returnTo
         if (!data.ok || !data.email) {
           if (!cancelled) {
             router.push(
-              `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+              `/login?returnTo=${encodeURIComponent(returnTo)}`,
             );
           }
           return;
@@ -60,9 +65,7 @@ export default function OtpGateClient({ children }: Props) {
         ) {
           if (!cancelled) {
             router.push(
-              `/ats/verify?callbackUrl=${encodeURIComponent(
-                callbackUrl,
-              )}`,
+              `/ats/verify?returnTo=${encodeURIComponent(returnTo)}`,
             );
           }
           return;
@@ -73,12 +76,10 @@ export default function OtpGateClient({ children }: Props) {
         }
       } catch (err) {
         console.error("OtpGateClient auth check error:", err);
-        const callbackUrl = pathname.startsWith("/ats")
-          ? pathname
-          : "/ats";
+        const returnTo = pathname.startsWith("/ats") ? pathname : "/ats";
         if (!cancelled) {
           router.push(
-            `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
+            `/login?returnTo=${encodeURIComponent(returnTo)}`,
           );
         }
       }
