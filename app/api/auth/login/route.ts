@@ -31,13 +31,12 @@ async function parseCredentials(req: NextRequest): Promise<ParsedCreds> {
       email = String(formData.get("email") ?? "").trim().toLowerCase();
       password = String(formData.get("password") ?? "");
     } else {
-      // Fallback: try formData but swallow undici errors if it doesn't match
+      // Fallback: try formData but swallow errors
       const formData = await req.formData();
       email = String(formData.get("email") ?? "").trim().toLowerCase();
       password = String(formData.get("password") ?? "");
     }
   } catch {
-    // If parsing fails, treat as missing credentials
     email = "";
     password = "";
   }
@@ -49,9 +48,10 @@ export async function POST(req: NextRequest) {
   const { email, password } = await parseCredentials(req);
 
   if (!email || !password) {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("error", "missing_credentials");
-    return NextResponse.redirect(url);
+    return NextResponse.json(
+      { ok: false, error: "missing_credentials" },
+      { status: 400 },
+    );
   }
 
   const supabase = createSupabaseRouteClient();
@@ -62,13 +62,12 @@ export async function POST(req: NextRequest) {
   });
 
   if (error || !data.session) {
-    const url = new URL("/login", req.url);
-    url.searchParams.set("error", "invalid_credentials");
-    return NextResponse.redirect(url);
+    return NextResponse.json(
+      { ok: false, error: "invalid_credentials" },
+      { status: 401 },
+    );
   }
 
-  // Supabase session cookie is now set. /ats layout + ensureOtpVerified
-  // will handle the OTP step and official-email gating.
-  const redirectUrl = new URL("/ats", req.url);
-  return NextResponse.redirect(redirectUrl);
+  // Supabase auth helpers will set cookies on this response.
+  return NextResponse.json({ ok: true });
 }
