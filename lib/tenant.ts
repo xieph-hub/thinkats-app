@@ -15,7 +15,8 @@ import { requireTenantMembership } from "@/lib/requireTenantMembership";
 export async function getResourcinTenant(
   tenantIdFromUrl?: string | null,
 ) {
-  const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
+  // 🔧 FIX: getHostContext is async
+  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
 
   // 1) Tenant subdomain – host wins, membership already enforced in AtsLayout.
   if (!isPrimaryHost && tenantSlugFromHost) {
