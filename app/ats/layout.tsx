@@ -20,7 +20,9 @@ type Props = {
 
 export default async function AtsLayout({ children }: Props) {
   const ctx = await getServerUser();
-  const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
+
+  // 🔧 FIX: getHostContext is async and returns isPrimaryHost + tenantSlugFromHost
+  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
 
   // 1) Require app-level user context (cookie-based auth)
   if (!ctx || !ctx.user) {
