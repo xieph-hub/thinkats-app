@@ -13,8 +13,6 @@ export const metadata = {
     "Manage tenants, jobs, candidates and clients from one shared ATS workspace.",
 };
 
-// Force this layout to be always dynamic so it can
-// reflect the current auth state on every request.
 export const dynamic = "force-dynamic";
 
 type Props = {
@@ -49,8 +47,8 @@ export default async function AtsLayout({ children }: Props) {
     }
   }
 
-  // 4) Server-side OTP gate for ATS (backed by LoginOtp + cookie)
-  await ensureOtpVerified(ctx);
+  // 4) Server-side OTP gate (cookie-based)
+  await ensureOtpVerified("/ats");
 
   // 5) Shape user object for the client layout
   const appUser = {
@@ -59,7 +57,7 @@ export default async function AtsLayout({ children }: Props) {
   };
 
   return (
-    <AtsLayoutClient user={appUser}>
+    <AtsLayoutClient user={appUser} isSuperAdmin={isSuperAdmin}>
       {children}
     </AtsLayoutClient>
   );
