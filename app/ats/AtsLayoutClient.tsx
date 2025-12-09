@@ -26,6 +26,13 @@ type NavGroup = {
   items: NavItem[];
 };
 
+type TenantRoleLite = {
+  tenantId: string;
+  tenantSlug: string | null;
+  tenantName?: string | null;
+  role?: string | null;
+};
+
 // 🔹 Global ATS-style IA with Admin → Plans
 const ALL_NAV_GROUPS: NavGroup[] = [
   {
@@ -69,24 +76,20 @@ export default function AtsLayoutClient({
   const searchParams = useSearchParams();
 
   // Tenant roles attached in getServerUser → appUser.tenants
-  const tenantRoles =
-    (user.tenants as
-      | {
-          tenantId: string;
-          tenantSlug: string | null;
-          tenantName: string | null;
-          role?: string | null;
-        }[]
-      | undefined) ?? [];
+  const tenantRoles: TenantRoleLite[] = Array.isArray(
+    (user as any).tenants,
+  )
+    ? ((user as any).tenants as TenantRoleLite[])
+    : [];
 
   const tenantIdFromQuery = searchParams.get("tenantId") ?? "";
-  const fallbackTenantId = tenantRoles[0]?.tenantId ?? "";
-  const activeTenantId = tenantIdFromQuery || fallbackTenantId;
+  const fallbackTenantId =
+    tenantRoles.length > 0 ? tenantRoles[0].tenantId : "";
+  const activeTenantId = tenantIdFromQuery || fallbackTenantId || "";
 
-  const activeTenant =
+  const activeTenant: TenantRoleLite | null =
     tenantRoles.find((t) => t.tenantId === activeTenantId) ??
-    tenantRoles[0] ??
-    null;
+    (tenantRoles.length > 0 ? tenantRoles[0] : null);
 
   // Only SUPER_ADMIN sees the Admin section
   const navGroups: NavGroup[] = isSuperAdmin
