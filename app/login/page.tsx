@@ -1,27 +1,24 @@
 // app/login/page.tsx
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import LoginPageClient from "./LoginPageClient";
 
 export const metadata: Metadata = {
-  title: "Sign in | ThinkATS",
-  description:
-    "Sign in to ThinkATS to manage workspaces, jobs, candidates and clients.",
+  title: "ThinkATS | Login",
+  description: "Sign in to manage ATS workspaces, jobs and candidates.",
 };
 
-// Optional: if you *never* want this statically generated, you can uncomment:
-// export const dynamic = "force-dynamic";
+type SearchParams = {
+  reset?: string;
+  error?: string;
+};
 
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-50 text-xs text-slate-500">
-          Loading sign-in…
-        </div>
-      }
-    >
-      <LoginPageClient />
-    </Suspense>
-  );
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const reset = searchParams?.reset === "1";
+  const errorCode = searchParams?.error ?? null;
+
+  return <LoginPageClient reset={reset} errorCode={errorCode} />;
 }
