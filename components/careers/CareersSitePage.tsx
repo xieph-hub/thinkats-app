@@ -41,9 +41,14 @@ function getBranding(
   const heroBackgroundHex =
     settings?.heroBackgroundHex || "#020617"; // slate-950
 
-  // For now we only have website; social handles can be added later
+  const bannerImageUrl = settings?.bannerImageUrl || null;
+
   const websiteUrl =
     clientCompany?.website || tenant?.websiteUrl || null;
+
+  const linkedinUrl = settings?.linkedinUrl || null;
+  const twitterUrl = settings?.twitterUrl || null;
+  const instagramUrl = settings?.instagramUrl || null;
 
   return {
     companyName,
@@ -54,7 +59,11 @@ function getBranding(
     primaryColorHex,
     accentColorHex,
     heroBackgroundHex,
+    bannerImageUrl,
     websiteUrl,
+    linkedinUrl,
+    twitterUrl,
+    instagramUrl,
   };
 }
 
@@ -134,8 +143,14 @@ export default function CareersSitePage({
     aboutHtml,
     logoUrl,
     heroBackgroundHex,
+    bannerImageUrl,
     websiteUrl,
+    linkedinUrl,
+    twitterUrl,
+    instagramUrl,
   } = getBranding(tenant, clientCompany, settings);
+
+  const hasSocials = !!(linkedinUrl || twitterUrl || instagramUrl);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
@@ -160,9 +175,21 @@ export default function CareersSitePage({
           </div>
 
           <div className="relative h-48 w-full max-w-md overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 md:h-56">
-            {/* If you add a proper banner image later, you can wire it here.
-                For now we keep a clean gradient and logo chip. */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.35),_transparent_55%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.12),_transparent_60%)]" />
+            {bannerImageUrl ? (
+              <>
+                {/* Banner image */}
+                <Image
+                  src={bannerImageUrl}
+                  alt={`${companyName} careers banner`}
+                  fill
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
+              </>
+            ) : (
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.35),_transparent_55%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.12),_transparent_60%)]" />
+            )}
+
             {logoUrl && (
               <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-xl bg-slate-950/80 px-3 py-2">
                 <div className="relative h-8 w-8 overflow-hidden rounded-lg bg-slate-800">
@@ -249,6 +276,55 @@ export default function CareersSitePage({
                 </span>
                 <span>Visit company website</span>
               </Link>
+            </div>
+          )}
+
+          {hasSocials && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Connect
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {linkedinUrl && (
+                  <Link
+                    href={linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-[#0A66C2] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[#084b8a]"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold">
+                      in
+                    </span>
+                    <span>LinkedIn</span>
+                  </Link>
+                )}
+                {twitterUrl && (
+                  <Link
+                    href={twitterUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-900 shadow-sm hover:bg-slate-200"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-slate-50">
+                      X
+                    </span>
+                    <span>Twitter</span>
+                  </Link>
+                )}
+                {instagramUrl && (
+                  <Link
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:brightness-110"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold">
+                      ig
+                    </span>
+                    <span>Instagram</span>
+                  </Link>
+                )}
+              </div>
             </div>
           )}
 
