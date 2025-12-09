@@ -4,15 +4,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Props = {
-  callbackUrl: string;
-};
-
-export default function LoginForm({ callbackUrl }: Props) {
+export default function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,41 +15,46 @@ export default function LoginForm({ callbackUrl }: Props) {
     e.preventDefault();
     setError(null);
 
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail || !password) {
-      setError("Please enter your email and password.");
+    if (!email || !password) {
+      setError("Email and password are required.");
       return;
     }
 
     setIsSubmitting(true);
-
     try {
-      const res = await fetch(
-        `/api/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: trimmedEmail,
-            password,
-          }),
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({ email, password }),
+      });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // ignore JSON parse errors
+      }
 
-      if (!res.ok || !data.ok) {
-        setError(data.error || "Unable to sign you in.");
-        setIsSubmitting(false);
+      if (!res.ok || !data?.ok) {
+        const message =
+          data?.error === "invalid_credentials"
+            ? "Incorrect email or password."
+            : data?.error || "Unable to sign you in. Please try again.";
+        setError(message);
         return;
       }
 
-      router.push(data.redirectTo || "/ats");
-    } catch (err) {
-      console.error("Login submit error:", err);
-      setError("Something went wrong. Please try again.");
+      // Successful password auth:
+      // - session cookie should be set by /api/auth/login
+      // - /ats layout + ensureOtpVerified will now decide whether to redirect
+      //   to /ats/verify for OTP (only once per device/session)
+      router.push("/ats");
+    } catch (err: any) {
+      console.error("Login error", err);
+      setError("Unexpected error signing in. Please try again.");
+    } finally {
       setIsSubmitting(false);
     }
   }
@@ -62,58 +62,54 @@ export default function LoginForm({ callbackUrl }: Props) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
           {error}
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-slate-200">
+      <div className="space-y-1">
+        <label
+          htmlFor="email"
+          className="text-[11px] font-medium text-slate-700"
+        >
           Work email
         </label>
         <input
+          id="email"
           type="email"
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           placeholder="you@company.com"
-          required
+          className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-slate-200">
+      <div className="space-y-1">
+        <label
+          htmlFor="password"
+          className="text-[11px] font-medium text-slate-700"
+        >
           Password
         </label>
         <input
+          id="password"
           type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           placeholder="••••••••"
-          required
+          className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
         />
       </div>
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-2 inline-flex w-full items-center justify-center rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#12204f] disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {isSubmitting ? "Signing you in…" : "Sign in"}
+        {isSubmitting ? "Signing in…" : "Sign in"}
       </button>
-
-      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-        <span>Admins only</span>
-        <a
-          href="/auth/forgot"
-          className="font-medium text-indigo-400 hover:text-indigo-300"
-        >
-          Forgot password?
-        </a>
-      </div>
     </form>
   );
 }
