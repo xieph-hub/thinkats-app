@@ -23,9 +23,14 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => null);
-    const codeRaw = body?.code as string | undefined;
+    const codeRaw =
+      typeof body?.code === "string" ? (body.code as string) : undefined;
+    const callbackUrlRaw =
+      typeof body?.callbackUrl === "string"
+        ? (body.callbackUrl as string)
+        : undefined;
 
-    if (!codeRaw) {
+    if (!codeRaw || !codeRaw.trim()) {
       return NextResponse.json(
         { ok: false, error: "missing_code" },
         { status: 400 },
@@ -33,13 +38,6 @@ export async function POST(req: NextRequest) {
     }
 
     const code = codeRaw.trim();
-    if (!code) {
-      return NextResponse.json(
-        { ok: false, error: "missing_code" },
-        { status: 400 },
-      );
-    }
-
     const now = new Date();
 
     const otp = await prisma.loginOtp.findFirst({
@@ -61,12 +59,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Mark OTP as consumed so it can't be reused
     await prisma.loginOtp.update({
       where: { id: otp.id },
       data: { consumed: true },
     });
 
-    const res = NextResponse.json({ ok: true });
+    // Normalise callback URL (fallback to /ats)
+    const callbackUrl =
+      callbackUrlRaw && callbackUrlRaw.startsWith("/")
+        ? callbackUrlRaw
+        : "/ats";
+
+    // Build response
+    const res = NextResponse.json({
+      ok: true,
+      redirectTo: callbackUrl,
+    });
 
     // Store timestamp in cookie so requireOtp can check freshness
     const issuedAt = Date.now().toString();
