@@ -2,8 +2,9 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-// 🔐 IMPORTANT: this must match whatever your /api/auth/login sets
-const AUTH_COOKIE_NAME = "thinkats_user_id";
+// 🔐 Shared cookie names for auth + OTP
+export const AUTH_COOKIE_NAME = "thinkats_user_id";
+export const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export type TenantRoleSummary = {
   tenantId: string;
@@ -28,7 +29,6 @@ export type ServerUserContext = {
 };
 
 // ✨ Shape used by ATS UI (e.g. AtsLayoutClient)
-// Kept compatible with ServerUserContext.user, with an optional tenants field
 export type AppUserWithTenants = ServerUserContext["user"] & {
   tenants?: TenantRoleSummary[];
 };
