@@ -1,74 +1,85 @@
 // app/api/auth/otp/verify/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
-const OTP_COOKIE_TTL_HOURS = 24;
+import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    const code = (body.code as string | undefined)?.trim();
+    const code = typeof body.code === "string" ? body.code.trim() : "";
 
-    if (!code || code.length !== 6) {
+    if (!code) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "Please provide a valid 6-digit code.",
-        },
+        { ok: false, error: "missing_code" },
+        { status: 400 },
+      );
+    }
+
+    const supabase = createSupabaseRouteClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user || !user.email) {
+      console.error("OTP verify unauthenticated:", userError);
+      return NextResponse.json(
+        { ok: false, error: "unauthenticated" },
+        { status: 401 },
+      );
+    }
+
+    const email = user.email.toLowerCase();
+
+    const appUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (!appUser) {
+      return NextResponse.json(
+        { ok: false, error: "user_not_found" },
         { status: 400 },
       );
     }
 
     const now = new Date();
 
-    const otp = await prisma.loginOtp.findFirst({
+    const otp = await prisma.otpCode.findFirst({
       where: {
+        userId: appUser.id,
         code,
-        consumed: false,
-        expiresAt: {
-          gt: now,
-        },
+        usedAt: null,
+        expiresAt: { gt: now },
       },
-      include: {
-        user: true,
+      orderBy: {
+        createdAt: "desc",
       },
     });
 
-    if (!otp || !otp.user) {
+    if (!otp) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: "Invalid or expired code. Please request a new one.",
-        },
+        { ok: false, error: "invalid_or_expired" },
         { status: 400 },
       );
     }
 
-    // Mark OTP as consumed
-    await prisma.loginOtp.update({
-      where: { id: otp.id },
-      data: { consumed: true },
-    });
+    await prisma.$transaction([
+      prisma.otpCode.update({
+        where: { id: otp.id },
+        data: { usedAt: now },
+      }),
+      prisma.user.update({
+        where: { id: appUser.id },
+        data: { otpVerifiedAt: now },
+      }),
+    ]);
 
-    // Set "verified" cookie
-    const res = NextResponse.json({ ok: true });
-
-    res.cookies.set(OTP_COOKIE_NAME, "true", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      expires: new Date(
-        Date.now() + OTP_COOKIE_TTL_HOURS * 60 * 60 * 1000,
-      ),
-    });
-
-    return res;
+    return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("OTP verify error:", err);
+    console.error("OTP verify failed:", err);
     return NextResponse.json(
-      { ok: false, error: "internal_error" },
+      { ok: false, error: "server_error" },
       { status: 500 },
     );
   }
