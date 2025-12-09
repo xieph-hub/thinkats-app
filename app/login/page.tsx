@@ -1,61 +1,128 @@
 // app/login/page.tsx
-import type { Metadata } from "next";
-import LoginForm from "./LoginForm";
+"use client";
 
-export const metadata: Metadata = {
-  title: "ThinkATS | Sign in",
-  description:
-    "Sign in to ThinkATS to manage tenants, jobs, candidates and clients.",
-};
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-type LoginSearchParams = {
-  returnTo?: string;
-};
+export default function LoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo") ?? "/ats";
 
-function sanitiseReturnTo(raw?: string): string {
-  if (!raw) return "/ats";
-  if (!raw.startsWith("/")) return "/ats";
-  if (raw.startsWith("//")) return "/ats"; // avoid protocol-relative
-  return raw;
-}
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams?: LoginSearchParams;
-}) {
-  const safeReturnTo = sanitiseReturnTo(searchParams?.returnTo);
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.ok) {
+        let message = "Unable to sign you in. Please try again.";
+
+        if (data.error === "invalid_credentials") {
+          message = "Invalid email or password.";
+        } else if (data.error === "missing_credentials") {
+          message = "Email and password are required.";
+        }
+
+        setError(message);
+        setSubmitting(false);
+        return;
+      }
+
+      // Supabase cookie is set now, move to OTP verification
+      router.push(`/ats/verify?returnTo=${encodeURIComponent(returnTo)}`);
+    } catch (err) {
+      console.error("Login submit error:", err);
+      setError("Something went wrong. Please try again.");
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950 bg-[radial-gradient(circle_at_top,_#172965_0,_transparent_60%),_radial-gradient(circle_at_bottom,_#64C247_0,_transparent_55%)] px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white/95 p-6 shadow-xl shadow-slate-900/20 backdrop-blur">
-        <div className="mb-5 space-y-1">
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
             ThinkATS
           </p>
-          <h1 className="text-xl font-semibold text-slate-900">
+          <h1 className="mt-1 text-lg font-semibold text-slate-900">
             Sign in to your workspace
           </h1>
-          <p className="text-xs text-slate-600">
-            Use your email and password. OTP is only required once per device
-            and is handled after login on the ATS side.
+          <p className="mt-1 text-[11px] text-slate-500">
+            Use your admin email and password. We&apos;ll ask for a one-time
+            code next.
           </p>
         </div>
 
-        {/* Pass the safe returnTo into the client component */}
-        <LoginForm returnTo={safeReturnTo} />
+        {error && (
+          <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
+            {error}
+          </div>
+        )}
 
-        <p className="mt-4 text-center text-[11px] text-slate-400">
-          Having trouble? Contact{" "}
-          <a
-            href="mailto:support@thinkats.com"
-            className="font-medium text-[#172965] underline-offset-2 hover:underline"
+        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+          <div className="space-y-1">
+            <label
+              htmlFor="email"
+              className="block text-[11px] font-medium text-slate-700"
+            >
+              Email address
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+              placeholder="you@company.com"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label
+              htmlFor="password"
+              className="block text-[11px] font-medium text-slate-700"
+            >
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-slate-900 focus:bg-white focus:ring-1 focus:ring-slate-900"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="mt-2 inline-flex w-full items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
           >
-            support@thinkats.com
-          </a>
-          .
-        </p>
+            {submitting ? "Signing in..." : "Continue"}
+          </button>
+        </form>
       </div>
-    </div>
+    </main>
   );
 }
