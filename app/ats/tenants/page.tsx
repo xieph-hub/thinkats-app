@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import TenantLogo from "@/components/ats/tenants/TenantLogo";
 import CopyCareersUrlButton from "@/components/ats/tenants/CopyCareersUrlButton";
+import TenantActionsMenu from "@/components/ats/tenants/TenantActionsMenu";
 
 export const dynamic = "force-dynamic";
 
@@ -91,7 +92,7 @@ export default async function AtsTenantsPage({
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
-  // OTP + super-admin gating handled by:
+  // OTP + super-admin gating is handled by:
   // - app/ats/layout.tsx (auth + OTP)
   // - app/ats/tenants/layout.tsx (SUPER_ADMIN only)
 
@@ -619,6 +620,9 @@ export default async function AtsTenantsPage({
               const candidateCount =
                 candidatesByTenant.get(tenant.id) ?? 0;
 
+              const canDeleteTenant =
+                jobCount === 0 && clientCount === 0 && candidateCount === 0;
+
               const isDefault =
                 defaultTenant && defaultTenant.id === tenant.id;
 
@@ -722,7 +726,7 @@ export default async function AtsTenantsPage({
                     </div>
                   </div>
 
-                  {/* Micro stats + shortcuts */}
+                  {/* Micro stats + shortcuts / actions */}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2">
                     <div className="flex flex-wrap gap-3 text-[10px]">
                       <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-slate-700 ring-1 ring-slate-200">
@@ -739,7 +743,15 @@ export default async function AtsTenantsPage({
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap justify-end gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {/* 🔹 New actions menu (suspend / archive / delete) */}
+                      <TenantActionsMenu
+                        tenantId={tenant.id}
+                        canDelete={canDeleteTenant}
+                        currentStatus={tenant.status ?? null}
+                      />
+
+                      {/* Existing shortcuts */}
                       <Link
                         href={`/ats/tenants?editTenantId=${encodeURIComponent(
                           tenant.id,
