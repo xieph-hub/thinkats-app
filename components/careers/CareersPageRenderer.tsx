@@ -1,396 +1,260 @@
 // components/careers/CareersPageRenderer.tsx
-import Link from "next/link";
-import type {
-  Tenant,
-  ClientCompany,
-  CareerSiteSettings,
-} from "@prisma/client";
-import CareersShell from "./CareersShell";
+import type { CareerSiteSettings, Job } from "@prisma/client";
 
-type HostContextLike = {
-  host: string;
-  isAppHost: boolean;
-  isTenantHost: boolean;
-  isCareersiteHost: boolean;
-  tenant: Tenant | null;
-  clientCompany: ClientCompany | null;
-  careerSiteSettings: CareerSiteSettings | null;
-};
+interface CareersPageRendererProps {
+  displayName: string;
+  settings?: CareerSiteSettings | null;
+  jobs: Job[];
 
-type JobForCareers = {
-  id: string;
-  title: string;
-  slug: string | null;
-  location: string | null;
-  department: string | null;
-  employmentType: string | null;
-  locationType: string | null;
-  shortDescription?: string | null;
-  createdAt?: Date | string;
-  clientCompany?: {
-    name: string | null;
-  } | null;
-};
-
-type CareersPageRendererProps = {
-  hostContext: HostContextLike;
-  page: "home" | "careers" | "jobs";
-  jobs?: JobForCareers[];
-};
-
-function formatDate(value: Date | string | undefined): string {
-  if (!value) return "";
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function JobsGrid({
-  jobs,
-  accentColor,
-  compact,
-}: {
-  jobs: JobForCareers[];
+  primaryColor: string;
   accentColor: string;
-  compact?: boolean;
-}) {
-  if (!jobs.length) {
-    return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-        No open roles right now. Check back soon or follow the company on
-        social to stay in the loop.
-      </div>
-    );
-  }
-
-  const displayJobs = compact ? jobs.slice(0, 4) : jobs;
-
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 md:grid-cols-2">
-        {displayJobs.map((job) => {
-          const href = `/jobs/${encodeURIComponent(job.slug ?? job.id)}`;
-          const labelCompany = job.clientCompany?.name ?? null;
-          return (
-            <article
-              key={job.id}
-              className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white/90 p-3 text-sm text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="space-y-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    <Link href={href} className="hover:underline">
-                      {job.title}
-                    </Link>
-                  </h3>
-                  {labelCompany && (
-                    <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                      {labelCompany}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 text-[11px] text-slate-600">
-                  {job.location && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5">
-                      <span
-                        className="h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: accentColor }}
-                      />
-                      {job.location}
-                    </span>
-                  )}
-                  {job.locationType && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5">
-                      {job.locationType}
-                    </span>
-                  )}
-                  {job.employmentType && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5">
-                      {job.employmentType}
-                    </span>
-                  )}
-                  {job.department && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5">
-                      {job.department}
-                    </span>
-                  )}
-                </div>
-
-                {job.shortDescription && (
-                  <p className="mt-1 line-clamp-3 text-[13px] text-slate-600">
-                    {job.shortDescription}
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-3 flex items-center justify-between text-[11px] text-slate-500">
-                <span>
-                  Posted{" "}
-                  <span className="font-medium">
-                    {formatDate(job.createdAt)}
-                  </span>
-                </span>
-                <Link
-                  href={href}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium"
-                  style={{ color: accentColor }}
-                >
-                  View role
-                  <span aria-hidden>↗</span>
-                </Link>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-
-      {compact && jobs.length > displayJobs.length && (
-        <p className="text-xs text-slate-500">
-          Showing {displayJobs.length} of {jobs.length} roles.
-        </p>
-      )}
-    </div>
-  );
 }
 
-export default function CareersPageRenderer({
-  hostContext,
-  page,
-  jobs = [],
-}: CareersPageRendererProps) {
-  const {
-    host,
-    isAppHost,
-    isTenantHost,
-    isCareersiteHost,
-    tenant,
-    clientCompany,
-    careerSiteSettings,
-  } = hostContext;
+function formatDate(date: Date | string): string {
+  try {
+    return new Date(date).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
 
-  const name =
-    clientCompany?.name ??
-    tenant?.name ??
-    (isAppHost ? "ThinkATS" : host.replace(/^www\./i, ""));
-
-  const primaryColor = careerSiteSettings?.primaryColorHex ?? "#172965";
-  const accentColor = careerSiteSettings?.accentColorHex ?? "#FFC000";
-  const heroBackground = careerSiteSettings?.heroBackgroundHex ?? "#F4F5FB";
+export default function CareersPageRenderer(props: CareersPageRendererProps) {
+  const { displayName, settings, jobs, primaryColor, accentColor } = props;
 
   const heroTitle =
-    careerSiteSettings?.heroTitle ??
-    (isAppHost
-      ? "Careers powered by ThinkATS"
-      : `Careers at ${name}`);
-
+    settings?.heroTitle ||
+    `At ${displayName}, we believe in the power of people.`;
   const heroSubtitle =
-    careerSiteSettings?.heroSubtitle ??
-    (isAppHost
-      ? "Explore roles from modern organisations using ThinkATS to hire thoughtfully."
-      : "Explore current opportunities and be part of what we’re building.");
+    settings?.heroSubtitle ||
+    "Explore how you can grow your career and make meaningful impact with us.";
 
-  const aboutHtml = careerSiteSettings?.aboutHtml ?? "";
-  const hasAbout = !!aboutHtml.trim();
+  const aboutHtml =
+    settings?.aboutHtml ||
+    `<p>${displayName} is building a team of curious, ambitious people who care deeply about their work and the people they work with.</p>`;
 
-  const isTenantExperience = isTenantHost || isCareersiteHost || !!tenant;
+  const bannerImageUrl = settings?.bannerImageUrl || null;
 
-  const jobsCount = jobs.length;
+  const linkedinUrl = settings?.linkedinUrl || null;
+  const twitterUrl = settings?.twitterUrl || null;
+  const instagramUrl = settings?.instagramUrl || null;
 
-  // Route helpers for nav (tenant subdomain vs main host)
-  const jobsHref = isTenantExperience ? "/jobs" : "/careers";
-  const allJobsHref = isTenantExperience ? "/jobs" : "/careers";
+  const hasSocial =
+    Boolean(linkedinUrl) || Boolean(twitterUrl) || Boolean(instagramUrl);
+
+  const hasJobs = jobs.length > 0;
+  const featuredJobs = jobs.slice(0, 8); // first version – up to 8 roles
 
   return (
-    <CareersShell
-      tenant={tenant}
-      clientCompany={clientCompany}
-      settings={careerSiteSettings}
-      host={host}
-      isAppHost={isAppHost}
-      isTenantHost={isTenantHost}
-      isCareersiteHost={isCareersiteHost}
-    >
-      <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        {/* Left: hero + jobs */}
-        <section className="space-y-5 border-b border-slate-100 pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6">
-          {/* Hero */}
-          <div
-            className="rounded-xl border border-slate-200 bg-white/80 px-4 py-4 shadow-sm"
-            style={{ backgroundColor: heroBackground }}
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              {isTenantExperience ? "Careers" : "Marketplace"}
-            </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
-              {heroTitle}
-            </h1>
-            <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-slate-700">
-              {heroSubtitle}
-            </p>
+    <div className="space-y-10">
+      {/* Hero + banner / culture card */}
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)] lg:items-start">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Careers at {displayName}
+          </p>
+          <h1 className="text-2xl font-semibold leading-snug text-slate-950 lg:text-3xl">
+            {heroTitle}
+          </h1>
+          <p className="text-sm text-slate-600">{heroSubtitle}</p>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-              <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: primaryColor }}
-                />
-                {jobsCount > 0
-                  ? `${jobsCount} open role${jobsCount === 1 ? "" : "s"}`
-                  : "No open roles currently"}
+          {hasSocial && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                Connect with us
               </span>
-
-              {isTenantExperience && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 ring-1 ring-slate-200">
-                  {tenant?.country || "Global"}
-                </span>
+              {linkedinUrl && (
+                <a
+                  href={linkedinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:border-slate-300 hover:text-slate-900"
+                >
+                  LinkedIn
+                </a>
+              )}
+              {twitterUrl && (
+                <a
+                  href={twitterUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:border-slate-300 hover:text-slate-900"
+                >
+                  X / Twitter
+                </a>
+              )}
+              {instagramUrl && (
+                <a
+                  href={instagramUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] font-medium hover:border-slate-300 hover:text-slate-900"
+                >
+                  Instagram
+                </a>
               )}
             </div>
+          )}
+        </div>
 
-            {jobsCount > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-                <Link
-                  href={jobsHref}
-                  className="inline-flex items-center justify-center rounded-full px-3 py-1 font-medium text-white shadow-sm"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  View all roles
-                </Link>
-                <a
-                  href="#open-roles"
-                  className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 px-3 py-1 font-medium text-slate-700 hover:bg-white"
-                >
-                  Jump to openings
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Jobs listing block */}
-          <div id="open-roles" className="space-y-2">
-            {(page === "jobs" || page === "careers") && (
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Open roles
-                </h2>
-                {jobsCount > 0 && (
-                  <p className="text-[11px] text-slate-500">
-                    Showing {jobsCount} role{jobsCount === 1 ? "" : "s"}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {page === "jobs" ? (
-              <JobsGrid jobs={jobs} accentColor={accentColor} />
-            ) : (
-              <JobsGrid jobs={jobs} accentColor={accentColor} compact />
-            )}
-
-            {page !== "jobs" && jobsCount > 4 && (
-              <div className="mt-2 text-right text-[11px]">
-                <Link
-                  href={allJobsHref}
-                  className="font-medium hover:underline"
-                  style={{ color: accentColor }}
-                >
-                  View all roles
-                </Link>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Right: culture / story / meta */}
-        <aside className="space-y-4 lg:pl-2">
-          <div className="rounded-xl border border-slate-200 bg-white/90 p-4 text-sm text-slate-700">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Life at {name}
-            </h2>
-            {hasAbout ? (
-              <div
-                className="prose prose-sm mt-2 max-w-none text-slate-700 prose-p:mb-2 prose-p:mt-0"
-                dangerouslySetInnerHTML={{ __html: aboutHtml }}
+        <div className="space-y-3">
+          {bannerImageUrl ? (
+            <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={bannerImageUrl}
+                alt={`${displayName} careers banner`}
+                className="h-40 w-full object-cover"
               />
-            ) : (
-              <p className="mt-2 text-[13px] text-slate-600">
-                This space is for culture, values and what it feels like to work
-                at {name}. You can manage this content from the careers site
-                editor inside your ATS workspace.
-              </p>
-            )}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-xs text-slate-500">
+              Use your careers site settings to upload a banner image that
+              reflects your culture and workspace.
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-xs text-slate-600">
+            <p className="font-semibold text-slate-900">Why join us</p>
+            <p className="mt-1 text-slate-600">
+              We&apos;re looking for people who are excited to solve meaningful
+              problems, collaborate with kind teammates, and grow their careers
+              over the long term.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* About / story block */}
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)]">
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+            About {displayName}
+          </p>
+          <div
+            className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:mb-2 prose-p:text-slate-700 prose-a:text-sky-600"
+            dangerouslySetInnerHTML={{ __html: aboutHtml }}
+          />
+        </div>
+
+        <div className="space-y-3">
+          <div
+            className="rounded-2xl border px-4 py-4 text-xs text-slate-700"
+            style={{ borderColor: primaryColor }}
+          >
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Don&apos;t see your role yet?
+            </p>
+            <p>
+              We&apos;re always interested in exceptional people. If you don&apos;t
+              see a perfect match today, you can still apply to a general
+              talent pool or check back again soon.
+            </p>
           </div>
 
-          {/* Social / meta card from CareerSiteSettings */}
-          {(careerSiteSettings?.linkedinUrl ||
-            careerSiteSettings?.twitterUrl ||
-            careerSiteSettings?.instagramUrl) && (
-            <div className="rounded-xl border border-slate-200 bg-white/90 p-4 text-[13px] text-slate-700">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Stay connected
-              </h3>
-              <p className="mt-1 text-[12px] text-slate-500">
-                Follow {name} to hear about new roles and what the team is up
-                to.
+          {hasJobs && (
+            <div
+              className="rounded-2xl border px-4 py-4 text-xs text-slate-700"
+              style={{ borderColor: accentColor }}
+            >
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                How our hiring works
               </p>
-              <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
-                {careerSiteSettings.linkedinUrl && (
-                  <a
-                    href={careerSiteSettings.linkedinUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 hover:bg-slate-50"
-                  >
-                    <span>LinkedIn</span>
-                    <span aria-hidden>↗</span>
-                  </a>
-                )}
-                {careerSiteSettings.twitterUrl && (
-                  <a
-                    href={careerSiteSettings.twitterUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 hover:bg-slate-50"
-                  >
-                    <span>X / Twitter</span>
-                    <span aria-hidden>↗</span>
-                  </a>
-                )}
-                {careerSiteSettings.instagramUrl && (
-                  <a
-                    href={careerSiteSettings.instagramUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 hover:bg-slate-50"
-                  >
-                    <span>Instagram</span>
-                    <span aria-hidden>↗</span>
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Marketplace hint when on app host */}
-          {isAppHost && !isTenantHost && (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-4 text-[12px] text-slate-600">
               <p>
-                This is the global careers entry point for roles managed on
-                ThinkATS. Individual client careers sites live on their own
-                subdomains, such as{" "}
-                <span className="font-mono text-slate-800">
-                  acme.thinkats.com/careers
-                </span>
-                .
+                Our process typically includes an intro conversation, role-fit
+                interview, and a practical case or portfolio review. We aim to
+                give you clear timelines and feedback along the way.
               </p>
             </div>
           )}
-        </aside>
-      </div>
-    </CareersShell>
+        </div>
+      </section>
+
+      {/* Featured roles */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-900">
+            {hasJobs ? "Open roles" : "No open roles right now"}
+          </h2>
+          {hasJobs && (
+            <p className="text-[11px] text-slate-500">
+              Showing {featuredJobs.length} role
+              {featuredJobs.length > 1 ? "s" : ""}. See more under{" "}
+              <span className="font-medium">Open roles</span>.
+            </p>
+          )}
+        </div>
+
+        {!hasJobs ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-xs text-slate-500">
+            There are no live openings at the moment. Please check back soon or
+            follow {displayName} on social channels for updates.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {featuredJobs.map((job) => {
+              const slugOrId = job.slug || job.id;
+
+              return (
+                <article
+                  key={job.id}
+                  className="group flex gap-4 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-4 transition hover:border-slate-200 hover:bg-white"
+                >
+                  <div className="flex-1 space-y-1.5">
+                    <h3 className="text-sm font-semibold text-slate-900 group-hover:underline">
+                      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+                      <a href={`/jobs/${slugOrId}`}>{job.title}</a>
+                    </h3>
+                    <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                      {job.location && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                          {job.location}
+                        </span>
+                      )}
+                      {job.department && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                          {job.department}
+                        </span>
+                      )}
+                      {job.employmentType && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                          {job.employmentType}
+                        </span>
+                      )}
+                      {job.experienceLevel && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                          {job.experienceLevel}
+                        </span>
+                      )}
+                    </div>
+                    {job.shortDescription && (
+                      <p className="mt-1 line-clamp-2 text-xs text-slate-600">
+                        {job.shortDescription}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-end justify-between gap-2 text-right">
+                    <p className="text-[11px] text-slate-400">
+                      Posted {formatDate(job.createdAt)}
+                    </p>
+                    <a
+                      href={`/jobs/${slugOrId}`}
+                      className="inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-semibold shadow-sm"
+                      style={{ backgroundColor: accentColor, color: "#0f172a" }}
+                    >
+                      View role
+                    </a>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
