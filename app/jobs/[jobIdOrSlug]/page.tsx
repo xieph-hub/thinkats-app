@@ -39,8 +39,12 @@ type JobRow = {
   confidential: boolean | null;
 };
 
+// Normalise NEXT_PUBLIC_SITE_URL so we don't get double slashes, etc.
 const BASE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com";
+  (process.env.NEXT_PUBLIC_SITE_URL || "https://www.resourcin.com").replace(
+    /\/$/,
+    "",
+  );
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (aligned with /jobs + JobCard)
@@ -218,8 +222,97 @@ function looksLikeUuid(value: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Google Jobs JSON-LD helpers
+// ---------------------------------------------------------------------------
 
-export default async function JobDetailPage({ params, searchParams }: PageProps) {
+function mapEmploymentTypeToSchema(
+  value?: string | null,
+): string | undefined {
+  if (!value) return undefined;
+  const v = value.toLowerCase();
+  if (v === "full_time" || v === "full-time") return "FULL_TIME";
+  if (v === "part_time" || v === "part-time") return "PART_TIME";
+  if (v === "contract" || v === "temporary") return "CONTRACTOR";
+  if (v === "internship") return "INTERN";
+  return undefined;
+}
+
+function jobIsRemote(job: JobRow): boolean {
+  const wm = (job.work_mode || "").toLowerCase();
+  const lt = (job.location_type || "").toLowerCase();
+  return (
+    wm.includes("remote") ||
+    lt.includes("remote") ||
+    wm === "remote-first"
+  );
+}
+
+function buildJobPostingSchema(job: JobRow, jobUrl: string) {
+  const createdAtIso = new Date(job.created_at).toISOString();
+
+  // Combine sections into one long description
+  const descriptionParts = [
+    job.short_description,
+    job.overview,
+    job.about_client,
+    job.responsibilities,
+    job.requirements,
+    job.benefits,
+  ].filter(Boolean) as string[];
+
+  const description =
+    descriptionParts.join("\n\n") ||
+    "This is an open mandate managed by Resourcin.";
+
+  const employmentType = mapEmploymentTypeToSchema(job.employment_type);
+
+  const hiringOrgName = job.confidential
+    ? "Confidential client (via Resourcin)"
+    : "Resourcin client (via Resourcin)";
+
+  const jobLocation = job.location
+    ? {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: job.location,
+        },
+      }
+    : undefined;
+
+  const schema: Record<string, any> = {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    title: job.title,
+    description,
+    datePosted: createdAtIso,
+    hiringOrganization: {
+      "@type": "Organization",
+      name: hiringOrgName,
+    },
+    employmentType,
+    jobLocation,
+    jobLocationType: jobIsRemote(job) ? "TELECOMMUTE" : undefined,
+    directApply: true,
+    url: jobUrl,
+  };
+
+  // Remove undefined keys
+  Object.keys(schema).forEach((key) => {
+    if (schema[key] === undefined) {
+      delete schema[key];
+    }
+  });
+
+  return schema;
+}
+
+// ---------------------------------------------------------------------------
+
+export default async function JobDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { jobIdOrSlug } = params;
   const isUuid = looksLikeUuid(jobIdOrSlug);
 
@@ -280,6 +373,8 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
     : `/jobs/${encodeURIComponent(job.id)}`;
   const jobUrl = `${BASE_URL}${canonicalPath}`;
 
+  const jobPostingJsonLd = buildJobPostingSchema(job, jobUrl);
+
   const shareText = encodeURIComponent(
     `${job.title}${job.location ? ` – ${job.location}` : ""} (via Resourcin)`,
   );
@@ -312,6 +407,14 @@ export default async function JobDetailPage({ params, searchParams }: PageProps)
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-10">
+      {/* Google Jobs JSON-LD */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jobPostingJsonLd),
+        }}
+      />
+
       {/* Top breadcrumb + title */}
       <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/4">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
