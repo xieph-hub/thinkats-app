@@ -740,43 +740,47 @@ export default async function AtsTenantsPage({
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
-                      {careersUrl && (
-                        <CopyCareersUrlButton url={careersUrl} />
-                      )}
-
-                      <Link
-                        href={`/ats/tenants?editTenantId=${encodeURIComponent(
-                          tenant.id,
-                        )}#workspace-form`}
-                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        Edit workspace
-                      </Link>
-                      <Link
-                        href={`/ats/jobs?tenantId=${encodeURIComponent(
-                          tenant.id,
-                        )}`}
-                        className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-800"
-                      >
-                        View jobs
-                      </Link>
-                      <Link
-                        href={`/ats/clients?tenantId=${encodeURIComponent(
-                          tenant.id,
-                        )}`}
-                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        View clients
-                      </Link>
-                      <Link
-                        href={`/ats/tenants/${encodeURIComponent(
-                          tenant.id,
-                        )}/careersite`}
-                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        Careers site
-                      </Link>
-                    </div>
+  <Link
+    href={`/ats/tenants?editTenantId=${encodeURIComponent(
+      tenant.id,
+    )}#workspace-form`}
+    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+  >
+    Edit workspace
+  </Link>
+  <Link
+    href={`/ats/tenants/${encodeURIComponent(
+      tenant.id,
+    )}/invite-admin`}
+    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+  >
+    Invite admin
+  </Link>
+  <Link
+    href={`/ats/jobs?tenantId=${encodeURIComponent(
+      tenant.id,
+    )}`}
+    className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-800"
+  >
+    View jobs
+  </Link>
+  <Link
+    href={`/ats/clients?tenantId=${encodeURIComponent(
+      tenant.id,
+    )}`}
+    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+  >
+    View clients
+  </Link>
+  <Link
+    href={`/ats/tenants/${encodeURIComponent(
+      tenant.id,
+    )}/careersite`}
+    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+  >
+    Careers site
+  </Link>
+</div>
                   </div>
                 </article>
               );
