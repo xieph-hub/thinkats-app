@@ -2,15 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
-import { isOfficialUser } from "@/lib/officialEmail";
 import { Resend } from "resend";
 
-const OTP_EXPIRY_MINUTES = 10;
-
-const resendApiKey = process.env.RESEND_API_KEY;
-const resendFrom = process.env.RESEND_FROM_EMAIL;
-const resend =
-  resendApiKey && resendFrom ? new Resend(resendApiKey) : null;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 function generateOtpCode(): string {
   // 6-digit numeric OTP
@@ -20,13 +14,13 @@ function generateOtpCode(): string {
 export async function POST(_req: NextRequest) {
   try {
     const supabase = createSupabaseRouteClient();
-
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
     if (userError || !user || !user.email) {
+      console.error("OTP request unauthenticated:", userError);
       return NextResponse.json(
         { ok: false, error: "unauthenticated" },
         { status: 401 },
@@ -35,85 +29,67 @@ export async function POST(_req: NextRequest) {
 
     const email = user.email.toLowerCase();
 
-    // Only send OTP to "official" / whitelisted emails
-    if (!isOfficialUser({ email })) {
-      return NextResponse.json(
-        { ok: false, error: "email_not_allowed" },
-        { status: 403 },
-      );
-    }
-
-    // Ensure we have an app-level User row
+    // 1) Find or create app-level User row
     let appUser = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, fullName: true },
     });
 
     if (!appUser) {
       appUser = await prisma.user.create({
         data: {
           email,
-          fullName:
-            (user.user_metadata as any)?.full_name ??
-            (user.user_metadata as any)?.name ??
-            null,
-          globalRole: "USER",
+          supabaseUserId: user.id,
         },
-        select: { id: true, fullName: true },
+      });
+    } else if (!appUser.supabaseUserId) {
+      // Backfill supabaseUserId if missing
+      appUser = await prisma.user.update({
+        where: { id: appUser.id },
+        data: { supabaseUserId: user.id },
       });
     }
 
-    // Invalidate any existing unconsumed, unexpired OTPs
-    await prisma.loginOtp.updateMany({
+    // 2) Invalidate previous active OTPs
+    await prisma.otpCode.updateMany({
       where: {
         userId: appUser.id,
-        consumed: false,
-        expiresAt: {
-          gt: new Date(),
-        },
+        usedAt: null,
+        expiresAt: { gt: new Date() },
       },
       data: {
-        consumed: true,
+        usedAt: new Date(),
       },
     });
 
+    // 3) Create new OTP
     const code = generateOtpCode();
-    const expiresAt = new Date(
-      Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
-    await prisma.loginOtp.create({
+    await prisma.otpCode.create({
       data: {
         userId: appUser.id,
         code,
         expiresAt,
-        consumed: false,
       },
     });
 
-    // Fire-and-forget email sending via Resend
-    if (resend) {
-      try {
-        await resend.emails.send({
-          from: resendFrom!,
-          to: email,
-          subject: "Your ThinkATS login code",
-          text: `Your one-time code is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
-        });
-      } catch (emailErr) {
-        console.error("Error sending OTP email:", emailErr);
-      }
-    } else {
-      console.warn(
-        "RESEND_API_KEY or RESEND_FROM_EMAIL not configured. OTP email not sent.",
-      );
-    }
+    // 4) Send email
+    const from =
+      process.env.ATS_OTP_FROM_EMAIL ??
+      "ThinkATS <no-reply@thinkats.com>";
+
+    await resend.emails.send({
+      from,
+      to: email,
+      subject: "Your ThinkATS login code",
+      text: `Your ThinkATS one-time code is ${code}. It expires in 10 minutes.`,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("OTP request error:", err);
+    console.error("OTP request failed:", err);
     return NextResponse.json(
-      { ok: false, error: "internal_error" },
+      { ok: false, error: "server_error" },
       { status: 500 },
     );
   }
