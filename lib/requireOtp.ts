@@ -2,32 +2,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
+const OTP_COOKIE_NAME = "thinkats_otp_ok";
 
-/**
- * Server-side OTP gate for ATS.
- *
- * - Checks for the `thinkats_otp_verified` cookie.
- * - If missing/falsey, redirects to /ats/verify with an optional callbackUrl.
- * - Intended to be used in server components/layouts:
- *     await ensureOtpVerified("/ats");
- *     await ensureOtpVerified("/ats/tenants");
- */
-export async function ensureOtpVerified(
-  callbackUrl: string = "/ats",
-): Promise<void> {
+export function ensureOtpVerified(callbackUrl: string) {
   const cookieStore = cookies();
   const flag = cookieStore.get(OTP_COOKIE_NAME)?.value;
 
-  // If already verified in this browser, allow through
-  if (flag === "true") {
+  // If cookie is present, let the request pass
+  if (flag === "1") {
     return;
   }
 
-  const params = new URLSearchParams();
-  if (callbackUrl) {
-    params.set("callbackUrl", callbackUrl);
-  }
-
-  redirect(`/ats/verify?${params.toString()}`);
+  // Otherwise, send the user to /ats/verify with the original callbackUrl
+  const target = `/ats/verify?callbackUrl=${encodeURIComponent(callbackUrl)}`;
+  redirect(target);
 }
