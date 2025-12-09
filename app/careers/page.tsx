@@ -1,8 +1,8 @@
 // app/careers/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { getHostContext } from "@/lib/host";
 
 export const dynamic = "force-dynamic";
 
@@ -55,15 +55,28 @@ function formatWorkMode(value?: string | null) {
 }
 
 export default async function CareersPage() {
-  // Host-based tenant resolution: slug.thinkats.com/careers
-  const host = (await getHostContext()) as any;
+  // --- Host awareness: figure out if we're on root or a tenant subdomain ----
+  const h = headers();
+  const hostHeader = h.get("host") || "";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://thinkats.com";
 
-  const hostType: string = host?.hostType ?? "root";
-  const tenantId: string | null = host?.tenantId ?? null;
-  const hostname: string | undefined = host?.hostname;
+  // Base/primary hostname from env, e.g. "thinkats.com" or "www.thinkats.com"
+  let primaryHostname = "thinkats.com";
+  try {
+    primaryHostname = new URL(siteUrl).hostname.replace(/^www\./i, "");
+  } catch {
+    // ignore, fall back to default
+  }
 
-  // Root / marketing or misconfigured host → soft message, no redirect
-  if (!tenantId || hostType !== "tenant") {
+  const rawHostname = hostHeader.split(":")[0] || primaryHostname;
+  const hostname = rawHostname.toLowerCase().replace(/^www\./i, "");
+
+  const isPrimaryHost = hostname === primaryHostname;
+  const isTenantHost =
+    !isPrimaryHost && hostname.endsWith(`.${primaryHostname}`);
+
+  // On root/marketing or unknown hosts → soft message, no redirect / no 404
+  if (!isTenantHost) {
     const rootJobsHref = "/jobs";
 
     return (
@@ -99,48 +112,22 @@ export default async function CareersPage() {
     );
   }
 
-  // Valid tenant host: fetch tenant, careers settings, and jobs
-  const [tenant, settings, jobsRaw] = await Promise.all([
-    prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-      },
-    }),
-    prisma.careerSiteSettings.findFirst({
-      where: { tenantId },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.job.findMany({
-      where: {
-        tenantId,
-        status: "open",
-        visibility: "public",
-        OR: [
-          { internalOnly: false },
-          { internalOnly: null },
-        ],
-      },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        location: true,
-        employmentType: true,
-        seniority: true,
-        workMode: true,
-        shortDescription: true,
-      },
-    }),
-  ]);
+  // We are on something like "tenantSlug.thinkats.com"
+  const tenantSlug = hostname.replace(`.${primaryHostname}`, "");
+
+  // Look up the tenant by slug
+  const tenant = await prisma.tenant.findUnique({
+    where: { slug: tenantSlug },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      status: true,
+    },
+  });
 
   if (!tenant) {
-    // Host resolves but tenant row missing: soft message, no 404
+    // Host resolves but we don't have a tenant row for this slug
     return (
       <main className="min-h-screen bg-slate-50">
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -168,6 +155,34 @@ export default async function CareersPage() {
     );
   }
 
+  // Careers settings + open jobs for this tenant
+  const [settings, jobsRaw] = await Promise.all([
+    prisma.careerSiteSettings.findFirst({
+      where: { tenantId: tenant.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.job.findMany({
+      where: {
+        tenantId: tenant.id,
+        status: "open",
+        visibility: "public",
+        OR: [{ internalOnly: false }, { internalOnly: null }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        location: true,
+        employmentType: true,
+        seniority: true,
+        workMode: true,
+        shortDescription: true,
+      },
+    }),
+  ]);
+
   const tenantStatus = normaliseStatus(tenant.status);
   const isActive = tenantStatus === "active";
 
@@ -187,11 +202,7 @@ export default async function CareersPage() {
   const jobs = jobsRaw as JobRow[];
   const jobsCount = jobs.length;
 
-  const resolvedHostname =
-    typeof hostname === "string" && hostname.length > 0
-      ? hostname
-      : "thinkats.com";
-  const careersUrl = `https://${resolvedHostname}/careers`;
+  const careersUrl = `https://${hostname}/careers`;
 
   // Inactive tenant or careers switched off → clear message
   if (!isActive || !isPublic) {
@@ -218,6 +229,7 @@ export default async function CareersPage() {
     );
   }
 
+  // ------------------------- Render careers page -----------------------------
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       {/* HERO */}
@@ -437,7 +449,10 @@ export default async function CareersPage() {
               <p className="mt-3 text-[10px] text-slate-500">
                 If you&apos;re an admin for this workspace, you can change the
                 branding and copy from the ATS under{" "}
-                <span className="font-medium">Tenant settings → Career site</span>.
+                <span className="font-medium">
+                  Tenant settings → Career site
+                </span>
+                .
               </p>
             </div>
           </aside>
