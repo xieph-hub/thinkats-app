@@ -8,7 +8,24 @@ export const metadata: Metadata = {
     "Sign in to ThinkATS to manage tenants, jobs, candidates and clients.",
 };
 
-export default function LoginPage() {
+type LoginSearchParams = {
+  returnTo?: string;
+};
+
+function sanitiseReturnTo(raw?: string): string {
+  if (!raw) return "/ats";
+  if (!raw.startsWith("/")) return "/ats";
+  if (raw.startsWith("//")) return "/ats"; // avoid protocol-relative
+  return raw;
+}
+
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams?: LoginSearchParams;
+}) {
+  const safeReturnTo = sanitiseReturnTo(searchParams?.returnTo);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 bg-[radial-gradient(circle_at_top,_#172965_0,_transparent_60%),_radial-gradient(circle_at_bottom,_#64C247_0,_transparent_55%)] px-4">
       <div className="w-full max-w-md rounded-3xl bg-white/95 p-6 shadow-xl shadow-slate-900/20 backdrop-blur">
@@ -25,7 +42,8 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <LoginForm />
+        {/* Pass the safe returnTo into the client component */}
+        <LoginForm returnTo={safeReturnTo} />
 
         <p className="mt-4 text-center text-[11px] text-slate-400">
           Having trouble? Contact{" "}
