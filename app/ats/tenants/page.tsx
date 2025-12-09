@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import TenantLogo from "@/components/ats/tenants/TenantLogo";
 import CopyCareersUrlButton from "@/components/ats/tenants/CopyCareersUrlButton";
-import TenantActionsMenu from "@/components/ats/tenants/TenantActionsMenu";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +20,21 @@ type TenantsPageSearchParams = {
   updated?: string;
   error?: string;
   editTenantId?: string;
+};
+
+// Extend Tenant with optional marketing fields so TS doesn't complain
+type TenantWithMarketing = Tenant & {
+  heroHeadline?: string | null;
+  heroSubheading?: string | null;
+  heroImageUrl?: string | null;
+  brandPrimaryColor?: string | null;
+  brandAccentColor?: string | null;
+  linkedinUrl?: string | null;
+  twitterUrl?: string | null;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  cultureHeadline?: string | null;
+  cultureBody?: string | null;
 };
 
 function formatDate(value: any): string {
@@ -92,13 +106,15 @@ export default async function AtsTenantsPage({
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
-  // OTP + super-admin gating is handled by:
+  // OTP + super-admin gating handled by:
   // - app/ats/layout.tsx (auth + OTP)
   // - app/ats/tenants/layout.tsx (SUPER_ADMIN only)
 
-  const tenants: Tenant[] = await prisma.tenant.findMany({
+  const tenantsRaw = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
   });
+
+  const tenants = tenantsRaw as TenantWithMarketing[];
 
   const totalTenants = tenants.length;
   const activeTenants = tenants.filter(
@@ -153,13 +169,14 @@ export default async function AtsTenantsPage({
 
   const editingTenant =
     editTenantId && tenants.length
-      ? tenants.find((t) => t.id === editTenantId) ?? null
+      ? (tenants.find((t) => t.id === editTenantId) as TenantWithMarketing | undefined) ??
+        null
       : null;
 
   const isEditing = Boolean(editingTenant);
 
   // Default tenant for copy & examples
-  const defaultTenant = await getResourcinTenant();
+  const defaultTenant = (await getResourcinTenant()) as TenantWithMarketing;
 
   const latestTenant = tenants[0] ?? null;
 
@@ -283,7 +300,7 @@ export default async function AtsTenantsPage({
           </div>
         </section>
 
-        {/* Create / Edit tenant form (with KYC) */}
+        {/* Create / Edit tenant form (with KYC + marketing) */}
         <section
           id="workspace-form"
           className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -394,7 +411,9 @@ export default async function AtsTenantsPage({
                 <input
                   id="registrationNumber"
                   name="registrationNumber"
-                  defaultValue={editingTenant?.registrationNumber ?? ""}
+                  defaultValue={
+                    (editingTenant as any)?.registrationNumber ?? ""
+                  }
                   placeholder="RC 1234567"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -410,7 +429,7 @@ export default async function AtsTenantsPage({
                 <input
                   id="taxId"
                   name="taxId"
-                  defaultValue={editingTenant?.taxId ?? ""}
+                  defaultValue={(editingTenant as any)?.taxId ?? ""}
                   placeholder="TIN 0123456789"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -428,7 +447,7 @@ export default async function AtsTenantsPage({
                 <input
                   id="country"
                   name="country"
-                  defaultValue={editingTenant?.country ?? ""}
+                  defaultValue={(editingTenant as any)?.country ?? ""}
                   placeholder="Nigeria"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -445,7 +464,7 @@ export default async function AtsTenantsPage({
                   <input
                     id="state"
                     name="state"
-                    defaultValue={editingTenant?.state ?? ""}
+                    defaultValue={(editingTenant as any)?.state ?? ""}
                     placeholder="Lagos"
                     className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                   />
@@ -461,7 +480,7 @@ export default async function AtsTenantsPage({
                   <input
                     id="city"
                     name="city"
-                    defaultValue={editingTenant?.city ?? ""}
+                    defaultValue={(editingTenant as any)?.city ?? ""}
                     placeholder="Victoria Island"
                     className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                   />
@@ -479,14 +498,14 @@ export default async function AtsTenantsPage({
               <input
                 id="addressLine1"
                 name="addressLine1"
-                defaultValue={editingTenant?.addressLine1 ?? ""}
+                defaultValue={(editingTenant as any)?.addressLine1 ?? ""}
                 placeholder="Plot 123, Admiralty Way"
                 className="mb-1 block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
               <input
                 id="addressLine2"
                 name="addressLine2"
-                defaultValue={editingTenant?.addressLine2 ?? ""}
+                defaultValue={(editingTenant as any)?.addressLine2 ?? ""}
                 placeholder="Floor / Suite / Landmark (optional)"
                 className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
@@ -503,7 +522,7 @@ export default async function AtsTenantsPage({
                 <input
                   id="industry"
                   name="industry"
-                  defaultValue={editingTenant?.industry ?? ""}
+                  defaultValue={(editingTenant as any)?.industry ?? ""}
                   placeholder="Fintech, Healthcare, Logistics..."
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -519,7 +538,7 @@ export default async function AtsTenantsPage({
                 <input
                   id="websiteUrl"
                   name="websiteUrl"
-                  defaultValue={editingTenant?.websiteUrl ?? ""}
+                  defaultValue={(editingTenant as any)?.websiteUrl ?? ""}
                   placeholder="https://acme.com"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -539,7 +558,9 @@ export default async function AtsTenantsPage({
                   id="primaryContactEmail"
                   name="primaryContactEmail"
                   type="email"
-                  defaultValue={editingTenant?.primaryContactEmail ?? ""}
+                  defaultValue={
+                    (editingTenant as any)?.primaryContactEmail ?? ""
+                  }
                   placeholder="founder@acme.com"
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
@@ -566,6 +587,211 @@ export default async function AtsTenantsPage({
                   <option value="suspended">Suspended</option>
                   <option value="archived">Archived</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Careers site & marketing (NEW) */}
+            <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Careers site &amp; marketing
+              </p>
+              <p className="mt-1 text-[10px] text-slate-500">
+                These fields control the mini-site at{" "}
+                <span className="font-mono text-slate-700">
+                  tenantSlug.thinkats.com/careers
+                </span>{" "}
+                – hero copy, brand colours and social links.
+              </p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="heroHeadline"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Hero headline (optional)
+                  </label>
+                  <input
+                    id="heroHeadline"
+                    name="heroHeadline"
+                    defaultValue={editingTenant?.heroHeadline ?? ""}
+                    placeholder="Careers at Acme Talent Partners"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="heroSubheading"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Hero subheading (optional)
+                  </label>
+                  <input
+                    id="heroSubheading"
+                    name="heroSubheading"
+                    defaultValue={editingTenant?.heroSubheading ?? ""}
+                    placeholder="Join Acme and help build what comes next."
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="heroImageUrl"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Hero/banner image URL (optional)
+                  </label>
+                  <input
+                    id="heroImageUrl"
+                    name="heroImageUrl"
+                    defaultValue={editingTenant?.heroImageUrl ?? ""}
+                    placeholder="https://cdn.acme.com/careers/hero.jpg"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Optional rich hero. We can later let them upload instead of
+                    pasting URLs.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="brandPrimaryColor"
+                      className="text-xs font-medium text-slate-700"
+                    >
+                      Primary brand colour (optional)
+                    </label>
+                    <input
+                      id="brandPrimaryColor"
+                      name="brandPrimaryColor"
+                      defaultValue={editingTenant?.brandPrimaryColor ?? ""}
+                      placeholder="#172965"
+                      className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="brandAccentColor"
+                      className="text-xs font-medium text-slate-700"
+                    >
+                      Accent colour (optional)
+                    </label>
+                    <input
+                      id="brandAccentColor"
+                      name="brandAccentColor"
+                      defaultValue={editingTenant?.brandAccentColor ?? ""}
+                      placeholder="#4F46E5"
+                      className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-mono text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="linkedinUrl"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    LinkedIn (optional)
+                  </label>
+                  <input
+                    id="linkedinUrl"
+                    name="linkedinUrl"
+                    defaultValue={editingTenant?.linkedinUrl ?? ""}
+                    placeholder="https://www.linkedin.com/company/acme"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="twitterUrl"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    X / Twitter (optional)
+                  </label>
+                  <input
+                    id="twitterUrl"
+                    name="twitterUrl"
+                    defaultValue={editingTenant?.twitterUrl ?? ""}
+                    placeholder="https://x.com/acme"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="instagramUrl"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Instagram (optional)
+                  </label>
+                  <input
+                    id="instagramUrl"
+                    name="instagramUrl"
+                    defaultValue={editingTenant?.instagramUrl ?? ""}
+                    placeholder="https://instagram.com/acme"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="facebookUrl"
+                    className="text-xs font-medium text-slate-700"
+                  >
+                    Facebook (optional)
+                  </label>
+                  <input
+                    id="facebookUrl"
+                    name="facebookUrl"
+                    defaultValue={editingTenant?.facebookUrl ?? ""}
+                    placeholder="https://facebook.com/acme"
+                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-1">
+                <label
+                  htmlFor="cultureHeadline"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Culture headline (optional)
+                </label>
+                <input
+                  id="cultureHeadline"
+                  name="cultureHeadline"
+                  defaultValue={editingTenant?.cultureHeadline ?? ""}
+                  placeholder="How we work"
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="cultureBody"
+                  className="text-xs font-medium text-slate-700"
+                >
+                  Culture body copy (optional)
+                </label>
+                <textarea
+                  id="cultureBody"
+                  name="cultureBody"
+                  defaultValue={editingTenant?.cultureBody ?? ""}
+                  placeholder="We value ownership, clear thinking and thoughtful collaboration..."
+                  rows={3}
+                  className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
+                />
               </div>
             </div>
 
@@ -620,16 +846,14 @@ export default async function AtsTenantsPage({
               const candidateCount =
                 candidatesByTenant.get(tenant.id) ?? 0;
 
-              const canDeleteTenant =
-                jobCount === 0 && clientCount === 0 && candidateCount === 0;
-
               const isDefault =
                 defaultTenant && defaultTenant.id === tenant.id;
 
               const locationParts: string[] = [];
-              if (tenant.city) locationParts.push(tenant.city);
-              if (tenant.state) locationParts.push(tenant.state);
-              if (tenant.country) locationParts.push(tenant.country);
+              if ((tenant as any).city) locationParts.push((tenant as any).city);
+              if ((tenant as any).state) locationParts.push((tenant as any).state);
+              if ((tenant as any).country)
+                locationParts.push((tenant as any).country);
               const prettyLocation = locationParts.join(", ");
 
               const careersUrl =
@@ -675,11 +899,11 @@ export default async function AtsTenantsPage({
                       </div>
 
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-[10px] text-slate-600">
-                        {tenant.primaryContactEmail ? (
+                        {(tenant as any).primaryContactEmail ? (
                           <span>
                             Primary contact:{" "}
                             <span className="font-medium text-slate-800">
-                              {tenant.primaryContactEmail}
+                              {(tenant as any).primaryContactEmail}
                             </span>
                           </span>
                         ) : (
@@ -688,20 +912,20 @@ export default async function AtsTenantsPage({
                           </span>
                         )}
 
-                        {tenant.registrationNumber && (
+                        {(tenant as any).registrationNumber && (
                           <span className="text-slate-500">
                             RC:{" "}
                             <span className="font-medium text-slate-800">
-                              {tenant.registrationNumber}
+                              {(tenant as any).registrationNumber}
                             </span>
                           </span>
                         )}
 
-                        {tenant.taxId && (
+                        {(tenant as any).taxId && (
                           <span className="text-slate-500">
                             TIN:{" "}
                             <span className="font-medium text-slate-800">
-                              {tenant.taxId}
+                              {(tenant as any).taxId}
                             </span>
                           </span>
                         )}
@@ -712,9 +936,9 @@ export default async function AtsTenantsPage({
                           </span>
                         )}
 
-                        {tenant.websiteUrl && (
+                        {(tenant as any).websiteUrl && (
                           <a
-                            href={tenant.websiteUrl}
+                            href={(tenant as any).websiteUrl}
                             target="_blank"
                             rel="noreferrer"
                             className="text-[#172965] underline-offset-2 hover:underline"
@@ -726,7 +950,7 @@ export default async function AtsTenantsPage({
                     </div>
                   </div>
 
-                  {/* Micro stats + shortcuts / actions */}
+                  {/* Micro stats + shortcuts */}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2">
                     <div className="flex flex-wrap gap-3 text-[10px]">
                       <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-slate-700 ring-1 ring-slate-200">
@@ -743,15 +967,7 @@ export default async function AtsTenantsPage({
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      {/* 🔹 New actions menu (suspend / archive / delete) */}
-                      <TenantActionsMenu
-                        tenantId={tenant.id}
-                        canDelete={canDeleteTenant}
-                        currentStatus={tenant.status ?? null}
-                      />
-
-                      {/* Existing shortcuts */}
+                    <div className="flex flex-wrap justify-end gap-2">
                       <Link
                         href={`/ats/tenants?editTenantId=${encodeURIComponent(
                           tenant.id,
