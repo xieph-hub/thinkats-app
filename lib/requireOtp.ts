@@ -1,17 +1,25 @@
 // lib/requireOtp.ts
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { getServerUser } from "@/lib/auth/getServerUser";
 
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
+export async function ensureOtpVerified(
+  returnTo: string = "/ats",
+): Promise<void> {
+  const authUser = await getServerUser();
 
-export async function ensureOtpVerified(returnTo: string) {
-  const cookieStore = cookies();
-  const verified = cookieStore.get(OTP_COOKIE_NAME)?.value;
-
-  if (verified === "true") {
-    return;
+  if (!authUser || !authUser.email) {
+    redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   }
 
-  // Not OTP-verified → send them to the OTP screen
-  redirect(`/auth/otp?returnTo=${encodeURIComponent(returnTo)}`);
+  const email = authUser.email.toLowerCase();
+
+  const appUser = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, otpVerifiedAt: true },
+  });
+
+  if (!appUser || !appUser.otpVerifiedAt) {
+    redirect(`/ats/verify?returnTo=${encodeURIComponent(returnTo)}`);
+  }
 }
