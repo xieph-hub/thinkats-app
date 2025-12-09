@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 /**
  * Auth is handled in /ats/layout.tsx using getServerUser().
- * Middleware here is only for subdomain → tenant routing and light rewrites.
+ * Middleware here is only for light subdomain handling where needed.
  */
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://thinkats.com";
@@ -28,7 +28,7 @@ function getTenantSlugFromHostname(hostname: string): string | null {
   const hostParts = hostname.split(".");
   const baseParts = BASE_DOMAIN.split(".");
 
-  // If no extra label beyond base domain, it's just thinkats.com
+  // If no extra label beyond base domain, it's just thinkats.com / www.thinkats.com
   if (hostParts.length <= baseParts.length) return null;
 
   const subdomain = hostParts[0]; // "acme" in acme.thinkats.com
@@ -46,26 +46,20 @@ export function middleware(req: NextRequest) {
 
   const tenantSlug = getTenantSlugFromHostname(hostname);
 
-  // If this host looks like a tenant subdomain (e.g. acme.thinkats.com)...
   if (tenantSlug) {
     const { pathname } = url;
 
-    // 1) acme.thinkats.com → /careers/acme
-    if (pathname === "/" || pathname === "") {
-      const rewriteUrl = url.clone();
-      rewriteUrl.pathname = `/careers/${encodeURIComponent(tenantSlug)}`;
-      return NextResponse.rewrite(rewriteUrl);
-    }
+    // IMPORTANT:
+    // We no longer rewrite "/" or "/careers" for tenant hosts.
+    // - app/page.tsx uses getHostContext() to render a tenant-specific front page
+    // - app/careers/page.tsx uses getHostContext() to render the careers microsite
+    //
+    // The browser URL stays:
+    //   - https://tenant.thinkats.com/
+    //   - https://tenant.thinkats.com/careers
+    // and the app router decides what to show based on host.
 
-    // 2) acme.thinkats.com/careers → /careers/acme
-    if (pathname === "/careers" || pathname === "/careers/") {
-      const rewriteUrl = url.clone();
-      rewriteUrl.pathname = `/careers/${encodeURIComponent(tenantSlug)}`;
-      return NextResponse.rewrite(rewriteUrl);
-    }
-
-    // 3) acme.thinkats.com/jobs → /jobs?tenantSlug=acme
-    //    (Your /jobs page can read searchParams.tenantSlug and filter.)
+    // Optional: keep the /jobs helper – just adds tenantSlug as a query param.
     if (pathname === "/jobs" || pathname === "/jobs/") {
       const rewriteUrl = url.clone();
       rewriteUrl.pathname = "/jobs";
@@ -74,7 +68,6 @@ export function middleware(req: NextRequest) {
     }
 
     // Everything else on the tenant subdomain just passes through
-    // (e.g. if later you add /talent-network, etc.)
   }
 
   // Default: behave as normal
