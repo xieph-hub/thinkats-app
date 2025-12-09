@@ -12,7 +12,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
+  // 🔧 FIX: getHostContext is async
+  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
 
   // 🔹 1) Primary host → global marketing homepage (unchanged)
   if (isPrimaryHost || !tenantSlugFromHost) {
@@ -234,7 +235,9 @@ export default async function HomePage() {
             <ul className="mt-4 space-y-2 text-[11px] text-slate-300">
               <li className="flex items-start gap-2">
                 <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span>Public careers & job listings stay open without login.</span>
+                <span>
+                  Public careers & job listings stay open without login.
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-sky-400" />
