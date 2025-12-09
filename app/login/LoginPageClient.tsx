@@ -2,25 +2,33 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
-export default function LoginPageClient() {
+type Props = {
+  reset?: boolean;
+  errorCode?: string | null;
+};
+
+export default function LoginPageClient({ reset, errorCode }: Props) {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(
-    searchParams.get("error")
-  );
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const nextPath = searchParams.get("next") || "/ats";
+  const effectiveError =
+    formError ||
+    (errorCode === "invalid_credentials"
+      ? "Incorrect email or password."
+      : errorCode === "missing_credentials"
+      ? "Please enter both email and password."
+      : null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setFormError(null);
     setSubmitting(true);
-    setError(null);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -30,59 +38,63 @@ export default function LoginPageClient() {
       });
 
       if (!res.ok) {
-        let data: any = null;
-        try {
-          data = await res.json();
-        } catch {
-          // ignore
-        }
+        const data = await res.json().catch(() => ({}));
+        const code = data?.error ?? "unknown_error";
 
-        setError(
-          data?.error ||
-            "Unable to sign you in. Check your details and try again."
-        );
-        setSubmitting(false);
+        if (code === "invalid_credentials") {
+          setFormError("Incorrect email or password.");
+        } else if (code === "missing_credentials") {
+          setFormError("Please enter both email and password.");
+        } else {
+          setFormError("Something went wrong while signing in.");
+        }
         return;
       }
 
-      // If login works, go to /ats (or whatever was passed in ?next=)
-      router.push(nextPath);
+      // Success → send them into ATS (OTP gate will redirect if needed)
+      router.push("/ats");
     } catch (err) {
-      console.error("Login error", err);
-      setError("Unexpected error. Please try again.");
+      console.error("Login request failed", err);
+      setFormError("Network error. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-4 space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             ThinkATS
           </p>
-          <h1 className="text-lg font-semibold text-slate-900">Sign in</h1>
-          <p className="text-[11px] text-slate-500">
-            Use your workspace email to access ATS workspaces, jobs and
-            candidates.
+          <h1 className="text-xl font-semibold text-slate-900">
+            Sign in to your workspace
+          </h1>
+          <p className="text-xs text-slate-600">
+            Use your email and password. We&apos;ll ask for OTP on sensitive
+            ATS screens.
           </p>
         </div>
 
-        {error && (
-          <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">
-            {error}
+        {reset && (
+          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
+            Your password has been reset. Please sign in with your new
+            credentials.
           </div>
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-3 text-[13px]"
-          noValidate
-        >
+        {effectiveError && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+            {effectiveError}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div className="space-y-1">
             <label
               htmlFor="email"
-              className="text-xs font-medium text-slate-700"
+              className="text-[11px] font-medium text-slate-700"
             >
               Work email
             </label>
@@ -90,49 +102,48 @@ export default function LoginPageClient() {
               id="email"
               type="email"
               autoComplete="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               placeholder="you@company.com"
+              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
             />
           </div>
 
           <div className="space-y-1">
-            <label
-              htmlFor="password"
-              className="text-xs font-medium text-slate-700"
-            >
-              Password
-            </label>
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="password"
+                className="text-[11px] font-medium text-slate-700"
+              >
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => router.push("/forgot-password")}
+                className="text-[11px] font-medium text-[#172965] hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
             <input
               id="password"
               type="password"
               autoComplete="current-password"
-              required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               placeholder="••••••••"
+              className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
             />
           </div>
 
           <button
             type="submit"
             disabled={submitting}
-            className="mt-1 inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#101b45] disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex w-full items-center justify-center rounded-full bg-[#172965] px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-[#0f1c48] disabled:opacity-60"
           >
-            {submitting ? "Signing you in…" : "Sign in"}
+            {submitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
-
-        <p className="mt-4 text-[10px] text-slate-400">
-          After sign-in, you&apos;ll be redirected to{" "}
-          <span className="font-mono text-[10px] text-slate-500">
-            {nextPath}
-          </span>
-          . OTP checks and workspace access are handled inside the ATS.
-        </p>
       </div>
     </main>
   );
