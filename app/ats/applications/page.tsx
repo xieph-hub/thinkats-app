@@ -1,698 +1,522 @@
-// app/ats/settings/page.tsx
+// app/ats/applications/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant, requireTenantMembership } from "@/lib/tenant";
-import { getServerUser } from "@/lib/auth/getServerUser";
-import ScoringSettingsCard from "@/components/ats/settings/ScoringSettingsCard";
+import { getResourcinTenant } from "@/lib/tenant";
+import { matchesBooleanQuery } from "@/lib/booleanSearch";
+import ApplicationsList from "./ApplicationsList";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "ThinkATS | Settings",
-  description: "Configure your ATS workspace, notifications, security and data.",
+  title: "ThinkATS | Applications",
+  description:
+    "Workspace-wide pipeline view of all job applications, across roles and clients.",
 };
 
-const PLAN_LABELS: Record<string, string> = {
-  STARTER: "Starter",
-  GROWTH: "Growth",
-  AGENCY: "Agency (multi-tenant)",
-  ENTERPRISE: "Enterprise",
+type ApplicationsPageSearchParams = {
+  q?: string;
+  stage?: string;
+  status?: string;
+  tier?: string;
+  viewId?: string;
 };
 
-const PLAN_FEATURE_BLURB: Record<string, string> = {
-  STARTER:
-    "Core ATS: jobs, candidates, applications and basic pipelines for a single workspace.",
-  GROWTH:
-    "Adds multi-tenant readiness, richer careers sites and scoring controls for growing teams.",
-  AGENCY:
-    "Designed for agencies: multiple client workspaces, shared pipelines and marketplace-ready jobs.",
-  ENTERPRISE:
-    "Everything in Agency, plus SSO, higher seat limits and custom controls for larger organisations.",
+type ApplicationsRow = {
+  id: string;
+  candidateId: string | null;
+  jobId: string | null;
+  jobTitle: string;
+  clientName: string | null;
+
+  fullName: string;
+  email: string;
+  location: string | null;
+  currentTitle: string | null;
+  currentCompany: string | null;
+
+  source: string | null;
+  stage: string | null;
+  status: string | null;
+
+  matchScore: number | null;
+  matchReason: string | null;
+  tier: string | null;
+  scoreReason: string | null;
+
+  appliedAt: string; // ISO
+  skillTags: { id: string; label: string; color?: string | null }[];
 };
 
-type SettingsSearchParams = {
-  updated?: string;
-  error?: string;
-};
-
-export default async function AtsSettingsPage({
-  searchParams,
+export default async function AtsApplicationsPage({
+  searchParams = {},
 }: {
-  searchParams?: SettingsSearchParams;
+  searchParams?: ApplicationsPageSearchParams;
 }) {
-  const updatedSection = searchParams?.updated;
-  const errorMessage = searchParams?.error;
-
-  const { isSuperAdmin } = await getServerUser();
   const tenant = await getResourcinTenant();
+  if (!tenant) notFound();
 
-  if (!tenant) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Settings unavailable
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          No default workspace tenant is configured. Check{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_ID
-          </code>{" "}
-          or{" "}
-          <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
-            RESOURCIN_TENANT_SLUG
-          </code>{" "}
-          in your environment before using ATS settings.
-        </p>
-      </div>
-    );
+  // ---------------------------------------------------------------------------
+  // Saved views (workspace-wide applications)
+  // ---------------------------------------------------------------------------
+
+  const rawViewId =
+    typeof searchParams.viewId === "string" ? searchParams.viewId : "";
+
+  const savedViewsRaw = await prisma.savedView.findMany({
+    where: {
+      tenantId: tenant.id,
+      scope: "applications_pipeline",
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const viewFromId =
+    rawViewId && savedViewsRaw.length
+      ? savedViewsRaw.find((v) => v.id === rawViewId) || null
+      : null;
+
+  const defaultView = savedViewsRaw.find((v) => v.isDefault) || null;
+
+  const activeView = viewFromId || defaultView || null;
+
+  // ---------------------------------------------------------------------------
+  // Filters (search, stage, status, tier)
+  // ---------------------------------------------------------------------------
+
+  let filterQ = "";
+  let filterStage = "ALL";
+  let filterStatus = "ALL"; // PENDING / ON_HOLD / REJECTED
+  let filterTier = "ALL";
+
+  if (activeView) {
+    const params = (activeView.filters || {}) as any;
+    if (typeof params.q === "string") filterQ = params.q;
+    if (typeof params.stage === "string") filterStage = params.stage;
+    if (typeof params.status === "string") filterStatus = params.status;
+    if (typeof params.tier === "string") filterTier = params.tier;
   }
 
-  if (!isSuperAdmin) {
-    await requireTenantMembership(tenant.id, {
-      allowedRoles: ["OWNER", "ADMIN"],
+  if (typeof searchParams.q === "string") {
+    filterQ = searchParams.q;
+  }
+
+  if (typeof searchParams.stage === "string" && searchParams.stage !== "") {
+    filterStage = searchParams.stage;
+  }
+
+  if (typeof searchParams.status === "string" && searchParams.status !== "") {
+    filterStatus = searchParams.status;
+  }
+
+  if (typeof searchParams.tier === "string" && searchParams.tier !== "") {
+    filterTier = searchParams.tier;
+  }
+
+  // Canonical stage list for workspace-wide view
+  const stageNames = [
+    "APPLIED",
+    "SCREENING",
+    "INTERVIEW",
+    "OFFER",
+    "HIRED",
+    "REJECTED",
+  ];
+
+  // ---------------------------------------------------------------------------
+  // Load applications (tenant-wide) + build filtered list
+  // ---------------------------------------------------------------------------
+
+  const applicationsRaw = await prisma.jobApplication.findMany({
+    where: {
+      job: {
+        tenantId: tenant.id,
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      job: {
+        include: {
+          clientCompany: true,
+        },
+      },
+      candidate: {
+        include: {
+          tags: {
+            include: {
+              tag: {
+                select: {
+                  id: true,
+                  name: true,
+                  color: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      scoringEvents: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  const totalApplications = applicationsRaw.length;
+  const pipelineApps: ApplicationsRow[] = [];
+
+  for (const app of applicationsRaw) {
+    const latestScore = app.scoringEvents[0] ?? null;
+
+    const score =
+      (latestScore?.score as number | null | undefined) ??
+      (app.matchScore as number | null | undefined) ??
+      null;
+    const tier = (latestScore?.tier as string | null | undefined) ?? null;
+    const engine = (latestScore?.engine as string | null | undefined) ?? null;
+    const scoreReason =
+      (latestScore?.reason as string | null | undefined) ??
+      (app.matchReason as string | null | undefined) ??
+      null;
+
+    const candidate = app.candidate ?? null;
+    const job = app.job ?? null;
+
+    const jobTitle = job?.title ?? "Job removed";
+    const clientName = job?.clientCompany?.name ?? null;
+
+    const skillTags =
+      candidate?.tags?.map((ct) => ({
+        id: ct.tag.id,
+        label: ct.tag.name,
+        color: ct.tag.color,
+      })) ?? [];
+
+    // Boolean / keyword search (workspace-wide)
+    const haystack = [
+      app.fullName,
+      app.email,
+      app.location,
+      app.linkedinUrl,
+      app.source,
+      jobTitle,
+      clientName,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const matchesQuery = matchesBooleanQuery(filterQ, {
+      haystack,
+      fields: {
+        name: app.fullName || "",
+        email: app.email || "",
+        location: app.location || "",
+        source: app.source || "",
+        stage: app.stage || "",
+        status: app.status || "",
+        tier: tier || "",
+        engine: engine || "",
+        job: jobTitle,
+        client: clientName || "",
+      },
+    });
+
+    if (!matchesQuery) continue;
+
+    // Status filter (PENDING / ON_HOLD / REJECTED)
+    if (
+      filterStatus !== "ALL" &&
+      (app.status || "PENDING").toUpperCase() !== filterStatus.toUpperCase()
+    ) {
+      continue;
+    }
+
+    // Tier filter
+    if (
+      filterTier !== "ALL" &&
+      (tier || "").toUpperCase() !== filterTier.toUpperCase()
+    ) {
+      continue;
+    }
+
+    // Stage filter
+    const stageName = (app.stage || "APPLIED").toUpperCase();
+    if (filterStage !== "ALL" && stageName !== filterStage.toUpperCase()) {
+      continue;
+    }
+
+    pipelineApps.push({
+      id: app.id,
+      candidateId: candidate ? candidate.id : null,
+      jobId: job ? job.id : null,
+      jobTitle,
+      clientName,
+
+      fullName: app.fullName,
+      email: app.email,
+      location: app.location,
+      currentTitle: candidate?.currentTitle ?? null,
+      currentCompany: candidate?.currentCompany ?? null,
+
+      source: app.source,
+      stage: app.stage,
+      status: app.status,
+
+      matchScore: score,
+      matchReason: app.matchReason ?? null,
+      tier,
+      scoreReason,
+
+      appliedAt: app.createdAt.toISOString(),
+      skillTags,
     });
   }
 
-  const anyTenant = tenant as any;
+  const allVisibleApplicationIds = pipelineApps.map((a) => a.id);
 
-  const [
-    careerSettings,
-    totalWorkspaces,
-    allTenantsForBilling,
-  ] = await Promise.all([
-    prisma.careerSiteSettings.findFirst({
-      where: { tenantId: tenant.id },
-    }),
-    prisma.tenant.count(),
-    isSuperAdmin
-      ? prisma.tenant.findMany({
-          orderBy: { name: "asc" },
-        })
-      : Promise.resolve([]),
-  ]);
+  const uniqueTiers = Array.from(
+    new Set(
+      applicationsRaw
+        .flatMap((a) => a.scoringEvents)
+        .map((e) => (e?.tier as string | null | undefined) || null)
+        .filter(Boolean) as string[],
+    ),
+  ).sort();
 
-  const defaultTimezone: string =
-    anyTenant.defaultTimezone || "Africa/Lagos";
-  const defaultCurrency: string = anyTenant.defaultCurrency || "USD";
+  const currentViewId =
+    typeof searchParams.viewId === "string"
+      ? searchParams.viewId
+      : activeView?.id || "";
 
-  const planTier: string = (anyTenant.planTier as string) || "GROWTH";
-  const planLabel =
-    PLAN_LABELS[planTier] ||
-    anyTenant.planName ||
-    anyTenant.plan ||
-    "Growth";
-
-  const planBlurb =
-    PLAN_FEATURE_BLURB[planTier] ||
-    "Core ATS with multi-tenant agency features as you grow.";
-
-  const seats: number | null =
-    typeof anyTenant.seats === "number" ? anyTenant.seats : null;
-  const maxSeats: number | null =
-    typeof anyTenant.maxSeats === "number" ? anyTenant.maxSeats : null;
-
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-  const tenantSlug: string = anyTenant.slug || tenant.id;
-  const careersPath = `/careers/${encodeURIComponent(tenantSlug)}`;
-  const careersUrl = baseUrl ? `${baseUrl}${careersPath}` : careersPath;
-
-  const isCareersPublic = careerSettings?.isPublic ?? true;
-  const includeInMarketplace =
-    (careerSettings as any)?.includeInMarketplace ?? false;
-
-  const workspaceName = tenant.name || "ATS workspace";
+  // ---------------------------------------------------------------------------
+  // UI – header + filters matching job pipeline shell
+  // ---------------------------------------------------------------------------
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 lg:px-8">
-      {/* Page header */}
-      <header className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ATS · Settings
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-          Settings
-        </h1>
-        <p className="text-sm text-slate-500">
-          Configure your ThinkATS workspace, notifications, security and data
-          controls. Most changes here apply to your entire ATS workspace.
-        </p>
+    <div className="flex h-full flex-1 flex-col bg-slate-50">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur">
+        <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+          <Link
+            href="/ats/dashboard"
+            className="hover:text-slate-700 hover:underline"
+          >
+            ATS
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-slate-800">Applications</span>
+        </div>
+
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-lg font-semibold text-slate-900">
+              Applications
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                {totalApplications} total applications
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {allVisibleApplicationIds.length} in current view
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-1 text-right text-[11px] text-slate-500">
+            <span className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+              Tenant plan:{" "}
+              <span className="ml-1 capitalize">
+                {(tenant as any).plan ?? "free"}
+              </span>
+            </span>
+            {activeView && (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                Active view: {activeView.name}
+                {activeView.isDefault ? " · default" : ""}
+              </span>
+            )}
+          </div>
+        </div>
       </header>
 
-      {/* Global alerts */}
-      <div className="space-y-2">
-        {updatedSection && (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800">
-            {updatedSection === "defaults" &&
-              "Workspace defaults updated successfully."}
-            {updatedSection === "billing" &&
-              "Billing & plan settings updated successfully."}
-            {updatedSection !== "defaults" &&
-              updatedSection !== "billing" &&
-              "Settings updated."}
-          </div>
-        )}
-
-        {errorMessage && (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-800">
-            {errorMessage}
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        {/* LEFT: main settings */}
-        <section className="space-y-6">
-          {/* Workspace basics + defaults */}
-          <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Workspace basics
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Identity and defaults for this ATS workspace. Branding and
-                  careers-site configuration live on their own settings pages.
-                </p>
-              </div>
-              <Link
-                href="/ats/settings/workspace"
-                className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-800"
+      {/* Filters + view management */}
+      <section className="border-b border-slate-200 bg-slate-50/80 px-5 py-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          {/* Filters */}
+          <form
+            className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
+            method="GET"
+          >
+            {/* View selector */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                View
+              </label>
+              <select
+                name="viewId"
+                defaultValue={currentViewId}
+                className="h-8 min-w-[140px] rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
-                Manage workspace
-              </Link>
+                <option value="">All candidates</option>
+                {savedViewsRaw.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                    {v.isDefault ? " · default" : ""}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Identity (read-only here) */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-700">
-                  Workspace name
-                </label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-inner-sm"
-                  value={workspaceName}
-                  disabled
-                />
-                <p className="text-[11px] text-slate-400">
-                  Pulled from your primary ATS tenant. Edit on{" "}
-                  <span className="font-medium text-slate-700">
-                    Workspace settings
-                  </span>
-                  .
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-700">
-                  Workspace URL
-                </label>
-                <div className="flex rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                  <span className="truncate">
-                    {tenantSlug}.thinkats.com /{" "}
-                    <span className="font-medium">ats</span>
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Internal ATS URL for your team. Client careers sites use their
-                  own URLs.
-                </p>
-              </div>
+            {/* Search */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Search
+              </label>
+              <input
+                type="text"
+                name="q"
+                defaultValue={filterQ}
+                placeholder='e.g. "senior engineer" source:linkedin -contract'
+                className="h-8 w-56 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              />
             </div>
 
-            {/* Defaults form: timezone + currency */}
-            <form
-              method="POST"
-              action="/api/ats/settings/defaults"
-              className="mt-2 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-3"
+            {/* Stage filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Stage
+              </label>
+              <select
+                name="stage"
+                defaultValue={filterStage}
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="ALL">All</option>
+                {stageNames.map((s) => (
+                  <option key={s} value={s.toUpperCase()}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Decision
+              </label>
+              <select
+                name="status"
+                defaultValue={filterStatus}
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="ALL">All</option>
+                <option value="PENDING">Accepted / active</option>
+                <option value="ON_HOLD">On hold</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            {/* Tier filter */}
+            <div className="flex flex-col">
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Tier
+              </label>
+              <select
+                name="tier"
+                defaultValue={filterTier}
+                className="h-8 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs text-slate-800 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+              >
+                <option value="ALL">All</option>
+                {uniqueTiers.map((t) => (
+                  <option key={t} value={t.toUpperCase()}>
+                    Tier {t.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="mt-5 inline-flex h-8 items-center rounded-full bg-indigo-600 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-indigo-700"
             >
-              <input type="hidden" name="tenantId" value={tenant.id} />
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="timezone"
-                  className="text-xs font-medium text-slate-700"
-                >
-                  Default timezone
-                </label>
-                <input
-                  id="timezone"
-                  name="timezone"
-                  type="text"
-                  defaultValue={defaultTimezone}
-                  placeholder="Africa/Lagos"
-                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                />
-                <p className="text-[11px] text-slate-400">
-                  IANA timezone ID, e.g.{" "}
-                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
-                    Africa/Lagos
-                  </code>{" "}
-                  or{" "}
-                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
-                    Europe/London
-                  </code>
-                  .
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="currency"
-                  className="text-xs font-medium text-slate-700"
-                >
-                  Default currency
-                </label>
-                <input
-                  id="currency"
-                  name="currency"
-                  type="text"
-                  defaultValue={defaultCurrency}
-                  placeholder="USD"
-                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-900 outline-none ring-0 placeholder:text-slate-400 focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                />
-                <p className="text-[11px] text-slate-400">
-                  Three-letter ISO code, e.g.{" "}
-                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
-                    USD
-                  </code>
-                  ,{" "}
-                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
-                    NGN
-                  </code>{" "}
-                  or{" "}
-                  <code className="rounded bg-slate-50 px-1 py-0.5 text-[10px]">
-                    EUR
-                  </code>
-                  .
-                </p>
-              </div>
-
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  className="w-full rounded-md bg-[#172965] px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#12204d]"
-                >
-                  Save defaults
-                </button>
-              </div>
-            </form>
-          </section>
-
-          {/* Scoring & bias settings (live card) */}
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Scoring &amp; ranking
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Workspace-level controls for tiers, weights, skills and bias
-                  reduction. Per-job overrides still apply inside each role.
-                </p>
-              </div>
-              <Link
-                href="/ats/settings/scoring"
-                className="hidden rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
-              >
-                Open scoring settings
-              </Link>
-            </div>
-
-            <ScoringSettingsCard />
-          </section>
-
-          {/* Notifications */}
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Email &amp; notifications
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Define which ATS events generate emails. Delivery rules can be
-                  wired into your email provider later.
-                </p>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
-                UI only
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              <NotificationRow
-                title="Daily ATS digest"
-                description="Morning email with new applications, new jobs and key activity across all tenants."
-              />
-              <NotificationRow
-                title="Mentions & comments"
-                description="Email your team when they are mentioned or assigned inside a candidate timeline."
-              />
-              <NotificationRow
-                title="Client collaboration"
-                description="Notify clients when you share a shortlist, request feedback, or update a candidate’s stage."
-              />
-              <NotificationRow
-                title="Security alerts"
-                description="Logins from new devices and critical account changes. Recommended on for all admins."
-                highlight
-              />
-            </div>
-          </section>
-
-          {/* Data & privacy / Danger zone */}
-          <section className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Data &amp; privacy
-              </h2>
-              <p className="text-xs text-slate-500">
-                Manage retention and export tools for candidate data across this
-                workspace.
-              </p>
-              <ul className="mt-2 space-y-2 text-xs text-slate-600">
-                <li>• Candidate data export (CSV, XLSX, JSON)</li>
-                <li>• Data retention policies per workspace</li>
-                <li>• Automatic redaction of PII after a chosen period</li>
-              </ul>
-            </div>
-
-            <div className="space-y-3 rounded-2xl border border-red-200 bg-red-50/70 p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-red-800">
-                Danger zone
-              </h2>
-              <p className="text-xs text-red-700">
-                These controls are intentionally locked down. Wire this to a
-                support and approval flow before enabling self-service.
-              </p>
-              <button
-                type="button"
-                className="mt-2 inline-flex items-center justify-center rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-red-700"
-              >
-                Contact support to close workspace
-              </button>
-              <p className="mt-1 text-[11px] text-red-700/80">
-                Closing a workspace archives all jobs, applications and tenant
-                records. ThinkATS support should guide this process.
-              </p>
-            </div>
-          </section>
-        </section>
-
-        {/* RIGHT: summary / meta */}
-        <aside className="space-y-6">
-          {/* Workspace overview */}
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Workspace overview
-            </h2>
-            <p className="text-xs text-slate-500">
-              Snapshot of how this ATS workspace is configured.
-            </p>
-
-            <dl className="mt-2 space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Default tenant</dt>
-                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {workspaceName}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Total workspaces</dt>
-                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {totalWorkspaces}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Default timezone</dt>
-                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {defaultTimezone}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Default currency</dt>
-                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {defaultCurrency}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          {/* Billing & plans card */}
-          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  Billing &amp; plans
-                </h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Plan tier and seat limits for this workspace. Super admins can
-                  override plans for any tenant.
-                </p>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
-                {planLabel}
-              </span>
-            </div>
-
-            <p className="text-[11px] text-slate-600">{planBlurb}</p>
-
-            <dl className="mt-2 space-y-1.5 text-[11px]">
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Seats (committed)</dt>
-                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {seats ?? "—"}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500">Seat limit</dt>
-                <dd className="ml-4 flex-1 text-right font-medium text-slate-900">
-                  {maxSeats ?? "—"}
-                </dd>
-              </div>
-            </dl>
-
-            <form
-              method="POST"
-              action="/api/ats/settings/billing"
-              className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-[11px]"
+              Apply filters
+            </button>
+            <Link
+              href="/ats/applications"
+              className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 transition hover:bg-slate-100"
             >
-              {isSuperAdmin ? (
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="tenantId"
-                    className="block text-[11px] font-medium text-slate-700"
-                  >
-                    Manage tenant (super admin)
-                  </label>
-                  <select
-                    id="tenantId"
-                    name="tenantId"
-                    defaultValue={tenant.id}
-                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                  >
-                    {allTenantsForBilling.map((t) => {
-                      const tAny = t as any;
-                      const label =
-                        t.name || tAny.slug || t.id;
-                      return (
-                        <option key={t.id} value={t.id}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <p className="text-[10px] text-slate-500">
-                    As a super admin, you can override plan tier and seat limits
-                    for any tenant, regardless of current limits.
-                  </p>
-                </div>
-              ) : (
-                <input type="hidden" name="tenantId" value={tenant.id} />
-              )}
+              Reset
+            </Link>
+          </form>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="planTier"
-                    className="block text-[11px] font-medium text-slate-700"
-                  >
-                    Plan tier
-                  </label>
-                  <select
-                    id="planTier"
-                    name="planTier"
-                    defaultValue={planTier}
-                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                  >
-                    <option value="STARTER">Starter</option>
-                    <option value="GROWTH">Growth</option>
-                    <option value="AGENCY">Agency</option>
-                    <option value="ENTERPRISE">Enterprise</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="seats"
-                    className="block text-[11px] font-medium text-slate-700"
-                  >
-                    Seats (committed)
-                  </label>
-                  <input
-                    id="seats"
-                    name="seats"
-                    type="number"
-                    min={0}
-                    defaultValue={seats ?? ""}
-                    placeholder="e.g. 5"
-                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="maxSeats"
-                    className="block text-[11px] font-medium text-slate-700"
-                  >
-                    Seat limit
-                  </label>
-                  <input
-                    id="maxSeats"
-                    name="maxSeats"
-                    type="number"
-                    min={0}
-                    defaultValue={maxSeats ?? ""}
-                    placeholder="e.g. 10"
-                    className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <p className="max-w-xs text-[10px] text-slate-500">
-                  Feature access can key off <span className="font-medium">Plan tier</span> in
-                  your middleware or UI (e.g. marketplace, advanced scoring,
-                  client workspaces).
-                </p>
-                <button
-                  type="submit"
-                  className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
-                >
-                  Save billing
-                </button>
-              </div>
-            </form>
+          {/* Visible count + hint */}
+          <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
+            <span>
+              Visible applications:{" "}
+              <span className="font-semibold text-slate-800">
+                {allVisibleApplicationIds.length}
+              </span>
+            </span>
+            <span className="max-w-xs text-right text-[10px]">
+              Use the filters and saved views to keep your shortlists and
+              interview-ready candidates one click away.
+            </span>
           </div>
+        </div>
 
-          {/* Careers-site summary card, wired to real settings */}
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-900 p-6 text-slate-50 shadow-sm">
-            <h2 className="text-sm font-semibold">Careers site</h2>
-            <p className="text-xs text-slate-200/90">
-              Quick view of how your public careers presence is configured for
-              this workspace.
-            </p>
-
-            <div className="mt-2 space-y-2 text-[11px]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-slate-50">
-                    Careers URL (tenant)
-                  </p>
-                  <p className="mt-0.5 text-slate-200/80">
-                    {isCareersPublic ? (
-                      <>
-                        Public at{" "}
-                        <Link
-                          href={careersPath}
-                          target="_blank"
-                          className="underline underline-offset-2"
-                        >
-                          {careersUrl}
-                        </Link>
-                      </>
-                    ) : (
-                      "Currently not public. Jobs still appear inside ATS."
-                    )}
-                  </p>
-                </div>
-                <span
-                  className={[
-                    "inline-flex h-6 items-center rounded-full px-3 text-[10px] font-semibold",
-                    isCareersPublic
-                      ? "bg-emerald-100/20 text-emerald-200"
-                      : "bg-slate-800 text-slate-300",
-                  ].join(" ")}
-                >
-                  {isCareersPublic ? "Public" : "Internal only"}
-                </span>
-              </div>
-
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium text-slate-50">
-                    Global marketplace
-                  </p>
-                  <p className="mt-0.5 text-slate-200/80">
-                    {includeInMarketplace
-                      ? "Public, open jobs also appear in the ThinkATS marketplace."
-                      : "Jobs are only surfaced on your own careers site, not the marketplace."}
-                  </p>
-                </div>
-                <span
-                  className={[
-                    "inline-flex h-6 items-center rounded-full px-3 text-[10px] font-semibold",
-                    includeInMarketplace
-                      ? "bg-indigo-100/20 text-indigo-200"
-                      : "bg-slate-800 text-slate-300",
-                  ].join(" ")}
-                >
-                  {includeInMarketplace ? "Enabled" : "Disabled"}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <Link
-                href="/ats/settings/careers"
-                className="inline-flex items-center rounded-full bg-slate-50 px-4 py-1.5 text-[11px] font-semibold text-slate-900 hover:bg-white"
-              >
-                Manage careers settings
-              </Link>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-/** Presentational helpers */
-
-function NotificationRow({
-  title,
-  description,
-  highlight,
-}: {
-  title: string;
-  description: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p
-          className={`text-sm font-medium ${
-            highlight ? "text-slate-900" : "text-slate-800"
-          }`}
+        {/* Save current filters as view */}
+        <form
+          action="/api/ats/views"
+          method="POST"
+          className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
         >
-          {title}
-        </p>
-        <p className="mt-1 text-xs text-slate-500">{description}</p>
-      </div>
-      <span className="inline-flex cursor-default items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
-        UI only
-      </span>
+          <input type="hidden" name="scope" value="applications_pipeline" />
+          <input type="hidden" name="redirectTo" value="/ats/applications" />
+          <input type="hidden" name="q" value={filterQ} />
+          <input type="hidden" name="stage" value={filterStage} />
+          <input type="hidden" name="status" value={filterStatus} />
+          <input type="hidden" name="tier" value={filterTier} />
+
+          <div className="flex flex-col">
+            <label className="mb-1 text-[11px] font-medium text-slate-600">
+              Save current filters as view
+            </label>
+            <input
+              type="text"
+              name="name"
+              required
+              placeholder="e.g. Tier A · Interview-ready"
+              className="h-8 w-64 rounded-md border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
+            />
+          </div>
+
+          <label className="mb-1 mt-4 flex items-center gap-1 text-[11px] text-slate-600 md:mt-0">
+            <input
+              type="checkbox"
+              name="setDefault"
+              className="h-3 w-3 rounded border-slate-400 text-indigo-600 focus:ring-indigo-500/40"
+            />
+            <span>Set as default view for this workspace</span>
+          </label>
+
+          <button
+            type="submit"
+            className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            Save view
+          </button>
+        </form>
+      </section>
+
+      {/* Applications list – full pipeline-styled rows */}
+      <section className="flex-1 px-5 py-4">
+        <ApplicationsList applications={pipelineApps} />
+      </section>
     </div>
   );
 }
