@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { Tenant } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
-import { ensureOtpVerified } from "@/lib/requireOtp";
 import TenantLogo from "@/components/ats/tenants/TenantLogo";
 import CopyCareersUrlButton from "@/components/ats/tenants/CopyCareersUrlButton";
 
@@ -92,8 +91,9 @@ export default async function AtsTenantsPage({
 }: {
   searchParams?: TenantsPageSearchParams;
 }) {
-  // 🔐 Every ATS workspace page should be behind OTP
-  await ensureOtpVerified("/ats/tenants");
+  // OTP + super-admin gating handled by:
+  // - app/ats/layout.tsx (auth + OTP)
+  // - app/ats/tenants/layout.tsx (SUPER_ADMIN only)
 
   const tenants: Tenant[] = await prisma.tenant.findMany({
     orderBy: { createdAt: "desc" },
@@ -740,47 +740,53 @@ export default async function AtsTenantsPage({
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
-  <Link
-    href={`/ats/tenants?editTenantId=${encodeURIComponent(
-      tenant.id,
-    )}#workspace-form`}
-    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-  >
-    Edit workspace
-  </Link>
-  <Link
-    href={`/ats/tenants/${encodeURIComponent(
-      tenant.id,
-    )}/invite-admin`}
-    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-  >
-    Invite admin
-  </Link>
-  <Link
-    href={`/ats/jobs?tenantId=${encodeURIComponent(
-      tenant.id,
-    )}`}
-    className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-800"
-  >
-    View jobs
-  </Link>
-  <Link
-    href={`/ats/clients?tenantId=${encodeURIComponent(
-      tenant.id,
-    )}`}
-    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-  >
-    View clients
-  </Link>
-  <Link
-    href={`/ats/tenants/${encodeURIComponent(
-      tenant.id,
-    )}/careersite`}
-    className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
-  >
-    Careers site
-  </Link>
-</div>
+                      <Link
+                        href={`/ats/tenants?editTenantId=${encodeURIComponent(
+                          tenant.id,
+                        )}#workspace-form`}
+                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        Edit workspace
+                      </Link>
+                      <Link
+                        href={`/ats/tenants/${encodeURIComponent(
+                          tenant.id,
+                        )}/invite-admin`}
+                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        Invite admin
+                      </Link>
+                      <Link
+                        href={`/ats/jobs?tenantId=${encodeURIComponent(
+                          tenant.id,
+                        )}`}
+                        className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-800"
+                      >
+                        View jobs
+                      </Link>
+                      <Link
+                        href={`/ats/clients?tenantId=${encodeURIComponent(
+                          tenant.id,
+                        )}`}
+                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        View clients
+                      </Link>
+                      <Link
+                        href={`/ats/tenants/${encodeURIComponent(
+                          tenant.id,
+                        )}/careersite`}
+                        className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        Careers site
+                      </Link>
+                      {careersUrl && (
+                        <CopyCareersUrlButton
+                          url={careersUrl}
+                          className="rounded-full bg-slate-50 px-3 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100"
+                        />
+                      )}
+                    </div>
                   </div>
                 </article>
               );
