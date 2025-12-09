@@ -3,7 +3,11 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import type { AppUserWithTenants } from "@/lib/auth/getServerUser";
 
 type Props = {
@@ -23,7 +27,7 @@ type NavGroup = {
 };
 
 // 🔹 Global ATS-style IA with Admin → Plans
-const navGroups: NavGroup[] = [
+const ALL_NAV_GROUPS: NavGroup[] = [
   {
     label: "Hiring",
     items: [
@@ -62,6 +66,34 @@ export default function AtsLayoutClient({
 }: Props) {
   const pathname = usePathname() || "/ats";
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Tenant roles attached in getServerUser → appUser.tenants
+  const tenantRoles =
+    (user.tenants as
+      | {
+          tenantId: string;
+          tenantSlug: string | null;
+          tenantName: string | null;
+          role?: string | null;
+        }[]
+      | undefined) ?? [];
+
+  const tenantIdFromQuery = searchParams.get("tenantId") ?? "";
+  const fallbackTenantId = tenantRoles[0]?.tenantId ?? "";
+  const activeTenantId = tenantIdFromQuery || fallbackTenantId;
+
+  const activeTenant =
+    tenantRoles.find((t) => t.tenantId === activeTenantId) ??
+    tenantRoles[0] ??
+    null;
+
+  // Only SUPER_ADMIN sees the Admin section
+  const navGroups: NavGroup[] = isSuperAdmin
+    ? ALL_NAV_GROUPS
+    : ALL_NAV_GROUPS.filter((group) => group.label !== "Admin");
+
+  const flatNavItems: NavItem[] = navGroups.flatMap((g) => g.items);
 
   async function handleSignOut() {
     try {
@@ -73,7 +105,23 @@ export default function AtsLayoutClient({
     }
   }
 
-  const displayName = user.fullName || user.email || "ATS user";
+  function handleTenantChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const nextTenantId = e.target.value;
+
+    const sp = new URLSearchParams(searchParams.toString());
+    if (nextTenantId) {
+      sp.set("tenantId", nextTenantId);
+    } else {
+      sp.delete("tenantId");
+    }
+    const query = sp.toString();
+    const target = query ? `${pathname}?${query}` : pathname;
+
+    router.push(target);
+  }
+
+  const displayName =
+    user.fullName || user.email || "ATS user";
 
   const initials = (user.fullName || user.email || "?")
     .split(" ")
@@ -81,16 +129,6 @@ export default function AtsLayoutClient({
     .join("")
     .slice(0, 2)
     .toUpperCase();
-
-  // Only show Admin group if super admin
-  const visibleNavGroups = navGroups.filter((group) => {
-    if (group.label === "Admin" && !isSuperAdmin) return false;
-    return true;
-  });
-
-  const visibleFlatNavItems: NavItem[] = visibleNavGroups.flatMap(
-    (g) => g.items,
-  );
 
   const BRAND_ACTIVE = "#2563EB";
   const BRAND_BORDER = "#1F2937";
@@ -126,7 +164,7 @@ export default function AtsLayoutClient({
           </div>
 
           <nav className="flex-1 space-y-5 text-sm">
-            {visibleNavGroups.map((group) => (
+            {navGroups.map((group) => (
               <div key={group.label} className="space-y-1">
                 <div className="px-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                   {group.label}
@@ -181,6 +219,7 @@ export default function AtsLayoutClient({
               borderColor: BRAND_BORDER,
             }}
           >
+            {/* Brand on mobile */}
             <div className="flex items-center gap-2 lg:hidden">
               <div
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
@@ -193,24 +232,58 @@ export default function AtsLayoutClient({
               </span>
             </div>
 
-            <div className="flex-1" />
-
-            <div className="flex items-center gap-3">
-              <div className="hidden flex-col items-end text-right text-xs sm:flex">
-                <span className="max-w-[200px] truncate font-medium text-slate-100">
-                  {displayName}
-                </span>
-                {user.email && (
-                  <span className="max-w-[200px] truncate text-[11px] text-slate-400">
-                    {user.email}
+            {/* Right side: workspace switcher + user */}
+            <div className="ml-auto flex items-center gap-3">
+              {/* Workspace switcher (desktop / md+) */}
+              {tenantRoles.length > 0 && (
+                <div className="hidden items-center gap-2 rounded-full bg-slate-900/80 px-3 py-1.5 text-xs text-slate-100 md:inline-flex">
+                  <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                    Workspace
                   </span>
-                )}
-              </div>
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold"
-                style={{ backgroundColor: "#111827" }}
-              >
-                {initials}
+                  <select
+                    value={activeTenantId}
+                    onChange={handleTenantChange}
+                    className="bg-transparent text-xs font-medium text-slate-100 outline-none"
+                  >
+                    {tenantRoles.map((t) => (
+                      <option
+                        key={t.tenantId}
+                        value={t.tenantId}
+                        className="bg-slate-900 text-slate-100"
+                      >
+                        {t.tenantName ||
+                          t.tenantSlug ||
+                          "Workspace"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <div className="hidden flex-col items-end text-right text-xs sm:flex">
+                  <span className="max-w-[200px] truncate font-medium text-slate-100">
+                    {displayName}
+                  </span>
+                  {user.email && (
+                    <span className="max-w-[200px] truncate text-[11px] text-slate-400">
+                      {user.email}
+                    </span>
+                  )}
+                  {activeTenant && (
+                    <span className="max-w-[200px] truncate text-[10px] text-slate-500">
+                      {activeTenant.tenantName ||
+                        activeTenant.tenantSlug ||
+                        "Default workspace"}
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold"
+                  style={{ backgroundColor: "#111827" }}
+                >
+                  {initials}
+                </div>
               </div>
             </div>
           </header>
@@ -223,7 +296,7 @@ export default function AtsLayoutClient({
               borderColor: BRAND_BORDER,
             }}
           >
-            {visibleFlatNavItems.map((item) => {
+            {flatNavItems.map((item) => {
               const active = isActive(pathname, item.href);
               return (
                 <Link
