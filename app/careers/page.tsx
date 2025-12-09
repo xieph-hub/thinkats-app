@@ -53,8 +53,7 @@ function formatDate(value: string | Date | null | undefined) {
 export default async function HostAwareCareersPage() {
   const { isPrimaryHost, tenantSlugFromHost } = getHostContext();
 
-  // 🔹 Primary host (thinkats.com / www.thinkats.com / any non-tenant host):
-  // Treat /careers as an alias for the global jobs marketplace.
+  // Primary host (thinkats.com): /careers behaves like /jobs
   if (isPrimaryHost || !tenantSlugFromHost) {
     redirect("/jobs");
   }
@@ -66,7 +65,7 @@ export default async function HostAwareCareersPage() {
     where: { slug },
   });
 
-  // If the tenant doesn't exist at all, show a soft message — no 404, no redirects.
+  // If the tenant doesn't exist at all, soft message – no 404.
   if (!tenant) {
     return (
       <main className="min-h-screen bg-[#F5F6FA]">
@@ -95,12 +94,12 @@ export default async function HostAwareCareersPage() {
     );
   }
 
-  // 2) Load careersite settings (branding, copy, marketplace flag, etc.)
+  // 2) Load careersite settings (branding, copy, flags)
   const settings = await prisma.careerSiteSettings.findFirst({
     where: { tenantId: tenant.id },
   });
 
-  // If tenant explicitly turned off their careers page, show a gentle message.
+  // If tenant explicitly turned off their careers page
   if (settings && settings.isPublic === false) {
     return (
       <main className="min-h-screen bg-[#F5F6FA]">
@@ -154,16 +153,14 @@ export default async function HostAwareCareersPage() {
 
   const aboutHtml =
     settings?.aboutHtml ||
-    `<p>We use ThinkATS to manage our hiring process. Every application is reviewed by a real hiring team member, and you can expect a structured, respectful interview experience.</p>`;
+    `<p>We use a structured, candidate-friendly hiring process. Every application is reviewed by a real hiring team member and you can expect clear communication throughout.</p>`;
 
-  const logoUrl = settings?.logoUrl || tenant.logoUrl || null;
+  const logoUrl = (settings && settings.logoUrl) || (tenant as any).logoUrl || null;
 
-  // Colour overrides with safe defaults
-  const primaryColor = settings?.primaryColorHex || "#172965"; // deep blue
-  const accentColor = settings?.accentColorHex || "#FFC000"; // yellow
-  const heroBackground = settings?.heroBackgroundHex || "#F5F6FA"; // soft grey
+  const primaryColor = settings?.primaryColorHex || "#172965";
+  const accentColor = settings?.accentColorHex || "#FFC000";
+  const heroBackground = settings?.heroBackgroundHex || "#F5F6FA";
 
-  // 🔹 Tracking source for job detail (so /jobs/[id] knows it came from THIS tenant careers page)
   const trackingSource = `CAREERS_${(tenant.slug || tenant.id).toUpperCase()}`;
 
   function jobPublicUrl(job: any) {
@@ -178,14 +175,14 @@ export default async function HostAwareCareersPage() {
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <div className="mx-auto max-w-5xl px-4 pb-12 pt-10 sm:px-6 lg:px-0">
-        {/* Hero */}
+        {/* HERO */}
         <section
-          className="mb-8 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur sm:p-8"
+          className="mb-8 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm backdrop-blur sm:p-8"
           style={{ backgroundColor: heroBackground }}
         >
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            {/* Brand side */}
             <div className="flex items-start gap-4">
-              {/* Logo / avatar */}
               <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                 {logoUrl ? (
                   <Image
@@ -238,6 +235,7 @@ export default async function HostAwareCareersPage() {
               </div>
             </div>
 
+            {/* Meta card / ThinkATS badge */}
             <div
               className="space-y-3 rounded-2xl px-4 py-3 text-xs text-slate-100 sm:w-64"
               style={{ backgroundColor: primaryColor }}
@@ -249,31 +247,34 @@ export default async function HostAwareCareersPage() {
                 Powered by ThinkATS
               </p>
               <p className="text-xs text-slate-100">
-                This careers site is powered by ThinkATS. Applications go
-                directly into the company&apos;s ATS workspace with structured
-                pipelines and clear interview stages.
+                This careers site is fully branded for{" "}
+                <span className="font-semibold">
+                  {tenant.name || tenant.slug || "this company"}
+                </span>
+                . Applications flow into a structured ATS workspace with clear
+                stages and decision history.
               </p>
               <p className="text-[11px] text-slate-200">
-                You&apos;ll create a simple candidate profile once, then can be
-                considered for multiple suitable roles.
+                Your profile can be reused for other roles with your consent,
+                keeping the candidate experience fast but respectful.
               </p>
               <Link
                 href="/jobs"
                 className="inline-flex items-center text-[11px] font-medium hover:text-white"
                 style={{ color: accentColor }}
               >
-                Browse all jobs on ThinkATS
+                Discover more roles on ThinkATS
                 <span className="ml-1 text-[10px]">↗</span>
               </Link>
             </div>
           </div>
         </section>
 
-        {/* About section */}
+        {/* ABOUT + PROCESS */}
         <section className="mb-8 grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
             <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Working here
+              Life at {tenant.name || "the company"}
             </h2>
             <div
               className="prose prose-sm max-w-none text-slate-700 prose-p:mb-2 prose-ul:mt-1 prose-ul:list-disc prose-ul:pl-4"
@@ -286,19 +287,19 @@ export default async function HostAwareCareersPage() {
               Hiring process at a glance
             </h3>
             <ol className="mt-2 space-y-1.5 list-decimal pl-4">
-              <li>Submit your application via the relevant role.</li>
-              <li>Screening by the hiring team using ThinkATS pipelines.</li>
-              <li>Interviews and assessments where relevant.</li>
-              <li>Decision and feedback shared as soon as possible.</li>
+              <li>Submit your application for a relevant role.</li>
+              <li>Screening by the hiring team using structured pipelines.</li>
+              <li>Interviews and any assessments, communicated in advance.</li>
+              <li>Decision and feedback as soon as reasonably possible.</li>
             </ol>
             <p className="mt-2 text-[11px] text-slate-500">
-              Specific steps may vary by role, but you can expect clear
-              communication and structured interviews.
+              Exact steps can vary per role, but you can expect clarity on what
+              happens next at each stage.
             </p>
           </div>
         </section>
 
-        {/* Jobs list */}
+        {/* JOBS LIST */}
         {totalJobs === 0 ? (
           <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             <p>No open roles are currently listed on this careers site.</p>
@@ -321,8 +322,7 @@ export default async function HostAwareCareersPage() {
                 (job.workMode as string | null) ||
                 (job.locationType as string | null) ||
                 null;
-              const workModeLabel =
-                formatWorkMode(workModeValue) || undefined;
+              const workModeLabel = formatWorkMode(workModeValue) || undefined;
               const employmentLabel =
                 formatEmploymentType(job.employmentType) || undefined;
               const posted = formatDate(job.createdAt);
@@ -342,13 +342,8 @@ export default async function HostAwareCareersPage() {
                       <h2 className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#172965]">
                         {job.title}
                       </h2>
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                        style={{
-                          backgroundColor: "#E9F7EE",
-                          color: "#306B34",
-                        }}
-                      >
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                        <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         Actively hiring
                       </span>
                     </div>
@@ -409,6 +404,17 @@ export default async function HostAwareCareersPage() {
             })}
           </section>
         )}
+
+        {/* Small footer badge – easy to hide later for full white-label */}
+        <footer className="mt-8 flex justify-end">
+          <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] text-slate-500 shadow-sm">
+            <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Hiring workflows powered by{" "}
+            <span className="ml-1 font-semibold text-slate-700">
+              ThinkATS
+            </span>
+          </div>
+        </footer>
       </div>
     </div>
   );
