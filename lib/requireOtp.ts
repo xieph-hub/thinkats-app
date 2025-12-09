@@ -1,25 +1,23 @@
 // lib/requireOtp.ts
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getServerUser } from "@/lib/auth/getServerUser";
+import {
+  AUTH_COOKIE_NAME,
+  OTP_COOKIE_NAME,
+} from "@/lib/auth/getServerUser";
 
 export async function ensureOtpVerified(
   returnTo: string = "/ats",
 ): Promise<void> {
-  const authUser = await getServerUser();
+  const cookieStore = cookies();
 
-  if (!authUser || !authUser.email) {
+  const userId = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  if (!userId) {
     redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
   }
 
-  const email = authUser.email.toLowerCase();
-
-  const appUser = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true, otpVerifiedAt: true },
-  });
-
-  if (!appUser || !appUser.otpVerifiedAt) {
+  const otpVerified = cookieStore.get(OTP_COOKIE_NAME)?.value;
+  if (!otpVerified) {
     redirect(`/ats/verify?returnTo=${encodeURIComponent(returnTo)}`);
   }
 }
