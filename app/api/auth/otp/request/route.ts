@@ -1,8 +1,9 @@
 // app/api/auth/otp/request/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
+import { cookies } from "next/headers";
 import { Resend } from "resend";
+import { prisma } from "@/lib/prisma";
+import { AUTH_COOKIE_NAME } from "@/lib/auth/getServerUser";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -13,74 +14,59 @@ function generateOtpCode(): string {
 
 export async function POST(_req: NextRequest) {
   try {
-    const supabase = createSupabaseRouteClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+    const cookieStore = cookies();
+    const userId = cookieStore.get(AUTH_COOKIE_NAME)?.value;
 
-    if (userError || !user || !user.email) {
-      console.error("OTP request unauthenticated:", userError);
+    if (!userId) {
       return NextResponse.json(
         { ok: false, error: "unauthenticated" },
         { status: 401 },
       );
     }
 
-    const email = user.email.toLowerCase();
-
-    // 1) Find or create app-level User row
-    let appUser = await prisma.user.findUnique({
-      where: { email },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
     });
 
-    if (!appUser) {
-      appUser = await prisma.user.create({
-        data: {
-          email,
-          supabaseUserId: user.id,
-        },
-      });
-    } else if (!appUser.supabaseUserId) {
-      // Backfill supabaseUserId if missing
-      appUser = await prisma.user.update({
-        where: { id: appUser.id },
-        data: { supabaseUserId: user.id },
-      });
+    if (!user || !user.email) {
+      return NextResponse.json(
+        { ok: false, error: "user_not_found" },
+        { status: 400 },
+      );
     }
 
-    // 2) Invalidate previous active OTPs
-    await prisma.otpCode.updateMany({
+    const now = new Date();
+
+    // 🔁 Invalidate any existing active OTPs
+    await prisma.loginOtp.updateMany({
       where: {
-        userId: appUser.id,
-        usedAt: null,
-        expiresAt: { gt: new Date() },
+        userId,
+        consumed: false,
+        expiresAt: { gt: now },
       },
       data: {
-        usedAt: new Date(),
+        consumed: true,
       },
     });
 
-    // 3) Create new OTP
     const code = generateOtpCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 mins
 
-    await prisma.otpCode.create({
+    await prisma.loginOtp.create({
       data: {
-        userId: appUser.id,
+        userId,
         code,
         expiresAt,
       },
     });
 
-    // 4) Send email
     const from =
       process.env.ATS_OTP_FROM_EMAIL ??
       "ThinkATS <no-reply@thinkats.com>";
 
     await resend.emails.send({
       from,
-      to: email,
+      to: user.email,
       subject: "Your ThinkATS login code",
       text: `Your ThinkATS one-time code is ${code}. It expires in 10 minutes.`,
     });
