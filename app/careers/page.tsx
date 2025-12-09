@@ -19,7 +19,8 @@ type JobRow = {
   location: string | null;
   employmentType: string | null;
   seniority: string | null;
-  summary: string | null;
+  workMode: string | null;
+  shortDescription: string | null;
 };
 
 function normaliseStatus(status: string | null | undefined): string {
@@ -48,16 +49,20 @@ function formatSeniority(value?: string | null) {
   return humanizeToken(value);
 }
 
+function formatWorkMode(value?: string | null) {
+  if (!value) return "";
+  return humanizeToken(value);
+}
+
 export default async function CareersPage() {
-  // Host-based tenant resolution (slug.thinkats.com/careers)
+  // Host-based tenant resolution: slug.thinkats.com/careers
   const host = (await getHostContext()) as any;
 
   const hostType: string = host?.hostType ?? "root";
   const tenantId: string | null = host?.tenantId ?? null;
   const hostname: string | undefined = host?.hostname;
 
-  // If we’re on the root / marketing domain or there’s no tenant,
-  // DO NOT redirect to /login or /ats – just show a soft message.
+  // Root / marketing or misconfigured host → soft message, no redirect
   if (!tenantId || hostType !== "tenant") {
     const rootJobsHref = "/jobs";
 
@@ -94,7 +99,7 @@ export default async function CareersPage() {
     );
   }
 
-  // We *do* have a tenant host: fetch tenant + careers settings + jobs
+  // Valid tenant host: fetch tenant, careers settings, and jobs
   const [tenant, settings, jobsRaw] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -111,7 +116,13 @@ export default async function CareersPage() {
     }),
     prisma.job.findMany({
       where: {
-        tenantId, // ✅ Removed `isPublished: true` – keep this aligned with your schema
+        tenantId,
+        status: "open",
+        visibility: "public",
+        OR: [
+          { internalOnly: false },
+          { internalOnly: null },
+        ],
       },
       orderBy: { createdAt: "desc" },
       take: 25,
@@ -122,13 +133,14 @@ export default async function CareersPage() {
         location: true,
         employmentType: true,
         seniority: true,
-        summary: true,
+        workMode: true,
+        shortDescription: true,
       },
     }),
   ]);
 
   if (!tenant) {
-    // Tenant genuinely missing for this host – don’t 404, just show a friendly message
+    // Host resolves but tenant row missing: soft message, no 404
     return (
       <main className="min-h-screen bg-slate-50">
         <div className="mx-auto max-w-xl px-4 py-16 text-center">
@@ -175,11 +187,13 @@ export default async function CareersPage() {
   const jobs = jobsRaw as JobRow[];
   const jobsCount = jobs.length;
 
-  const resolvedHostname = hostname || "thinkats.com";
+  const resolvedHostname =
+    typeof hostname === "string" && hostname.length > 0
+      ? hostname
+      : "thinkats.com";
   const careersUrl = `https://${resolvedHostname}/careers`;
 
-  // If tenant is inactive or careers page is not public,
-  // show a clear but soft “not visible” message.
+  // Inactive tenant or careers switched off → clear message
   if (!isActive || !isPublic) {
     return (
       <main className="min-h-screen bg-slate-50">
@@ -330,6 +344,7 @@ export default async function CareersPage() {
                       job.employmentType,
                     );
                     const seniority = formatSeniority(job.seniority);
+                    const workMode = formatWorkMode(job.workMode);
                     const href = `/jobs/${encodeURIComponent(
                       job.slug || job.id,
                     )}`;
@@ -351,6 +366,11 @@ export default async function CareersPage() {
                                   {job.location}
                                 </span>
                               )}
+                              {workMode && (
+                                <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
+                                  {workMode}
+                                </span>
+                              )}
                               {employmentType && (
                                 <span className="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5">
                                   {employmentType}
@@ -362,9 +382,9 @@ export default async function CareersPage() {
                                 </span>
                               )}
                             </div>
-                            {job.summary && (
+                            {job.shortDescription && (
                               <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">
-                                {job.summary}
+                                {job.shortDescription}
                               </p>
                             )}
                           </div>
