@@ -5,6 +5,7 @@ import { Inter } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import AuthRecoveryListener from "@/components/AuthRecoveryListener";
+import AuthHashRedirector from "./AuthHashRedirector";
 import { getServerUser } from "@/lib/supabaseServer";
 import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
 
@@ -84,7 +85,10 @@ export default async function RootLayout({
   return (
     <html lang="en" className={inter.className}>
       <body className="bg-slate-50 text-slate-900 antialiased">
-        {/* Handles password reset / magic-link flows */}
+        {/* Redirects /#...type=recovery → /auth/reset#... */}
+        <AuthHashRedirector />
+
+        {/* Handles other recovery / magic-link flows as you already had */}
         <AuthRecoveryListener />
 
         <Navbar currentUser={user} otpVerified={otpVerified} />
