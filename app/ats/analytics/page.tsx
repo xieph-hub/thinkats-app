@@ -1,5 +1,6 @@
 // app/ats/analytics/page.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 type PageProps = {
   searchParams?: {
     range?: string;
+    clientKey?: string;
   };
 };
 
@@ -20,6 +22,13 @@ type StageBucket = { stage: string | null; _count: { _all: number } };
 type SourceBucket = { source: string | null; _count: { _all: number } };
 type TierBucket = { tier: string | null; _count: { _all: number } };
 type AppsByJobBucket = { jobId: string; _count: { _all: number } };
+
+type ClientSummary = {
+  key: string;
+  label: string;
+  jobCount: number;
+  applicationCount: number;
+};
 
 function pct(part: number, whole: number): string {
   if (!whole || whole <= 0) return "–";
@@ -31,6 +40,12 @@ function barWidth(count: number, total: number): string {
   const raw = Math.round((count / total) * 100);
   const safe = Math.max(raw, count > 0 ? 6 : 0);
   return `${Math.min(safe, 100)}%`;
+}
+
+function buildAnalyticsHref(range: string, clientKey: string | "all") {
+  const base = `/ats/analytics?range=${encodeURIComponent(range)}`;
+  if (!clientKey || clientKey === "all") return base;
+  return `${base}&clientKey=${encodeURIComponent(clientKey)}`;
 }
 
 export default async function AnalyticsPage({ searchParams }: PageProps) {
@@ -68,14 +83,20 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const rawRange =
     typeof searchParams?.range === "string" ? searchParams.range : "all";
   const range = rawRange === "30d" ? "30d" : "all";
+  const rangeLabel = range === "30d" ? "Last 30 days" : "All time";
+
+  const rawClientKeyParam =
+    typeof searchParams?.clientKey === "string"
+      ? searchParams.clientKey
+      : "all";
+  // "all" or a specific clientKey
+  const requestedClientKey = rawClientKeyParam || "all";
 
   const now = new Date();
   const cutoff =
     range === "30d"
       ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
       : null;
-
-  const rangeLabel = range === "30d" ? "Last 30 days" : "All time";
 
   const createdAtFilter = cutoff != null ? { createdAt: { gte: cutoff } } : {};
 
@@ -89,6 +110,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
       title: true,
       status: true,
       createdAt: true,
+      clientCompanyId: true,
       clientCompany: {
         select: {
           name: true,
@@ -100,11 +122,13 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     },
   });
 
-  const jobIds = jobs.map((j) => j.id);
-  const hasJobs = jobIds.length > 0;
+  // We'll compute client summaries after we know applicationsByJob.
+  // For now, just keep all jobs.
+  const allJobIds = jobs.map((j) => j.id);
+  const hasJobs = allJobIds.length > 0;
 
   // ---------------------------------------------------------------------------
-  // Aggregations
+  // Aggregations (tenant-wide, unchanged)
   // ---------------------------------------------------------------------------
   const totalCandidatesPromise = prisma.candidate.count({
     where: {
@@ -116,32 +140,32 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const totalApplicationsPromise = hasJobs
     ? prisma.jobApplication.count({
         where: {
-          jobId: { in: jobIds },
+          jobId: { in: allJobIds },
           ...createdAtFilter,
         },
       })
     : Promise.resolve(0);
 
   const stageBucketsPromise: Promise<StageBucket[]> = hasJobs
-    ? prisma.jobApplication.groupBy({
+    ? (prisma.jobApplication.groupBy({
         by: ["stage"],
         _count: { _all: true },
         where: {
-          jobId: { in: jobIds },
+          jobId: { in: allJobIds },
           ...createdAtFilter,
         },
-      }) as any
+      }) as any)
     : Promise.resolve([]);
 
   const sourceBucketsPromise: Promise<SourceBucket[]> = hasJobs
-    ? prisma.jobApplication.groupBy({
+    ? (prisma.jobApplication.groupBy({
         by: ["source"],
         _count: { _all: true },
         where: {
-          jobId: { in: jobIds },
+          jobId: { in: allJobIds },
           ...createdAtFilter,
         },
-      }) as any
+      }) as any)
     : Promise.resolve([]);
 
   const tierBucketsPromise: Promise<TierBucket[]> = hasJobs
@@ -150,7 +174,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         _count: { _all: true },
         where: {
           tenantId: tenant.id,
-          jobId: { in: jobIds },
+          jobId: { in: allJobIds },
           ...(cutoff != null ? { createdAt: { gte: cutoff } } : {}),
         },
       }) as any)
@@ -161,7 +185,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         by: ["jobId"],
         _count: { _all: true },
         where: {
-          jobId: { in: jobIds },
+          jobId: { in: allJobIds },
           ...createdAtFilter,
         },
       }) as any)
@@ -188,25 +212,49 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     applicationsByJobMap.set(bucket.jobId, bucket._count._all);
   }
 
+  // ---------------------------------------------------------------------------
+  // Client summaries (for filter row) – derived from jobs + applications
+  // ---------------------------------------------------------------------------
+  const clientSummaryMap = new Map<string, ClientSummary>();
+
+  for (const job of jobs) {
+    const key = job.clientCompanyId ?? "__internal__";
+    const label = job.clientCompany?.name || "Internal";
+    const applicationsCount = applicationsByJobMap.get(job.id) ?? 0;
+
+    const existing = clientSummaryMap.get(key);
+    if (!existing) {
+      clientSummaryMap.set(key, {
+        key,
+        label,
+        jobCount: 1,
+        applicationCount: applicationsCount,
+      });
+    } else {
+      existing.jobCount += 1;
+      existing.applicationCount += applicationsCount;
+    }
+  }
+
+  const clientSummaries = Array.from(clientSummaryMap.values()).sort(
+    (a, b) => b.applicationCount - a.applicationCount || b.jobCount - a.jobCount,
+  );
+
+  const hasClientKey =
+    requestedClientKey !== "all" && clientSummaryMap.has(requestedClientKey);
+  const effectiveClientKey: string | "all" = hasClientKey
+    ? requestedClientKey
+    : "all";
+
+  // ---------------------------------------------------------------------------
+  // Basic derived metrics
+  // ---------------------------------------------------------------------------
   const openJobs = jobs.filter(
     (j) => (j.status || "").toLowerCase() === "open",
   );
   const closedJobs = jobs.filter(
     (j) => (j.status || "").toLowerCase() !== "open",
   );
-
-  const jobsByVolume = [...jobs]
-    .map((j) => ({
-      ...j,
-      applicationCount: applicationsByJobMap.get(j.id) ?? 0,
-    }))
-    .sort((a, b) => b.applicationCount - a.applicationCount)
-    .slice(0, 5);
-
-  const maxVolume =
-    jobsByVolume.length > 0
-      ? Math.max(...jobsByVolume.map((j) => j.applicationCount))
-      : 0;
 
   const sortedStageBuckets = stageBuckets
     .slice()
@@ -224,6 +272,28 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     (sum, b) => sum + b._count._all,
     0,
   );
+
+  // Top roles by volume – this is where client filter applies
+  const jobsForVolume =
+    effectiveClientKey === "all"
+      ? jobs
+      : jobs.filter(
+          (j) =>
+            (j.clientCompanyId ?? "__internal__") === effectiveClientKey,
+        );
+
+  const jobsByVolume = jobsForVolume
+    .map((j) => ({
+      ...j,
+      applicationCount: applicationsByJobMap.get(j.id) ?? 0,
+    }))
+    .sort((a, b) => b.applicationCount - a.applicationCount)
+    .slice(0, 5);
+
+  const maxVolume =
+    jobsByVolume.length > 0
+      ? Math.max(...jobsByVolume.map((j) => j.applicationCount))
+      : 0;
 
   const tenantPlan = (tenant as any).plan as string | null | undefined;
 
@@ -245,7 +315,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             </p>
           </div>
 
-          <div className="flex flex-col items-end gap-1 text-right">
+          <div className="flex flex-col items-end gap-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
               <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/10 text-[10px] font-semibold text-emerald-300">
                 ●
@@ -255,23 +325,40 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                   {tenant.name || "Tenant workspace"}
                 </p>
                 <p className="text-[10px] text-slate-400">
-                  {jobIds.length} jobs · {totalCandidates} candidates
+                  {jobs.length} jobs · {totalCandidates} candidates
                 </p>
               </div>
             </div>
 
-            {tenantPlan && (
-              <div className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                Plan: <span className="capitalize">{tenantPlan}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {tenantPlan && (
+                <div className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-medium text-amber-200">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+                  Plan: <span className="capitalize">{tenantPlan}</span>
+                </div>
+              )}
+
+              {/* Tiny Export CSV button */}
+              <a
+                href={`/api/ats/analytics/export?range=${encodeURIComponent(
+                  range,
+                )}${
+                  effectiveClientKey !== "all"
+                    ? `&clientKey=${encodeURIComponent(effectiveClientKey)}`
+                    : ""
+                }`}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-[10px] font-medium text-slate-200 hover:border-emerald-400 hover:text-emerald-200"
+              >
+                <span>Export CSV</span>
+                <span className="text-[11px]">↧</span>
+              </a>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto px-6 pb-8 pt-4">
-        {/* Time window + quick stats ribbon */}
+        {/* Time window selector */}
         <section className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-300">
             <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
@@ -296,6 +383,16 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
               <option value="all">All time</option>
               <option value="30d">Last 30 days</option>
             </select>
+
+            {/* Preserve clientKey when changing range */}
+            {effectiveClientKey !== "all" && (
+              <input
+                type="hidden"
+                name="clientKey"
+                value={effectiveClientKey}
+              />
+            )}
+
             <button
               type="submit"
               className="inline-flex h-8 items-center rounded-full bg-emerald-500 px-3 text-[11px] font-semibold text-emerald-950 shadow-sm shadow-emerald-500/30 hover:bg-emerald-400"
@@ -303,6 +400,63 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
               Apply
             </button>
           </form>
+        </section>
+
+        {/* Per-client filter row */}
+        <section className="mb-5 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+                Clients
+              </h2>
+              <p className="mt-0.5 text-[11px] text-slate-500">
+                Quickly slice top roles by client. Tenant-wide metrics above
+                stay unchanged.
+              </p>
+            </div>
+            <div className="text-[10px] text-slate-500">
+              {clientSummaries.length} client
+              {clientSummaries.length === 1 ? "" : "s"}
+            </div>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {/* All clients pill */}
+            <Link
+              href={buildAnalyticsHref(range, "all")}
+              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] ${
+                effectiveClientKey === "all"
+                  ? "border-emerald-400 bg-emerald-500/10 text-emerald-200"
+                  : "border-slate-800 bg-slate-900/70 text-slate-300 hover:border-slate-600"
+              }`}
+            >
+              <span>All clients</span>
+            </Link>
+
+            {clientSummaries.map((client) => {
+              const isActive = effectiveClientKey === client.key;
+              return (
+                <Link
+                  key={client.key}
+                  href={buildAnalyticsHref(range, client.key)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${
+                    isActive
+                      ? "border-emerald-400 bg-emerald-500/10 text-emerald-200"
+                      : "border-slate-800 bg-slate-900/70 text-slate-300 hover:border-slate-600"
+                  }`}
+                >
+                  <span className="truncate max-w-[120px]">
+                    {client.label}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
+                    <span>{client.jobCount} jobs</span>
+                    <span>·</span>
+                    <span>{client.applicationCount} apps</span>
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         </section>
 
         {/* Summary row */}
@@ -487,7 +641,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
           </div>
         </section>
 
-        {/* Sources + top roles */}
+        {/* Source breakdown + top roles */}
         <section className="mt-5 grid gap-4 lg:grid-cols-2">
           {/* Source breakdown */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-sm shadow-black/40">
@@ -548,7 +702,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             )}
           </div>
 
-          {/* Top roles by volume */}
+          {/* Top roles by volume – respects client filter */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-sm shadow-black/40">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -556,10 +710,14 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                   Top roles by volume
                 </h2>
                 <p className="mt-0.5 text-[11px] text-slate-500">
-                  Roles attracting the most applications in this window.
+                  Roles attracting the most applications in this window
+                  {effectiveClientKey === "all"
+                    ? ""
+                    : " for the selected client"}.
                 </p>
               </div>
-              <span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300">
+              <span className="rounded-full bg-s
+late-800 px-2.5 py-1 text-[10px] text-slate-300">
                 {jobsByVolume.length || 0} roles
               </span>
             </div>
