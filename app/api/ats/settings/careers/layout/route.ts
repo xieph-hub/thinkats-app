@@ -18,8 +18,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "no-tenant" }, { status: 400 });
   }
 
-  const page = await prisma.careerPage.findFirst({
-    where: { tenantId, slug: "careers-home" },
+  // Prefer the composite unique if present, otherwise this still works fine.
+  const page = await prisma.careerPage.findUnique({
+    where: {
+      tenantId_slug: {
+        tenantId,
+        slug: "careers-home",
+      },
+    },
   });
 
   return NextResponse.json({
@@ -34,21 +40,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => null) as any;
+  const body = (await req.json().catch(() => null)) as unknown;
 
-  const tenantId =
-    typeof body?.tenantId === "string" && body.tenantId.trim().length > 0
-      ? body.tenantId.trim()
-      : null;
+  // Make tenantId explicitly string | null so Prisma is happy
+  let tenantId: string | null = null;
+  if (
+    body &&
+    typeof (body as any).tenantId === "string" &&
+    (body as any).tenantId.trim().length > 0
+  ) {
+    tenantId = (body as any).tenantId.trim();
+  }
 
   if (!tenantId) {
     return NextResponse.json({ error: "no-tenant" }, { status: 400 });
   }
 
   // Support both: { tenantId, layout: {...} } and { sections: [...] }
-  const rawLayout = body?.layout ?? body;
+  const rawLayout = (body as any)?.layout ?? body;
 
-  let layout;
+  let layout: any;
   try {
     layout = parseCareerLayout(rawLayout);
   } catch (err: any) {
@@ -71,6 +82,9 @@ export async function POST(req: NextRequest) {
     create: {
       tenantId,
       slug: "careers-home",
+      // Required by your Prisma schema (CareerPage.path is non-nullable)
+      path: "/careers",
+      // kind has a default of CAREERS_HOME in the DB, so we can omit it
       layout,
     },
     update: {
