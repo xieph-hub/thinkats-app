@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import CareersLayoutEditor from "@/components/careers/CareersLayoutEditor";
 import type { CareerLayout } from "@/types/careersLayout";
+import BannerUploadField from "@/components/careers/BannerUploadField";
 
 export const dynamic = "force-dynamic";
 
@@ -263,7 +264,6 @@ export default async function CareersSettingsPage({
       <form
         method="POST"
         action="/api/ats/settings/careers-site"
-        encType="multipart/form-data"
         className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 text-[11px] text-slate-700 shadow-sm"
       >
         <input type="hidden" name="tenantId" value={selectedTenantId} />
@@ -294,6 +294,12 @@ export default async function CareersSettingsPage({
                 Optional. Shown on the jobs hub header.
               </p>
             </div>
+
+            {/* 🔹 Banner upload via Supabase (no big payload through Vercel) */}
+            <BannerUploadField
+              tenantId={selectedTenantId}
+              initialUrl={bannerImagePreviewUrl || null}
+            />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -328,36 +334,6 @@ export default async function CareersSettingsPage({
                   className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
                 />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label
-                htmlFor="bannerImageFile"
-                className="block text-[11px] font-medium text-slate-700"
-              >
-                Hero banner image
-              </label>
-              <input
-                id="bannerImageFile"
-                name="bannerImageFile"
-                type="file"
-                accept="image/*"
-                className="block w-full text-[11px] text-slate-700"
-              />
-              {bannerImagePreviewUrl && (
-                <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={bannerImagePreviewUrl}
-                    alt="Current banner"
-                    className="h-32 w-full object-cover"
-                  />
-                </div>
-              )}
-              <p className="text-[10px] text-slate-500">
-                Optional. Upload a wide image (e.g. 1600×400) that sits at the
-                top of the tenant hub.
-              </p>
             </div>
           </div>
 
