@@ -3,31 +3,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
 
-function nullIfEmpty(value: any): string | null {
+function nullIfEmpty(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") return String(value);
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
 }
 
-function parseCheckbox(value: any): boolean {
+function parseCheckbox(value: unknown): boolean {
   if (typeof value === "string") {
     const v = value.toLowerCase();
-    return v === "on" || v === "true" || v === "1";
+    return v === "on" || v === "true" || v === "1" || v === "yes";
   }
   return Boolean(value);
 }
 
-// Accept both JSON and form-data bodies
-async function parseBody(req: NextRequest): Promise<Record<string, any>> {
+async function parseBody(req: NextRequest): Promise<Record<string, unknown>> {
   const contentType = req.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
-    return (await req.json()) as Record<string, any>;
+    const json = (await req.json()) as Record<string, unknown>;
+    return json ?? {};
   }
 
   const formData = await req.formData();
-  const obj: Record<string, any> = {};
+  const obj: Record<string, unknown> = {};
 
   for (const [key, value] of formData.entries()) {
     if (typeof value === "string") {
@@ -44,13 +44,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await parseBody(req);
 
-    // 1) Prefer explicit tenantId from the form / JSON
+    // 1) Prefer explicit tenantId from form / JSON
     let tenantId: string | null = null;
 
-    if (typeof body.tenantId === "string" && body.tenantId.trim() !== "") {
-      tenantId = body.tenantId.trim();
+    const rawTenant = body.tenantId;
+    if (typeof rawTenant === "string" && rawTenant.trim() !== "") {
+      tenantId = rawTenant.trim();
     } else {
-      // 2) Fallback: try to resolve from host (for subdomain / custom-domain flows)
+      // 2) Fallback: resolve from host for subdomain/custom domains
       try {
         const hostContext = await getHostContext();
         const maybeTenant = (hostContext as any)?.tenant;
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
           tenantId = String(maybeTenant.id);
         }
       } catch {
-        // swallow host resolution errors; we'll handle missing tenantId below
+        // ignore, fallback handled below
       }
     }
 
@@ -95,38 +96,38 @@ export async function POST(req: NextRequest) {
       twitterUrl: nullIfEmpty(body.twitterUrl),
       instagramUrl: nullIfEmpty(body.instagramUrl),
 
-      includeInMarketplace:
-        body.includeInMarketplace !== undefined
-          ? parseCheckbox(body.includeInMarketplace)
-          : undefined,
-      isPublic:
-        body.isPublic !== undefined ? parseCheckbox(body.isPublic) : undefined,
+      includeInMarketplace: parseCheckbox(body.includeInMarketplace),
+      isPublic: parseCheckbox(body.isPublic),
 
       updatedAt: new Date(),
     };
-
-    // Strip out undefined so we don't overwrite with undefined
-    const cleanedData = Object.fromEntries(
-      Object.entries(data).filter(([, v]) => v !== undefined),
-    );
 
     const existing = await prisma.careerSiteSettings.findFirst({
       where: { tenantId },
     });
 
-    let settings;
-    if (existing) {
-      settings = await prisma.careerSiteSettings.update({
-        where: { id: existing.id },
-        data: cleanedData,
-      });
-    } else {
-      settings = await prisma.careerSiteSettings.create({
-        data: {
-          tenantId,
-          ...cleanedData,
-        },
-      });
+    const settings = existing
+      ? await prisma.careerSiteSettings.update({
+          where: { id: existing.id },
+          data,
+        })
+      : await prisma.careerSiteSettings.create({
+          data: {
+            tenantId,
+            ...data,
+          },
+        });
+
+    // If called from a browser form, redirect back to settings instead of
+    // leaving the user on a JSON response.
+    const accept = req.headers.get("accept") || "";
+    const isBrowser = accept.includes("text/html");
+
+    if (isBrowser) {
+      const url = new URL(req.url);
+      url.pathname = "/ats/settings/careers";
+      url.searchParams.set("tenantId", tenantId);
+      return NextResponse.redirect(url.toString(), { status: 303 });
     }
 
     return NextResponse.json({ ok: true, settings });
@@ -140,7 +141,6 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  // So hitting /api/ats/settings/careers-site in the browser gives a clear message
   return NextResponse.json(
     { ok: false, error: "Use POST to update careers site settings." },
     { status: 405 },
