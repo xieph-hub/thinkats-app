@@ -21,7 +21,7 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
 
     setError(null);
 
-    // Small guard so people don't upload 50MB monsters
+    // Guard against crazy-large uploads
     const maxSizeMB = 8;
     if (file.size > maxSizeMB * 1024 * 1024) {
       setError(`Please upload an image under ${maxSizeMB}MB.`);
@@ -78,7 +78,7 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <label className="block text-[11px] font-medium text-slate-700">
-          Banner image
+          Hero banner image
         </label>
         {bannerUrl && (
           <button
@@ -99,7 +99,7 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
         className="block w-full text-[11px] text-slate-700 file:mr-3 file:rounded-full file:border-none file:bg-slate-100 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-200"
       />
 
-      {/* This is what actually gets saved via the form submit */}
+      {/* This is what the API receives and saves */}
       <input type="hidden" name="bannerImageUrl" value={bannerUrl} />
 
       {uploading && (
@@ -113,7 +113,7 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
       )}
 
       {bannerUrl && (
-        <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={bannerUrl}
@@ -125,8 +125,8 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
 
       <p className="text-[10px] text-slate-500">
         Uploads directly to Supabase Storage. When you click{" "}
-        <span className="font-semibold">Save</span>, the banner URL is stored
-        in this tenant&apos;s settings.
+        <span className="font-semibold">Save jobs hub settings</span>, only the
+        public URL is stored in this tenant&apos;s settings.
       </p>
     </div>
   );
