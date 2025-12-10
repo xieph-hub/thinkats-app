@@ -108,19 +108,27 @@ async function fetchJobs(
   const workModeFilter = asStringParam(searchParams?.workMode);
   const employmentTypeFilter = asStringParam(searchParams?.employmentType);
 
+  // Base where
   const where: Prisma.JobWhereInput = {
     status: "open",
     visibility: "public",
-    OR: [{ internalOnly: false }, { internalOnly: null }],
   };
 
-  // If we're on a tenant/client host, scope to that tenant
+  // Collect AND filters in a local array to keep TS happy
+  const andFilters: Prisma.JobWhereInput[] = [];
+
+  // internalOnly: false or null
+  andFilters.push({
+    OR: [{ internalOnly: false }, { internalOnly: null }],
+  });
+
+  // Scope to tenant if on tenant host
   if (hostContext.tenant?.id) {
     where.tenantId = hostContext.tenant.id;
   }
 
   if (q) {
-    where.AND = (where.AND ?? []).concat({
+    andFilters.push({
       OR: [
         { title: { contains: q, mode: "insensitive" } },
         { department: { contains: q, mode: "insensitive" } },
@@ -133,15 +141,21 @@ async function fetchJobs(
   }
 
   if (locationFilter) {
-    where.location = { contains: locationFilter, mode: "insensitive" };
+    andFilters.push({
+      location: { contains: locationFilter, mode: "insensitive" },
+    });
   }
 
   if (workModeFilter) {
-    where.workMode = workModeFilter;
+    andFilters.push({ workMode: workModeFilter });
   }
 
   if (employmentTypeFilter) {
-    where.employmentType = employmentTypeFilter;
+    andFilters.push({ employmentType: employmentTypeFilter });
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = andFilters;
   }
 
   return prisma.job.findMany({
@@ -200,7 +214,6 @@ export default async function JobsPage({
             </div>
 
             <form method="GET" className="space-y-3 text-xs text-[#4B5563]">
-              {/* Preserve tenant scoping if present via host, but we don't need a hidden field here */}
               <div className="space-y-1.5">
                 <label
                   htmlFor="q"
@@ -360,7 +373,7 @@ export default async function JobsPage({
                   <Link
                     key={job.id}
                     href={href}
-                    className="block rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2563EB] hover:shadow-md"
+                    className="block rounded-2xl border border-[#E5E7EB] bg_white bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[#2563EB] hover:shadow-md"
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       {/* Left: Logo + title + meta */}
