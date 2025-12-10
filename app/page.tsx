@@ -3,45 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
-import CareersShell from "@/components/careers/CareersShell";
-import CareersPageRenderer from "@/components/careers/CareersPageRenderer";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "ThinkATS | Multi-tenant ATS & hiring hubs",
-  description:
-    "Build modern hiring hubs for every client: shared ATS workspace, white-label career sites and structured pipelines.",
-};
-
-type PublicJobsArgs = {
-  tenantId: string;
-  clientCompanyId?: string | null;
-};
-
-async function getPublicJobsForCareersSite({
-  tenantId,
-  clientCompanyId,
-}: PublicJobsArgs) {
-  const where: any = {
-    tenantId,
-    status: "open",
-    visibility: "public",
-    OR: [{ internalOnly: false }, { internalOnly: null }],
-  };
-
-  if (clientCompanyId) {
-    where.clientCompanyId = clientCompanyId;
-  }
-
-  return prisma.job.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      clientCompany: true,
-    },
-  });
-}
 
 function normaliseWebsiteUrl(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -55,239 +18,314 @@ function normaliseWebsiteUrl(raw: string | null | undefined): string | null {
   return `https://${trimmed}`;
 }
 
+export async function generateMetadata(): Promise<Metadata> {
+  const hostContext = await getHostContext();
+  const { tenant, clientCompany } = hostContext as any;
+
+  const displayName =
+    clientCompany?.name || tenant?.name || tenant?.slug || "ThinkATS";
+
+  return {
+    title: `${displayName} | Jobs hub`,
+    description: `Explore jobs and updates for ${displayName}, powered by ThinkATS.`,
+  };
+}
+
 export default async function RootPage() {
   const hostContext = await getHostContext();
-  const {
-    isAppHost,
-    isCareersiteHost,
-    tenant,
-    clientCompany,
-    careerSiteSettings,
-    host,
-    baseDomain,
-  } = hostContext as any;
+  const { isAppHost, tenant, clientCompany, careerSiteSettings, host } =
+    hostContext as any;
 
-  // 1) Careersite-ish host but no tenant/client → soft "not configured"
-  if (isCareersiteHost && !tenant && !clientCompany) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-50">
-        <div className="max-w-md rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center">
-          <h1 className="text-lg font-semibold">
-            This hub isn&apos;t configured yet
+  // Main ThinkATS host or no tenant resolved → show marketing shell
+  if (!tenant || isAppHost) {
+    return <MarketingHome />;
+  }
+
+  const displayName =
+    clientCompany?.name || tenant.name || tenant.slug || host;
+
+  const logoUrl =
+    (careerSiteSettings as any)?.logoUrl ||
+    clientCompany?.logoUrl ||
+    tenant.logoUrl ||
+    null;
+
+  const websiteRaw =
+    (clientCompany as any)?.website || tenant.websiteUrl || null;
+  const websiteUrl = normaliseWebsiteUrl(websiteRaw);
+
+  const linkedinUrl = (careerSiteSettings as any)?.linkedinUrl || null;
+  const twitterUrl = (careerSiteSettings as any)?.twitterUrl || null;
+  const instagramUrl = (careerSiteSettings as any)?.instagramUrl || null;
+
+  const scopeFilter = clientCompany?.id
+    ? { tenantId: tenant.id, clientCompanyId: clientCompany.id }
+    : { tenantId: tenant.id };
+
+  const [openJobsCount, latestJobs] = await Promise.all([
+    prisma.job.count({
+      where: {
+        ...scopeFilter,
+        status: "open",
+        visibility: "public",
+        OR: [{ internalOnly: false }, { internalOnly: null }],
+      },
+    }),
+    prisma.job.findMany({
+      where: {
+        ...scopeFilter,
+        status: "open",
+        visibility: "public",
+        OR: [{ internalOnly: false }, { internalOnly: null }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+      select: {
+        id: true,
+        title: true,
+        location: true,
+        locationType: true,
+        employmentType: true,
+        createdAt: true,
+        slug: true,
+      },
+    }),
+  ]);
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 md:flex-row md:py-12">
+        {/* Sidebar (hub shell) */}
+        <aside className="w-full md:w-72 md:flex-none">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+            <div className="flex items-center gap-3">
+              {logoUrl ? (
+                <div className="relative h-10 w-10 overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoUrl}
+                    alt={displayName}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-xs font-semibold">
+                  {displayName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Jobs hub
+                </p>
+                <h1 className="truncate text-lg font-semibold text-slate-50">
+                  {displayName}
+                </h1>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3 text-[11px] leading-relaxed text-slate-300">
+              {careerSiteSettings?.aboutHtml ? (
+                <div
+                  className="[&_p]:mt-1.5 [&_p]:text-[11px] [&_p]:leading-relaxed [&_strong]:font-semibold [&_ul]:mt-1.5 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mt-0.5"
+                  dangerouslySetInnerHTML={{
+                    __html: careerSiteSettings.aboutHtml,
+                  }}
+                />
+              ) : (
+                <p>
+                  This hub brings together jobs, links and a simple overview for{" "}
+                  {displayName}. Use the button on the right to explore open
+                  jobs.
+                </p>
+              )}
+            </div>
+
+            {/* Social + website */}
+            <div className="mt-5 border-t border-slate-800 pt-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Online
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                {websiteUrl && (
+                  <a
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-100 hover:border-sky-500 hover:text-sky-400"
+                  >
+                    <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    Website
+                  </a>
+                )}
+                {linkedinUrl && (
+                  <a
+                    href={linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-100 hover:border-sky-500 hover:text-sky-400"
+                  >
+                    LinkedIn
+                  </a>
+                )}
+                {twitterUrl && (
+                  <a
+                    href={twitterUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-100 hover:border-sky-500 hover:text-sky-400"
+                  >
+                    X / Twitter
+                  </a>
+                )}
+                {instagramUrl && (
+                  <a
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 px-2.5 py-1 text-[11px] text-slate-100 hover:border-sky-500 hover:text-sky-400"
+                  >
+                    Instagram
+                  </a>
+                )}
+                {!websiteUrl &&
+                  !linkedinUrl &&
+                  !twitterUrl &&
+                  !instagramUrl && (
+                    <p className="text-[10px] text-slate-500">
+                      Add website and social links in the Jobs settings page to
+                      show them here.
+                    </p>
+                  )}
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main hub content */}
+        <section className="flex-1">
+          <div className="space-y-4">
+            {/* Hero + CTA to jobs */}
+            <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 via-slate-900/40 to-slate-900/80 p-6 shadow-[0_18px_45px_rgba(15,23,42,0.65)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Jobs
+              </p>
+              <div className="mt-2 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+                <div>
+                  <h2 className="text-2xl font-semibold text-slate-50">
+                    {openJobsCount > 0
+                      ? `Open jobs at ${displayName}`
+                      : `Jobs at ${displayName}`}
+                  </h2>
+                  <p className="mt-1 text-[12px] text-slate-300">
+                    {openJobsCount > 0 ? (
+                      <>
+                        {openJobsCount}{" "}
+                        {openJobsCount === 1 ? "job is" : "jobs are"} currently
+                        open. Browse details and apply in a few clicks.
+                      </>
+                    ) : (
+                      <>
+                        There are no open jobs published right now. Check back
+                        soon or follow this organisation&apos;s channels.
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Link
+                    href="/jobs"
+                    className="inline-flex items-center rounded-full bg-sky-500 px-4 py-2 text-[11px] font-semibold text-slate-950 shadow-sm hover:bg-sky-400"
+                  >
+                    View all jobs
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Recently posted jobs */}
+            {latestJobs.length > 0 && (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-slate-50">
+                    Recently posted jobs
+                  </h3>
+                  <Link
+                    href="/jobs"
+                    className="text-[11px] font-medium text-sky-400 hover:text-sky-300"
+                  >
+                    See all jobs
+                  </Link>
+                </div>
+                <div className="mt-4 grid gap-3">
+                  {latestJobs.map((job) => {
+                    const href = job.slug
+                      ? `/jobs/${encodeURIComponent(job.slug)}`
+                      : `/jobs/${job.id}`;
+                    return (
+                      <Link
+                        key={job.id}
+                        href={href}
+                        className="group flex items-start justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-950/40 px-4 py-3 hover:border-sky-500/70 hover:bg-slate-900/80"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-medium text-slate-50 group-hover:text-sky-100">
+                            {job.title}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                            {job.location && <span>{job.location}</span>}
+                            {job.locationType && (
+                              <span className="rounded-full border border-slate-700/70 px-2 py-0.5 text-[9px] uppercase tracking-wide text-slate-300">
+                                {job.locationType}
+                              </span>
+                            )}
+                            {job.employmentType && (
+                              <span className="rounded-full border border-slate-700/70 px-2 py-0.5 text-[9px] uppercase tracking-wide text-slate-300">
+                                {job.employmentType}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-slate-500">
+                          View job →
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function MarketingHome() {
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-16">
+        <header className="space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            ThinkATS
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-50">
+            Modern jobs infrastructure for agencies and talent teams.
           </h1>
-          <p className="mt-3 text-sm text-slate-400">
-            We couldn&apos;t find a live hiring hub for{" "}
-            <span className="font-mono text-slate-200">{host}</span>. If you
-            expected to see open roles here, please contact ThinkATS support.
+          <p className="text-sm text-slate-300">
+            ThinkATS gives you multi-tenant applicant tracking, client-branded
+            jobs pages and simple automation – with candidates and jobs managed
+            in one shared workspace.
+          </p>
+        </header>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-[12px] text-slate-300">
+          <p>
+            You&apos;re looking at the main ThinkATS home. When you connect a
+            subdomain such as{" "}
+            <span className="font-mono text-sky-400">acme.thinkats.com</span>,
+            that host becomes the jobs hub for that client or tenant.
           </p>
         </div>
-      </main>
-    );
-  }
-
-  // 2) Tenant / client host → tenant hub at https://slug.thinkats.com
-  if (tenant) {
-    const displayName =
-      clientCompany?.name || tenant.name || tenant.slug || host;
-
-    const logoUrl =
-      (careerSiteSettings as any)?.logoUrl ||
-      clientCompany?.logoUrl ||
-      tenant.logoUrl ||
-      null;
-
-    const [theme, page, jobs] = await Promise.all([
-      prisma.careerTheme.findFirst({
-        where: {
-          tenantId: tenant.id,
-        },
-        orderBy: { updatedAt: "desc" },
-      }),
-      prisma.careerPage.findFirst({
-        where: {
-          tenantId: tenant.id,
-          slug: "careers-home",
-        },
-        orderBy: { updatedAt: "desc" },
-      }),
-      getPublicJobsForCareersSite({
-        tenantId: tenant.id,
-        clientCompanyId: clientCompany?.id ?? null,
-      }),
-    ]);
-
-    const themeAny = theme as any;
-    const settingsAny = careerSiteSettings as any;
-
-    const primaryColor =
-      themeAny?.tokens?.colors?.primary ||
-      settingsAny?.primaryColorHex ||
-      settingsAny?.primaryColor ||
-      "#172965";
-
-    const accentColor =
-      themeAny?.tokens?.colors?.accent ||
-      settingsAny?.accentColorHex ||
-      settingsAny?.accentColor ||
-      "#0ea5e9";
-
-    const heroBackground =
-      themeAny?.tokens?.colors?.heroBackground ||
-      settingsAny?.heroBackgroundHex ||
-      "#F9FAFB";
-
-    const planTier = (tenant.planTier || "STARTER").toUpperCase();
-
-    const websiteRaw =
-      (clientCompany as any)?.website || tenant.websiteUrl || null;
-    const websiteUrl = normaliseWebsiteUrl(websiteRaw);
-
-    const linkedinUrl = settingsAny?.linkedinUrl ?? null;
-    const twitterUrl = settingsAny?.twitterUrl ?? null;
-    const instagramUrl = settingsAny?.instagramUrl ?? null;
-
-    const assetBaseUrl =
-      process.env.NEXT_PUBLIC_CAREERS_ASSET_BASE_URL ||
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      null;
-
-    return (
-      <CareersShell
-        displayName={displayName}
-        logoUrl={logoUrl}
-        host={host}
-        baseDomain={baseDomain}
-        planTier={planTier}
-        primaryColor={primaryColor}
-        accentColor={accentColor}
-        heroBackground={heroBackground}
-        websiteUrl={websiteUrl}
-        linkedinUrl={linkedinUrl}
-        twitterUrl={twitterUrl}
-        instagramUrl={instagramUrl}
-        activeNav="home"
-      >
-        <CareersPageRenderer
-          displayName={displayName}
-          settings={careerSiteSettings}
-          theme={theme}
-          layout={(page?.layout as any) ?? null}
-          jobs={jobs}
-          primaryColor={primaryColor}
-          accentColor={accentColor}
-          assetBaseUrl={assetBaseUrl}
-        />
-      </CareersShell>
-    );
-  }
-
-  // 3) App host / default → ThinkATS marketing homepage
-  return (
-    <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-10">
-        {/* Hero */}
-        <section className="space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1 text-[11px] text-slate-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Multi-tenant ATS · client hubs · white-label careers
-          </div>
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-              Build a hiring hub for every client.
-            </h1>
-            <p className="mt-3 max-w-xl text-sm text-slate-300">
-              ThinkATS gives you shared ATS workspaces, branded hubs on{" "}
-              <span className="font-mono text-sky-400">
-                slug.thinkats.com
-              </span>{" "}
-              and structured pipelines for jobs, candidates and interviews.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/login"
-              className="inline-flex items-center rounded-full bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-950 hover:bg-slate-200"
-            >
-              Login to ATS
-            </Link>
-            <Link
-              href="/contact"
-              className="inline-flex items-center rounded-full border border-slate-700 px-4 py-2 text-[11px] font-semibold text-slate-100 hover:border-slate-500"
-            >
-              Talk to us
-            </Link>
-          </div>
-        </section>
-
-        {/* Pillars */}
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-300">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Shared ATS
-            </p>
-            <p className="mt-2 text-sm font-medium text-slate-50">
-              One workspace for all clients
-            </p>
-            <p className="mt-2">
-              Centralise jobs, candidates, interview notes and email in one
-              multi-tenant ATS built for agencies and HR teams.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-300">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Client hubs
-            </p>
-            <p className="mt-2 text-sm font-medium text-slate-50">
-              Branded hiring hubs per client
-            </p>
-            <p className="mt-2">
-              Give every client a hub on{" "}
-              <span className="font-mono text-[11px] text-sky-400">
-                slug.thinkats.com
-              </span>{" "}
-              with jobs, story and candidate experience tailored to them.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-300">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Careers & jobs
-            </p>
-            <p className="mt-2 text-sm font-medium text-slate-50">
-              Jobs marketplace when you&apos;re ready
-            </p>
-            <p className="mt-2">
-              Start with client hubs first, then fan out into a group-wide
-              marketplace to surface roles across all tenants.
-            </p>
-          </div>
-        </section>
-
-        {/* Explainer */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-300">
-          <p className="font-medium text-slate-100">
-            How URLs behave once everything is wired:
-          </p>
-          <ul className="mt-2 space-y-1.5 list-disc pl-5">
-            <li>
-              <span className="font-mono text-sky-400">
-                slug.thinkats.com
-              </span>{" "}
-              – client hub home (sidebar, overview, jobs entry).
-            </li>
-            <li>
-              <span className="font-mono text-sky-400">
-                slug.thinkats.com/jobs
-              </span>{" "}
-              – jobs listing for that tenant.
-            </li>
-            <li>
-              <span className="font-mono text-sky-400">
-                www.thinkats.com
-              </span>{" "}
-              – your own product & marketing site.
-            </li>
-          </ul>
-        </section>
       </div>
     </main>
   );
