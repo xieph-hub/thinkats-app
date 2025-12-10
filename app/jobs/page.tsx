@@ -1,12 +1,19 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   MapPin,
   Building2,
   Clock,
   BriefcaseBusiness,
+  Filter,
   Share2,
+  Linkedin,
+  Twitter,
+  Link2,
+  MessageCircle,
+  Tag as TagIcon,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
@@ -99,7 +106,6 @@ export default async function JobsPage({
 }) {
   const hostContext = await getHostContext();
   const {
-    isAppHost,
     tenant,
     clientCompany,
     host,
@@ -121,7 +127,7 @@ export default async function JobsPage({
     employmentType,
   });
 
-  // Loosely typed result to avoid Prisma TS mismatches
+  // Keep this loosely typed to avoid Prisma TS mismatches
   const jobs = (await prisma.job.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -136,9 +142,7 @@ export default async function JobsPage({
   })) as any[];
 
   const primarySettings =
-    (careerSiteSettings as any) ??
-    tenant?.careerSiteSettings?.[0] ??
-    null;
+    (careerSiteSettings as any) ?? tenant?.careerSiteSettings?.[0] ?? null;
 
   const displayName =
     clientCompany?.name ||
@@ -155,16 +159,11 @@ export default async function JobsPage({
   const headerLogoUrl =
     clientCompany?.logoUrl || logoFromSettings || tenant?.logoUrl || null;
 
-  // Brand-ish colours
-  const primaryColor =
-    (primarySettings as any)?.primaryColorHex ||
-    (primarySettings as any)?.primaryColor ||
-    "#172965";
-
-  const accentColor =
+  // Brand-aligned highlight (match /jobs/[slug] feel)
+  const accentColor: string =
     (primarySettings as any)?.accentColorHex ||
     (primarySettings as any)?.accentColor ||
-    "#0f766e"; // calm teal-ish accent
+    "#2563EB"; // Electric blue
 
   const isTenantScoped = Boolean(tenant);
   const isClientScoped = Boolean(clientCompany);
@@ -177,26 +176,22 @@ export default async function JobsPage({
 
   const totalJobs = jobs.length;
 
-  // For social sharing
-  const jobsUrl =
-    host && !isAppHost
-      ? `https://${host}/jobs`
-      : `${process.env.NEXT_PUBLIC_SITE_URL || "https://www.thinkats.com"}/jobs`;
+  // Share URLs (for the board itself)
+  const currentPath = "/jobs";
+  const hostName = host || baseDomain || "";
+  const currentUrl = hostName ? `https://${hostName}${currentPath}` : currentPath;
+  const encodedUrl = encodeURIComponent(currentUrl);
+  const encodedMessage = encodeURIComponent(
+    `Check out these open roles: ${currentUrl}`,
+  );
 
-  const shareText = `Jobs at ${displayName}`;
-  const linkedinShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
-    jobsUrl,
-  )}`;
-  const twitterShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(
-    jobsUrl,
-  )}&text=${encodeURIComponent(shareText)}`;
-  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(
-    `${shareText} ${jobsUrl}`,
-  )}`;
+  const whatsappShareUrl = `https://wa.me/?text=${encodedMessage}`;
+  const linkedinShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+  const twitterShareUrl = `https://twitter.com/intent/tweet?url=${encodedUrl}`;
 
   return (
     <main className="min-h-screen bg-white px-4 py-10 text-slate-900">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
         {/* Header / Context */}
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
@@ -210,7 +205,7 @@ export default async function JobsPage({
                 />
               </div>
             ) : (
-              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {displayName.slice(0, 2).toUpperCase()}
               </div>
             )}
@@ -232,330 +227,371 @@ export default async function JobsPage({
             </div>
           </div>
 
-          {/* Context pill + social share */}
-          <div className="flex flex-col items-end gap-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] text-slate-600">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-800">
-                {totalJobs}
+          {/* Context pill */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-600">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-slate-800">
+              {totalJobs}
+            </span>
+            <span className="truncate">
+              {totalJobs === 1 ? "Open role" : "Open roles"} ·{" "}
+              <span className="font-medium text-slate-900">
+                {contextLabel}
               </span>
-              <span className="truncate">
-                {totalJobs === 1 ? "Open role" : "Open roles"} ·{" "}
-                <span className="font-medium text-slate-900">
-                  {contextLabel}
+            </span>
+          </div>
+        </header>
+
+        {/* Main content: refine sidebar + jobs panel */}
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,260px),1fr]">
+          {/* LEFT: refine jobs + social share */}
+          <aside className="space-y-4">
+            {/* Refine jobs card */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[11px] text-slate-700 shadow-sm">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] text-slate-800">
+                  <Filter className="h-3.5 w-3.5 text-slate-500" />
                 </span>
-              </span>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Refine jobs
+                  </p>
+                  <p className="text-[11px] font-medium text-slate-900">
+                    Narrow down roles that match your profile.
+                  </p>
+                </div>
+              </div>
+              <ul className="mt-2 space-y-1.5 text-[11px] text-slate-600">
+                <li>• Use keyword search for title, team or function.</li>
+                <li>• Filter by location or department to focus results.</li>
+                <li>• Combine filters to discover the most relevant roles.</li>
+              </ul>
             </div>
 
-            {/* Social share row */}
-            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-              <Share2 className="h-3.5 w-3.5 text-slate-400" />
-              <span>Share this jobs page:</span>
-              <div className="flex flex-wrap items-center gap-1.5">
+            {/* Share board card */}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[11px] text-slate-700 shadow-sm">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] text-slate-800">
+                  <Share2 className="h-3.5 w-3.5 text-slate-500" />
+                </span>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Share this board
+                  </p>
+                  <p className="text-[11px] text-slate-700">
+                    Send these roles to a colleague or your network.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <a
+                  href={whatsappShareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded-full bg-[#22C55E] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  WhatsApp
+                </a>
                 <a
                   href={linkedinShareUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100"
+                  className="inline-flex items-center gap-1 rounded-full bg-[#2563EB] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
                 >
+                  <Linkedin className="h-3.5 w-3.5" />
                   LinkedIn
                 </a>
                 <a
                   href={twitterShareUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100"
+                  className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
                 >
+                  <Twitter className="h-3.5 w-3.5" />
                   X
                 </a>
-                <a
-                  href={whatsappShareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-[#128C7E] hover:border-[#128C7E]/40 hover:bg-slate-100"
-                >
-                  WhatsApp
-                </a>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Link2 className="h-3 w-3 text-slate-400" />
+                    <span className="truncate">{currentUrl}</span>
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </header>
-
-        {/* Main layout: left refine panel + right jobs list */}
-        <section className="grid gap-6 lg:grid-cols-[260px,1fr]">
-          {/* LEFT: Refine jobs */}
-          <aside className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-[11px] text-slate-700 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Refine jobs
-              </h2>
-              <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                {totalJobs} {totalJobs === 1 ? "role" : "roles"}
-              </span>
-            </div>
-
-            <form className="space-y-3">
-              <div className="space-y-1">
-                <label
-                  htmlFor="q"
-                  className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Keyword
-                </label>
-                <input
-                  id="q"
-                  name="q"
-                  defaultValue={q ?? ""}
-                  placeholder="Search by title, team or keyword…"
-                  className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="location"
-                  className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Location
-                </label>
-                <input
-                  id="location"
-                  name="location"
-                  defaultValue={location ?? ""}
-                  placeholder="e.g. Lagos, Remote"
-                  className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="department"
-                  className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Department
-                </label>
-                <input
-                  id="department"
-                  name="department"
-                  defaultValue={department ?? ""}
-                  placeholder="e.g. Sales, Operations"
-                  className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="employmentType"
-                  className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
-                >
-                  Employment type
-                </label>
-                <input
-                  id="employmentType"
-                  name="employmentType"
-                  defaultValue={employmentType ?? ""}
-                  placeholder="e.g. Full-time, Contract"
-                  className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="mt-2 inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
-                style={{ backgroundColor: accentColor }}
-              >
-                Update filters
-              </button>
-            </form>
           </aside>
 
-          {/* RIGHT: Jobs list */}
-          <div className="space-y-3">
-            {jobs.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-[11px] text-slate-500">
-                <p className="font-medium text-slate-900">
-                  No open roles right now.
-                </p>
-                <p className="mt-1">
-                  Check back later or follow this organisation on their social
-                  channels for future updates.
-                </p>
-              </div>
-            ) : (
-              <ul className="space-y-3">
-                {jobs.map((rawJob) => {
-                  const job = rawJob as any;
+          {/* RIGHT: filters + jobs list */}
+          <div className="space-y-4">
+            {/* Search / filters */}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 text-[11px] text-slate-700 shadow-sm">
+              <form className="grid gap-3 md:grid-cols-[2fr,1fr,1fr]">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="q"
+                    className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                  >
+                    Keyword
+                  </label>
+                  <input
+                    id="q"
+                    name="q"
+                    defaultValue={q ?? ""}
+                    placeholder="Search by title, team or keyword…"
+                    className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#2563EB] focus:bg-white focus:ring-1 focus:ring-[#2563EB]"
+                  />
+                </div>
 
-                  const jobUrl = `/jobs/${encodeURIComponent(
-                    job.slug || job.id,
-                  )}`;
+                <div className="space-y-1">
+                  <label
+                    htmlFor="location"
+                    className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                  >
+                    Location
+                  </label>
+                  <input
+                    id="location"
+                    name="location"
+                    defaultValue={location ?? ""}
+                    placeholder="e.g. Lagos, Remote"
+                    className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#2563EB] focus:bg-white focus:ring-1 focus:ring-[#2563EB]"
+                  />
+                </div>
 
-                  const jobTenant = job.tenant as any;
-                  const jobSettings =
-                    (jobTenant?.careerSiteSettings &&
-                      jobTenant.careerSiteSettings[0]) ||
-                    null;
+                <div className="space-y-1">
+                  <label
+                    htmlFor="department"
+                    className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
+                  >
+                    Department
+                  </label>
+                  <input
+                    id="department"
+                    name="department"
+                    defaultValue={department ?? ""}
+                    placeholder="e.g. Sales, Operations"
+                    className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#2563EB] focus:bg-white focus:ring-1 focus:ring-[#2563EB]"
+                  />
+                </div>
 
-                  const cardLogoUrl =
-                    (job.clientCompany as any)?.logoUrl ||
-                    (job.clientCompany as any)?.logo_url ||
-                    (jobSettings as any)?.logoUrl ||
-                    (jobSettings as any)?.logo_url ||
-                    jobTenant?.logoUrl ||
-                    null;
+                {/* Actions row */}
+                <div className="md:col-span-3 mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-500">
+                  <span>
+                    Showing{" "}
+                    <span className="font-semibold text-slate-900">
+                      {totalJobs}
+                    </span>{" "}
+                    {totalJobs === 1 ? "role" : "roles"}.
+                  </span>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
+                    style={{ backgroundColor: accentColor }}
+                  >
+                    Update filters
+                  </button>
+                </div>
+              </form>
+            </section>
 
-                  const companyLabel =
-                    (job.clientCompany as any)?.name ||
-                    jobTenant?.name ||
-                    jobTenant?.slug ||
-                    displayName;
+            {/* Jobs list – cards styled like detail page */}
+            <section className="space-y-3">
+              {jobs.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-[11px] text-slate-500">
+                  <p className="font-medium text-slate-900">
+                    No open roles right now.
+                  </p>
+                  <p className="mt-1">
+                    Check back later or follow this organisation on their social
+                    channels for future updates.
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {jobs.map((rawJob) => {
+                    const job = rawJob as any;
 
-                  const locationLabel =
-                    job.location || "Location not specified";
-                  const employmentLabel =
-                    job.employmentType || job.workMode || null;
-                  const locationTypeLabel =
-                    job.locationType || job.location_type;
+                    const jobUrl = `/jobs/${encodeURIComponent(
+                      job.slug || job.id,
+                    )}`;
 
-                  const createdAt = job.createdAt
-                    ? new Date(job.createdAt)
-                    : null;
+                    const jobTenant = job.tenant as any;
+                    const jobSettings =
+                      (jobTenant?.careerSiteSettings &&
+                        jobTenant.careerSiteSettings[0]) ||
+                      null;
 
-                  const postedLabel = createdAt
-                    ? createdAt.toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : null;
+                    const cardLogoUrl =
+                      (job.clientCompany as any)?.logoUrl ||
+                      (job.clientCompany as any)?.logo_url ||
+                      (jobSettings as any)?.logoUrl ||
+                      (jobSettings as any)?.logo_url ||
+                      jobTenant?.logoUrl ||
+                      null;
 
-                  const shortDescription =
-                    job.shortDescription || job.short_description || null;
+                    const companyLabel =
+                      (job.clientCompany as any)?.name ||
+                      jobTenant?.name ||
+                      jobTenant?.slug ||
+                      displayName;
 
-                  const tags: string[] =
-                    Array.isArray(job.tags) && job.tags.length > 0
-                      ? job.tags
+                    const locationLabel =
+                      job.location || "Location not specified";
+                    const employmentLabel =
+                      job.employmentType || job.workMode || null;
+                    const locationTypeLabel =
+                      job.locationType || job.location_type;
+
+                    const createdAt = job.createdAt
+                      ? new Date(job.createdAt)
+                      : null;
+
+                    const postedLabel = createdAt
+                      ? createdAt.toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : null;
+
+                    const shortDescription =
+                      job.shortDescription || job.short_description || null;
+
+                    const tags: string[] = Array.isArray(job.tags)
+                      ? (job.tags as string[])
                       : [];
 
-                  return (
-                    <li key={job.id}>
-                      <Link
-                        href={jobUrl}
-                        className="group block rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-[1px] hover:border-emerald-600/70 hover:shadow-md"
-                      >
-                        <div className="flex gap-3">
-                          {/* Tiny logo avatar on the left of the title */}
-                          <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                            {cardLogoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={cardLogoUrl}
-                                alt={companyLabel}
-                                className="h-8 w-8 object-contain"
-                              />
-                            ) : (
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                                {companyLabel.slice(0, 2).toUpperCase()}
-                              </span>
-                            )}
-                          </div>
+                    const cardStyle: CSSProperties = {
+                      // Make accent available to Tailwind arbitrary values
+                      ["--jobs-accent" as any]: accentColor,
+                    };
 
-                          <div className="flex-1 space-y-2">
-                            {/* Title + posted */}
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-                              <h2 className="text-sm font-semibold text-slate-900 group-hover:text-emerald-700">
-                                {job.title}
-                              </h2>
-                              {postedLabel && (
-                                <span className="text-[10px] text-slate-500">
-                                  Posted {postedLabel}
+                    return (
+                      <li key={job.id}>
+                        <Link
+                          href={jobUrl}
+                          className="group block rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-[1px] hover:border-[var(--jobs-accent)] hover:shadow-md"
+                          style={cardStyle}
+                        >
+                          <div className="flex gap-3">
+                            {/* Tiny logo avatar on the left of the title */}
+                            <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                              {cardLogoUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={cardLogoUrl}
+                                  alt={companyLabel}
+                                  className="h-8 w-8 object-contain"
+                                />
+                              ) : (
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                  {companyLabel.slice(0, 2).toUpperCase()}
                                 </span>
                               )}
                             </div>
 
-                            {/* Company + meta icons */}
-                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-                              <span className="inline-flex items-center gap-1 font-medium text-slate-800">
-                                <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                                {companyLabel}
-                              </span>
-
-                              <span className="inline-flex items-center gap-1">
-                                {/* red pin */}
-                                <MapPin className="h-3.5 w-3.5 text-red-500" />
-                                {locationLabel}
-                              </span>
-
-                              {employmentLabel && (
-                                <span className="inline-flex items-center gap-1">
-                                  {/* deep brown briefcase */}
-                                  <BriefcaseBusiness className="h-3.5 w-3.5 text-[#7A4B2A]" />
-                                  {employmentLabel}
-                                </span>
-                              )}
-
-                              {locationTypeLabel && (
-                                <span className="inline-flex items-center gap-1">
-                                  {/* rich accent for work style */}
-                                  <Clock className="h-3.5 w-3.5 text-emerald-600" />
-                                  {locationTypeLabel}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Tags */}
-                            {tags.length > 0 && (
-                              <div className="mt-1 flex flex-wrap gap-1.5">
-                                {tags.slice(0, 6).map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600"
-                                  >
-                                    {tag}
+                            <div className="flex-1 space-y-2">
+                              {/* Title + posted */}
+                              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                                <h2 className="text-sm font-semibold text-slate-900 group-hover:text-[var(--jobs-accent)]">
+                                  {job.title}
+                                </h2>
+                                {postedLabel && (
+                                  <span className="text-[10px] text-slate-500">
+                                    Posted {postedLabel}
                                   </span>
-                                ))}
+                                )}
                               </div>
-                            )}
 
-                            {/* Short description */}
-                            {shortDescription && (
-                              <p className="line-clamp-2 text-[11px] text-slate-600">
-                                {shortDescription}
-                              </p>
-                            )}
-                          </div>
+                              {/* Company + meta icons */}
+                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                                <span className="inline-flex items-center gap-1 font-medium text-slate-800">
+                                  <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                                  {companyLabel}
+                                </span>
 
-                          {/* Right CTA */}
-                          <div className="hidden items-center pl-3 text-[11px] font-medium text-emerald-700 sm:flex">
-                            <span className="flex items-center gap-1">
-                              View job
-                              <span aria-hidden>↗</span>
-                            </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <MapPin className="h-3.5 w-3.5 text-[#EF4444]" />
+                                  {locationLabel}
+                                </span>
+
+                                {employmentLabel && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <BriefcaseBusiness className="h-3.5 w-3.5 text-[#92400E]" />
+                                    {employmentLabel}
+                                  </span>
+                                )}
+
+                                {locationTypeLabel && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <Clock className="h-3.5 w-3.5 text-[#2563EB]" />
+                                    {locationTypeLabel}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Short description */}
+                              {shortDescription && (
+                                <p className="line-clamp-2 text-[11px] text-slate-600">
+                                  {shortDescription}
+                                </p>
+                              )}
+
+                              {/* Tags row */}
+                              {tags.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                                    <TagIcon className="h-3 w-3 text-slate-400" />
+                                    Tags
+                                  </span>
+                                  {tags.map((tag: string) => (
+                                    <span
+                                      key={tag}
+                                      className="inline-flex items-center rounded-full bg-[#E5F0FF] px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                                    >
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Right CTA */}
+                            <div className="hidden items-center pl-3 text-[11px] font-medium text-[var(--jobs-accent)] sm:flex">
+                              <span className="flex items-center gap-1">
+                                View job
+                                <span aria-hidden>↗</span>
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            {/* Subtle footer – quiet ThinkATS tag only */}
+            <footer className="mt-2 flex items-center justify-between border-t border-slate-200 pt-4 text-[10px] text-slate-500">
+              <span>
+                Jobs powered by{" "}
+                <span className="font-semibold text-slate-700">
+                  ThinkATS
+                </span>
+                .
+              </span>
+              {baseDomain && (
+                <span className="hidden sm:inline">
+                  Host:{" "}
+                  <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
+                    {host}
+                  </code>
+                </span>
+              )}
+            </footer>
           </div>
         </section>
-
-        {/* Subtle footer – no big ThinkATS nav, just a quiet tag */}
-        <footer className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-[10px] text-slate-500">
-          <span>
-            Jobs powered by{" "}
-            <span className="font-semibold text-slate-700">ThinkATS</span>.
-          </span>
-          {baseDomain && (
-            <span className="hidden sm:inline">
-              Host:{" "}
-              <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
-                {host}
-              </code>
-            </span>
-          )}
-        </footer>
       </div>
     </main>
   );
