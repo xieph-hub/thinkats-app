@@ -660,10 +660,10 @@ model CareerTheme {
 
 // Represents a single configurable page in the careers microsite.
 model CareerPage {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String   @map("tenant_id") @db.Uuid
-  clientCompanyId String? @map("client_company_id") @db.Uuid
-  themeId        String?  @map("theme_id") @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  clientCompanyId String?  @map("client_company_id") @db.Uuid
+  themeId         String?  @map("theme_id") @db.Uuid
 
   kind CareerPageKind @map("kind") @default(CAREERS_HOME)
 
@@ -696,6 +696,7 @@ model CareerPage {
   @@index([tenantId, kind], map: "idx_career_pages_tenant_kind")
   @@index([tenantId, path], map: "idx_career_pages_tenant_path")
   @@index([tenantId, slug], map: "idx_career_pages_tenant_slug")
+  @@unique([tenantId, slug], name: "tenantId_slug")
 }
 
 // --------------------------------------------------------------------------
