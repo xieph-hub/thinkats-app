@@ -104,9 +104,9 @@ export default async function CareersPage() {
           </header>
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
             <p>
-              You can turn this page into a marketplace of featured roles
-              later – for now, the primary experience is each client&apos;s
-              own careers microsite on a dedicated host.
+              You can turn this page into a marketplace of featured roles later
+              – for now, the primary experience is each client&apos;s own
+              careers microsite on a dedicated host.
             </p>
           </div>
         </div>
@@ -146,7 +146,6 @@ export default async function CareersPage() {
     prisma.careerTheme.findFirst({
       where: {
         tenantId: tenant.id,
-        clientCompanyId: clientCompany?.id ?? null,
       },
       orderBy: { updatedAt: "desc" },
     }),
@@ -155,7 +154,7 @@ export default async function CareersPage() {
         tenantId: tenant.id,
         clientCompanyId: clientCompany?.id ?? null,
         slug: "careers-home",
-        isEnabled: true,
+        isPublished: true, // <-- use the actual field on CareerPage
       },
       orderBy: { updatedAt: "desc" },
     }),
@@ -187,11 +186,7 @@ export default async function CareersPage() {
 
   const planTier = (tenant.planTier || "STARTER").toUpperCase();
 
-  const websiteRaw =
-    (clientCompany as any)?.website ||
-    tenant.websiteUrl ||
-    null;
-
+  const websiteRaw = (clientCompany as any)?.website || tenant.websiteUrl || null;
   const websiteUrl = normaliseWebsiteUrl(websiteRaw);
 
   const assetBaseUrl =
