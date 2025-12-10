@@ -44,12 +44,10 @@ function normaliseWebsiteUrl(raw: string | null | undefined): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  // If already absolute (http/https), just return
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
 
-  // Otherwise, treat it as a bare domain and make it https://
   return `https://${trimmed}`;
 }
 
@@ -104,8 +102,8 @@ export default async function CareersPage() {
           </header>
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
             <p>
-              You can turn this page into a marketplace of featured roles later
-              – for now, the primary experience is each client&apos;s own
+              You can turn this page into a marketplace of featured roles
+              later – for now, the primary experience is each client&apos;s own
               careers microsite on a dedicated host.
             </p>
           </div>
@@ -145,19 +143,38 @@ export default async function CareersPage() {
   const [theme, page, jobs] = await Promise.all([
     prisma.careerTheme.findFirst({
       where: {
-        tenantId: tenant.id,
+        OR: [
+          { tenantId: tenant.id },
+          { tenantId: null, isSystem: true },
+        ],
       },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.careerPage.findFirst({
-      where: {
-        tenantId: tenant.id,
-        clientCompanyId: clientCompany?.id ?? null,
-        slug: "careers-home",
-        isPublished: true, // <-- use the actual field on CareerPage
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
+    (async () => {
+      // Prefer client-specific page if clientCompany exists, else tenant-wide
+      if (clientCompany?.id) {
+        const clientScoped = await prisma.careerPage.findFirst({
+          where: {
+            tenantId: tenant.id,
+            clientCompanyId: clientCompany.id,
+            slug: "careers-home",
+            isPublished: true,
+          },
+          orderBy: { updatedAt: "desc" },
+        });
+        if (clientScoped) return clientScoped;
+      }
+
+      return prisma.careerPage.findFirst({
+        where: {
+          tenantId: tenant.id,
+          clientCompanyId: null,
+          slug: "careers-home",
+          isPublished: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+    })(),
     getPublicJobsForCareersSite({
       tenantId: tenant.id,
       clientCompanyId: clientCompany?.id ?? null,
@@ -186,7 +203,11 @@ export default async function CareersPage() {
 
   const planTier = (tenant.planTier || "STARTER").toUpperCase();
 
-  const websiteRaw = (clientCompany as any)?.website || tenant.websiteUrl || null;
+  const websiteRaw =
+    (clientCompany as any)?.website ||
+    tenant.websiteUrl ||
+    null;
+
   const websiteUrl = normaliseWebsiteUrl(websiteRaw);
 
   const assetBaseUrl =
