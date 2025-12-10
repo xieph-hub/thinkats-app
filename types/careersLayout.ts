@@ -2,34 +2,30 @@
 
 export type CareerLayoutHeroSection = {
   type: "hero";
-  props?: {
-    title?: string;
-    subtitle?: string;
-    hide?: boolean;
-  };
+  title?: string;
+  subtitle?: string;
+  align?: "left" | "center" | "right";
+  showCta?: boolean;
 };
 
-export type CareerLayoutAboutSection = {
-  type: "about";
-  props?: {
-    title?: string;
-    html?: string;
-    hide?: boolean;
-  };
+export type CareerLayoutIntroSection = {
+  type: "intro";
+  title?: string;
+  bodyHtml?: string;
 };
 
-export type CareerLayoutFeaturedRolesSection = {
-  type: "featuredRoles";
-  props?: {
-    limit?: number; // how many roles to show on the homepage
-    hide?: boolean;
-  };
+export type CareerLayoutJobsListSection = {
+  type: "jobs_list";
+  title?: string;
+  layout?: "list" | "cards";
+  showSearch?: boolean;
+  showFilters?: boolean;
 };
 
 export type CareerLayoutSection =
   | CareerLayoutHeroSection
-  | CareerLayoutAboutSection
-  | CareerLayoutFeaturedRolesSection;
+  | CareerLayoutIntroSection
+  | CareerLayoutJobsListSection;
 
 export type CareerLayout = {
   sections: CareerLayoutSection[];
