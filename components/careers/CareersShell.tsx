@@ -18,7 +18,7 @@ interface CareersShellProps {
   accentColor: string; // hex, e.g. "#0ea5e9"
   heroBackground: string; // hex, e.g. "#F9FAFB"
 
-  // Optional public company site
+  // Optional public company site (from tenant.websiteUrl or client website)
   websiteUrl?: string | null;
 
   // Which tab to highlight
@@ -26,6 +26,20 @@ interface CareersShellProps {
 
   // Page content goes here
   children: ReactNode;
+}
+
+function normaliseWebsiteUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  // If it already has http/https, keep it
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Otherwise, treat as bare domain and prefix https://
+  return `https://${trimmed}`;
 }
 
 export default function CareersShell(props: CareersShellProps) {
@@ -58,6 +72,8 @@ export default function CareersShell(props: CareersShellProps) {
 
   const careersActive = activeNav === "careers";
   const jobsActive = activeNav === "jobs";
+
+  const safeWebsiteUrl = normaliseWebsiteUrl(websiteUrl);
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
@@ -98,7 +114,7 @@ export default function CareersShell(props: CareersShellProps) {
               </div>
             </div>
 
-            {/* Tenant mini-nav – NOT the ThinkATS marketing nav */}
+            {/* Tenant mini-nav – candidate facing only (no admin login) */}
             <nav className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
               <Link
                 href="/careers"
@@ -122,9 +138,9 @@ export default function CareersShell(props: CareersShellProps) {
                 Open roles
               </Link>
 
-              {websiteUrl && (
+              {safeWebsiteUrl && (
                 <a
-                  href={websiteUrl}
+                  href={safeWebsiteUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="text-[11px] font-medium text-slate-600 hover:text-slate-900"
@@ -132,14 +148,6 @@ export default function CareersShell(props: CareersShellProps) {
                   Company site
                 </a>
               )}
-
-              <Link
-                href="/login"
-                className="rounded-full border px-3 py-1 text-[11px] font-semibold"
-                style={{ borderColor: primaryColor, color: primaryColor }}
-              >
-                Admin login
-              </Link>
             </nav>
           </div>
 
@@ -150,12 +158,12 @@ export default function CareersShell(props: CareersShellProps) {
             {showPoweredBy && (
               <footer className="mt-6 border-t border-slate-200 pt-3 text-[10px] text-slate-400">
                 Powered by{" "}
-                  <span
-                    className="font-medium"
-                    style={{ color: accentColor || "#0f172a" }}
-                  >
-                    ThinkATS
-                  </span>
+                <span
+                  className="font-medium"
+                  style={{ color: accentColor || "#0f172a" }}
+                >
+                  ThinkATS
+                </span>
                 .
               </footer>
             )}
