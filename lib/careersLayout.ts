@@ -1,104 +1,43 @@
 // lib/careersLayout.ts
 import { z } from "zod";
-
-// --- Section schemas -------------------------------------------------------
+import type { CareerLayout } from "@/types/careersLayout";
 
 export const HeroSectionSchema = z.object({
   type: z.literal("hero"),
-  eyebrow: z.string().optional(),
-  title: z.string().min(1),
+  title: z.string().optional(),
   subtitle: z.string().optional(),
-  align: z.enum(["left", "center"]).default("left"),
-  variant: z.enum(["solid", "soft"]).default("solid"),
+  align: z.enum(["left", "center", "right"]).optional(),
+  showCta: z.boolean().optional(),
 });
 
-export const RichTextSectionSchema = z.object({
-  type: z.literal("rich_text"),
+export const IntroSectionSchema = z.object({
+  type: z.literal("intro"),
   title: z.string().optional(),
-  html: z.string().optional(),
-});
-
-export const ValuesSectionSchema = z.object({
-  type: z.literal("values"),
-  title: z.string().optional(),
-  items: z
-    .array(
-      z.object({
-        label: z.string(),
-        description: z.string().optional(),
-      }),
-    )
-    .default([]),
-});
-
-export const StatsSectionSchema = z.object({
-  type: z.literal("stats"),
-  title: z.string().optional(),
-  items: z
-    .array(
-      z.object({
-        label: z.string(),
-        value: z.string(),
-      }),
-    )
-    .default([]),
+  bodyHtml: z.string().optional(),
 });
 
 export const JobsListSectionSchema = z.object({
   type: z.literal("jobs_list"),
   title: z.string().optional(),
-  intro: z.string().optional(),
-  layout: z.enum(["cards", "rows"]).default("cards"),
+  layout: z.enum(["list", "cards"]).optional(),
+  showSearch: z.boolean().optional(),
+  showFilters: z.boolean().optional(),
 });
 
-// --- Root schemas ----------------------------------------------------------
-
-export const CareerLayoutSectionSchema = z.discriminatedUnion("type", [
-  HeroSectionSchema,
-  RichTextSectionSchema,
-  ValuesSectionSchema,
-  StatsSectionSchema,
-  JobsListSectionSchema,
-]);
-
-export const CareerPageLayoutSchema = z.object({
-  sections: z.array(CareerLayoutSectionSchema).default([]),
+export const CareerLayoutSchema = z.object({
+  sections: z
+    .array(
+      z.union([HeroSectionSchema, IntroSectionSchema, JobsListSectionSchema]),
+    )
+    .optional()
+    .default([]),
 });
-
-// --- Types -----------------------------------------------------------------
-
-export type CareerLayoutSection = z.infer<typeof CareerLayoutSectionSchema>;
-export type CareerLayout = z.infer<typeof CareerPageLayoutSchema>;
-
-// --- Helpers ---------------------------------------------------------------
-
-export function getDefaultCareerLayout(): CareerLayout {
-  return {
-    sections: [
-      {
-        type: "hero",
-        eyebrow: "Join the team",
-        title: "Open roles",
-        subtitle:
-          "Browse current opportunities and apply in a few minutes. No cover letters required.",
-        align: "left",
-        variant: "solid",
-      },
-      {
-        type: "jobs_list",
-        title: "Open positions",
-        intro:
-          "We’re always looking for thoughtful builders across operations, product, engineering and growth.",
-        layout: "cards",
-      },
-    ],
-  };
-}
 
 export function parseCareerLayout(input: unknown): CareerLayout {
-  try {
-    return CareerPageLayoutSchema.parse(input);
-  } catch {
-    return getDefaultCareerLayout();
+  const result = CareerLayoutSchema.safeParse(input);
+  if (!result.success) {
+    return { sections: [] };
   }
+  // zod has already validated the shape
+  return result.data as CareerLayout;
 }
