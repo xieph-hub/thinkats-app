@@ -4,6 +4,10 @@
 import { useState, useRef } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
+// Prefer explicit bucket from env, fall back to resourcin-uploads
+const BANNERS_BUCKET =
+  process.env.NEXT_PUBLIC_CAREER_BANNERS_BUCKET || "resourcin-uploads";
+
 type Props = {
   tenantId: string;
   initialUrl?: string | null;
@@ -21,7 +25,7 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
 
     setError(null);
 
-    // Guard against crazy-large uploads
+    // Guard against very large uploads (helps avoid 413s at Supabase level too)
     const maxSizeMB = 8;
     if (file.size > maxSizeMB * 1024 * 1024) {
       setError(`Please upload an image under ${maxSizeMB}MB.`);
@@ -36,10 +40,10 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
         .replace(/[^a-z0-9\.]+/g, "-")
         .replace(/\.+/g, ".");
 
-      const path = `banners/${tenantId}/${Date.now()}-${safeName}`;
+      const path = `career-banners/${tenantId}/${Date.now()}-${safeName}`;
 
       const { error: uploadError } = await supabaseBrowser.storage
-        .from("career-banners")
+        .from(BANNERS_BUCKET)
         .upload(path, file, {
           cacheControl: "3600",
           upsert: false,
@@ -47,20 +51,25 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
         });
 
       if (uploadError) {
-        console.error("Banner upload error:", uploadError);
-        setError("Upload failed, please try another image.");
+        console.error("Supabase banner upload error:", uploadError);
+        setError(
+          uploadError.message ||
+            "Upload failed on Supabase. Please try another image.",
+        );
         return;
       }
 
       const { data } = supabaseBrowser.storage
-        .from("career-banners")
+        .from(BANNERS_BUCKET)
         .getPublicUrl(path);
 
       const publicUrl = data.publicUrl;
       setBannerUrl(publicUrl);
-    } catch (err) {
-      console.error("Banner upload error:", err);
-      setError("Upload failed, please try again.");
+    } catch (err: any) {
+      console.error("Banner upload unexpected error:", err);
+      setError(
+        err?.message || "Upload failed, please check the console for details.",
+      );
     } finally {
       setUploading(false);
     }
@@ -99,7 +108,7 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
         className="block w-full text-[11px] text-slate-700 file:mr-3 file:rounded-full file:border-none file:bg-slate-100 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-200"
       />
 
-      {/* This is what the API receives and saves */}
+      {/* This is what the API receives and persists */}
       <input type="hidden" name="bannerImageUrl" value={bannerUrl} />
 
       {uploading && (
@@ -124,9 +133,8 @@ export default function BannerUploadField({ tenantId, initialUrl }: Props) {
       )}
 
       <p className="text-[10px] text-slate-500">
-        Uploads directly to Supabase Storage. When you click{" "}
-        <span className="font-semibold">Save jobs hub settings</span>, only the
-        public URL is stored in this tenant&apos;s settings.
+        Image is stored in Supabase Storage ({BANNERS_BUCKET}). When you save,
+        only the public URL is stored with this tenant&apos;s settings.
       </p>
     </div>
   );
