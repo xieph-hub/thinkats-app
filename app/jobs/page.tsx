@@ -1,6 +1,7 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
 
@@ -8,18 +9,82 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Jobs | ThinkATS",
-  description: "Browse open roles powered by ThinkATS.",
+  description:
+    "Live roles managed on ThinkATS, filtered by tenant or client based on the current host.",
 };
 
 type JobsPageSearchParams = {
   q?: string | string[];
   location?: string | string[];
+  department?: string | string[];
+  employmentType?: string | string[];
 };
 
-function asString(value: string | string[] | undefined): string {
-  if (!value) return "";
-  if (Array.isArray(value)) return value[0] ?? "";
-  return value;
+function asStringParam(
+  value: string | string[] | undefined,
+  fallback: string | null = null,
+): string | null {
+  if (!value) return fallback;
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
+function buildJobSearchWhere(args: {
+  tenantId?: string | null;
+  clientCompanyId?: string | null;
+  q?: string | null;
+  location?: string | null;
+  department?: string | null;
+  employmentType?: string | null;
+}) {
+  const where: any = {
+    status: "open",
+    visibility: "public",
+    OR: [{ internalOnly: false }, { internalOnly: null }],
+  };
+
+  if (args.tenantId) {
+    where.tenantId = args.tenantId;
+  }
+
+  if (args.clientCompanyId) {
+    where.clientCompanyId = args.clientCompanyId;
+  }
+
+  const orFilters: any[] = [];
+
+  if (args.q) {
+    orFilters.push(
+      { title: { contains: args.q, mode: "insensitive" } },
+      { department: { contains: args.q, mode: "insensitive" } },
+      { location: { contains: args.q, mode: "insensitive" } },
+    );
+  }
+
+  if (args.location) {
+    orFilters.push({
+      location: { contains: args.location, mode: "insensitive" },
+    });
+  }
+
+  if (args.department) {
+    orFilters.push({
+      department: { contains: args.department, mode: "insensitive" },
+    });
+  }
+
+  if (args.employmentType) {
+    where.employmentType = args.employmentType;
+  }
+
+  if (orFilters.length > 0) {
+    // Combine text filters with the base visibility rules
+    where.AND = where.AND || [];
+    where.AND.push({ OR: orFilters });
+  }
+
+  return where;
 }
 
 export default async function JobsPage({
@@ -28,236 +93,360 @@ export default async function JobsPage({
   searchParams?: JobsPageSearchParams;
 }) {
   const hostContext = await getHostContext();
-  const { isAppHost, tenant, clientCompany, host } = hostContext as any;
+  const {
+    isAppHost,
+    tenant,
+    clientCompany,
+    host,
+    baseDomain,
+    careerSiteSettings,
+  } = hostContext as any;
 
-  const q = asString(searchParams?.q);
-  const locationFilter = asString(searchParams?.location);
+  const q = asStringParam(searchParams?.q);
+  const location = asStringParam(searchParams?.location);
+  const department = asStringParam(searchParams?.department);
+  const employmentType = asStringParam(searchParams?.employmentType);
 
-  // ------------------------------------------------------
-  // Main app host → global jobs marketplace
-  // ------------------------------------------------------
-  if (isAppHost && !tenant) {
-    const where: any = {
-      status: "open",
-      visibility: "public",
-      OR: [{ internalOnly: false }, { internalOnly: null }],
-    };
-
-    if (q) {
-      where.OR = [
-        { title: { contains: q, mode: "insensitive" } },
-        { department: { contains: q, mode: "insensitive" } },
-        { location: { contains: q, mode: "insensitive" } },
-      ];
-    }
-
-    if (locationFilter) {
-      where.location = {
-        contains: locationFilter,
-        mode: "insensitive",
-      };
-    }
-
-    const jobs = await prisma.job.findMany({
-      where,
-      include: {
-        tenant: true,
-        clientCompany: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    });
-
-    return (
-      <main className="min-h-screen bg-slate-950 text-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-10 lg:py-12">
-          <header className="mb-6 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Jobs marketplace
-            </p>
-            <h1 className="text-2xl font-semibold text-slate-50 sm:text-3xl">
-              Open roles across tenants
-            </h1>
-            <p className="text-sm text-slate-300">
-              These jobs are powered by ThinkATS and managed by our tenants and
-              their clients.
-            </p>
-          </header>
-
-          {jobs.length === 0 ? (
-            <p className="mt-4 text-xs text-slate-400">
-              No open public roles right now. Check back soon.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {jobs.map((job) => (
-                <li
-                  key={job.id}
-                  className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-xs sm:text-sm"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-slate-50">{job.title}</p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        {(job.clientCompany && job.clientCompany.name) ||
-                          (job.tenant && job.tenant.name) ||
-                          "Client"}
-                      </p>
-                    </div>
-                    {job.location && (
-                      <p className="text-[11px] text-slate-400">
-                        {job.location}
-                      </p>
-                    )}
-                  </div>
-                  {job.shortDescription && (
-                    <p className="mt-2 line-clamp-2 text-xs text-slate-300">
-                      {job.shortDescription}
-                    </p>
-                  )}
-                  <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400">
-                    <span>
-                      {job.employmentType && <span>{job.employmentType}</span>}
-                      {job.locationType && job.employmentType && " · "}
-                      {job.locationType && <span>{job.locationType}</span>}
-                    </span>
-                    <Link
-                      href={`/jobs/${encodeURIComponent(job.slug || job.id)}`}
-                      className="font-medium text-sky-400 hover:underline"
-                    >
-                      View job
-                    </Link>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </main>
-    );
-  }
-
-  // ------------------------------------------------------
-  // Non-app host but no tenant → soft error
-  // ------------------------------------------------------
-  if (!tenant) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-50">
-        <div className="max-w-md rounded-2xl border border-slate-800 bg-slate-900/70 p-6 text-center">
-          <h1 className="text-lg font-semibold">Jobs not available</h1>
-          <p className="mt-3 text-sm text-slate-400">
-            We couldn&apos;t resolve a tenant for{" "}
-            <span className="font-mono text-slate-200">{host}</span>. If you
-            expected to see jobs here, please contact ThinkATS support.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  // ------------------------------------------------------
-  // Tenant / client host → tenant-specific jobs
-  // ------------------------------------------------------
-  const whereTenant: any = {
-    tenantId: tenant.id,
-    status: "open",
-    visibility: "public",
-    OR: [{ internalOnly: false }, { internalOnly: null }],
-  };
-
-  if (clientCompany?.id) {
-    whereTenant.clientCompanyId = clientCompany.id;
-  }
-
-  if (q) {
-    whereTenant.OR = [
-      { title: { contains: q, mode: "insensitive" } },
-      { department: { contains: q, mode: "insensitive" } },
-      { location: { contains: q, mode: "insensitive" } },
-    ];
-  }
-
-  if (locationFilter) {
-    whereTenant.location = {
-      contains: locationFilter,
-      mode: "insensitive",
-    };
-  }
-
-  const jobs = await prisma.job.findMany({
-    where: whereTenant,
-    include: {
-      clientCompany: true,
-    },
-    orderBy: { createdAt: "desc" },
+  const where = buildJobSearchWhere({
+    tenantId: tenant?.id ?? null,
+    clientCompanyId: clientCompany?.id ?? null,
+    q,
+    location,
+    department,
+    employmentType,
   });
 
+  // Fetch jobs + branding context
+  const jobs = await prisma.job.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      clientCompany: true,
+      tenant: {
+        include: {
+          careerSiteSettings: true,
+        },
+      },
+    },
+  });
+
+  type JobWithRelations = (typeof jobs)[number];
+
+  const primarySettings =
+    (careerSiteSettings as any) ??
+    tenant?.careerSiteSettings?.[0] ??
+    null;
+
   const displayName =
-    clientCompany?.name || tenant.name || (tenant as any).slug || host;
+    clientCompany?.name ||
+    tenant?.name ||
+    tenant?.slug ||
+    host ||
+    "Jobs";
+
+  const logoFromSettings =
+    (primarySettings as any)?.logoUrl ||
+    (primarySettings as any)?.logo_url ||
+    null;
+
+  const headerLogoUrl =
+    clientCompany?.logoUrl || logoFromSettings || tenant?.logoUrl || null;
+
+  const primaryColor =
+    (primarySettings as any)?.primaryColorHex ||
+    (primarySettings as any)?.primaryColor ||
+    "#172965";
+
+  const accentColor =
+    (primarySettings as any)?.accentColorHex ||
+    (primarySettings as any)?.accentColor ||
+    "#0ea5e9";
+
+  const heroBackground =
+    (primarySettings as any)?.heroBackgroundHex || "#020617"; // slate-950-ish
+
+  const isTenantScoped = Boolean(tenant);
+  const isClientScoped = Boolean(clientCompany);
+
+  const contextLabel = isClientScoped
+    ? clientCompany!.name
+    : isTenantScoped
+      ? tenant!.name || tenant!.slug
+      : baseDomain || "ThinkATS";
+
+  const totalJobs = jobs.length;
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50">
-      <div className="mx-auto max-w-5xl px-4 py-10 lg:py-12">
-        <header className="mb-6 space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Jobs
-          </p>
-          <h1 className="text-2xl font-semibold text-slate-50 sm:text-3xl">
-            All jobs at {displayName}
-          </h1>
-          <p className="text-sm text-slate-300">
-            These are the public, open roles currently available.
-          </p>
+    <main
+      className="min-h-screen bg-slate-950 px-4 py-10 text-slate-50"
+      style={{ background: heroBackground }}
+    >
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        {/* Header / Context */}
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            {headerLogoUrl ? (
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={headerLogoUrl}
+                  alt={displayName}
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+            ) : (
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/70 text-xs font-semibold uppercase tracking-wide text-slate-300">
+                {displayName.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Jobs
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-50">
+                Roles at {displayName}
+              </h1>
+              <p className="mt-1 text-xs text-slate-400">
+                {isClientScoped
+                  ? "These are live roles for this client, powered by ThinkATS."
+                  : isTenantScoped
+                    ? "Open roles managed under this tenant’s workspace."
+                    : "Marketplace view of open roles managed on ThinkATS."}
+              </p>
+            </div>
+          </div>
+
+          {/* Context pill */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-[11px] text-slate-300">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold text-slate-100">
+              {totalJobs}
+            </span>
+            <span className="truncate">
+              {totalJobs === 1 ? "Open role" : "Open roles"} ·{" "}
+              <span className="font-medium text-slate-100">
+                {contextLabel}
+              </span>
+            </span>
+          </div>
         </header>
 
-        {jobs.length === 0 ? (
-          <p className="mt-4 text-xs text-slate-400">
-            There are no open public roles at the moment. Check back soon.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {jobs.map((job) => (
-              <li
-                key={job.id}
-                className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-xs sm:text-sm"
+        {/* Search / filters (simple, but keeps the structure for later) */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-[11px] text-slate-200">
+          <form className="grid gap-3 md:grid-cols-[2fr,1fr,1fr]">
+            <div className="space-y-1">
+              <label
+                htmlFor="q"
+                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-slate-50">{job.title}</p>
-                    {job.clientCompany && (
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        {job.clientCompany.name}
-                      </p>
-                    )}
-                  </div>
-                  {job.location && (
-                    <p className="text-[11px] text-slate-400">
-                      {job.location}
-                    </p>
-                  )}
-                </div>
-                {job.shortDescription && (
-                  <p className="mt-2 line-clamp-2 text-xs text-slate-300">
-                    {job.shortDescription}
-                  </p>
-                )}
-                <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400">
-                  <span>
-                    {job.employmentType && <span>{job.employmentType}</span>}
-                    {job.locationType && job.employmentType && " · "}
-                    {job.locationType && <span>{job.locationType}</span>}
-                  </span>
-                  <Link
-                    href={`/jobs/${encodeURIComponent(job.slug || job.id)}`}
-                    className="font-medium text-sky-400 hover:underline"
-                  >
-                    View job
-                  </Link>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                Keyword
+              </label>
+              <input
+                id="q"
+                name="q"
+                defaultValue={q ?? ""}
+                placeholder="Search by title, team or keyword…"
+                className="block w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-50 outline-none placeholder:text-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="location"
+                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400"
+              >
+                Location
+              </label>
+              <input
+                id="location"
+                name="location"
+                defaultValue={location ?? ""}
+                placeholder="e.g. Lagos, Remote"
+                className="block w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-50 outline-none placeholder:text-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="department"
+                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400"
+              >
+                Department
+              </label>
+              <input
+                id="department"
+                name="department"
+                defaultValue={department ?? ""}
+                placeholder="e.g. Sales, Operations"
+                className="block w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-50 outline-none placeholder:text-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+
+            {/* Actions row */}
+            <div className="md:col-span-3 mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-400">
+              <span>
+                Showing{" "}
+                <span className="font-semibold text-slate-100">
+                  {totalJobs}
+                </span>{" "}
+                {totalJobs === 1 ? "role" : "roles"}.
+              </span>
+              <button
+                type="submit"
+                className="inline-flex items-center rounded-full bg-sky-500 px-4 py-1.5 text-[11px] font-semibold text-slate-950 shadow-sm hover:bg-sky-400"
+                style={{ backgroundColor: accentColor, color: "#020617" }}
+              >
+                Update filters
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* Jobs list */}
+        <section className="space-y-3">
+          {jobs.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/60 px-4 py-10 text-center text-[11px] text-slate-400">
+              <p className="font-medium text-slate-100">
+                No open roles right now.
+              </p>
+              <p className="mt-1">
+                Check back later or follow this organisation on their social
+                channels for future updates.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {jobs.map((job: JobWithRelations) => {
+                const jobUrl = `/jobs/${encodeURIComponent(job.slug || job.id)}`;
+
+                const jobTenant = job.tenant as any;
+                const jobSettings =
+                  (jobTenant?.careerSiteSettings &&
+                    jobTenant.careerSiteSettings[0]) ||
+                  null;
+
+                const cardLogoUrl =
+                  (job.clientCompany as any)?.logoUrl ||
+                  (jobSettings as any)?.logoUrl ||
+                  jobTenant?.logoUrl ||
+                  null;
+
+                const companyLabel =
+                  (job.clientCompany as any)?.name ||
+                  jobTenant?.name ||
+                  jobTenant?.slug ||
+                  displayName;
+
+                const locationLabel = job.location || "Location not specified";
+                const employmentLabel =
+                  job.employmentType || job.workMode || null;
+
+                const createdAt = job.createdAt
+                  ? new Date(job.createdAt)
+                  : null;
+
+                const postedLabel = createdAt
+                  ? createdAt.toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : null;
+
+                return (
+                  <li key={job.id}>
+                    <Link
+                      href={jobUrl}
+                      className="group block overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 transition hover:border-sky-500/70 hover:bg-slate-900"
+                    >
+                      <div className="flex gap-3">
+                        {/* Tiny logo avatar */}
+                        <div className="mt-0.5 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-950/80">
+                          {cardLogoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={cardLogoUrl}
+                              alt={companyLabel}
+                              className="h-7 w-7 object-contain"
+                            />
+                          ) : (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              {companyLabel.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 space-y-2">
+                          {/* Title + company */}
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                            <h2 className="text-sm font-semibold text-slate-50 group-hover:text-sky-300">
+                              {job.title}
+                            </h2>
+                            {postedLabel && (
+                              <span className="text-[10px] text-slate-500">
+                                Posted {postedLabel}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                            <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2.5 py-0.5 text-[10px] font-medium text-slate-100">
+                              {companyLabel}
+                            </span>
+                            <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2 py-0.5">
+                              {locationLabel}
+                            </span>
+                            {employmentLabel && (
+                              <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2 py-0.5">
+                                {employmentLabel}
+                              </span>
+                            )}
+                            {job.department && (
+                              <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2 py-0.5">
+                                {job.department}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Short description */}
+                          {job.shortDescription && (
+                            <p className="line-clamp-2 text-[11px] text-slate-300">
+                              {job.shortDescription}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Right chevron / call to action */}
+                        <div className="hidden items-center pl-3 text-[11px] font-medium text-sky-300 sm:flex">
+                          <span className="flex items-center gap-1">
+                            View job
+                            <span aria-hidden>↗</span>
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* Subtle footer */}
+        <footer className="mt-4 flex items-center justify-between border-t border-slate-900 pt-4 text-[10px] text-slate-500">
+          <span>
+            Jobs powered by{" "}
+            <span className="font-semibold text-slate-300">ThinkATS</span>.
+          </span>
+          {baseDomain && (
+            <span className="hidden sm:inline">
+              Host:{" "}
+              <code className="rounded bg-slate-900 px-1 py-0.5 text-[10px]">
+                {host}
+              </code>
+            </span>
+          )}
+        </footer>
       </div>
     </main>
   );
