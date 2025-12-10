@@ -1,46 +1,29 @@
 // components/careers/CareersShell.tsx
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { Globe, Linkedin, Twitter, Instagram } from "lucide-react";
 
-type ActiveNav = "home" | "careers" | "jobs";
-
-interface CareersShellProps {
+type CareersShellProps = {
   displayName: string;
   logoUrl: string | null;
-
-  // Host + plan info (from getHostContext + tenant)
   host: string;
-  baseDomain: string;
-  planTier: string; // e.g. "STARTER" | "GROWTH" | "AGENCY" | "ENTERPRISE"
-
-  // Branding (usually derived from CareerSiteSettings / CareerTheme)
-  primaryColor: string; // hex, e.g. "#172965"
-  accentColor: string; // hex, e.g. "#0ea5e9"
-  heroBackground: string; // hex, e.g. "#F9FAFB"
-
-  // Optional public company site (from tenant.websiteUrl or client website)
-  websiteUrl?: string | null;
-
-  // Which tab to highlight
-  activeNav?: ActiveNav;
-
-  // Page content goes here
+  baseDomain: string | null;
+  planTier: string;
+  primaryColor: string;
+  accentColor: string;
+  heroBackground: string;
+  websiteUrl: string | null;
+  linkedinUrl?: string | null;
+  twitterUrl?: string | null;
+  instagramUrl?: string | null;
+  /**
+   * Controls which local nav item is highlighted.
+   * We support a few keys but treat anything else as "no highlight".
+   */
+  activeNav?: "home" | "overview" | "careers" | "jobs" | "about";
   children: ReactNode;
-}
-
-function normaliseWebsiteUrl(url?: string | null): string | null {
-  if (!url) return null;
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-
-  // If it already has http/https, keep it
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  // Otherwise, treat as bare domain and prefix https://
-  return `https://${trimmed}`;
-}
+};
 
 export default function CareersShell(props: CareersShellProps) {
   const {
@@ -53,123 +36,266 @@ export default function CareersShell(props: CareersShellProps) {
     accentColor,
     heroBackground,
     websiteUrl,
-    activeNav = "careers",
+    linkedinUrl,
+    twitterUrl,
+    instagramUrl,
+    activeNav,
     children,
   } = props;
 
-  const isUnderMainDomain =
-    host === baseDomain || host.endsWith(`.${baseDomain}`);
+  const navItems = [
+    { key: "home", label: "Overview", href: "/" },
+    { key: "jobs", label: "Jobs", href: "/jobs" },
+    { key: "about", label: "About", href: "#about" },
+  ] as const;
 
-  const upperTier = (planTier || "").toUpperCase();
-  const isEnterprisePlan = upperTier === "ENTERPRISE";
+  const showJobsLink = true;
+  const hasOnlinePresence =
+    !!websiteUrl || !!linkedinUrl || !!twitterUrl || !!instagramUrl;
 
-  // Only Enterprise + custom domain can fully remove "Powered by"
-  const canRemoveBranding = isEnterprisePlan && !isUnderMainDomain;
-  const showPoweredBy = !canRemoveBranding;
+  const year = new Date().getFullYear();
 
-  const navItemBase =
-    "rounded-full px-3 py-1 text-[11px] font-semibold transition";
-
-  const careersActive = activeNav === "careers";
-  const jobsActive = activeNav === "jobs";
-
-  const safeWebsiteUrl = normaliseWebsiteUrl(websiteUrl);
+  // Helper to strip protocol for nicer display
+  const displayHost = (url: string) =>
+    url.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
-      <div className="mx-auto max-w-5xl px-4 py-10 lg:py-16">
-        <div
-          className="overflow-hidden rounded-3xl border bg-white shadow-xl"
-          style={{
-            borderColor: primaryColor,
-            boxShadow: "0 22px 60px rgba(15,23,42,0.16)",
-          }}
-        >
-          {/* Top bar: logo + mini-nav */}
-          <div
-            className="flex flex-col gap-4 border-b px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
-            style={{ background: heroBackground }}
-          >
-            <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-slate-950 text-slate-50">
+      {/* Top bar – tenant-level only, no ThinkATS product nav */}
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 lg:px-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-slate-900 ring-1 ring-slate-800">
               {logoUrl ? (
-                <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={logoUrl}
-                    alt={displayName}
-                    className="h-full w-full object-contain"
-                  />
-                </div>
+                <Image
+                  src={logoUrl}
+                  alt={displayName}
+                  width={36}
+                  height={36}
+                  className="h-9 w-9 object-contain"
+                />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
+                  {displayName.slice(0, 2).toUpperCase()}
+                </span>
               )}
-
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {displayName}
-                </p>
-                <p className="text-[11px] text-slate-500">Careers</p>
-              </div>
             </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-slate-50">
+                  {displayName}
+                </h1>
+                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                  {planTier}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                {host}
+                {baseDomain ? ` · powered by ThinkATS` : ""}
+              </p>
+            </div>
+          </div>
 
-            {/* Tenant mini-nav – candidate facing only (no admin login) */}
-            <nav className="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
+          {/* Local nav – Overview / Jobs / About */}
+          <nav className="hidden items-center gap-4 text-[11px] text-slate-300 sm:flex">
+            {navItems.map((item) => {
+              const isActive =
+                (item.key === "home" &&
+                  (activeNav === "home" || activeNav === "overview")) ||
+                activeNav === item.key;
+
+              return (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className={
+                    "rounded-full px-3 py-1 transition " +
+                    (isActive
+                      ? "bg-slate-800 text-slate-50"
+                      : "text-slate-300 hover:bg-slate-900 hover:text-slate-50")
+                  }
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+            {websiteUrl && (
               <Link
-                href="/careers"
-                className={`${navItemBase} ${
-                  careersActive
-                    ? "bg-white/80 text-slate-900 shadow-sm"
-                    : "hover:bg-white/60 hover:text-slate-900"
-                }`}
+                href={websiteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700/70 px-3 py-1 text-[10px] text-slate-300 hover:border-slate-500 hover:text-slate-50"
               >
-                Careers home
+                <Globe className="h-3.5 w-3.5" />
+                <span className="truncate max-w-[140px]">
+                  {displayHost(websiteUrl)}
+                </span>
               </Link>
+            )}
+          </nav>
+        </div>
+      </header>
 
+      {/* Main hub layout: sidebar + content */}
+      <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 lg:flex-row lg:px-6 lg:py-8">
+        {/* Sidebar – company summary, meta, quick links */}
+        <aside className="w-full shrink-0 space-y-4 lg:w-64">
+          <div
+            className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-xs text-slate-200"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at top left, rgba(148, 163, 253, 0.24), transparent 55%)",
+            }}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Overview
+            </p>
+            <p className="mt-2 text-sm font-medium text-slate-50">
+              {displayName}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-300">
+              A dedicated hiring hub for this organisation — roles, insights and
+              candidate experience in one place.
+            </p>
+            {showJobsLink && (
               <Link
                 href="/jobs"
-                className={`${navItemBase} ${
-                  jobsActive
-                    ? "bg-white/80 text-slate-900 shadow-sm"
-                    : "hover:bg-white/60 hover:text-slate-900"
-                }`}
+                className="mt-3 inline-flex items-center rounded-full bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-950 hover:bg-slate-200"
               >
-                Open roles
+                View open jobs
+                <span className="ml-1.5 text-[13px]">↗</span>
               </Link>
-
-              {safeWebsiteUrl && (
-                <a
-                  href={safeWebsiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] font-medium text-slate-600 hover:text-slate-900"
-                >
-                  Company site
-                </a>
-              )}
-            </nav>
-          </div>
-
-          {/* Page content */}
-          <div className="px-6 py-7 lg:px-8 lg:py-9">
-            {children}
-
-            {showPoweredBy && (
-              <footer className="mt-6 border-t border-slate-200 pt-3 text-[10px] text-slate-400">
-                Powered by{" "}
-                <span
-                  className="font-medium"
-                  style={{ color: accentColor || "#0f172a" }}
-                >
-                  ThinkATS
-                </span>
-                .
-              </footer>
             )}
           </div>
+
+          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[11px] text-slate-300">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Workspace details
+            </p>
+            <div className="mt-1 space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-400">Plan</span>
+                <span className="font-medium text-slate-100">{planTier}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-400">Hub URL</span>
+                <span className="truncate font-mono text-[10px] text-slate-200">
+                  {host}
+                </span>
+              </div>
+              {baseDomain && (
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-400">Base domain</span>
+                  <span className="truncate font-mono text-[10px] text-slate-200">
+                    {baseDomain}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Online presence – website + socials */}
+          {hasOnlinePresence && (
+            <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[11px] text-slate-300">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Online presence
+              </p>
+              <div className="mt-2 space-y-1.5">
+                {websiteUrl && (
+                  <Link
+                    href={websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-slate-100 hover:text-slate-50"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800">
+                      <Globe className="h-3 w-3" />
+                    </span>
+                    <span className="truncate">
+                      {displayHost(websiteUrl)}
+                    </span>
+                  </Link>
+                )}
+                {linkedinUrl && (
+                  <Link
+                    href={linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-slate-200 hover:text-slate-50"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800">
+                      <Linkedin className="h-3 w-3" />
+                    </span>
+                    <span className="truncate">
+                      LinkedIn
+                    </span>
+                  </Link>
+                )}
+                {twitterUrl && (
+                  <Link
+                    href={twitterUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-slate-200 hover:text-slate-50"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800">
+                      <Twitter className="h-3 w-3" />
+                    </span>
+                    <span className="truncate">
+                      X (Twitter)
+                    </span>
+                  </Link>
+                )}
+                {instagramUrl && (
+                  <Link
+                    href={instagramUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-slate-200 hover:text-slate-50"
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800">
+                      <Instagram className="h-3 w-3" />
+                    </span>
+                    <span className="truncate">
+                      Instagram
+                    </span>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-[10px] text-slate-400">
+            <p>
+              This hub is powered by{" "}
+              <span className="font-semibold text-slate-200">ThinkATS</span> —
+              multi-tenant ATS & careers infrastructure for modern HR and talent
+              teams.
+            </p>
+          </div>
+        </aside>
+
+        {/* Main content – your configurable layout + jobs */}
+        <section
+          className="flex-1 space-y-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-5"
+          style={{ backgroundColor: heroBackground }}
+        >
+          {children}
+        </section>
+      </main>
+
+      {/* Footer – subtle, tenant-first, small ThinkATS credit */}
+      <footer className="border-t border-slate-900/70 bg-slate-950/90 py-4">
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-2 px-4 text-[10px] text-slate-500 sm:flex-row sm:items-center lg:px-6">
+          <span>
+            © {year} {displayName}. All rights reserved.
+          </span>
+          <span>
+            Hiring infrastructure by{" "}
+            <span className="font-semibold text-slate-300">ThinkATS</span>
+          </span>
         </div>
-      </div>
-    </main>
+      </footer>
+    </div>
   );
 }
