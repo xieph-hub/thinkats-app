@@ -1,32 +1,42 @@
 // components/careers/CareersPageRenderer.tsx
 import Link from "next/link";
 import Image from "next/image";
-import type { CareerSiteSettings, Job, CareerTheme } from "@prisma/client";
+import type {
+  CareerSiteSettings,
+  Job,
+  CareerTheme,
+  ClientCompany,
+} from "@prisma/client";
 
 // For now we keep this loose – it’s just JSON coming from CareerPage.layout.
 // Later, if you stabilise the schema (sections, blocks, etc.), we can
 // introduce a stricter shared type here.
 type CareerLayout = unknown;
 
+// Extend Job with the included clientCompany relation
+type JobWithCompany = Job & {
+  clientCompany?: ClientCompany | null;
+};
+
 type Props = {
   displayName: string;
   settings: CareerSiteSettings | null;
   theme: CareerTheme | null;
   layout: CareerLayout | null;
-  jobs: Job[];
+  jobs: JobWithCompany[];
   primaryColor: string;
   accentColor: string;
   assetBaseUrl: string | null;
 };
 
-function formatJobLocation(job: Job) {
+function formatJobLocation(job: JobWithCompany) {
   const parts: string[] = [];
   if (job.location) parts.push(job.location);
   if (job.locationType) parts.push(job.locationType);
   return parts.join(" • ") || "Location flexible";
 }
 
-function formatEmployment(job: Job) {
+function formatEmployment(job: JobWithCompany) {
   const parts: string[] = [];
   if (job.employmentType) parts.push(job.employmentType);
   if (job.seniority) parts.push(job.seniority);
@@ -55,8 +65,7 @@ export default function CareersPageRenderer({
   assetBaseUrl,
 }: Props) {
   const heroTitle =
-    settings?.heroTitle ||
-    `Careers at ${displayName}`;
+    settings?.heroTitle || `Careers at ${displayName}`;
   const heroSubtitle =
     settings?.heroSubtitle ||
     "Join a team that is building, scaling, and transforming ambitious ideas into reality.";
@@ -256,17 +265,20 @@ export default function CareersPageRenderer({
                       </div>
 
                       <div className="flex flex-row items-center gap-3 text-[11px] text-slate-300 sm:flex-col sm:items-end">
-                        {job.salaryVisible && job.salaryCurrency && job.salaryMin && job.salaryMax && (
-                          <div className="rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-1.5 text-right">
-                            <div className="font-medium">
-                              {job.salaryCurrency} {job.salaryMin.toString()} –{" "}
-                              {job.salaryCurrency} {job.salaryMax.toString()}
+                        {job.salaryVisible &&
+                          job.salaryCurrency &&
+                          job.salaryMin &&
+                          job.salaryMax && (
+                            <div className="rounded-xl border border-slate-700/70 bg-slate-900/80 px-3 py-1.5 text-right">
+                              <div className="font-medium">
+                                {job.salaryCurrency} {job.salaryMin.toString()} –{" "}
+                                {job.salaryCurrency} {job.salaryMax.toString()}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                Estimated range
+                              </div>
                             </div>
-                            <div className="text-[10px] text-slate-400">
-                              Estimated range
-                            </div>
-                          </div>
-                        )}
+                          )}
                         <span
                           className="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium"
                           style={{
