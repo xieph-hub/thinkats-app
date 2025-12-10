@@ -425,7 +425,10 @@ export default async function CareersSettingsPage({
       </form>
 
       {/* JSON layout editor (writes CareerPage.layout via API) */}
-      <CareersLayoutEditor initialLayout={initialLayout} />
+      <CareersLayoutEditor
+        tenantId={selectedTenantId}
+        initialLayout={initialLayout ?? undefined}
+      />
     </div>
   );
 }
