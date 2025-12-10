@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import CareersLayoutEditor from "@/components/careers/CareersLayoutEditor";
-import type { CareerLayout } from "@/lib/careersLayout";
+import type { CareerLayout } from "@/types/careersLayout";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Careers site settings | ThinkATS",
+  title: "Jobs hub settings | ThinkATS",
   description:
-    "Configure careers site branding, copy, and marketplace visibility for this tenant.",
+    "Configure jobs hub branding, copy, and marketplace visibility for this tenant.",
 };
 
 type SearchParams = {
@@ -26,7 +26,7 @@ function asStringParam(
   return value;
 }
 
-export default async function CareersSettingsPage({
+export default async function JobsHubSettingsPage({
   searchParams,
 }: {
   searchParams?: SearchParams;
@@ -42,10 +42,10 @@ export default async function CareersSettingsPage({
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 lg:px-8">
         <h1 className="text-2xl font-semibold text-slate-900">
-          Careers site settings
+          Jobs hub settings
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          No tenants exist yet. Create a tenant before configuring careers site
+          No tenants exist yet. Create a tenant before configuring jobs hub
           settings.
         </p>
       </div>
@@ -53,7 +53,7 @@ export default async function CareersSettingsPage({
   }
 
   const tenantParam = asStringParam(searchParams?.tenantId);
-  const selectedTenant =
+  let selectedTenant =
     (tenantParam &&
       tenants.find(
         (t) => t.id === tenantParam || (t as any).slug === tenantParam,
@@ -63,7 +63,7 @@ export default async function CareersSettingsPage({
   const selectedTenantId = selectedTenant.id;
 
   // -----------------------------
-  // Load careers site settings for this tenant
+  // Load jobs hub / site settings for this tenant
   // -----------------------------
   const settings = await prisma.careerSiteSettings.findFirst({
     where: { tenantId: selectedTenantId },
@@ -71,12 +71,14 @@ export default async function CareersSettingsPage({
 
   const heroTitle =
     settings?.heroTitle ||
-    `Careers at ${
+    `Jobs at ${
       selectedTenant.name || (selectedTenant as any).slug || "our company"
     }`;
+
   const heroSubtitle =
     settings?.heroSubtitle ||
     "Explore open roles and opportunities to join the team.";
+
   const aboutHtml =
     settings?.aboutHtml ||
     "<p>Use this section to explain what it feels like to work here, how you make decisions and what you value.</p>";
@@ -86,7 +88,7 @@ export default async function CareersSettingsPage({
     (settings as any)?.includeInMarketplace ?? false;
 
   // -----------------------------
-  // Load layout (CareerPage.layout) for the careers homepage
+  // Load layout (CareerPage.layout) for the jobs hub homepage
   // -----------------------------
   const careerPage = await prisma.careerPage.findFirst({
     where: {
@@ -98,10 +100,10 @@ export default async function CareersSettingsPage({
   const initialLayout = (careerPage?.layout ?? null) as CareerLayout | null;
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-  const careersPath = "/careers";
-  const marketplacePath = "/jobs";
+  const jobsPath = `/jobs?tenantId=${encodeURIComponent(selectedTenantId)}`;
+  const marketplacePath = `/jobs`;
 
-  const careersUrl = baseUrl ? `${baseUrl}${careersPath}` : careersPath;
+  const jobsUrl = baseUrl ? `${baseUrl}${jobsPath}` : jobsPath;
   const marketplaceUrl = baseUrl
     ? `${baseUrl}${marketplacePath}`
     : marketplacePath;
@@ -112,10 +114,10 @@ export default async function CareersSettingsPage({
       <header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Settings · Careers
+            Settings · Jobs hub
           </p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            Careers site settings
+            Jobs hub settings
           </h1>
           <p className="mt-1 text-xs text-slate-600">
             Configure branding, copy and where this tenant&apos;s jobs appear
@@ -162,19 +164,19 @@ export default async function CareersSettingsPage({
             </span>
             <p>
               <span className="font-medium text-slate-800">
-                Tenant careers site:
+                Tenant jobs page:
               </span>{" "}
               <Link
-                href={careersPath}
+                href={jobsPath}
                 target="_blank"
                 className="font-medium text-[#172965] hover:underline"
               >
-                {careersUrl}
+                {jobsUrl}
               </Link>
               <span className="ml-1 text-slate-500">
                 (controlled by{" "}
                 <span className="font-medium">
-                  “Make this careers site public”
+                  “Make this jobs page public”
                 </span>{" "}
                 below)
               </span>
@@ -209,8 +211,8 @@ export default async function CareersSettingsPage({
 
         <div className="mt-3 inline-flex rounded-full bg-slate-50 px-3 py-1 text-[10px] text-slate-500">
           <span className="mr-1 text-[9px]">●</span>
-          Public, open jobs from this tenant always appear on their own careers
-          site, and optionally on the global marketplace.
+          Public, open jobs from this tenant always appear on their own jobs
+          page, and optionally on the global marketplace.
         </div>
       </section>
 
@@ -245,7 +247,7 @@ export default async function CareersSettingsPage({
                 className="block w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none focus:border-[#172965] focus:bg-white focus:ring-1 focus:ring-[#172965]"
               />
               <p className="text-[10px] text-slate-500">
-                Optional. Shown on the tenant careers site header.
+                Optional. Shown on the tenant jobs hub header.
               </p>
             </div>
 
@@ -342,7 +344,7 @@ export default async function CareersSettingsPage({
           />
           <p className="text-[10px] text-slate-500">
             Supports basic HTML (p, strong, em, ul, ol, li). Rendered on the
-            tenant&apos;s public careers site.
+            tenant&apos;s public jobs hub.
           </p>
         </div>
 
@@ -350,8 +352,6 @@ export default async function CareersSettingsPage({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <label className="flex items-start gap-2">
-              {/* Hidden field so unchecked sends "false" */}
-              <input type="hidden" name="isPublic" value="false" />
               <input
                 type="checkbox"
                 name="isPublic"
@@ -360,13 +360,13 @@ export default async function CareersSettingsPage({
               />
               <span className="text-[11px] text-slate-700">
                 <span className="font-medium">
-                  Make this careers site public
+                  Make this jobs page public
                 </span>
                 <br />
                 <span className="text-[10px] text-slate-500">
-                  When enabled, the tenant&apos;s careers site is reachable at{" "}
+                  When enabled, the tenant&apos;s jobs page is reachable at{" "}
                   <code className="rounded bg-white px-1 py-0.5 text-[10px]">
-                    {careersPath}
+                    {jobsPath}
                   </code>{" "}
                   and indexed in your own channels (but not automatically in
                   the global jobs marketplace).
@@ -377,12 +377,6 @@ export default async function CareersSettingsPage({
 
           <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <label className="flex items-start gap-2">
-              {/* Hidden field so unchecked sends "false" */}
-              <input
-                type="hidden"
-                name="includeInMarketplace"
-                value="false"
-              />
               <input
                 type="checkbox"
                 name="includeInMarketplace"
@@ -402,7 +396,7 @@ export default async function CareersSettingsPage({
                     {marketplacePath}
                   </code>
                   . Candidates can still discover roles via the tenant&apos;s
-                  own careers site.
+                  own jobs hub.
                 </span>
               </span>
             </label>
@@ -426,7 +420,7 @@ export default async function CareersSettingsPage({
             type="submit"
             className="inline-flex items-center rounded-full bg-[#172965] px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:bg-[#12204d]"
           >
-            Save careers settings
+            Save jobs hub settings
           </button>
         </div>
       </form>
