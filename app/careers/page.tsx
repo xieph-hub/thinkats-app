@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
+import CareersShell from "@/components/careers/CareersShell";
 import CareersPageRenderer from "@/components/careers/CareersPageRenderer";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +33,6 @@ async function getPublicJobsForCareersSite(args: {
     orderBy: {
       createdAt: "desc",
     },
-    include: {
-      clientCompany: true,
-    },
   });
 }
 
@@ -46,6 +44,8 @@ export default async function CareersPage() {
     tenant,
     clientCompany,
     host,
+    baseDomain,
+    careerSiteSettings,
   } = hostContext;
 
   // 1) Careersite-ish host but no tenant or client resolved → soft "not configured"
@@ -66,24 +66,81 @@ export default async function CareersPage() {
     );
   }
 
-  // 2) Tenant / client careersite host (subdomain or custom domain) OR main app host
-  //    - When tenant exists → show that tenant/client’s jobs.
-  //    - When no tenant (www.thinkats.com) → renderer will just show the global shell.
-  let jobs: any[] = [];
+  // 2) Tenant / client careersite host (subdomain or custom domain)
+  if (tenant && (isCareersiteHost || !isAppHost)) {
+    const displayName =
+      clientCompany?.name || tenant.name || tenant.slug || host;
 
-  if (tenant) {
-    jobs = await getPublicJobsForCareersSite({
+    const logoUrl =
+      (careerSiteSettings as any)?.logoUrl ||
+      clientCompany?.logoUrl ||
+      tenant.logoUrl ||
+      null;
+
+    const primaryColor =
+      (careerSiteSettings as any)?.primaryColorHex || "#172965";
+    const accentColor =
+      (careerSiteSettings as any)?.accentColorHex || "#0ea5e9";
+    const heroBackground =
+      (careerSiteSettings as any)?.heroBackgroundHex || "#F9FAFB";
+
+    const websiteUrl = clientCompany?.website ?? tenant.websiteUrl ?? null;
+
+    const jobs = await getPublicJobsForCareersSite({
       tenantId: tenant.id,
       clientCompanyId: clientCompany?.id ?? null,
     });
-  } else if (isAppHost) {
-    // Global app host (thinkats.com/careers or www.thinkats.com/careers)
-    // For now we keep this as a marketplace shell with zero jobs.
-    // Later you can hydrate with featured marketplace roles.
-    jobs = [];
+
+    return (
+      <CareersShell
+        displayName={displayName}
+        logoUrl={logoUrl}
+        host={host}
+        baseDomain={baseDomain}
+        planTier={tenant.planTier}
+        primaryColor={primaryColor}
+        accentColor={accentColor}
+        heroBackground={heroBackground}
+        websiteUrl={websiteUrl}
+        activeNav="careers"
+      >
+        <CareersPageRenderer
+          displayName={displayName}
+          settings={careerSiteSettings}
+          jobs={jobs}
+          primaryColor={primaryColor}
+          accentColor={accentColor}
+        />
+      </CareersShell>
+    );
   }
 
+  // 3) Main app host (thinkats.com/careers) – simple global entry point
   return (
-    <CareersPageRenderer hostContext={hostContext} page="careers" jobs={jobs} />
+    <main className="min-h-screen bg-slate-950 px-4 py-12 text-slate-50">
+      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <header className="space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Careers powered by ThinkATS
+          </h1>
+          <p className="text-sm text-slate-400">
+            This is the global careers entry point for roles managed on
+            ThinkATS. Individual client careers sites live on their own
+            subdomains, for example{" "}
+            <span className="font-mono text-sky-400">
+              acme.thinkats.com/careers
+            </span>
+            .
+          </p>
+        </header>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
+          <p>
+            You can turn this page into a marketplace of featured roles later –
+            for now, the primary experience is each client&apos;s own careers
+            microsite on a dedicated host.
+          </p>
+        </div>
+      </div>
+    </main>
   );
 }
