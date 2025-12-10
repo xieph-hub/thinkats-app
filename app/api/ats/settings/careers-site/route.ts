@@ -2,38 +2,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-function nullIfEmpty(value: unknown): string | null {
+function nullIfEmpty(value: any): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") return String(value);
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
 }
 
-function parseCheckbox(value: unknown): boolean {
+function parseCheckbox(value: any): boolean {
   if (typeof value === "string") {
     const v = value.toLowerCase();
-    return v === "on" || v === "true" || v === "1" || v === "yes";
+    return v === "on" || v === "true" || v === "1";
   }
   return Boolean(value);
 }
 
-async function parseBody(req: NextRequest): Promise<Record<string, unknown>> {
+async function parseBody(req: NextRequest): Promise<Record<string, any>> {
   const contentType = req.headers.get("content-type") || "";
 
+  // JSON body
   if (contentType.includes("application/json")) {
-    const json = (await req.json()) as Record<string, unknown>;
-    return json ?? {};
+    return (await req.json()) as Record<string, any>;
   }
 
+  // form-data (HTML form)
   const formData = await req.formData();
-  const obj: Record<string, unknown> = {};
+  const obj: Record<string, any> = {};
 
   for (const [key, value] of formData.entries()) {
     if (typeof value === "string") {
       obj[key] = value;
     } else {
-      obj[key] = (value as File).name;
+      // Keep File objects so we can upload them
+      obj[key] = value;
     }
   }
 
@@ -44,22 +47,20 @@ export async function POST(req: NextRequest) {
   try {
     const body = await parseBody(req);
 
-    // 1) Prefer explicit tenantId from form / JSON
+    // --------------------------------------------------
+    // Resolve tenantId (form field first, then host)
+    // --------------------------------------------------
     let tenantId: string | null = null;
 
-    const rawTenant = body.tenantId;
-    if (typeof rawTenant === "string" && rawTenant.trim() !== "") {
-      tenantId = rawTenant.trim();
+    if (typeof body.tenantId === "string" && body.tenantId.trim() !== "") {
+      tenantId = body.tenantId.trim();
     } else {
-      // 2) Fallback: resolve from host for subdomain/custom domains
       try {
         const hostContext = await getHostContext();
         const maybeTenant = (hostContext as any)?.tenant;
-        if (maybeTenant?.id) {
-          tenantId = String(maybeTenant.id);
-        }
+        if (maybeTenant?.id) tenantId = String(maybeTenant.id);
       } catch {
-        // ignore, fallback handled below
+        // ignore – handled below
       }
     }
 
@@ -74,12 +75,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const data = {
+    // --------------------------------------------------
+    // Optional banner image upload → Supabase Storage
+    // --------------------------------------------------
+    let newBannerImagePath: string | undefined;
+    let newBannerImageUrl: string | undefined;
+
+    const bannerFile = body.bannerImageFile as any | undefined;
+    if (
+      bannerFile &&
+      typeof bannerFile === "object" &&
+      typeof bannerFile.arrayBuffer === "function"
+    ) {
+      try {
+        const arrayBuffer = await bannerFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const originalName: string =
+          bannerFile.name || `banner-${Date.now()}.jpg`;
+        const ext = originalName.includes(".")
+          ? originalName.split(".").pop()!
+          : "jpg";
+
+        const objectPath = `tenants/${tenantId}/banner-${Date.now()}.${ext}`;
+
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from("careers-assets")
+          .upload(objectPath, buffer, {
+            contentType: bannerFile.type || "image/*",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("Error uploading banner image:", uploadError);
+        } else {
+          newBannerImagePath = objectPath;
+          const publicBase =
+            process.env.NEXT_PUBLIC_CAREERS_ASSET_BASE_URL || "";
+          if (publicBase) {
+            newBannerImageUrl = `${publicBase.replace(
+              /\/$/,
+              "",
+            )}/${objectPath}`;
+          }
+        }
+      } catch (e) {
+        console.error("Unexpected error uploading banner image:", e);
+      }
+    }
+
+    // --------------------------------------------------
+    // Build update payload
+    // --------------------------------------------------
+    const data: Record<string, any> = {
       logoUrl: nullIfEmpty(body.logoUrl),
 
-      bannerImageUrl: nullIfEmpty(body.bannerImageUrl),
-      bannerImagePath: nullIfEmpty(body.bannerImagePath),
-      bannerImageAlt: nullIfEmpty(body.bannerImageAlt),
+      // Only update banner fields if we actually uploaded a new file
+      bannerImageUrl: newBannerImageUrl,
+      bannerImagePath: newBannerImagePath,
 
       primaryColorHex: nullIfEmpty(body.primaryColorHex),
       accentColorHex: nullIfEmpty(body.accentColorHex),
@@ -96,11 +149,20 @@ export async function POST(req: NextRequest) {
       twitterUrl: nullIfEmpty(body.twitterUrl),
       instagramUrl: nullIfEmpty(body.instagramUrl),
 
-      includeInMarketplace: parseCheckbox(body.includeInMarketplace),
-      isPublic: parseCheckbox(body.isPublic),
+      includeInMarketplace:
+        body.includeInMarketplace !== undefined
+          ? parseCheckbox(body.includeInMarketplace)
+          : undefined,
+      isPublic:
+        body.isPublic !== undefined ? parseCheckbox(body.isPublic) : undefined,
 
       updatedAt: new Date(),
     };
+
+    // Strip undefined (but keep null to allow clearing values)
+    const cleanedData = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined),
+    );
 
     const existing = await prisma.careerSiteSettings.findFirst({
       where: { tenantId },
@@ -109,17 +171,18 @@ export async function POST(req: NextRequest) {
     const settings = existing
       ? await prisma.careerSiteSettings.update({
           where: { id: existing.id },
-          data,
+          data: cleanedData,
         })
       : await prisma.careerSiteSettings.create({
           data: {
             tenantId,
-            ...data,
+            ...cleanedData,
           },
         });
 
-    // If called from a browser form, redirect back to settings instead of
-    // leaving the user on a JSON response.
+    // --------------------------------------------------
+    // Browser form? Redirect back to settings
+    // --------------------------------------------------
     const accept = req.headers.get("accept") || "";
     const isBrowser = accept.includes("text/html");
 
