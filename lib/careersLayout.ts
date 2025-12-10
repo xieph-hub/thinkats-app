@@ -1,50 +1,61 @@
-// lib/careersLayout.ts
+// lib/careersLayoutSchema.ts
+import { z } from "zod";
 
-// Discriminated union of section types
-export type CareerLayoutSection =
-  | HeroSectionNode
-  | AboutSectionNode
-  | FeaturedRolesSectionNode
-  | RichTextSectionNode;
+export const HeroSectionSchema = z.object({
+  type: z.literal("hero"),
+  id: z.string().optional(),
+  props: z
+    .object({
+      title: z.string().max(200).optional(),
+      subtitle: z.string().max(400).optional(),
+      showSocial: z.boolean().optional(),
+    })
+    .optional(),
+});
 
-export type HeroSectionNode = {
-  type: "hero";
-  id?: string;
-  props?: {
-    title?: string;
-    subtitle?: string;
-    showSocial?: boolean; // default true
-  };
-};
+export const AboutSectionSchema = z.object({
+  type: z.literal("about"),
+  id: z.string().optional(),
+  props: z
+    .object({
+      title: z.string().max(200).optional(),
+      html: z.string().optional(),
+    })
+    .optional(),
+});
 
-export type AboutSectionNode = {
-  type: "about";
-  id?: string;
-  props?: {
-    title?: string; // overrides "About {displayName}" if set
-    html?: string; // rich text HTML
-  };
-};
+export const FeaturedRolesSectionSchema = z.object({
+  type: z.literal("featuredRoles"),
+  id: z.string().optional(),
+  props: z
+    .object({
+      limit: z.number().int().min(1).max(50).optional(),
+      showViewAllLink: z.boolean().optional(),
+    })
+    .optional(),
+});
 
-export type FeaturedRolesSectionNode = {
-  type: "featuredRoles";
-  id?: string;
-  props?: {
-    limit?: number; // default 8
-    showViewAllLink?: boolean; // future use
-  };
-};
+export const RichTextSectionSchema = z.object({
+  type: z.literal("richText"),
+  id: z.string().optional(),
+  props: z.object({
+    title: z.string().max(200).optional(),
+    html: z.string(),
+  }),
+});
 
-export type RichTextSectionNode = {
-  type: "richText";
-  id?: string;
-  props?: {
-    title?: string;
-    html: string;
-  };
-};
+export const CareerLayoutSectionSchema = z.discriminatedUnion("type", [
+  HeroSectionSchema,
+  AboutSectionSchema,
+  FeaturedRolesSectionSchema,
+  RichTextSectionSchema,
+]);
 
-// Canonical layout shape saved in DB
-export type CareerLayout = {
-  sections: CareerLayoutSection[];
-};
+export const CareerLayoutSchema = z.object({
+  sections: z.array(CareerLayoutSectionSchema),
+});
+
+// Convenience parse helper
+export function parseCareerLayout(input: unknown) {
+  return CareerLayoutSchema.parse(input);
+}
