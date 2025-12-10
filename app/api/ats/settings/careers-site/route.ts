@@ -18,7 +18,7 @@ function parseCheckbox(value: any): boolean {
   return Boolean(value);
 }
 
-// Accept both JSON and form-data bodies so we're future-proof
+// Accept both JSON and form-data bodies
 async function parseBody(req: NextRequest): Promise<Record<string, any>> {
   const contentType = req.headers.get("content-type") || "";
 
@@ -33,7 +33,6 @@ async function parseBody(req: NextRequest): Promise<Record<string, any>> {
     if (typeof value === "string") {
       obj[key] = value;
     } else {
-      // File objects, etc. — for now, just keep their filename
       obj[key] = (value as File).name;
     }
   }
@@ -43,18 +42,36 @@ async function parseBody(req: NextRequest): Promise<Record<string, any>> {
 
 export async function POST(req: NextRequest) {
   try {
-    // Resolve current tenant from host / session
-    const hostContext = await getHostContext();
-    const { tenant } = hostContext as any;
+    const body = await parseBody(req);
 
-    if (!tenant) {
+    // 1) Prefer explicit tenantId from the form / JSON
+    let tenantId: string | null = null;
+
+    if (typeof body.tenantId === "string" && body.tenantId.trim() !== "") {
+      tenantId = body.tenantId.trim();
+    } else {
+      // 2) Fallback: try to resolve from host (for subdomain / custom-domain flows)
+      try {
+        const hostContext = await getHostContext();
+        const maybeTenant = (hostContext as any)?.tenant;
+        if (maybeTenant?.id) {
+          tenantId = String(maybeTenant.id);
+        }
+      } catch {
+        // swallow host resolution errors; we'll handle missing tenantId below
+      }
+    }
+
+    if (!tenantId) {
       return NextResponse.json(
-        { ok: false, error: "No tenant resolved for this request." },
+        {
+          ok: false,
+          error:
+            "No tenantId provided and none resolved from host. Make sure the form sends tenantId.",
+        },
         { status: 400 },
       );
     }
-
-    const body = await parseBody(req);
 
     const data = {
       logoUrl: nullIfEmpty(body.logoUrl),
@@ -88,14 +105,13 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     };
 
-    // Strip out undefined keys so we don't accidentally overwrite with "undefined"
+    // Strip out undefined so we don't overwrite with undefined
     const cleanedData = Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== undefined),
     );
 
-    // Find existing settings row (we didn't mark tenantId as @unique in Prisma)
     const existing = await prisma.careerSiteSettings.findFirst({
-      where: { tenantId: tenant.id },
+      where: { tenantId },
     });
 
     let settings;
@@ -107,7 +123,7 @@ export async function POST(req: NextRequest) {
     } else {
       settings = await prisma.careerSiteSettings.create({
         data: {
-          tenantId: tenant.id,
+          tenantId,
           ...cleanedData,
         },
       });
@@ -123,9 +139,8 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Optional: explicitly block GET so hitting this URL in the browser
-// returns a clear message instead of a 404.
 export async function GET() {
+  // So hitting /api/ats/settings/careers-site in the browser gives a clear message
   return NextResponse.json(
     { ok: false, error: "Use POST to update careers site settings." },
     { status: 405 },
