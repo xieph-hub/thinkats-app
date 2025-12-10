@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import CareersLayoutEditor from "@/components/careers/CareersLayoutEditor";
-import type { CareerLayout } from "@/lib/careersLayout";
+import type { CareerLayout } from "@/types/careersLayout";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Careers site settings | ThinkATS",
   description:
-    "Configure careers site branding, copy, layout and marketplace visibility for this tenant.",
+    "Configure careers site branding, copy, and marketplace visibility for this tenant.",
 };
 
 type SearchParams = {
@@ -53,7 +53,7 @@ export default async function CareersSettingsPage({
   }
 
   const tenantParam = asStringParam(searchParams?.tenantId);
-  const selectedTenant =
+  let selectedTenant =
     (tenantParam &&
       tenants.find(
         (t) => t.id === tenantParam || (t as any).slug === tenantParam,
@@ -82,7 +82,20 @@ export default async function CareersSettingsPage({
     "<p>Use this section to explain what it feels like to work here, how you make decisions and what you value.</p>";
 
   const isPublic = settings?.isPublic ?? true;
-  const includeInMarketplace = (settings as any)?.includeInMarketplace ?? false;
+  const includeInMarketplace =
+    (settings as any)?.includeInMarketplace ?? false;
+
+  // -----------------------------
+  // Load layout (CareerPage.layout) for the careers homepage
+  // -----------------------------
+  const careerPage = await prisma.careerPage.findFirst({
+    where: {
+      tenantId: selectedTenantId,
+      slug: "careers-home",
+    },
+  });
+
+  const initialLayout = (careerPage?.layout ?? null) as CareerLayout | null;
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   const tenantSlug = (selectedTenant as any).slug || selectedTenantId;
@@ -93,15 +106,6 @@ export default async function CareersSettingsPage({
   const marketplaceUrl = baseUrl
     ? `${baseUrl}${marketplacePath}`
     : marketplacePath;
-
-  // -----------------------------
-  // Load layout JSON for this tenant
-  // -----------------------------
-  const careerPage = await prisma.careerPage.findFirst({
-    where: { tenantId: selectedTenantId, slug: "careers-home" },
-  });
-
-  const initialLayout = (careerPage?.layout ?? null) as CareerLayout | null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 lg:px-8">
@@ -115,8 +119,8 @@ export default async function CareersSettingsPage({
             Careers site settings
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Configure branding, copy, layout and where this tenant&apos;s jobs
-            appear across ThinkATS.
+            Configure branding, copy and where this tenant&apos;s jobs appear
+            across ThinkATS.
           </p>
         </div>
 
@@ -211,7 +215,7 @@ export default async function CareersSettingsPage({
         </div>
       </section>
 
-      {/* Careers branding + copy form */}
+      {/* Form */}
       <form
         method="POST"
         action="/api/ats/settings/careers-site"
@@ -420,11 +424,8 @@ export default async function CareersSettingsPage({
         </div>
       </form>
 
-      {/* Layout editor card (JSON layout for careers-home) */}
-      <CareersLayoutEditor
-        tenantId={selectedTenantId}
-        initialLayout={initialLayout}
-      />
+      {/* JSON layout editor (writes CareerPage.layout via API) */}
+      <CareersLayoutEditor initialLayout={initialLayout} />
     </div>
   );
 }
