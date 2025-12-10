@@ -558,7 +558,7 @@ model JobStage {
 }
 
 // --------------------------------------------------------------------------
-// CAREER SITE SETTINGS (WHITE-LABEL CAREERS PORTAL)
+// CAREER SITE SETTINGS
 // --------------------------------------------------------------------------
 
 model CareerSiteSettings {
@@ -588,28 +588,6 @@ model CareerSiteSettings {
   linkedinUrl  String? @map("linkedin_url")
   twitterUrl   String? @map("twitter_url")
   instagramUrl String? @map("instagram_url")
-
-  // Theme + layout builder (serialized configs)
-  themeVariant  String?  @map("theme_variant")  // "corporate", "startup", "creative", etc.
-  themeConfig   Json?    @map("theme_config")   // full theme tokens/config
-  layoutConfig  Json?    @map("layout_config")  // sections / blocks for the page builder
-
-  // Localisation / language
-  defaultLocale    String?   @map("default_locale")
-  supportedLocales String[]  @map("supported_locales") @db.Text
-
-  // SEO / metadata
-  seoTitle       String? @map("seo_title")
-  seoDescription String? @map("seo_description")
-  seoImageUrl    String? @map("seo_image_url")
-
-  // Advanced embeds / integrations
-  customCss           String? @map("custom_css")
-  customJs            String? @map("custom_js")
-  googleAnalyticsId   String? @map("ga_measurement_id")
-  metaPixelId         String? @map("meta_pixel_id")
-  otherAnalyticsJson  Json?   @map("other_analytics_json")
-  chatWidgetEmbed     String? @map("chat_widget_embed")
 
   includeInMarketplace Boolean @map("include_in_marketplace") @default(false)
   isPublic             Boolean @map("is_public") @default(true)
@@ -719,17 +697,17 @@ model ScoringEvent {
   jobId         String?   @map("job_id") @db.Uuid
   applicationId String?   @map("application_id") @db.Uuid
 
-  engine        String   @map("engine") // e.g. "semantic-v1"
+  engine        String   @map("engine")
   engineVersion String?  @map("engine_version")
   mode          String?  @map("mode")   // volume | executive | balanced
   score         Int?     @map("score")
   tier          String?  @map("tier")
 
-  configSnapshot Json?   @map("config_snapshot") // scoring config used
-  inputSummary   Json?   @map("input_summary")   // metadata about features
+  configSnapshot Json?   @map("config_snapshot")
+  inputSummary   Json?   @map("input_summary")
   reason         String? @map("reason")
-  risks          Json?   @map("risks")           // list of risk strings
-  redFlags       Json?   @map("red_flags")       // list of red-flag strings
+  risks          Json?   @map("risks")
+  redFlags       Json?   @map("red_flags")
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
@@ -779,7 +757,7 @@ model AnalyticsSnapshot {
   label String? @map("label") // e.g. "2025-12-05" or "last_30_days"
 
   asOf    DateTime @map("as_of") @db.Timestamptz(6)
-  payload Json     @map("payload") // arbitrary JSON with metrics
+  payload Json     @map("payload")
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
