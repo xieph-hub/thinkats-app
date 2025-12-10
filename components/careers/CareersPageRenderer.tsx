@@ -1,29 +1,206 @@
 // components/careers/CareersPageRenderer.tsx
-import Link from "next/link";
 import type {
   CareerSiteSettings,
-  CareerTheme,
   Job,
+  CareerTheme,
   ClientCompany,
 } from "@prisma/client";
-import type {
-  CareerLayout,
-  CareerLayoutSection,
-} from "@/lib/careersLayout";
-import { parseCareerLayout, getDefaultCareerLayout } from "@/lib/careersLayout";
+import type { CareerLayout } from "@/types/careersLayout";
 
-type JobWithClient = Job & { clientCompany: ClientCompany | null };
+type JobsWithClient = Job & { clientCompany?: ClientCompany | null };
 
 type Props = {
   displayName: string;
   settings: CareerSiteSettings | null;
   theme: CareerTheme | null;
-  layout: CareerLayout | null;
-  jobs: JobWithClient[];
+  layout: CareerLayout | null | any;
+  jobs: JobsWithClient[];
   primaryColor: string;
   accentColor: string;
   assetBaseUrl: string | null;
 };
+
+function getEffectiveLayout(displayName: string, layout: any): CareerLayout {
+  if (layout && Array.isArray((layout as any).sections)) {
+    return layout as CareerLayout;
+  }
+
+  const heroTitle = `Jobs at ${displayName}`;
+  const heroSubtitle =
+    "Explore open jobs, learn more about how we work and apply in a few clicks.";
+
+  return {
+    sections: [
+      {
+        type: "hero",
+        title: heroTitle,
+        subtitle: heroSubtitle,
+        align: "left",
+        showCta: true,
+      },
+      {
+        type: "intro",
+        title: "Working here",
+        bodyHtml:
+          "<p>Use this space to explain what makes this organisation distinct – how decisions are made, how teams collaborate and what growth can look like.</p>",
+      },
+      {
+        type: "jobs_list",
+        title: "Open jobs",
+        layout: "list",
+        showSearch: false,
+        showFilters: false,
+      },
+    ],
+  } as CareerLayout;
+}
+
+function renderHeroSection(
+  section: any,
+  settings: CareerSiteSettings | null,
+  primaryColor: string,
+  accentColor: string,
+) {
+  const title = section.title ?? "Jobs";
+  const subtitle =
+    section.subtitle ??
+    "Join the team and work on meaningful problems with people who care.";
+
+  const align =
+    section.align === "center" || section.align === "right"
+      ? section.align
+      : "left";
+
+  const alignmentClasses =
+    align === "center"
+      ? "items-center text-center"
+      : align === "right"
+        ? "items-end text-right"
+        : "items-start text-left";
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900/60 to-slate-950 p-6 sm:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div className={`flex-1 ${alignmentClasses}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Jobs
+          </p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-50 sm:text-3xl">
+            {title}
+          </h2>
+          <p className="mt-2 max-w-xl text-[12px] leading-relaxed text-slate-300">
+            {subtitle}
+          </p>
+        </div>
+        {section.showCta !== false && (
+          <div className="flex flex-none items-end justify-start sm:justify-end">
+            <a
+              href="#jobs"
+              className="inline-flex items-center rounded-full px-4 py-2 text-[11px] font-semibold text-slate-950 shadow-sm"
+              style={{
+                backgroundColor: accentColor || primaryColor,
+              }}
+            >
+              View open jobs
+            </a>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function renderIntroSection(section: any, settings: CareerSiteSettings | null) {
+  const title = section.title ?? "About this team";
+  const bodyHtml =
+    section.bodyHtml ??
+    settings?.aboutHtml ??
+    "<p>Use this section to describe the mission, how teams work together and what you value in teammates.</p>";
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6">
+      <h3 className="text-sm font-semibold text-slate-50">{title}</h3>
+      <div
+        className="prose prose-invert mt-3 max-w-none text-[12px] prose-p:mt-2 prose-p:leading-relaxed prose-strong:text-slate-50 prose-a:text-sky-400"
+        dangerouslySetInnerHTML={{ __html: bodyHtml }}
+      />
+    </section>
+  );
+}
+
+function renderJobsListSection(section: any, jobs: JobsWithClient[]) {
+  const title = section.title ?? "Open jobs";
+
+  if (!jobs || jobs.length === 0) {
+    return (
+      <section
+        id="jobs"
+        className="rounded-3xl border border-dashed border-slate-800 bg-slate-950/40 p-5 sm:p-6"
+      >
+        <h3 className="text-sm font-semibold text-slate-50">{title}</h3>
+        <p className="mt-2 text-[12px] text-slate-400">
+          There are no open jobs published right now. Check back soon or follow
+          this organisation on their social channels.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      id="jobs"
+      className="rounded-3xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-50">{title}</h3>
+        <p className="text-[11px] text-slate-400">
+          {jobs.length} open {jobs.length === 1 ? "job" : "jobs"}
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        {jobs.map((job) => {
+          const href = job.slug
+            ? `/jobs/${encodeURIComponent(job.slug)}`
+            : `/jobs/${job.id}`;
+
+          return (
+            <a
+              key={job.id}
+              href={href}
+              className="group flex items-start justify-between gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/60 px-4 py-3 hover:border-sky-500/80 hover:bg-slate-900/80"
+            >
+              <div className="min-w-0">
+                <h4 className="truncate text-[13px] font-medium text-slate-50 group-hover:text-sky-100">
+                  {job.title}
+                </h4>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                  {job.clientCompany && (
+                    <span className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[9px] uppercase tracking-wide text-slate-300">
+                      {job.clientCompany.name}
+                    </span>
+                  )}
+                  {job.location && <span>{job.location}</span>}
+                  {job.locationType && (
+                    <span className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[9px] uppercase tracking-wide text-slate-300">
+                      {job.locationType}
+                    </span>
+                  )}
+                  {job.employmentType && (
+                    <span className="rounded-full border border-slate-700/70 bg-slate-900/70 px-2 py-0.5 text-[9px] uppercase tracking-wide text-slate-300">
+                      {job.employmentType}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-500">View job →</span>
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export default function CareersPageRenderer({
   displayName,
@@ -34,313 +211,38 @@ export default function CareersPageRenderer({
   primaryColor,
   accentColor,
 }: Props) {
-  const effectiveLayout =
-    layout && layout.sections
-      ? parseCareerLayout(layout)
-      : getDefaultCareerLayout();
-
-  const hasJobs = jobs.length > 0;
+  const effectiveLayout = getEffectiveLayout(displayName, layout);
+  const rawSections = (effectiveLayout as any)?.sections;
+  const sections: any[] = Array.isArray(rawSections) ? rawSections : [];
 
   return (
-    <div className="space-y-10 pb-12">
-      {effectiveLayout.sections.map((section, idx) => (
-        <section key={idx}>
-          {renderSection(section, {
-            displayName,
-            settings,
-            theme,
-            primaryColor,
-            accentColor,
-            jobs,
-            hasJobs,
-          })}
-        </section>
-      ))}
+    <div className="space-y-4 sm:space-y-5">
+      {sections.map((section, index) => {
+        if (!section || typeof section !== "object") return null;
+
+        switch (section.type) {
+          case "hero":
+            return (
+              <div key={`hero-${index}`}>
+                {renderHeroSection(section, settings, primaryColor, accentColor)}
+              </div>
+            );
+          case "intro":
+            return (
+              <div key={`intro-${index}`}>
+                {renderIntroSection(section, settings)}
+              </div>
+            );
+          case "jobs_list":
+            return (
+              <div key={`jobs-${index}`}>
+                {renderJobsListSection(section, jobs)}
+              </div>
+            );
+          default:
+            return null;
+        }
+      })}
     </div>
-  );
-}
-
-function renderSection(
-  section: CareerLayoutSection,
-  ctx: {
-    displayName: string;
-    settings: CareerSiteSettings | null;
-    theme: CareerTheme | null;
-    primaryColor: string;
-    accentColor: string;
-    jobs: JobWithClient[];
-    hasJobs: boolean;
-  },
-) {
-  switch (section.type) {
-    case "hero":
-      return (
-        <div
-          className="rounded-3xl border border-slate-800/70 bg-slate-950/80 px-6 py-10 shadow-lg md:px-10 md:py-12"
-          style={{
-            backgroundImage: `radial-gradient(circle at top left, ${ctx.accentColor}33, transparent 55%), radial-gradient(circle at bottom right, ${ctx.primaryColor}33, transparent 55%)`,
-          }}
-        >
-          <div className="space-y-4 md:max-w-2xl">
-            {section.eyebrow && (
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-300/80">
-                {section.eyebrow}
-              </p>
-            )}
-            <h1
-              className={`text-3xl font-semibold tracking-tight text-slate-50 md:text-4xl ${
-                section.align === "center" ? "text-center" : "text-left"
-              }`}
-            >
-              {section.title || `Careers at ${ctx.displayName}`}
-            </h1>
-            {section.subtitle && (
-              <p
-                className={`text-sm text-slate-300/90 ${
-                  section.align === "center" ? "text-center" : "text-left"
-                }`}
-              >
-                {section.subtitle}
-              </p>
-            )}
-            {ctx.hasJobs && (
-              <p
-                className={`text-[11px] text-slate-400 ${
-                  section.align === "center" ? "text-center" : "text-left"
-                }`}
-              >
-                Showing{" "}
-                <span className="font-semibold text-slate-50">
-                  {ctx.jobs.length}
-                </span>{" "}
-                open role{ctx.jobs.length === 1 ? "" : "s"}.
-              </p>
-            )}
-          </div>
-        </div>
-      );
-
-    case "rich_text":
-      if (!section.html && !section.title) return null;
-      return (
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-6">
-          {section.title && (
-            <h2 className="mb-2 text-sm font-semibold text-slate-100">
-              {section.title}
-            </h2>
-          )}
-          {section.html && (
-            <div
-              className="prose prose-invert max-w-none prose-p:text-slate-200 prose-li:text-slate-200 prose-strong:text-slate-50 prose-a:text-sky-400"
-              dangerouslySetInnerHTML={{ __html: section.html }}
-            />
-          )}
-        </div>
-      );
-
-    case "values":
-      if (!section.items?.length) return null;
-      return (
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-6">
-          {section.title && (
-            <h2 className="mb-4 text-sm font-semibold text-slate-100">
-              {section.title}
-            </h2>
-          )}
-          <div className="grid gap-4 md:grid-cols-3">
-            {section.items.map((item, idx) => (
-              <div
-                key={idx}
-                className="rounded-xl border border-slate-800/80 bg-slate-950/90 p-4"
-              >
-                <p className="text-xs font-semibold text-slate-100">
-                  {item.label}
-                </p>
-                {item.description && (
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    {item.description}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
-    case "stats":
-      if (!section.items?.length) return null;
-      return (
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-6">
-          {section.title && (
-            <h2 className="mb-4 text-sm font-semibold text-slate-100">
-              {section.title}
-            </h2>
-          )}
-          <div className="grid gap-4 md:grid-cols-4">
-            {section.items.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex flex-col rounded-xl border border-slate-800/80 bg-slate-950/90 px-4 py-3"
-              >
-                <span className="text-xs text-slate-400">{item.label}</span>
-                <span className="mt-1 text-lg font-semibold text-slate-50">
-                  {item.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
-    case "jobs_list":
-      return (
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-6">
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-100">
-                {section.title || "Open positions"}
-              </h2>
-              {section.intro && (
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {section.intro}
-                </p>
-              )}
-            </div>
-            {ctx.hasJobs && (
-              <p className="text-[10px] text-slate-500">
-                {ctx.jobs.length} open role
-                {ctx.jobs.length === 1 ? "" : "s"}
-              </p>
-            )}
-          </div>
-
-          {!ctx.hasJobs ? (
-            <p className="text-[11px] text-slate-500">
-              No open roles right now. Check back soon or follow our updates on
-              LinkedIn.
-            </p>
-          ) : section.layout === "rows" ? (
-            <div className="divide-y divide-slate-800/70">
-              {ctx.jobs.map((job) => (
-                <JobRow key={job.id} job={job} accentColor={ctx.accentColor} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {ctx.jobs.map((job) => (
-                <JobCard
-                  key={job.id}
-                  job={job}
-                  accentColor={ctx.accentColor}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      );
-
-    default:
-      return null;
-  }
-}
-
-function jobHref(job: JobWithClient) {
-  const slugOrId = job.slug || job.id;
-  return `/jobs/${encodeURIComponent(slugOrId)}`;
-}
-
-function JobCard({
-  job,
-  accentColor,
-}: {
-  job: JobWithClient;
-  accentColor: string;
-}) {
-  return (
-    <Link
-      href={jobHref(job)}
-      className="flex h-full flex-col rounded-xl border border-slate-800/80 bg-slate-950/90 p-4 transition hover:border-slate-500 hover:bg-slate-900/90"
-    >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-50">
-            {job.title}
-          </h3>
-          {job.clientCompany && (
-            <p className="mt-0.5 text-[11px] text-slate-400">
-              {job.clientCompany.name}
-            </p>
-          )}
-        </div>
-        {job.location && (
-          <span className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-950/80 px-2.5 py-0.5 text-[10px] font-medium text-slate-300">
-            {job.location}
-          </span>
-        )}
-      </div>
-
-      {job.shortDescription && (
-        <p className="mb-3 line-clamp-2 text-[11px] text-slate-400">
-          {job.shortDescription}
-        </p>
-      )}
-
-      <div className="mt-auto flex items-center justify-between pt-1 text-[10px] text-slate-500">
-        <span>
-          {job.employmentType || "Full time"}
-          {job.department ? ` · ${job.department}` : ""}
-        </span>
-        <span
-          className="font-semibold"
-          style={{ color: accentColor || "#0ea5e9" }}
-        >
-          View role →
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-function JobRow({
-  job,
-  accentColor,
-}: {
-  job: JobWithClient;
-  accentColor: string;
-}) {
-  return (
-    <Link
-      href={jobHref(job)}
-      className="flex flex-col gap-2 py-3 transition hover:bg-slate-900/40"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold text-slate-50">
-            {job.title}
-          </span>
-          <span className="text-[11px] text-slate-400">
-            {job.clientCompany?.name || "Open role"}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
-          {job.location && (
-            <span className="rounded-full border border-slate-700/70 bg-slate-950/80 px-2 py-0.5">
-              {job.location}
-            </span>
-          )}
-          {job.employmentType && (
-            <span className="rounded-full border border-slate-700/70 bg-slate-950/80 px-2 py-0.5">
-              {job.employmentType}
-            </span>
-          )}
-          <span
-            className="font-semibold"
-            style={{ color: accentColor || "#0ea5e9" }}
-          >
-            View →
-          </span>
-        </div>
-      </div>
-    </Link>
   );
 }
