@@ -2,9 +2,10 @@
 "use client";
 
 import { useState } from "react";
-import type { CareerLayout } from "@/types/careersLayout";
+import type { CareerLayout } from "@/lib/careersLayout";
 
 type Props = {
+  tenantId: string;
   initialLayout: CareerLayout | null;
 };
 
@@ -22,7 +23,7 @@ function ensureDefaultLayout(layout: CareerLayout | null): CareerLayout {
   };
 }
 
-export default function CareersLayoutEditor({ initialLayout }: Props) {
+export default function CareersLayoutEditor({ tenantId, initialLayout }: Props) {
   const [layout, setLayout] = useState<CareerLayout>(
     ensureDefaultLayout(initialLayout),
   );
@@ -40,7 +41,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
         return {
           ...s,
           props: {
-            ...(s.props || {}),
+            ...(s as any).props,
             ...patch,
           },
         };
@@ -58,17 +59,20 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
       const res = await fetch("/api/ats/settings/careers/layout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(layout),
+        body: JSON.stringify({
+          tenantId,
+          layout,
+        }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to save");
+        throw new Error(data.error || "Failed to save layout");
       }
 
       setStatus("Saved");
     } catch (err: any) {
-      setStatus(err.message || "Error saving layout");
+      setStatus(err?.message || "Error saving layout");
     } finally {
       setSaving(false);
     }
@@ -79,8 +83,11 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
       <h2 className="text-base font-semibold">Careers page layout</h2>
       <p className="text-xs text-slate-500">
         Control the hero copy, about section, and how many roles show on the
-        careers homepage. This writes JSON into <code>CareerPage.layout</code>{" "}
-        – no SQL needed.
+        careers homepage. This writes JSON into{" "}
+        <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px]">
+          CareerPage.layout
+        </code>{" "}
+        for this tenant.
       </p>
 
       {/* Hero */}
@@ -93,7 +100,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
             Title
             <input
               type="text"
-              defaultValue={hero?.props?.title || ""}
+              defaultValue={(hero as any)?.props?.title || ""}
               onChange={(e) =>
                 updateSection("hero", { title: e.target.value || undefined })
               }
@@ -104,7 +111,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
             Subtitle
             <textarea
               rows={3}
-              defaultValue={hero?.props?.subtitle || ""}
+              defaultValue={(hero as any)?.props?.subtitle || ""}
               onChange={(e) =>
                 updateSection("hero", {
                   subtitle: e.target.value || undefined,
@@ -125,7 +132,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
           Custom title (optional)
           <input
             type="text"
-            defaultValue={about?.props?.title || ""}
+            defaultValue={(about as any)?.props?.title || ""}
             onChange={(e) =>
               updateSection("about", { title: e.target.value || undefined })
             }
@@ -136,7 +143,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
           About HTML
           <textarea
             rows={5}
-            defaultValue={about?.props?.html || ""}
+            defaultValue={(about as any)?.props?.html || ""}
             onChange={(e) =>
               updateSection("about", { html: e.target.value || undefined })
             }
@@ -156,7 +163,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
             type="number"
             min={1}
             max={50}
-            defaultValue={featured?.props?.limit ?? 8}
+            defaultValue={(featured as any)?.props?.limit ?? 8}
             onChange={(e) =>
               updateSection("featuredRoles", {
                 limit: Number(e.target.value || 8),
@@ -174,7 +181,7 @@ export default function CareersLayoutEditor({ initialLayout }: Props) {
           disabled={saving}
           className="inline-flex items-center justify-center rounded-md border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
         >
-          {saving ? "Saving..." : "Save layout"}
+          {saving ? "Saving…" : "Save layout"}
         </button>
         {status && (
           <p className="text-[11px] text-slate-500">
