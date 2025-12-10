@@ -1,7 +1,7 @@
 // app/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
+import { MapPin, Building2, Clock, BriefcaseBusiness } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
 
@@ -79,7 +79,6 @@ function buildJobSearchWhere(args: {
   }
 
   if (orFilters.length > 0) {
-    // Combine text filters with the base visibility rules
     where.AND = where.AND || [];
     where.AND.push({ OR: orFilters });
   }
@@ -116,8 +115,8 @@ export default async function JobsPage({
     employmentType,
   });
 
-  // Fetch jobs + branding context
-  const jobs = await prisma.job.findMany({
+  // Keep this loosely typed to avoid Prisma TS mismatches
+  const jobs = (await prisma.job.findMany({
     where,
     orderBy: { createdAt: "desc" },
     include: {
@@ -128,9 +127,7 @@ export default async function JobsPage({
         },
       },
     },
-  });
-
-  type JobWithRelations = (typeof jobs)[number];
+  })) as any[];
 
   const primarySettings =
     (careerSiteSettings as any) ??
@@ -160,10 +157,7 @@ export default async function JobsPage({
   const accentColor =
     (primarySettings as any)?.accentColorHex ||
     (primarySettings as any)?.accentColor ||
-    "#0ea5e9";
-
-  const heroBackground =
-    (primarySettings as any)?.heroBackgroundHex || "#020617"; // slate-950-ish
+    "#0f766e"; // calm teal-ish accent
 
   const isTenantScoped = Boolean(tenant);
   const isClientScoped = Boolean(clientCompany);
@@ -177,16 +171,13 @@ export default async function JobsPage({
   const totalJobs = jobs.length;
 
   return (
-    <main
-      className="min-h-screen bg-slate-950 px-4 py-10 text-slate-50"
-      style={{ background: heroBackground }}
-    >
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         {/* Header / Context */}
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             {headerLogoUrl ? (
-              <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-900/70">
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={headerLogoUrl}
@@ -195,19 +186,19 @@ export default async function JobsPage({
                 />
               </div>
             ) : (
-              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/70 text-xs font-semibold uppercase tracking-wide text-slate-300">
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {displayName.slice(0, 2).toUpperCase()}
               </div>
             )}
 
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Jobs
               </p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-50">
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
                 Roles at {displayName}
               </h1>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500">
                 {isClientScoped
                   ? "These are live roles for this client, powered by ThinkATS."
                   : isTenantScoped
@@ -218,26 +209,26 @@ export default async function JobsPage({
           </div>
 
           {/* Context pill */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-[11px] text-slate-300">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] font-semibold text-slate-100">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] text-slate-600">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-800">
               {totalJobs}
             </span>
             <span className="truncate">
               {totalJobs === 1 ? "Open role" : "Open roles"} ·{" "}
-              <span className="font-medium text-slate-100">
+              <span className="font-medium text-slate-900">
                 {contextLabel}
               </span>
             </span>
           </div>
         </header>
 
-        {/* Search / filters (simple, but keeps the structure for later) */}
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-3 text-[11px] text-slate-200">
+        {/* Search / filters (matches clean detail UX but lightweight) */}
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 text-[11px] text-slate-700 shadow-sm">
           <form className="grid gap-3 md:grid-cols-[2fr,1fr,1fr]">
             <div className="space-y-1">
               <label
                 htmlFor="q"
-                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400"
+                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
               >
                 Keyword
               </label>
@@ -246,14 +237,14 @@ export default async function JobsPage({
                 name="q"
                 defaultValue={q ?? ""}
                 placeholder="Search by title, team or keyword…"
-                className="block w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-50 outline-none placeholder:text-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
               />
             </div>
 
             <div className="space-y-1">
               <label
                 htmlFor="location"
-                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400"
+                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
               >
                 Location
               </label>
@@ -262,14 +253,14 @@ export default async function JobsPage({
                 name="location"
                 defaultValue={location ?? ""}
                 placeholder="e.g. Lagos, Remote"
-                className="block w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-50 outline-none placeholder:text-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
               />
             </div>
 
             <div className="space-y-1">
               <label
                 htmlFor="department"
-                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400"
+                className="block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-500"
               >
                 Department
               </label>
@@ -278,23 +269,23 @@ export default async function JobsPage({
                 name="department"
                 defaultValue={department ?? ""}
                 placeholder="e.g. Sales, Operations"
-                className="block w-full rounded-lg border border-slate-700 bg-slate-950/80 px-3 py-2 text-[11px] text-slate-50 outline-none placeholder:text-slate-500 focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
               />
             </div>
 
             {/* Actions row */}
-            <div className="md:col-span-3 mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-400">
+            <div className="md:col-span-3 mt-2 flex items-center justify-between gap-3 text-[10px] text-slate-500">
               <span>
                 Showing{" "}
-                <span className="font-semibold text-slate-100">
+                <span className="font-semibold text-slate-900">
                   {totalJobs}
                 </span>{" "}
                 {totalJobs === 1 ? "role" : "roles"}.
               </span>
               <button
                 type="submit"
-                className="inline-flex items-center rounded-full bg-sky-500 px-4 py-1.5 text-[11px] font-semibold text-slate-950 shadow-sm hover:bg-sky-400"
-                style={{ backgroundColor: accentColor, color: "#020617" }}
+                className="inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
+                style={{ backgroundColor: accentColor }}
               >
                 Update filters
               </button>
@@ -302,11 +293,11 @@ export default async function JobsPage({
           </form>
         </section>
 
-        {/* Jobs list */}
+        {/* Jobs list – cards styled like detail page, with icons + tiny logo */}
         <section className="space-y-3">
           {jobs.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/60 px-4 py-10 text-center text-[11px] text-slate-400">
-              <p className="font-medium text-slate-100">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-[11px] text-slate-500">
+              <p className="font-medium text-slate-900">
                 No open roles right now.
               </p>
               <p className="mt-1">
@@ -316,8 +307,12 @@ export default async function JobsPage({
             </div>
           ) : (
             <ul className="space-y-3">
-              {jobs.map((job: JobWithRelations) => {
-                const jobUrl = `/jobs/${encodeURIComponent(job.slug || job.id)}`;
+              {jobs.map((rawJob) => {
+                const job = rawJob as any;
+
+                const jobUrl = `/jobs/${encodeURIComponent(
+                  job.slug || job.id,
+                )}`;
 
                 const jobTenant = job.tenant as any;
                 const jobSettings =
@@ -327,7 +322,9 @@ export default async function JobsPage({
 
                 const cardLogoUrl =
                   (job.clientCompany as any)?.logoUrl ||
+                  (job.clientCompany as any)?.logo_url ||
                   (jobSettings as any)?.logoUrl ||
+                  (jobSettings as any)?.logo_url ||
                   jobTenant?.logoUrl ||
                   null;
 
@@ -340,6 +337,7 @@ export default async function JobsPage({
                 const locationLabel = job.location || "Location not specified";
                 const employmentLabel =
                   job.employmentType || job.workMode || null;
+                const locationTypeLabel = job.locationType || job.location_type;
 
                 const createdAt = job.createdAt
                   ? new Date(job.createdAt)
@@ -353,33 +351,36 @@ export default async function JobsPage({
                     })
                   : null;
 
+                const shortDescription =
+                  job.shortDescription || job.short_description || null;
+
                 return (
                   <li key={job.id}>
                     <Link
                       href={jobUrl}
-                      className="group block overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 transition hover:border-sky-500/70 hover:bg-slate-900"
+                      className="group block rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-[1px] hover:border-emerald-600/70 hover:shadow-md"
                     >
                       <div className="flex gap-3">
-                        {/* Tiny logo avatar */}
-                        <div className="mt-0.5 flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-950/80">
+                        {/* Tiny logo avatar on the left of the title */}
+                        <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                           {cardLogoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={cardLogoUrl}
                               alt={companyLabel}
-                              className="h-7 w-7 object-contain"
+                              className="h-8 w-8 object-contain"
                             />
                           ) : (
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                               {companyLabel.slice(0, 2).toUpperCase()}
                             </span>
                           )}
                         </div>
 
                         <div className="flex-1 space-y-2">
-                          {/* Title + company */}
+                          {/* Title + posted */}
                           <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-                            <h2 className="text-sm font-semibold text-slate-50 group-hover:text-sky-300">
+                            <h2 className="text-sm font-semibold text-slate-900 group-hover:text-emerald-700">
                               {job.title}
                             </h2>
                             {postedLabel && (
@@ -389,35 +390,43 @@ export default async function JobsPage({
                             )}
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
-                            <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2.5 py-0.5 text-[10px] font-medium text-slate-100">
+                          {/* Company + meta icons */}
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                            <span className="inline-flex items-center gap-1 font-medium text-slate-800">
+                              <Building2 className="h-3.5 w-3.5 text-slate-400" />
                               {companyLabel}
                             </span>
-                            <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2 py-0.5">
+
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="h-3.5 w-3.5 text-slate-400" />
                               {locationLabel}
                             </span>
+
                             {employmentLabel && (
-                              <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2 py-0.5">
+                              <span className="inline-flex items-center gap-1">
+                                <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-400" />
                                 {employmentLabel}
                               </span>
                             )}
-                            {job.department && (
-                              <span className="inline-flex items-center rounded-full bg-slate-900/80 px-2 py-0.5">
-                                {job.department}
+
+                            {locationTypeLabel && (
+                              <span className="inline-flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                                {locationTypeLabel}
                               </span>
                             )}
                           </div>
 
                           {/* Short description */}
-                          {job.shortDescription && (
-                            <p className="line-clamp-2 text-[11px] text-slate-300">
-                              {job.shortDescription}
+                          {shortDescription && (
+                            <p className="line-clamp-2 text-[11px] text-slate-600">
+                              {shortDescription}
                             </p>
                           )}
                         </div>
 
-                        {/* Right chevron / call to action */}
-                        <div className="hidden items-center pl-3 text-[11px] font-medium text-sky-300 sm:flex">
+                        {/* Right CTA */}
+                        <div className="hidden items-center pl-3 text-[11px] font-medium text-emerald-700 sm:flex">
                           <span className="flex items-center gap-1">
                             View job
                             <span aria-hidden>↗</span>
@@ -432,16 +441,16 @@ export default async function JobsPage({
           )}
         </section>
 
-        {/* Subtle footer */}
-        <footer className="mt-4 flex items-center justify-between border-t border-slate-900 pt-4 text-[10px] text-slate-500">
+        {/* Subtle footer – no big ThinkATS nav, just a quiet tag */}
+        <footer className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-[10px] text-slate-500">
           <span>
             Jobs powered by{" "}
-            <span className="font-semibold text-slate-300">ThinkATS</span>.
+            <span className="font-semibold text-slate-700">ThinkATS</span>.
           </span>
           {baseDomain && (
             <span className="hidden sm:inline">
               Host:{" "}
-              <code className="rounded bg-slate-900 px-1 py-0.5 text-[10px]">
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
                 {host}
               </code>
             </span>
