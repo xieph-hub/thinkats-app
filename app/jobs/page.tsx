@@ -157,7 +157,7 @@ export default async function JobsPage({
   const accentColor =
     (primarySettings as any)?.accentColorHex ||
     (primarySettings as any)?.accentColor ||
-    "#0f766e"; // calm teal-ish accent
+    "#0f766e"; // rich, calm accent
 
   const isTenantScoped = Boolean(tenant);
   const isClientScoped = Boolean(clientCompany);
@@ -222,7 +222,7 @@ export default async function JobsPage({
           </div>
         </header>
 
-        {/* Search / filters (matches clean detail UX but lightweight) */}
+        {/* Search / filters */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 text-[11px] text-slate-700 shadow-sm">
           <form className="grid gap-3 md:grid-cols-[2fr,1fr,1fr]">
             <div className="space-y-1">
@@ -293,7 +293,7 @@ export default async function JobsPage({
           </form>
         </section>
 
-        {/* Jobs list – cards styled like detail page, with icons + tiny logo */}
+        {/* Jobs list */}
         <section className="space-y-3">
           {jobs.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-[11px] text-slate-500">
@@ -356,84 +356,108 @@ export default async function JobsPage({
 
                 return (
                   <li key={job.id}>
-                    <Link
-                      href={jobUrl}
-                      className="group block rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-[1px] hover:border-emerald-600/70 hover:shadow-md"
-                    >
-                      <div className="flex gap-3">
-                        {/* Tiny logo avatar on the left of the title */}
-                        <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                          {cardLogoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={cardLogoUrl}
-                              alt={companyLabel}
-                              className="h-8 w-8 object-contain"
-                            />
-                          ) : (
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                              {companyLabel.slice(0, 2).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
+                    {/* Decorative side rails left & right */}
+                    <div className="relative">
+                      <div
+                        className="pointer-events-none absolute inset-y-2 -left-3 hidden w-2 rounded-r-2xl opacity-60 sm:block"
+                        style={{ backgroundColor: accentColor }}
+                      />
+                      <div
+                        className="pointer-events-none absolute inset-y-2 -right-3 hidden w-2 rounded-l-2xl opacity-60 sm:block"
+                        style={{ backgroundColor: accentColor }}
+                      />
 
-                        <div className="flex-1 space-y-2">
-                          {/* Title + posted */}
-                          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-                            <h2 className="text-sm font-semibold text-slate-900 group-hover:text-emerald-700">
-                              {job.title}
-                            </h2>
-                            {postedLabel && (
-                              <span className="text-[10px] text-slate-500">
-                                Posted {postedLabel}
+                      <Link
+                        href={jobUrl}
+                        className="relative group block rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:-translate-y-[1px] hover:border-emerald-600/70 hover:shadow-md"
+                      >
+                        <div className="flex gap-3">
+                          {/* Tiny logo avatar on the left of the title */}
+                          <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                            {cardLogoUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={cardLogoUrl}
+                                alt={companyLabel}
+                                className="h-8 w-8 object-contain"
+                              />
+                            ) : (
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                {companyLabel.slice(0, 2).toUpperCase()}
                               </span>
                             )}
                           </div>
 
-                          {/* Company + meta icons */}
-                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-                            <span className="inline-flex items-center gap-1 font-medium text-slate-800">
-                              <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                              {companyLabel}
-                            </span>
+                          <div className="flex-1 space-y-2">
+                            {/* Title + posted */}
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                              <h2 className="text-sm font-semibold text-slate-900 group-hover:text-emerald-700">
+                                {job.title}
+                              </h2>
+                              {postedLabel && (
+                                <span className="text-[10px] text-slate-500">
+                                  Posted {postedLabel}
+                                </span>
+                              )}
+                            </div>
 
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                              {locationLabel}
-                            </span>
-
-                            {employmentLabel && (
-                              <span className="inline-flex items-center gap-1">
-                                <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-400" />
-                                {employmentLabel}
+                            {/* Company + meta icons */}
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                              <span className="inline-flex items-center gap-1 font-medium text-slate-800">
+                                <Building2
+                                  className="h-3.5 w-3.5"
+                                  style={{ color: accentColor }}
+                                />
+                                {companyLabel}
                               </span>
-                            )}
 
-                            {locationTypeLabel && (
                               <span className="inline-flex items-center gap-1">
-                                <Clock className="h-3.5 w-3.5 text-slate-400" />
-                                {locationTypeLabel}
+                                <MapPin
+                                  className="h-3.5 w-3.5"
+                                  style={{ color: accentColor }}
+                                />
+                                {locationLabel}
                               </span>
+
+                              {employmentLabel && (
+                                <span className="inline-flex items-center gap-1">
+                                  <BriefcaseBusiness
+                                    className="h-3.5 w-3.5"
+                                    style={{ color: accentColor }}
+                                  />
+                                  {employmentLabel}
+                                </span>
+                              )}
+
+                              {locationTypeLabel && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Clock
+                                    className="h-3.5 w-3.5"
+                                    style={{ color: accentColor }}
+                                  />
+                                  {locationTypeLabel}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Short description */}
+                            {shortDescription && (
+                              <p className="line-clamp-2 text-[11px] text-slate-600">
+                                {shortDescription}
+                              </p>
                             )}
                           </div>
 
-                          {/* Short description */}
-                          {shortDescription && (
-                            <p className="line-clamp-2 text-[11px] text-slate-600">
-                              {shortDescription}
-                            </p>
-                          )}
+                          {/* Right CTA */}
+                          <div className="hidden items-center pl-3 text-[11px] font-medium text-emerald-700 sm:flex">
+                            <span className="flex items-center gap-1">
+                              View job
+                              <span aria-hidden>↗</span>
+                            </span>
+                          </div>
                         </div>
-
-                        {/* Right CTA */}
-                        <div className="hidden items-center pl-3 text-[11px] font-medium text-emerald-700 sm:flex">
-                          <span className="flex items-center gap-1">
-                            View job
-                            <span aria-hidden>↗</span>
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
+                      </Link>
+                    </div>
                   </li>
                 );
               })}
