@@ -2,13 +2,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import CareersLayoutEditor from "@/components/careers/CareersLayoutEditor";
+import type { CareerLayout } from "@/lib/careersLayout";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Careers site settings | ThinkATS",
   description:
-    "Configure careers site branding, copy, and marketplace visibility for this tenant.",
+    "Configure careers site branding, copy, layout and marketplace visibility for this tenant.",
 };
 
 type SearchParams = {
@@ -51,7 +53,7 @@ export default async function CareersSettingsPage({
   }
 
   const tenantParam = asStringParam(searchParams?.tenantId);
-  let selectedTenant =
+  const selectedTenant =
     (tenantParam &&
       tenants.find(
         (t) => t.id === tenantParam || (t as any).slug === tenantParam,
@@ -69,7 +71,9 @@ export default async function CareersSettingsPage({
 
   const heroTitle =
     settings?.heroTitle ||
-    `Careers at ${selectedTenant.name || (selectedTenant as any).slug || "our company"}`;
+    `Careers at ${
+      selectedTenant.name || (selectedTenant as any).slug || "our company"
+    }`;
   const heroSubtitle =
     settings?.heroSubtitle ||
     "Explore open roles and opportunities to join the team.";
@@ -80,10 +84,8 @@ export default async function CareersSettingsPage({
   const isPublic = settings?.isPublic ?? true;
   const includeInMarketplace = (settings as any)?.includeInMarketplace ?? false;
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || ""; // optional, for full URLs
-  const tenantSlug =
-    (selectedTenant as any).slug || selectedTenantId;
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
+  const tenantSlug = (selectedTenant as any).slug || selectedTenantId;
   const careersPath = `/careers/${encodeURIComponent(tenantSlug)}`;
   const marketplacePath = `/jobs`;
 
@@ -91,6 +93,15 @@ export default async function CareersSettingsPage({
   const marketplaceUrl = baseUrl
     ? `${baseUrl}${marketplacePath}`
     : marketplacePath;
+
+  // -----------------------------
+  // Load layout JSON for this tenant
+  // -----------------------------
+  const careerPage = await prisma.careerPage.findFirst({
+    where: { tenantId: selectedTenantId, slug: "careers-home" },
+  });
+
+  const initialLayout = (careerPage?.layout ?? null) as CareerLayout | null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 lg:px-8">
@@ -104,8 +115,8 @@ export default async function CareersSettingsPage({
             Careers site settings
           </h1>
           <p className="mt-1 text-xs text-slate-600">
-            Configure branding, copy and where this tenant&apos;s jobs appear
-            across ThinkATS.
+            Configure branding, copy, layout and where this tenant&apos;s jobs
+            appear across ThinkATS.
           </p>
         </div>
 
@@ -158,8 +169,11 @@ export default async function CareersSettingsPage({
                 {careersUrl}
               </Link>
               <span className="ml-1 text-slate-500">
-                (controlled by <span className="font-medium">“Make this careers
-                site public”</span> below)
+                (controlled by{" "}
+                <span className="font-medium">
+                  “Make this careers site public”
+                </span>{" "}
+                below)
               </span>
             </p>
           </div>
@@ -197,7 +211,7 @@ export default async function CareersSettingsPage({
         </div>
       </section>
 
-      {/* Form */}
+      {/* Careers branding + copy form */}
       <form
         method="POST"
         action="/api/ats/settings/careers-site"
@@ -405,6 +419,12 @@ export default async function CareersSettingsPage({
           </button>
         </div>
       </form>
+
+      {/* Layout editor card (JSON layout for careers-home) */}
+      <CareersLayoutEditor
+        tenantId={selectedTenantId}
+        initialLayout={initialLayout}
+      />
     </div>
   );
 }
