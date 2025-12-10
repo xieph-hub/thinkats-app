@@ -1,17 +1,19 @@
 // app/api/ats/settings/careers/layout/route.ts
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { parseCareerLayout } from "@/lib/careersLayoutSchema";
-import { getCurrentTenantId } from "@/lib/tenantContext"; // whatever you use
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
   const user = await getServerUser();
   if (!user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const tenantId = await getCurrentTenantId(user);
+  const tenantId = req.nextUrl.searchParams.get("tenantId");
   if (!tenantId) {
     return NextResponse.json({ error: "no-tenant" }, { status: 400 });
   }
@@ -26,32 +28,41 @@ export async function GET() {
   });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const user = await getServerUser();
   if (!user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const tenantId = await getCurrentTenantId(user);
+  const body = await req.json().catch(() => null) as any;
+
+  const tenantId =
+    typeof body?.tenantId === "string" && body.tenantId.trim().length > 0
+      ? body.tenantId.trim()
+      : null;
+
   if (!tenantId) {
     return NextResponse.json({ error: "no-tenant" }, { status: 400 });
   }
 
-  const body = await req.json();
+  // Support both: { tenantId, layout: {...} } and { sections: [...] }
+  const rawLayout = body?.layout ?? body;
 
   let layout;
   try {
-    layout = parseCareerLayout(body);
+    layout = parseCareerLayout(rawLayout);
   } catch (err: any) {
     return NextResponse.json(
-      { error: "invalid-layout", details: err?.issues ?? err?.message },
+      {
+        error: "invalid-layout",
+        details: err?.issues ?? err?.message ?? "Invalid layout payload",
+      },
       { status: 400 },
     );
   }
 
   await prisma.careerPage.upsert({
     where: {
-      // adjust to your unique constraint
       tenantId_slug: {
         tenantId,
         slug: "careers-home",
