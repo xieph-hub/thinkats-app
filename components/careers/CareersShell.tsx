@@ -13,7 +13,7 @@ interface CareersShellProps {
   baseDomain: string;
   planTier: string; // e.g. "STARTER" | "GROWTH" | "AGENCY" | "ENTERPRISE"
 
-  // Branding (usually derived from CareerSiteSettings)
+  // Branding (usually derived from CareerSiteSettings / CareerTheme)
   primaryColor: string; // hex, e.g. "#172965"
   accentColor: string; // hex, e.g. "#0ea5e9"
   heroBackground: string; // hex, e.g. "#F9FAFB"
@@ -150,12 +150,12 @@ export default function CareersShell(props: CareersShellProps) {
             {showPoweredBy && (
               <footer className="mt-6 border-t border-slate-200 pt-3 text-[10px] text-slate-400">
                 Powered by{" "}
-                <span
-                  className="font-medium"
-                  style={{ color: accentColor || "#0f172a" }}
-                >
-                  ThinkATS
-                </span>
+                  <span
+                    className="font-medium"
+                    style={{ color: accentColor || "#0f172a" }}
+                  >
+                    ThinkATS
+                  </span>
                 .
               </footer>
             )}
