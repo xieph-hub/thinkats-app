@@ -6,7 +6,6 @@ import {
   Building2,
   Clock,
   BriefcaseBusiness,
-  Filter,
   Share2,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
@@ -100,6 +99,7 @@ export default async function JobsPage({
 }) {
   const hostContext = await getHostContext();
   const {
+    isAppHost,
     tenant,
     clientCompany,
     host,
@@ -121,6 +121,7 @@ export default async function JobsPage({
     employmentType,
   });
 
+  // Loosely typed result to avoid Prisma TS mismatches
   const jobs = (await prisma.job.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -135,7 +136,9 @@ export default async function JobsPage({
   })) as any[];
 
   const primarySettings =
-    (careerSiteSettings as any) ?? tenant?.careerSiteSettings?.[0] ?? null;
+    (careerSiteSettings as any) ??
+    tenant?.careerSiteSettings?.[0] ??
+    null;
 
   const displayName =
     clientCompany?.name ||
@@ -151,6 +154,12 @@ export default async function JobsPage({
 
   const headerLogoUrl =
     clientCompany?.logoUrl || logoFromSettings || tenant?.logoUrl || null;
+
+  // Brand-ish colours
+  const primaryColor =
+    (primarySettings as any)?.primaryColorHex ||
+    (primarySettings as any)?.primaryColor ||
+    "#172965";
 
   const accentColor =
     (primarySettings as any)?.accentColorHex ||
@@ -168,28 +177,123 @@ export default async function JobsPage({
 
   const totalJobs = jobs.length;
 
-  // Base URL for social sharing
-  const envBase = process.env.NEXT_PUBLIC_SITE_URL;
-  const absoluteBaseUrl = host
-    ? `https://${host}`
-    : envBase || "https://www.thinkats.com";
+  // For social sharing
+  const jobsUrl =
+    host && !isAppHost
+      ? `https://${host}/jobs`
+      : `${process.env.NEXT_PUBLIC_SITE_URL || "https://www.thinkats.com"}/jobs`;
+
+  const shareText = `Jobs at ${displayName}`;
+  const linkedinShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
+    jobsUrl,
+  )}`;
+  const twitterShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(
+    jobsUrl,
+  )}&text=${encodeURIComponent(shareText)}`;
+  const whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(
+    `${shareText} ${jobsUrl}`,
+  )}`;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:flex-row">
-        {/* LEFT: Refine jobs panel */}
-        <aside className="w-full lg:w-64">
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 text-[11px] text-slate-700 shadow-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100">
-                <Filter className="h-3.5 w-3.5 text-emerald-600" />
+    <main className="min-h-screen bg-white px-4 py-10 text-slate-900">
+      <div className="mx-auto max-w-6xl space-y-6">
+        {/* Header / Context */}
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            {headerLogoUrl ? (
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={headerLogoUrl}
+                  alt={displayName}
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+            ) : (
+              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {displayName.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Jobs
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                Roles at {displayName}
+              </h1>
+              <p className="mt-1 text-xs text-slate-500">
+                {isClientScoped
+                  ? "These are live roles for this client, powered by ThinkATS."
+                  : isTenantScoped
+                    ? "Open roles managed under this tenant’s workspace."
+                    : "Marketplace view of open roles managed on ThinkATS."}
+              </p>
+            </div>
+          </div>
+
+          {/* Context pill + social share */}
+          <div className="flex flex-col items-end gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] text-slate-600">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-800">
+                {totalJobs}
               </span>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-                Refine jobs
-              </h2>
+              <span className="truncate">
+                {totalJobs === 1 ? "Open role" : "Open roles"} ·{" "}
+                <span className="font-medium text-slate-900">
+                  {contextLabel}
+                </span>
+              </span>
             </div>
 
-            <form className="space-y-3" method="GET">
+            {/* Social share row */}
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+              <Share2 className="h-3.5 w-3.5 text-slate-400" />
+              <span>Share this jobs page:</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <a
+                  href={linkedinShareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100"
+                >
+                  LinkedIn
+                </a>
+                <a
+                  href={twitterShareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100"
+                >
+                  X
+                </a>
+                <a
+                  href={whatsappShareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-[#128C7E] hover:border-[#128C7E]/40 hover:bg-slate-100"
+                >
+                  WhatsApp
+                </a>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Main layout: left refine panel + right jobs list */}
+        <section className="grid gap-6 lg:grid-cols-[260px,1fr]">
+          {/* LEFT: Refine jobs */}
+          <aside className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-[11px] text-slate-700 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Refine jobs
+              </h2>
+              <span className="rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
+                {totalJobs} {totalJobs === 1 ? "role" : "roles"}
+              </span>
+            </div>
+
+            <form className="space-y-3">
               <div className="space-y-1">
                 <label
                   htmlFor="q"
@@ -201,7 +305,7 @@ export default async function JobsPage({
                   id="q"
                   name="q"
                   defaultValue={q ?? ""}
-                  placeholder="Title, team or keyword…"
+                  placeholder="Search by title, team or keyword…"
                   className="block w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-900 outline-none placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-1 focus:ring-emerald-600"
                 />
               </div>
@@ -254,85 +358,18 @@ export default async function JobsPage({
                 />
               </div>
 
-              <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-                <span>
-                  {totalJobs === 0 ? (
-                    <>No roles match these filters.</>
-                  ) : (
-                    <>
-                      Showing{" "}
-                      <span className="font-semibold text-slate-900">
-                        {totalJobs}
-                      </span>{" "}
-                      {totalJobs === 1 ? "role" : "roles"}.
-                    </>
-                  )}
-                </span>
-                <button
-                  type="submit"
-                  className="inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
-                  style={{ backgroundColor: accentColor }}
-                >
-                  Apply
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="mt-2 inline-flex w-full items-center justify-center rounded-full px-4 py-2 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
+                style={{ backgroundColor: accentColor }}
+              >
+                Update filters
+              </button>
             </form>
-          </section>
-        </aside>
+          </aside>
 
-        {/* RIGHT: Header + jobs list */}
-        <div className="flex-1 space-y-4">
-          {/* Header / Context */}
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              {headerLogoUrl ? (
-                <div className="mt-0.5 flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={headerLogoUrl}
-                    alt={displayName}
-                    className="h-8 w-8 object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {displayName.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Jobs
-                </p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-                  Roles at {displayName}
-                </h1>
-                <p className="mt-1 text-xs text-slate-500">
-                  {isClientScoped
-                    ? "These are live roles for this client, powered by ThinkATS."
-                    : isTenantScoped
-                      ? "Open roles managed under this tenant’s workspace."
-                      : "Marketplace view of open roles managed on ThinkATS."}
-                </p>
-              </div>
-            </div>
-
-            {/* Context pill */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] text-slate-600">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-800">
-                {totalJobs}
-              </span>
-              <span className="truncate">
-                {totalJobs === 1 ? "Open role" : "Open roles"} ·{" "}
-                <span className="font-medium text-slate-900">
-                  {contextLabel}
-                </span>
-              </span>
-            </div>
-          </header>
-
-          {/* Jobs list – cards with coloured icons, tags, social sharing */}
-          <section className="space-y-3">
+          {/* RIGHT: Jobs list */}
+          <div className="space-y-3">
             {jobs.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center text-[11px] text-slate-500">
                 <p className="font-medium text-slate-900">
@@ -351,6 +388,7 @@ export default async function JobsPage({
                   const jobUrl = `/jobs/${encodeURIComponent(
                     job.slug || job.id,
                   )}`;
+
                   const jobTenant = job.tenant as any;
                   const jobSettings =
                     (jobTenant?.careerSiteSettings &&
@@ -393,18 +431,10 @@ export default async function JobsPage({
                   const shortDescription =
                     job.shortDescription || job.short_description || null;
 
-                  const tags: string[] = Array.isArray(job.tags)
-                    ? job.tags
-                    : [];
-                  const visibleTags = tags.slice(0, 4);
-
-                  const absoluteJobUrl = `${absoluteBaseUrl}${jobUrl}`;
-                  const linkedinShareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(
-                    absoluteJobUrl,
-                  )}`;
-                  const xShareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(
-                    absoluteJobUrl,
-                  )}&text=${encodeURIComponent(job.title || "Job opportunity")}`;
+                  const tags: string[] =
+                    Array.isArray(job.tags) && job.tags.length > 0
+                      ? job.tags
+                      : [];
 
                   return (
                     <li key={job.id}>
@@ -442,7 +472,7 @@ export default async function JobsPage({
                               )}
                             </div>
 
-                            {/* Company + meta icons (coloured icons) */}
+                            {/* Company + meta icons */}
                             <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                               <span className="inline-flex items-center gap-1 font-medium text-slate-800">
                                 <Building2 className="h-3.5 w-3.5 text-slate-500" />
@@ -450,39 +480,35 @@ export default async function JobsPage({
                               </span>
 
                               <span className="inline-flex items-center gap-1">
+                                {/* red pin */}
                                 <MapPin className="h-3.5 w-3.5 text-red-500" />
                                 {locationLabel}
                               </span>
 
                               {employmentLabel && (
                                 <span className="inline-flex items-center gap-1">
-                                  <BriefcaseBusiness className="h-3.5 w-3.5 text-emerald-600" />
+                                  {/* deep brown briefcase */}
+                                  <BriefcaseBusiness className="h-3.5 w-3.5 text-[#7A4B2A]" />
                                   {employmentLabel}
                                 </span>
                               )}
 
                               {locationTypeLabel && (
                                 <span className="inline-flex items-center gap-1">
-                                  <Clock className="h-3.5 w-3.5 text-amber-700" />
+                                  {/* rich accent for work style */}
+                                  <Clock className="h-3.5 w-3.5 text-emerald-600" />
                                   {locationTypeLabel}
                                 </span>
                               )}
                             </div>
 
-                            {/* Short description */}
-                            {shortDescription && (
-                              <p className="line-clamp-2 text-[11px] text-slate-600">
-                                {shortDescription}
-                              </p>
-                            )}
-
-                            {/* Tags row */}
-                            {visibleTags.length > 0 && (
+                            {/* Tags */}
+                            {tags.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1.5">
-                                {visibleTags.map((tag) => (
+                                {tags.slice(0, 6).map((tag) => (
                                   <span
                                     key={tag}
-                                    className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                                    className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600"
                                   >
                                     {tag}
                                   </span>
@@ -490,37 +516,20 @@ export default async function JobsPage({
                               </div>
                             )}
 
-                            {/* Bottom row: CTA + social share */}
-                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
-                              <span className="inline-flex items-center rounded-full bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white shadow-sm group-hover:bg-emerald-700">
-                                View job
-                              </span>
+                            {/* Short description */}
+                            {shortDescription && (
+                              <p className="line-clamp-2 text-[11px] text-slate-600">
+                                {shortDescription}
+                              </p>
+                            )}
+                          </div>
 
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                                  <Share2 className="h-3.5 w-3.5 text-slate-400" />
-                                  <span>Share:</span>
-                                </span>
-                                <a
-                                  href={linkedinShareUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] font-medium text-slate-700 underline-offset-2 hover:underline"
-                                >
-                                  LinkedIn
-                                </a>
-                                <a
-                                  href={xShareUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] font-medium text-slate-700 underline-offset-2 hover:underline"
-                                >
-                                  X
-                                </a>
-                              </div>
-                            </div>
+                          {/* Right CTA */}
+                          <div className="hidden items-center pl-3 text-[11px] font-medium text-emerald-700 sm:flex">
+                            <span className="flex items-center gap-1">
+                              View job
+                              <span aria-hidden>↗</span>
+                            </span>
                           </div>
                         </div>
                       </Link>
@@ -529,24 +538,24 @@ export default async function JobsPage({
                 })}
               </ul>
             )}
-          </section>
+          </div>
+        </section>
 
-          {/* Subtle footer – no ThinkATS nav, just a quiet tag */}
-          <footer className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-[10px] text-slate-500">
-            <span>
-              Jobs powered by{" "}
-              <span className="font-semibold text-slate-700">ThinkATS</span>.
+        {/* Subtle footer – no big ThinkATS nav, just a quiet tag */}
+        <footer className="mt-4 flex items-center justify-between border-t border-slate-200 pt-4 text-[10px] text-slate-500">
+          <span>
+            Jobs powered by{" "}
+            <span className="font-semibold text-slate-700">ThinkATS</span>.
+          </span>
+          {baseDomain && (
+            <span className="hidden sm:inline">
+              Host:{" "}
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
+                {host}
+              </code>
             </span>
-            {baseDomain && (
-              <span className="hidden sm:inline">
-                Host:{" "}
-                <code className="rounded bg-slate-100 px-1 py-0.5 text-[10px]">
-                  {host}
-                </code>
-              </span>
-            )}
-          </footer>
-        </div>
+          )}
+        </footer>
       </div>
     </main>
   );
