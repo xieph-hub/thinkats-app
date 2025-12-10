@@ -19,6 +19,14 @@ enum TagKind {
   PIPELINE
 }
 
+// High-level page “kind” for the careers builder
+enum CareerPageKind {
+  CAREERS_HOME   // /careers
+  JOBS_INDEX     // /jobs
+  JOB_DETAIL     // /jobs/[jobIdOrSlug]
+  CUSTOM         // /anything-you-like
+}
+
 // --------------------------------------------------------------------------
 // TENANTS
 // --------------------------------------------------------------------------
@@ -92,6 +100,10 @@ model Tenant {
 
   // invitations
   invitations TenantInvitation[]
+
+  // careers theme-builder
+  careerThemes CareerTheme[]
+  careerPages  CareerPage[]
 
   @@map("tenants")
 }
@@ -199,6 +211,9 @@ model ClientCompany {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   jobs   Job[]
+
+  // Theme-builder pages specifically scoped to this client
+  careerPages CareerPage[]
 
   @@map("client_companies")
 }
@@ -558,7 +573,7 @@ model JobStage {
 }
 
 // --------------------------------------------------------------------------
-// CAREER SITE SETTINGS
+// CAREER SITE SETTINGS + THEME-BUILDER HOOKS
 // --------------------------------------------------------------------------
 
 model CareerSiteSettings {
@@ -569,7 +584,11 @@ model CareerSiteSettings {
   logoUrl        String? @map("logo_url")
 
   // Hero/banner image for the careers microsite
-  bannerImageUrl String? @map("banner_image_url")
+  // bannerImagePath = uploaded asset path (e.g. Supabase storage)
+  // bannerImageUrl  = fully-qualified URL (legacy / external)
+  bannerImageUrl  String? @map("banner_image_url")
+  bannerImagePath String? @map("banner_image_path")
+  bannerImageAlt  String? @map("banner_image_alt")
 
   // Hex-based brand colours for careers microsite
   primaryColorHex   String? @map("primary_color_hex")   // e.g. "#172965"
@@ -589,15 +608,94 @@ model CareerSiteSettings {
   twitterUrl   String? @map("twitter_url")
   instagramUrl String? @map("instagram_url")
 
+  // Theme builder linkage
+  themeId    String? @map("theme_id") @db.Uuid
+  homePageId String? @map("home_page_id") @db.Uuid
+
   includeInMarketplace Boolean @map("include_in_marketplace") @default(false)
   isPublic             Boolean @map("is_public") @default(true)
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant   Tenant       @relation(fields: [tenantId], references: [id])
+  theme    CareerTheme? @relation(fields: [themeId], references: [id])
+  homePage CareerPage?  @relation(fields: [homePageId], references: [id])
 
   @@map("career_site_settings")
+}
+
+// --------------------------------------------------------------------------
+// CAREER THEMES & PAGES (WEBFLOW-LITE)
+// --------------------------------------------------------------------------
+
+// Re-usable theme (design tokens) for one or many tenants/sites.
+model CareerTheme {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String?  @map("tenant_id") @db.Uuid
+
+  name        String
+  slug        String?  @map("slug")
+  description String?  @map("description")
+
+  // If true, this is a global/system theme you ship out-of-the-box
+  isSystem Boolean @map("is_system") @default(false)
+
+  // Arbitrary JSON "design token" blob: colors, typography, radii, spacing, etc.
+  tokens Json @map("tokens")
+
+  // Optional preview thumbnail for theme picker
+  previewImageUrl String? @map("preview_image_url")
+
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  tenant       Tenant?             @relation(fields: [tenantId], references: [id])
+  siteSettings CareerSiteSettings[]
+  pages        CareerPage[]
+
+  @@map("career_themes")
+  @@index([tenantId, slug], map: "idx_career_themes_tenant_slug")
+}
+
+// Represents a single configurable page in the careers microsite.
+model CareerPage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  clientCompanyId String? @map("client_company_id") @db.Uuid
+  themeId        String?  @map("theme_id") @db.Uuid
+
+  kind CareerPageKind @map("kind") @default(CAREERS_HOME)
+
+  // Optional slug for CUSTOM pages; for core pages the path is still useful
+  slug String? @map("slug")
+
+  // Route for this page within the careers site, e.g. "/careers", "/jobs", "/about"
+  path String @map("path")
+
+  title       String? @map("title")
+  description String? @map("description")
+
+  // JSON layout tree: sections, blocks, components with props.
+  layout Json? @map("layout")
+
+  isPublished Boolean @map("is_published") @default(true)
+  isDefault   Boolean @map("is_default")   @default(false)
+
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
+  theme         CareerTheme?   @relation(fields: [themeId], references: [id])
+
+  // Back-reference for "homePage" on CareerSiteSettings
+  primaryForSites CareerSiteSettings[]
+
+  @@map("career_pages")
+  @@index([tenantId, kind], map: "idx_career_pages_tenant_kind")
+  @@index([tenantId, path], map: "idx_career_pages_tenant_path")
+  @@index([tenantId, slug], map: "idx_career_pages_tenant_slug")
 }
 
 // --------------------------------------------------------------------------
