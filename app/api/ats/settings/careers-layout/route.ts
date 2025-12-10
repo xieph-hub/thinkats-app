@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
         path: "/careers",
         title:
           tenant.name ??
-          // @ts-expect-error slug may exist via @@map
           (tenant as any).slug ??
           "Careers",
         description: null,
