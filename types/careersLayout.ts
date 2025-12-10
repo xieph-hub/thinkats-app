@@ -1,50 +1,36 @@
 // types/careersLayout.ts
 
-// Discriminated union of section types
-export type CareerLayoutSection =
-  | HeroSectionNode
-  | AboutSectionNode
-  | FeaturedRolesSectionNode
-  | RichTextSectionNode;
-
-export type HeroSectionNode = {
+export type CareerLayoutHeroSection = {
   type: "hero";
-  id?: string;
   props?: {
     title?: string;
     subtitle?: string;
-    showSocial?: boolean; // default true
+    hide?: boolean;
   };
 };
 
-export type AboutSectionNode = {
+export type CareerLayoutAboutSection = {
   type: "about";
-  id?: string;
-  props?: {
-    title?: string; // overrides "About {displayName}" if set
-    html?: string; // rich text HTML
-  };
-};
-
-export type FeaturedRolesSectionNode = {
-  type: "featuredRoles";
-  id?: string;
-  props?: {
-    limit?: number; // default 8
-    showViewAllLink?: boolean; // future use
-  };
-};
-
-export type RichTextSectionNode = {
-  type: "richText";
-  id?: string;
   props?: {
     title?: string;
-    html: string;
+    html?: string;
+    hide?: boolean;
   };
 };
 
-// Canonical layout shape saved in DB
+export type CareerLayoutFeaturedRolesSection = {
+  type: "featuredRoles";
+  props?: {
+    limit?: number; // how many roles to show on the homepage
+    hide?: boolean;
+  };
+};
+
+export type CareerLayoutSection =
+  | CareerLayoutHeroSection
+  | CareerLayoutAboutSection
+  | CareerLayoutFeaturedRolesSection;
+
 export type CareerLayout = {
   sections: CareerLayoutSection[];
 };
