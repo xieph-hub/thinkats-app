@@ -1,26 +1,29 @@
 // components/careers/CareersPageRenderer.tsx
-import type { CareerSiteSettings, Job } from "@prisma/client";
-
-interface LayoutSection {
-  type: string;
-  id?: string;
-  props?: Record<string, any> | null;
-}
+import type { CareerSiteSettings, Job, CareerTheme } from "@prisma/client";
+import type {
+  CareerLayout,
+  CareerLayoutSection,
+} from "@/lib/careersLayout";
 
 interface CareersPageRendererProps {
   displayName: string;
+
+  // Branding + content sources
   settings?: CareerSiteSettings | null;
+  theme?: CareerTheme | null;
+  layout?: CareerLayout | null;
+
   jobs: Job[];
 
-  // Optional base colors (e.g. from server-resolved theme)
-  primaryColor?: string;
-  accentColor?: string;
+  primaryColor: string;
+  accentColor: string;
 
-  // Raw theme tokens JSON from CareerTheme.tokens
-  themeTokens?: Record<string, any> | null;
-
-  // Layout JSON from CareerPage.layout
-  layout?: unknown;
+  /**
+   * Optional base URL for careers assets (e.g. CDN).
+   * If omitted, we fall back to:
+   *   NEXT_PUBLIC_CAREERS_ASSET_BASE_URL || NEXT_PUBLIC_SITE_URL
+   */
+  assetBaseUrl?: string | null;
 }
 
 function formatDate(date: Date | string): string {
@@ -35,88 +38,200 @@ function formatDate(date: Date | string): string {
   }
 }
 
-// Normalise the layout JSON into an array of sections we can safely map.
-function normaliseLayout(rawLayout: unknown): LayoutSection[] {
-  if (!rawLayout) return [];
+/**
+ * Normalise layout: if nothing is set yet, fall back to
+ * [hero, about, featuredRoles] with a sensible default limit.
+ */
+function getEffectiveSections(layout: CareerLayout | null): CareerLayoutSection[] {
+  const defaultSections: CareerLayoutSection[] = [
+    { type: "hero" },
+    { type: "about" },
+    { type: "featuredRoles", props: { limit: 8 } },
+  ];
 
-  // Option A: layout is already an array of sections
-  if (Array.isArray(rawLayout)) {
-    return rawLayout.filter(
-      (s): s is LayoutSection =>
-        !!s &&
-        typeof s === "object" &&
-        typeof (s as any).type === "string",
-    );
-  }
+  const raw = Array.isArray(layout?.sections) ? layout!.sections : defaultSections;
 
-  // Option B: layout is an object with a `sections` array
-  if (
-    typeof rawLayout === "object" &&
-    rawLayout !== null &&
-    Array.isArray((rawLayout as any).sections)
-  ) {
-    return (rawLayout as any).sections.filter(
-      (s: any): s is LayoutSection =>
-        !!s && typeof s === "object" && typeof s.type === "string",
-    );
-  }
-
-  return [];
+  // Respect `visible: false` if/when you start writing that
+  return raw.filter((section) => (section as any)?.visible !== false);
 }
 
-// Prefer bannerImagePath → full URL, then fall back to bannerImageUrl
-function resolveBannerUrl(settings?: CareerSiteSettings | null): string | null {
-  if (!settings) return null;
+/**
+ * Prefer a banner asset path (CareerTheme.bannerImagePath) and build a URL
+ * using assetBaseUrl; otherwise fall back to bannerImageUrl on settings/theme.
+ */
+function computeBannerImageUrl(
+  theme: CareerTheme | null | undefined,
+  settings: CareerSiteSettings | null | undefined,
+  assetBaseUrl?: string | null,
+): string | null {
+  const envBase =
+    process.env.NEXT_PUBLIC_CAREERS_ASSET_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "";
 
-  if (settings.bannerImagePath) {
-    const path = settings.bannerImagePath;
-    const base = process.env.NEXT_PUBLIC_CAREERS_BANNER_BASE_URL;
+  const base =
+    (assetBaseUrl ?? envBase ?? "").toString().trim();
 
-    if (base) {
-      return `${base.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
-    }
+  let bannerUrl: string | null = null;
 
-    // If the path is already a full URL, just return it
-    if (/^https?:\/\//.test(path)) {
-      return path;
-    }
+  // Try bannerImagePath from CareerTheme first (path like "banners/acme-hero.jpg")
+  const themeAny = theme as any;
+  const bannerImagePath: string | undefined =
+    themeAny?.bannerImagePath || themeAny?.banner_image_path;
 
-    // Relative path fallback (e.g. same origin)
-    return path;
+  if (base && bannerImagePath) {
+    const baseClean = base.replace(/\/$/, "");
+    const pathClean = String(bannerImagePath).replace(/^\//, "");
+    bannerUrl = `${baseClean}/${pathClean}`;
   }
 
-  if (settings.bannerImageUrl) {
-    return settings.bannerImageUrl;
+  // Fallback to any explicit URL (theme or settings)
+  if (!bannerUrl) {
+    const themeBannerUrl: string | undefined = themeAny?.bannerImageUrl;
+    bannerUrl = themeBannerUrl || settings?.bannerImageUrl || null;
   }
 
-  return null;
+  return bannerUrl;
 }
 
-// --------------------------- Section components -----------------------------
+export default function CareersPageRenderer(props: CareersPageRendererProps) {
+  const {
+    displayName,
+    settings,
+    theme,
+    layout = null,
+    jobs,
+    primaryColor,
+    accentColor,
+    assetBaseUrl,
+  } = props;
 
-type HeroSectionProps = {
+  const hasJobs = jobs.length > 0;
+  const sections = getEffectiveSections(layout);
+
+  // Defaults from settings (or sensible hard-coded ones)
+  const defaultHeroTitle =
+    settings?.heroTitle ||
+    `At ${displayName}, we believe in the power of people.`;
+  const defaultHeroSubtitle =
+    settings?.heroSubtitle ||
+    "Explore how you can grow your career and make meaningful impact with us.";
+
+  const defaultAboutHtml =
+    settings?.aboutHtml ||
+    `<p>${displayName} is building a team of curious, ambitious people who care deeply about their work and the people they work with.</p>`;
+
+  // Social links from settings (for now)
+  const linkedinUrl = settings?.linkedinUrl || null;
+  const twitterUrl = settings?.twitterUrl || null;
+  const instagramUrl = settings?.instagramUrl || null;
+
+  const bannerImageUrl = computeBannerImageUrl(theme ?? null, settings ?? null, assetBaseUrl);
+
+  return (
+    <div className="space-y-10">
+      {sections.map((section, index) => {
+        const key = section.id || `${section.type}-${index}`;
+        const propsAny = (section as any).props || {};
+
+        switch (section.type) {
+          case "hero": {
+            const heroTitle = propsAny.title ?? defaultHeroTitle;
+            const heroSubtitle = propsAny.subtitle ?? defaultHeroSubtitle;
+
+            return (
+              <HeroSection
+                key={key}
+                displayName={displayName}
+                heroTitle={heroTitle}
+                heroSubtitle={heroSubtitle}
+                bannerImageUrl={bannerImageUrl}
+                linkedinUrl={linkedinUrl}
+                twitterUrl={twitterUrl}
+                instagramUrl={instagramUrl}
+              />
+            );
+          }
+
+          case "about": {
+            const aboutTitle =
+              propsAny.title ?? `About ${displayName}`;
+            const aboutHtml =
+              propsAny.html ?? defaultAboutHtml;
+
+            return (
+              <AboutSection
+                key={key}
+                displayName={displayName}
+                aboutTitle={aboutTitle}
+                aboutHtml={aboutHtml}
+                primaryColor={primaryColor}
+                accentColor={accentColor}
+                hasJobs={hasJobs}
+              />
+            );
+          }
+
+          case "featuredRoles": {
+            let limit: number | undefined;
+
+            if (typeof propsAny.limit === "number") {
+              limit = propsAny.limit;
+            } else if (typeof propsAny.limit === "string") {
+              const parsed = parseInt(propsAny.limit, 10);
+              if (!Number.isNaN(parsed)) {
+                limit = parsed;
+              }
+            }
+
+            const safeLimit =
+              typeof limit === "number" && limit > 0
+                ? Math.min(50, Math.max(1, limit))
+                : 8;
+
+            return (
+              <FeaturedRolesSection
+                key={key}
+                displayName={displayName}
+                jobs={jobs}
+                accentColor={accentColor}
+                limit={safeLimit}
+              />
+            );
+          }
+
+          default:
+            // Unknown section type – ignore for now (future-proof for experiments)
+            return null;
+        }
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Section components
+// ---------------------------------------------------------------------------
+
+interface HeroSectionProps {
   displayName: string;
   heroTitle: string;
   heroSubtitle: string;
   bannerImageUrl: string | null;
-  bannerImageAlt: string;
   linkedinUrl: string | null;
   twitterUrl: string | null;
   instagramUrl: string | null;
-};
+}
 
-function HeroSection(props: HeroSectionProps) {
-  const {
-    displayName,
-    heroTitle,
-    heroSubtitle,
-    bannerImageUrl,
-    bannerImageAlt,
-    linkedinUrl,
-    twitterUrl,
-    instagramUrl,
-  } = props;
-
+function HeroSection({
+  displayName,
+  heroTitle,
+  heroSubtitle,
+  bannerImageUrl,
+  linkedinUrl,
+  twitterUrl,
+  instagramUrl,
+}: HeroSectionProps) {
   const hasSocial =
     Boolean(linkedinUrl) || Boolean(twitterUrl) || Boolean(instagramUrl);
 
@@ -176,14 +291,14 @@ function HeroSection(props: HeroSectionProps) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={bannerImageUrl}
-              alt={bannerImageAlt}
+              alt={`${displayName} careers banner`}
               className="h-40 w-full object-cover"
             />
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-xs text-slate-500">
-            Use your careers site settings to upload a banner image that
-            reflects your culture and workspace.
+            Use your careers theme to upload a banner image that reflects your
+            culture and workspace.
           </div>
         )}
 
@@ -200,22 +315,28 @@ function HeroSection(props: HeroSectionProps) {
   );
 }
 
-type AboutSectionProps = {
+interface AboutSectionProps {
   displayName: string;
+  aboutTitle: string;
   aboutHtml: string;
   primaryColor: string;
   accentColor: string;
   hasJobs: boolean;
-};
+}
 
-function AboutSection(props: AboutSectionProps) {
-  const { displayName, aboutHtml, primaryColor, accentColor, hasJobs } = props;
-
+function AboutSection({
+  displayName,
+  aboutTitle,
+  aboutHtml,
+  primaryColor,
+  accentColor,
+  hasJobs,
+}: AboutSectionProps) {
   return (
     <section className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)]">
       <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-700">
         <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          About {displayName}
+          {aboutTitle || `About ${displayName}`}
         </p>
         <div
           className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:mb-2 prose-p:text-slate-700 prose-a:text-sky-600"
@@ -233,8 +354,8 @@ function AboutSection(props: AboutSectionProps) {
           </p>
           <p>
             We&apos;re always interested in exceptional people. If you don&apos;t
-            see a perfect match today, you can still apply to a general
-            talent pool or check back again soon.
+            see a perfect match today, you can still apply to a general talent
+            pool or check back again soon.
           </p>
         </div>
 
@@ -258,20 +379,21 @@ function AboutSection(props: AboutSectionProps) {
   );
 }
 
-type FeaturedRolesSectionProps = {
+interface FeaturedRolesSectionProps {
   displayName: string;
-  accentColor: string;
   jobs: Job[];
-  limit?: number;
-};
+  accentColor: string;
+  limit: number;
+}
 
-function FeaturedRolesSection(props: FeaturedRolesSectionProps) {
-  const { displayName, accentColor, jobs, limit } = props;
-
+function FeaturedRolesSection({
+  displayName,
+  jobs,
+  accentColor,
+  limit,
+}: FeaturedRolesSectionProps) {
   const hasJobs = jobs.length > 0;
-  const featuredJobs = hasJobs
-    ? jobs.slice(0, typeof limit === "number" ? limit : 8)
-    : [];
+  const featuredJobs = hasJobs ? jobs.slice(0, limit) : [];
 
   return (
     <section className="space-y-3">
@@ -324,9 +446,9 @@ function FeaturedRolesSection(props: FeaturedRolesSectionProps) {
                         {job.employmentType}
                       </span>
                     )}
-                    {job.experienceLevel && (
+                    {(job as any).experienceLevel && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                        {job.experienceLevel}
+                        {(job as any).experienceLevel}
                       </span>
                     )}
                   </div>
@@ -355,195 +477,5 @@ function FeaturedRolesSection(props: FeaturedRolesSectionProps) {
         </div>
       )}
     </section>
-  );
-}
-
-type RichTextSectionProps = {
-  title?: string;
-  html?: string;
-};
-
-function RichTextSection(props: RichTextSectionProps) {
-  const { title, html } = props;
-
-  if (!html) return null;
-
-  return (
-    <section className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-      {title && (
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          {title}
-        </p>
-      )}
-      <div
-        className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:mb-2 prose-p:text-slate-700 prose-a:text-sky-600"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    </section>
-  );
-}
-
-// ------------------------------- Main render -------------------------------
-
-export default function CareersPageRenderer(props: CareersPageRendererProps) {
-  const {
-    displayName,
-    settings,
-    jobs,
-    primaryColor: primaryColorProp,
-    accentColor: accentColorProp,
-    themeTokens,
-    layout,
-  } = props;
-
-  // Extract color tokens from theme (if provided)
-  const tokenColors =
-    themeTokens && typeof themeTokens === "object"
-      ? ((themeTokens as any).colors as Record<string, any>) || {}
-      : {};
-
-  const resolvedPrimaryColor: string =
-    (typeof tokenColors.primary === "string" && tokenColors.primary) ||
-    settings?.primaryColorHex ||
-    settings?.primaryColor ||
-    primaryColorProp ||
-    "#172965";
-
-  const resolvedAccentColor: string =
-    (typeof tokenColors.accent === "string" && tokenColors.accent) ||
-    settings?.accentColorHex ||
-    settings?.accentColor ||
-    accentColorProp ||
-    "#0ea5e9";
-
-  const bannerImageUrl = resolveBannerUrl(settings);
-  const bannerImageAlt =
-    settings?.bannerImageAlt || `${displayName} careers banner`;
-
-  const defaultHeroTitle =
-    settings?.heroTitle ||
-    `At ${displayName}, we believe in the power of people.`;
-  const defaultHeroSubtitle =
-    settings?.heroSubtitle ||
-    "Explore how you can grow your career and make meaningful impact with us.";
-
-  const defaultAboutHtml =
-    settings?.aboutHtml ||
-    `<p>${displayName} is building a team of curious, ambitious people who care deeply about their work and the people they work with.</p>`;
-
-  const linkedinUrl = settings?.linkedinUrl || null;
-  const twitterUrl = settings?.twitterUrl || null;
-  const instagramUrl = settings?.instagramUrl || null;
-
-  const hasJobs = jobs.length > 0;
-  const sections = normaliseLayout(layout);
-
-  // If no layout is configured yet → fall back to the default 3-section layout
-  if (sections.length === 0) {
-    return (
-      <div className="space-y-10">
-        <HeroSection
-          displayName={displayName}
-          heroTitle={defaultHeroTitle}
-          heroSubtitle={defaultHeroSubtitle}
-          bannerImageUrl={bannerImageUrl}
-          bannerImageAlt={bannerImageAlt}
-          linkedinUrl={linkedinUrl}
-          twitterUrl={twitterUrl}
-          instagramUrl={instagramUrl}
-        />
-
-        <AboutSection
-          displayName={displayName}
-          aboutHtml={defaultAboutHtml}
-          primaryColor={resolvedPrimaryColor}
-          accentColor={resolvedAccentColor}
-          hasJobs={hasJobs}
-        />
-
-        <FeaturedRolesSection
-          displayName={displayName}
-          accentColor={resolvedAccentColor}
-          jobs={jobs}
-        />
-      </div>
-    );
-  }
-
-  // Layout is present → treat it as the source-of-truth for sections
-  return (
-    <div className="space-y-10">
-      {sections.map((section, index) => {
-        const key = section.id || `${section.type}-${index}`;
-        const props = section.props || {};
-
-        switch (section.type) {
-          case "hero": {
-            const heroTitle = (props.title as string) || defaultHeroTitle;
-            const heroSubtitle =
-              (props.subtitle as string) || defaultHeroSubtitle;
-
-            return (
-              <HeroSection
-                key={key}
-                displayName={displayName}
-                heroTitle={heroTitle}
-                heroSubtitle={heroSubtitle}
-                bannerImageUrl={bannerImageUrl}
-                bannerImageAlt={bannerImageAlt}
-                linkedinUrl={linkedinUrl}
-                twitterUrl={twitterUrl}
-                instagramUrl={instagramUrl}
-              />
-            );
-          }
-
-          case "about": {
-            const aboutHtml =
-              (props.html as string | undefined) || defaultAboutHtml;
-
-            return (
-              <AboutSection
-                key={key}
-                displayName={displayName}
-                aboutHtml={aboutHtml}
-                primaryColor={resolvedPrimaryColor}
-                accentColor={resolvedAccentColor}
-                hasJobs={hasJobs}
-              />
-            );
-          }
-
-          case "featuredRoles": {
-            const limit =
-              typeof props.limit === "number" ? (props.limit as number) : undefined;
-
-            return (
-              <FeaturedRolesSection
-                key={key}
-                displayName={displayName}
-                accentColor={resolvedAccentColor}
-                jobs={jobs}
-                limit={limit}
-              />
-            );
-          }
-
-          case "richText": {
-            return (
-              <RichTextSection
-                key={key}
-                title={props.title as string | undefined}
-                html={props.html as string | undefined}
-              />
-            );
-          }
-
-          default:
-            // Unknown section type – safely ignore
-            return null;
-        }
-      })}
-    </div>
   );
 }
