@@ -40,7 +40,11 @@ export async function POST(
       status,
     } = body || {};
 
-    if (!applicationIds || !Array.isArray(applicationIds) || applicationIds.length === 0) {
+    if (
+      !applicationIds ||
+      !Array.isArray(applicationIds) ||
+      applicationIds.length === 0
+    ) {
       return NextResponse.json(
         { ok: false, error: "No applicationIds provided" },
         { status: 400 },
@@ -141,7 +145,18 @@ export async function POST(
       action,
       updatedCount,
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    // Let Next.js handle auth redirects (NEXT_REDIRECT) instead of treating them as errors
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "digest" in err &&
+      typeof (err as any).digest === "string" &&
+      (err as any).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw err;
+    }
+
     console.error("Bulk pipeline update error", err);
     const message =
       err instanceof Error ? err.message : "Unexpected error during bulk update.";
