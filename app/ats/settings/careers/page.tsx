@@ -87,15 +87,9 @@ export default async function CareersSettingsPage({
   const includeInMarketplace =
     (settings as any)?.includeInMarketplace ?? false;
 
-  const careersAssetBase =
-    process.env.NEXT_PUBLIC_CAREERS_ASSET_BASE_URL || "";
+  // Banner preview: trust the DB's bannerImageUrl as the source of truth
   const bannerImagePreviewUrl =
-    (settings as any)?.bannerImageUrl ||
-    (careersAssetBase && (settings as any)?.bannerImagePath
-      ? `${careersAssetBase.replace(/\/$/, "")}/${
-          (settings as any).bannerImagePath
-        }`
-      : "");
+    (settings as any)?.bannerImageUrl ?? "";
 
   // -----------------------------
   // Layout (JSON) for hub homepage (still stored in CareerPage)
@@ -295,7 +289,7 @@ export default async function CareersSettingsPage({
               </p>
             </div>
 
-            {/* 🔹 Banner upload via Supabase (no big payload through Vercel) */}
+            {/* Banner upload via Supabase */}
             <BannerUploadField
               tenantId={selectedTenantId}
               initialUrl={bannerImagePreviewUrl || null}
