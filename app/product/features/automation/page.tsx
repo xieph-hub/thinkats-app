@@ -10,88 +10,99 @@ export const metadata: Metadata = {
 
 export default function AutomationFeaturesPage() {
   return (
-    <main className="bg-slate-50">
-      <section className="border-b border-slate-200 bg-gradient-to-br from-white via-white to-[#172965]/5">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#172965]">
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <section className="border-b border-slate-900 bg-gradient-to-br from-slate-950 via-slate-950 to-sky-900/20">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300">
             Product · Automation &amp; emails
           </p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50 sm:text-4xl">
             Keep candidates warm without losing your voice.
           </h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-700">
+          <p className="mt-3 max-w-2xl text-sm text-slate-300">
             ThinkATS is designed to support simple, honest communication — from
-            application acknowledgements to shortlisting and final decisions.
+            application acknowledgements to shortlisting and final decisions —
+            without turning your ATS into a marketing automation tool.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link
-              href="/signup"
-              className="inline-flex items-center rounded-full bg-[#172965] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#0f1c48]"
+              href="/contact"
+              className="inline-flex items-center rounded-full bg-sky-500 px-5 py-2 text-xs font-semibold text-slate-950 shadow-sm hover:bg-sky-400"
             >
-              Join the early access list
+              Discuss your email flows
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-6 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-50">
               Application acknowledgements
             </h2>
-            <p className="mt-2 text-xs text-slate-600">
+            <p className="mt-2 text-[12px] text-slate-300">
               Automatically confirm applications with a short, clear message
-              that sets expectations on next steps and timelines.
+              that sets expectations on next steps and timelines — per tenant,
+              with optional role-specific tweaks.
             </p>
-            <ul className="mt-3 space-y-1.5 text-[11px] text-slate-600">
+            <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
               <li>• Per-tenant default templates</li>
-              <li>• Role-specific overrides where needed</li>
-              <li>• Simple personalisation (name, role, company)</li>
+              <li>• Role-level overrides where needed</li>
+              <li>• Simple personalisation (name, role, organisation)</li>
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-50">
               Stage-based notifications
             </h2>
-            <p className="mt-2 text-xs text-slate-600">
-              When you move a candidate between stages, ThinkATS can trigger
-              pre-defined messages or reminders — while still letting you edit
-              the final wording.
+            <p className="mt-2 text-[12px] text-slate-300">
+              When you move a candidate between stages, ThinkATS can suggest or
+              trigger the right email — interview invite, next steps or clear
+              closure — while still letting humans edit the final wording.
             </p>
-            <ul className="mt-3 space-y-1.5 text-[11px] text-slate-600">
+            <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
               <li>• Interview invites &amp; confirmations</li>
               <li>• Reminder nudges for overdue feedback</li>
-              <li>• Clear &quot;no&quot; emails when needed</li>
+              <li>• Clear “no” emails when needed</li>
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-50">
               Internal alerts &amp; alignment
             </h2>
-            <p className="mt-2 text-xs text-slate-600">
+            <p className="mt-2 text-[12px] text-slate-300">
               Make sure hiring managers and stakeholders know when there&apos;s
               something to review — without spamming everyone on every move.
             </p>
-            <ul className="mt-3 space-y-1.5 text-[11px] text-slate-600">
-              <li>• Digest-style notifications by role</li>
+            <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
+              <li>• Digest-style notifications by role or tenant</li>
               <li>• Per-tenant preferences for who gets what</li>
               <li>• Audit trail of what was sent and when</li>
             </ul>
           </div>
         </div>
 
-        <div className="mt-10 rounded-2xl border border-dashed border-[#64C247]/40 bg-[#64C247]/5 p-5 text-xs text-slate-700">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#306B34]">
+        <div className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-100">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Roadmap
           </p>
-          <p className="mt-2">
-            The automation layer is intentionally lightweight at first, with
-            room to grow into more advanced sequences, dynamic templates and
-            integrations with your existing comms tools.
+          <p className="mt-2 text-[12px] text-slate-200">
+            The automation layer starts intentionally lightweight, with room to
+            grow into more advanced sequences, richer templates and deeper
+            integrations with your email / calendar stack — while keeping the
+            focus on clarity, not noise.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px]">
+            <Link
+              href="/product/features/integrations"
+              className="font-medium text-sky-300 hover:underline"
+            >
+              See where integrations come in →
+            </Link>
+          </div>
         </div>
       </section>
     </main>
