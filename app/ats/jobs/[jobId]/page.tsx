@@ -423,9 +423,10 @@ export default async function JobPipelinePage({
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           {/* Filters */}
           <form
-            className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
-            method="GET"
-          >
+  key={`filters-${currentViewId}-${filterQ}-${filterStage}-${filterStatus}-${filterTier}`}
+  className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
+  method="GET"
+>
             {/* View selector */}
             <div className="flex flex-col">
               <label className="mb-1 text-[11px] font-medium text-slate-600">
