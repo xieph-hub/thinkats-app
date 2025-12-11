@@ -1,4 +1,3 @@
-// app/product/features/integrations/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -55,8 +54,9 @@ export default function IntegrationsFeaturesPage() {
               Files &amp; document storage
             </h2>
             <p className="mt-2 text-[12px] text-slate-300">
-              CVs, scorecards and hiring docs are stored securely, with clear
-              links from candidates and jobs — not buried in forwarded threads.
+              CVs, scorecards, interview notes and hiring docs are stored
+              securely, with clear links from candidates and jobs — not buried
+              in forwarded threads.
             </p>
             <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
               <li>• CV storage with secure, shareable links</li>
@@ -90,14 +90,14 @@ export default function IntegrationsFeaturesPage() {
           </p>
           <p className="mt-2 text-[12px] text-slate-200">
             In practice, teams keep email, calendars and HR systems exactly
-            where they are. ThinkATS becomes the place where roles, pipelines
-            and candidate decisions live — with just enough integration to keep
-            everyone aligned.
+            where they are. ThinkATS becomes the place where roles, pipelines,
+            scores and candidate decisions live — with just enough integration
+            to keep everyone aligned.
           </p>
           <p className="mt-2 text-[12px] text-slate-200">
-            That means: hiring managers still work from their inbox, ops teams
-            still trust their HR stack, and leadership can see hiring progress
-            without asking for a new spreadsheet every week.
+            Hiring managers still work from their inbox, ops teams still trust
+            their HR stack, and leadership can see hiring progress without
+            asking for a new spreadsheet every week.
           </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
