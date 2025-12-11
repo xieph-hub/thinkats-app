@@ -17,15 +17,38 @@ export default function ContactClient() {
     setMessage(null);
 
     const formData = new FormData(e.currentTarget);
-    const name = (formData.get("name") || "").toString();
-    const email = (formData.get("email") || "").toString();
-    const company = (formData.get("company") || "").toString();
-    const body = (formData.get("message") || "").toString();
+
+    const payload = {
+      name: (formData.get("name") || "").toString().trim(),
+      email: (formData.get("email") || "").toString().trim(),
+      company: (formData.get("company") || "").toString().trim(),
+      role: (formData.get("role") || "").toString().trim(),
+      message: (formData.get("message") || "").toString().trim(),
+    };
+
+    if (!payload.name || !payload.email || !payload.message) {
+      setStatus("error");
+      setMessage("Please fill in your name, work email and a short message.");
+      return;
+    }
 
     try {
-      // TODO: wire this to a real endpoint when you're ready
-      // For now we just simulate success so the page builds cleanly.
-      console.log("Contact form submit", { name, email, company, body });
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || "Failed to send message");
+      }
 
       setStatus("success");
       setMessage("Thanks for reaching out. We’ll get back to you shortly.");
@@ -34,7 +57,7 @@ export default function ContactClient() {
       console.error("Contact form error:", err);
       setStatus("error");
       setMessage(
-        "We couldn’t send your message right now. Please try again in a moment."
+        "We couldn’t send your message right now. Please try again, or email us directly.",
       );
     }
   }
@@ -42,14 +65,22 @@ export default function ContactClient() {
   return (
     <main className="bg-slate-950 text-slate-50">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-4xl flex-col justify-center px-6 py-16">
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-          Talk to the ThinkATS team.
-        </h1>
-        <p className="mt-3 max-w-xl text-sm text-slate-300">
-          Tell us a bit about your hiring setup and we&apos;ll share how
-          ThinkATS can help you run cleaner pipelines, career sites and
-          automations.
-        </p>
+        <header className="space-y-3">
+          <p className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/10 text-[10px] text-sky-300">
+              ●
+            </span>
+            Contact
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            Talk to the ThinkATS team.
+          </h1>
+          <p className="max-w-xl text-sm text-slate-300">
+            Tell us a bit about your hiring setup and we&apos;ll share how
+            ThinkATS can help you run cleaner pipelines, career sites and
+            automations across tenants and clients.
+          </p>
+        </header>
 
         <form
           onSubmit={handleSubmit}
@@ -64,7 +95,7 @@ export default function ContactClient() {
                 name="name"
                 required
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                placeholder="Jane Doe"
+                placeholder="Adaobi Okafor"
               />
             </div>
             <div className="space-y-1">
@@ -81,15 +112,27 @@ export default function ContactClient() {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="block text-xs font-medium text-slate-300">
-              COMPANY
-            </label>
-            <input
-              name="company"
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-              placeholder="Company name"
-            />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-slate-300">
+                COMPANY
+              </label>
+              <input
+                name="company"
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                placeholder="Company name"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-slate-300">
+                ROLE / TITLE
+              </label>
+              <input
+                name="role"
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                placeholder="Head of Talent, Founder, etc."
+              />
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -101,7 +144,7 @@ export default function ContactClient() {
               required
               rows={4}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-50 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-              placeholder="Tell us about your hiring challenges, team size, and timelines."
+              placeholder="Share your current hiring process, tools, tenant setup and where ThinkATS could help."
             />
           </div>
 
