@@ -1,141 +1,121 @@
 // components/careers/BannerUploadField.tsx
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
-// Prefer explicit bucket from env, fall back to resourcin-uploads
-const BANNERS_BUCKET =
-  process.env.NEXT_PUBLIC_CAREER_BANNERS_BUCKET || "resourcin-uploads";
-
-type Props = {
+type BannerUploadFieldProps = {
   tenantId: string;
-  initialUrl?: string | null;
+  initialUrl: string | null;
 };
 
-export default function BannerUploadField({ tenantId, initialUrl }: Props) {
-  const [bannerUrl, setBannerUrl] = useState(initialUrl ?? "");
-  const [uploading, setUploading] = useState(false);
+export default function BannerUploadField({
+  tenantId,
+  initialUrl,
+}: BannerUploadFieldProps) {
+  const [previewUrl, setPreviewUrl] = useState(initialUrl ?? "");
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setError(null);
+    setSuccess(null);
+    setIsUploading(true);
 
-    // Guard against very large uploads (helps avoid 413s at Supabase level too)
-    const maxSizeMB = 8;
-    if (file.size > maxSizeMB * 1024 * 1024) {
-      setError(`Please upload an image under ${maxSizeMB}MB.`);
-      return;
-    }
-
-    setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const safeName = file.name
-        .toLowerCase()
-        .replace(/[^a-z0-9\.]+/g, "-")
-        .replace(/\.+/g, ".");
+      // Use your public bucket (fallback to "careers-assets" if the env isn't set)
+      const bucket =
+        process.env.NEXT_PUBLIC_CAREER_BANNERS_BUCKET || "careers-assets";
 
-      const path = `career-banners/${tenantId}/${Date.now()}-${safeName}`;
+      const objectPath = `tenants/${tenantId}/banner-${Date.now()}-${
+        file.name
+      }`;
 
-      const { error: uploadError } = await supabaseBrowser.storage
-        .from(BANNERS_BUCKET)
-        .upload(path, file, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: file.type || `image/${ext}`,
+      // 1) Upload to Supabase Storage (browser side)
+      const { data, error } = await supabaseBrowser.storage
+        .from(bucket)
+        .upload(objectPath, file, {
+          upsert: true,
         });
 
-      if (uploadError) {
-        console.error("Supabase banner upload error:", uploadError);
-        setError(
-          uploadError.message ||
-            "Upload failed on Supabase. Please try another image.",
-        );
-        return;
+      if (error) throw error;
+
+      const { data: publicData } = supabaseBrowser.storage
+        .from(bucket)
+        .getPublicUrl(data.path);
+
+      const publicUrl = publicData.publicUrl;
+      if (!publicUrl) {
+        throw new Error("Could not derive public URL for banner");
       }
 
-      const { data } = supabaseBrowser.storage
-        .from(BANNERS_BUCKET)
-        .getPublicUrl(path);
+      // 2) Persist URL to DB via API
+      const res = await fetch("/api/ats/settings/careers-banner", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tenantId,
+          bannerImageUrl: publicUrl,
+          bannerImagePath: objectPath,
+        }),
+      });
 
-      const publicUrl = data.publicUrl;
-      setBannerUrl(publicUrl);
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to save banner settings");
+      }
+
+      // 3) Update local preview
+      setPreviewUrl(publicUrl);
+      setSuccess("Banner updated");
     } catch (err: any) {
-      console.error("Banner upload unexpected error:", err);
-      setError(
-        err?.message || "Upload failed, please check the console for details.",
-      );
+      console.error(err);
+      setError(err?.message ?? "Failed to upload banner");
     } finally {
-      setUploading(false);
-    }
-  }
-
-  function handleClear() {
-    setBannerUrl("");
-    setError(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      setIsUploading(false);
     }
   }
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <label className="block text-[11px] font-medium text-slate-700">
-          Hero banner image
-        </label>
-        {bannerUrl && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="text-[10px] font-medium text-slate-500 hover:text-red-500"
-          >
-            Remove banner
-          </button>
-        )}
-      </div>
-
+    <div className="space-y-2">
+      <label className="block text-[11px] font-medium text-slate-700">
+        Banner image
+      </label>
       <input
-        ref={fileInputRef}
         type="file"
         accept="image/*"
-        onChange={handleFileChange}
-        className="block w-full text-[11px] text-slate-700 file:mr-3 file:rounded-full file:border-none file:bg-slate-100 file:px-3 file:py-1.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+        onChange={handleChange}
+        className="block w-full text-[11px]"
       />
+      <p className="text-[10px] text-slate-500">
+        Recommended: at least 1600×400px, JPG or PNG. Uploading saves
+        immediately for this tenant.
+      </p>
 
-      {/* This is what the API receives and persists */}
-      <input type="hidden" name="bannerImageUrl" value={bannerUrl} />
-
-      {uploading && (
-        <p className="text-[10px] text-slate-500">Uploading banner…</p>
-      )}
-
-      {error && (
-        <p className="text-[10px] text-red-500">
-          {error}
-        </p>
-      )}
-
-      {bannerUrl && (
-        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+      {previewUrl && (
+        <div className="mt-2 overflow-hidden rounded-md border border-slate-200">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={bannerUrl}
-            alt="Current banner"
-            className="h-32 w-full object-cover md:h-40"
+            src={previewUrl}
+            alt="Current jobs hub banner"
+            className="h-32 w-full object-cover"
           />
         </div>
       )}
 
-      <p className="text-[10px] text-slate-500">
-        Image is stored in Supabase Storage ({BANNERS_BUCKET}). When you save,
-        only the public URL is stored with this tenant&apos;s settings.
-      </p>
+      {isUploading && (
+        <p className="text-[10px] text-slate-500">Uploading…</p>
+      )}
+      {error && <p className="text-[10px] text-red-600">{error}</p>}
+      {success && (
+        <p className="text-[10px] text-emerald-600">{success}</p>
+      )}
     </div>
   );
 }
