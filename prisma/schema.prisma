@@ -214,7 +214,7 @@ model ClientCompany {
 
   // Theme-builder pages specifically scoped to this client
   careerPages  CareerPage[]
-  careerThemes CareerTheme[]   // NEW: back-relation to themes
+  careerThemes CareerTheme[]   // back-relation to themes
 
   @@map("client_companies")
 }
@@ -632,9 +632,9 @@ model CareerSiteSettings {
 
 // Re-usable theme (design tokens) for one or many tenants/sites.
 model CareerTheme {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String?  @map("tenant_id") @db.Uuid
-  clientCompanyId String? @map("client_company_id") @db.Uuid   // NEW
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String?  @map("tenant_id") @db.Uuid
+  clientCompanyId String? @map("client_company_id") @db.Uuid
 
   name        String
   slug        String?  @map("slug")
