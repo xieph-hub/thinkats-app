@@ -117,7 +117,7 @@ export default async function RootPage() {
   }
 
   // ------------------------------------------------------
-  // Tenant / client host → jobs hub
+  // Tenant / client host → jobs hub (WHITE SKELETON)
   // ------------------------------------------------------
   const settingsAny = careerSiteSettings as any;
 
@@ -145,7 +145,7 @@ export default async function RootPage() {
   const accentColor =
     settingsAny?.accentColorHex || settingsAny?.accentColor || "#0ea5e9";
   const heroBackground =
-    settingsAny?.heroBackgroundHex || "#020617"; // dark fallback
+    settingsAny?.heroBackgroundHex || "#F9FAFB"; // light default
 
   const heroTitle =
     settingsAny?.heroTitle || `Jobs at ${displayName || "this organisation"}`;
@@ -171,13 +171,13 @@ export default async function RootPage() {
   const jobsHref = "/jobs";
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50">
+    <main className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto max-w-6xl px-4 py-10 lg:py-12">
         <div className="grid gap-8 lg:grid-cols-[240px,minmax(0,1fr)]">
           {/* SIDE RAIL / HUB NAV */}
           <aside className="space-y-4">
             {/* Identity card */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               {settingsAny?.logoUrl && (
                 <div className="mb-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -188,7 +188,7 @@ export default async function RootPage() {
                   />
                 </div>
               )}
-              <h1 className="text-sm font-semibold text-slate-50">
+              <h1 className="text-sm font-semibold text-slate-900">
                 {displayName}
               </h1>
               {websiteUrl && (
@@ -196,7 +196,7 @@ export default async function RootPage() {
                   <Link
                     href={websiteUrl}
                     target="_blank"
-                    className="text-sky-400 hover:underline"
+                    className="text-sky-700 hover:underline"
                   >
                     Visit website
                   </Link>
@@ -205,15 +205,15 @@ export default async function RootPage() {
             </div>
 
             {/* Hub nav */}
-            <nav className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 text-xs">
+            <nav className="rounded-2xl border border-slate-200 bg-white p-3 text-xs shadow-sm">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Hub
               </p>
               <ul className="space-y-1">
                 <li>
-                  <span className="flex items-center justify-between rounded-lg bg-slate-800/80 px-3 py-2 text-slate-100">
+                  <span className="flex items-center justify-between rounded-lg bg-slate-900 px-3 py-2 text-slate-50">
                     <span>Overview</span>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-slate-200">
                       You&apos;re here
                     </span>
                   </span>
@@ -221,11 +221,11 @@ export default async function RootPage() {
                 <li>
                   <Link
                     href={jobsHref}
-                    className="flex items-center justify-between rounded-lg px-3 py-2 text-slate-200 hover:bg-slate-800/70"
+                    className="flex items-center justify-between rounded-lg px-3 py-2 text-slate-700 hover:bg-slate-50"
                   >
                     <span>Jobs</span>
                     {hasJobs && (
-                      <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">
                         {jobs.length}
                       </span>
                     )}
@@ -235,7 +235,7 @@ export default async function RootPage() {
             </nav>
 
             {/* Social links */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 text-xs">
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 text-xs shadow-sm">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Social
               </p>
@@ -245,7 +245,7 @@ export default async function RootPage() {
                     <Link
                       href={websiteUrl}
                       target="_blank"
-                      className="hover:underline text-slate-200"
+                      className="text-slate-700 hover:underline"
                     >
                       Website
                     </Link>
@@ -256,7 +256,7 @@ export default async function RootPage() {
                     <Link
                       href={linkedinUrl}
                       target="_blank"
-                      className="hover:underline text-slate-200"
+                      className="text-slate-700 hover:underline"
                     >
                       LinkedIn
                     </Link>
@@ -267,7 +267,7 @@ export default async function RootPage() {
                     <Link
                       href={twitterUrl}
                       target="_blank"
-                      className="hover:underline text-slate-200"
+                      className="text-slate-700 hover:underline"
                     >
                       X / Twitter
                     </Link>
@@ -278,7 +278,7 @@ export default async function RootPage() {
                     <Link
                       href={instagramUrl}
                       target="_blank"
-                      className="hover:underline text-slate-200"
+                      className="text-slate-700 hover:underline"
                     >
                       Instagram
                     </Link>
@@ -297,13 +297,11 @@ export default async function RootPage() {
           <section className="space-y-6">
             {/* Hero */}
             <div
-              className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80 shadow-lg"
-              style={{
-                borderColor: primaryColor,
-              }}
+              className="overflow-hidden rounded-2xl border bg-white shadow-sm"
+              style={{ borderColor: primaryColor }}
             >
               {bannerImageUrl && (
-                <div className="relative h-40 w-full overflow-hidden border-b border-slate-800/70 bg-slate-900">
+                <div className="relative h-40 w-full overflow-hidden border-b border-slate-200 bg-slate-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={bannerImageUrl}
@@ -315,32 +313,34 @@ export default async function RootPage() {
               <div
                 className="p-6 sm:p-8"
                 style={
-                  !bannerImageUrl
-                    ? { backgroundColor: heroBackground }
-                    : undefined
+                  !bannerImageUrl ? { backgroundColor: heroBackground } : {}
                 }
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                   Jobs hub
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-50 sm:text-3xl">
+                <h2 className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">
                   {heroTitle}
                 </h2>
-                <p className="mt-2 max-w-2xl text-sm text-slate-200">
+                <p className="mt-2 max-w-2xl text-sm text-slate-600">
                   {heroSubtitle}
                 </p>
                 {hasJobs && (
-                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-300">
+                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-600">
                     <span>
                       Showing{" "}
-                      <span className="font-semibold">
+                      <span className="font-semibold text-slate-900">
                         {Math.min(jobs.length, 4)}
                       </span>{" "}
                       {jobs.length === 1 ? "open role" : "open roles"}.
                     </span>
                     <Link
                       href={jobsHref}
-                      className="inline-flex items-center rounded-full border border-slate-600 bg-slate-900/60 px-3 py-1 text-[11px] font-medium text-slate-50 hover:border-slate-400"
+                      className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium"
+                      style={{
+                        borderColor: accentColor,
+                        color: accentColor,
+                      }}
                     >
                       View all jobs
                     </Link>
@@ -350,33 +350,33 @@ export default async function RootPage() {
             </div>
 
             {/* About / working here */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 text-sm text-slate-200">
-              <h3 className="text-sm font-semibold text-slate-50">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">
                 Working here
               </h3>
               <div
-                className="prose prose-invert prose-sm mt-3 max-w-none"
+                className="prose prose-sm mt-3 max-w-none text-slate-700"
                 dangerouslySetInnerHTML={{ __html: aboutHtml }}
               />
             </div>
 
             {/* Jobs list preview */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-slate-50">
+                <h3 className="text-sm font-semibold text-slate-900">
                   Open jobs
                 </h3>
                 {hasJobs && (
                   <Link
                     href={jobsHref}
-                    className="text-xs font-medium text-sky-400 hover:underline"
+                    className="text-xs font-medium text-sky-700 hover:underline"
                   >
                     View all jobs
                   </Link>
                 )}
               </div>
               {!hasJobs ? (
-                <p className="mt-3 text-xs text-slate-400">
+                <p className="mt-3 text-xs text-slate-500">
                   There are no open public roles at the moment. Check back
                   soon.
                 </p>
@@ -385,31 +385,31 @@ export default async function RootPage() {
                   {jobs.map((job) => (
                     <li
                       key={job.id}
-                      className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4 text-xs sm:text-sm"
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs sm:text-sm"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="font-medium text-slate-50">
+                          <p className="font-medium text-slate-900">
                             {job.title}
                           </p>
                           {job.clientCompany && (
-                            <p className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-slate-400">
+                            <p className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-slate-500">
                               {job.clientCompany.name}
                             </p>
                           )}
                         </div>
                         {job.location && (
-                          <p className="text-[11px] text-slate-400">
+                          <p className="text-[11px] text-slate-500">
                             {job.location}
                           </p>
                         )}
                       </div>
                       {job.shortDescription && (
-                        <p className="mt-2 line-clamp-2 text-xs text-slate-300">
+                        <p className="mt-2 line-clamp-2 text-xs text-slate-600">
                           {job.shortDescription}
                         </p>
                       )}
-                      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                      <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-slate-500">
                         <span>
                           {job.employmentType && <span>{job.employmentType}</span>}
                           {job.locationType && job.employmentType && " · "}
@@ -419,7 +419,8 @@ export default async function RootPage() {
                           href={`/jobs/${encodeURIComponent(
                             job.slug || job.id,
                           )}`}
-                          className="font-medium text-sky-400 hover:underline"
+                          className="font-medium"
+                          style={{ color: accentColor }}
                         >
                           View job
                         </Link>
@@ -433,7 +434,7 @@ export default async function RootPage() {
             {/* Footer: minimal ThinkATS stamp */}
             <p className="mt-2 text-[10px] text-slate-500">
               Powered by{" "}
-              <span className="font-semibold text-slate-100">ThinkATS</span>
+              <span className="font-semibold text-slate-800">ThinkATS</span>.
             </p>
           </section>
         </div>
