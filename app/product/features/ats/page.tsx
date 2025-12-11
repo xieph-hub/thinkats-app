@@ -1,4 +1,3 @@
-// app/product/features/ats/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -11,7 +10,7 @@ export const metadata: Metadata = {
 export default function AtsFeaturesPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
-      {/* Hero */}
+      {/* HERO */}
       <section className="border-b border-slate-900 bg-gradient-to-br from-slate-950 via-slate-950 to-sky-900/20">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300">
@@ -21,9 +20,10 @@ export default function AtsFeaturesPage() {
             Pipelines that actually match how you hire.
           </h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-300">
-            ThinkATS gives you structured pipelines for each role — from
-            applied to hired — with stage counts, inline updates and a single
-            place to see where every candidate is across jobs and tenants.
+            ThinkATS gives you structured pipelines for each role — from applied
+            to hired — with stage counts, inline updates, scoring signals and a
+            single place to see where every candidate is across jobs and
+            tenants.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link
@@ -42,25 +42,27 @@ export default function AtsFeaturesPage() {
         </div>
       </section>
 
-      {/* Content */}
+      {/* CONTENT */}
       <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-6 md:grid-cols-2">
+          {/* Per-job pipelines */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-50">
               Per-job pipelines, not a candidate dump
             </h2>
             <p className="mt-2 text-[12px] text-slate-300">
               Each role has its own pipeline view, so you can see stage counts,
-              movement and risk at a glance — instead of scrolling a generic
-              candidate list.
+              movement and risk at a glance — instead of scrolling through a
+              generic candidate list and guessing what&apos;s important.
             </p>
             <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-              <li>• Custom stages per job, with clear order</li>
-              <li>• Stage badges with candidate counts</li>
+              <li>• Custom stages per job, in a clear order</li>
+              <li>• Stage badges with live candidate counts</li>
               <li>• Separation of active vs. terminal stages</li>
             </ul>
           </div>
 
+          {/* Inline changes */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-50">
               Fast, inline changes from the job view
@@ -77,6 +79,7 @@ export default function AtsFeaturesPage() {
             </ul>
           </div>
 
+          {/* Multi-tenant & scoring */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm md:col-span-2">
             <h2 className="text-sm font-semibold text-slate-50">
               Built for agencies, in-house teams and groups
@@ -84,38 +87,52 @@ export default function AtsFeaturesPage() {
             <p className="mt-2 text-[12px] text-slate-300">
               Because ThinkATS is multi-tenant from day one, you can run
               pipelines for your own roles and for clients — with clear
-              separation but shared tooling and reporting.
+              separation, shared tooling and scoring that works across the
+              board.
             </p>
             <ul className="mt-3 grid gap-2 text-[11px] text-slate-300 sm:grid-cols-3">
               <li>• Tenant-aware jobs and applications</li>
               <li>• Optional client-aware roles for agencies</li>
               <li>• Candidate reuse without losing history</li>
             </ul>
+            <ul className="mt-3 grid gap-2 text-[11px] text-slate-300 sm:grid-cols-3">
+              <li>• Match scores surfaced directly in the pipeline</li>
+              <li>• Ranked shortlists for high-volume roles</li>
+              <li>• Trail of notes and decisions for each candidate</li>
+            </ul>
           </div>
         </div>
 
+        {/* HOW IT CONNECTS */}
         <div className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-100">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             Where this fits in the product
           </p>
           <p className="mt-2 text-[12px] text-slate-200">
             The ATS and pipeline layer underpins everything else in ThinkATS:
-            career sites publish jobs from here, automation responds to pipeline
-            changes and analytics reads directly from these stages — no manual
-            syncing or side spreadsheets.
+            career sites publish jobs from here, scoring and shortlisting sit on
+            top of these pipelines, automation reacts to changes and analytics
+            reads directly from this data — no manual syncing or shadow
+            spreadsheets.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px]">
             <Link
-              href="/product/features/automation"
+              href="/career-sites"
               className="font-medium text-sky-300 hover:underline"
             >
-              See how automation sits on top →
+              See how jobs appear on career sites →
             </Link>
             <Link
               href="/product/features/analytics"
               className="font-medium text-sky-300 hover:underline"
             >
               View reporting &amp; insights →
+            </Link>
+            <Link
+              href="/product/features/automation"
+              className="font-medium text-sky-300 hover:underline"
+            >
+              See how automation keeps candidates informed →
             </Link>
           </div>
         </div>
