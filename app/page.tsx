@@ -117,7 +117,7 @@ export default async function RootPage() {
   }
 
   // ------------------------------------------------------
-  // Tenant / client host → jobs hub (WHITE SKELETON)
+  // Tenant / client host → mini ATS home
   // ------------------------------------------------------
   const settingsAny = careerSiteSettings as any;
 
@@ -170,9 +170,89 @@ export default async function RootPage() {
   const hasJobs = jobs.length > 0;
   const jobsHref = "/jobs";
 
+  const totalJobs = jobs.length;
+  const primaryLocation =
+    jobs.find((j) => j.location)?.location || "Multiple locations";
+
   return (
-    <main className="min-h-screen bg-white text-slate-900">
-      <div className="mx-auto max-w-6xl px-4 py-10 lg:py-12">
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto max-w-6xl px-4 py-10 lg:py-12 space-y-6">
+        {/* Hero at top, full width */}
+        <div
+          className="overflow-hidden rounded-2xl border bg-white shadow-sm"
+          style={{ borderColor: primaryColor }}
+        >
+          {bannerImageUrl && (
+            <div className="relative h-40 w-full overflow-hidden border-b border-slate-200 bg-slate-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={bannerImageUrl}
+                alt={`${displayName} banner`}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          )}
+          <div
+            className="flex flex-col gap-4 p-6 sm:p-8 md:flex-row md:items-center md:justify-between"
+            style={!bannerImageUrl ? { backgroundColor: heroBackground } : {}}
+          >
+            <div className="space-y-2">
+              <p className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] text-white">
+                  {displayName.slice(0, 1).toUpperCase()}
+                </span>
+                Jobs hub
+              </p>
+              <h2 className="text-2xl font-semibold text-slate-900 sm:text-3xl">
+                {heroTitle}
+              </h2>
+              <p className="max-w-2xl text-sm text-slate-600">
+                {heroSubtitle}
+              </p>
+            </div>
+
+            <div className="space-y-3 text-sm md:text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Open roles
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">
+                    {totalJobs}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px]">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Primary location
+                  </p>
+                  <p className="mt-1 text-xs text-slate-700">
+                    {primaryLocation}
+                  </p>
+                </div>
+              </div>
+              {hasJobs && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Link
+                    href={jobsHref}
+                    className="inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
+                    style={{ backgroundColor: accentColor }}
+                  >
+                    View all jobs
+                  </Link>
+                  <p className="text-[11px] text-slate-500">
+                    Showing{" "}
+                    <span className="font-semibold text-slate-900">
+                      {Math.min(totalJobs, 4)}
+                    </span>{" "}
+                    featured role{totalJobs === 1 ? "" : "s"} below.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Grid: side rail + content */}
         <div className="grid gap-8 lg:grid-cols-[240px,minmax(0,1fr)]">
           {/* SIDE RAIL / HUB NAV */}
           <aside className="space-y-4">
@@ -211,9 +291,12 @@ export default async function RootPage() {
               </p>
               <ul className="space-y-1">
                 <li>
-                  <span className="flex items-center justify-between rounded-lg bg-slate-900 px-3 py-2 text-slate-50">
+                  <span
+                    className="flex items-center justify-between rounded-lg px-3 py-2 text-slate-50"
+                    style={{ backgroundColor: accentColor }}
+                  >
                     <span>Overview</span>
-                    <span className="text-[10px] text-slate-200">
+                    <span className="text-[10px] text-slate-100">
                       You&apos;re here
                     </span>
                   </span>
@@ -226,7 +309,7 @@ export default async function RootPage() {
                     <span>Jobs</span>
                     {hasJobs && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-700">
-                        {jobs.length}
+                        {totalJobs}
                       </span>
                     )}
                   </Link>
@@ -295,60 +378,6 @@ export default async function RootPage() {
 
           {/* MAIN COLUMN */}
           <section className="space-y-6">
-            {/* Hero */}
-            <div
-              className="overflow-hidden rounded-2xl border bg-white shadow-sm"
-              style={{ borderColor: primaryColor }}
-            >
-              {bannerImageUrl && (
-                <div className="relative h-40 w-full overflow-hidden border-b border-slate-200 bg-slate-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={bannerImageUrl}
-                    alt={`${displayName} banner`}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-              )}
-              <div
-                className="p-6 sm:p-8"
-                style={
-                  !bannerImageUrl ? { backgroundColor: heroBackground } : {}
-                }
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Jobs hub
-                </p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">
-                  {heroTitle}
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                  {heroSubtitle}
-                </p>
-                {hasJobs && (
-                  <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                    <span>
-                      Showing{" "}
-                      <span className="font-semibold text-slate-900">
-                        {Math.min(jobs.length, 4)}
-                      </span>{" "}
-                      {jobs.length === 1 ? "open role" : "open roles"}.
-                    </span>
-                    <Link
-                      href={jobsHref}
-                      className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium"
-                      style={{
-                        borderColor: accentColor,
-                        color: accentColor,
-                      }}
-                    >
-                      View all jobs
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* About / working here */}
             <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">
