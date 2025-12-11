@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 type ApplicationsRow = {
@@ -31,7 +34,24 @@ export default function ApplicationsList({
 }: {
   applications: ApplicationsRow[];
 }) {
-  const hasRows = applications.length > 0;
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+
+  const total = applications.length;
+  const hasRows = total > 0;
+
+  const pageCount = total === 0 ? 1 : Math.ceil(total / pageSize);
+  const currentPage = Math.min(page, pageCount);
+
+  const visibleApplications = useMemo(() => {
+    if (total === 0) return [];
+    const start = (currentPage - 1) * pageSize;
+    return applications.slice(start, start + pageSize);
+  }, [applications, currentPage, pageSize, total]);
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const from = total === 0 ? 0 : startIndex + 1;
+  const to = total === 0 ? 0 : Math.min(startIndex + visibleApplications.length, total);
 
   const statusTotals = applications.reduce(
     (acc, app) => {
@@ -45,12 +65,20 @@ export default function ApplicationsList({
   );
 
   const summaryText = hasRows
-    ? `${applications.length} application${
-        applications.length === 1 ? "" : "s"
-      } · ${statusTotals.active} active · ${statusTotals.onHold} on hold · ${
+    ? `${total} application${total === 1 ? "" : "s"} · ${
+        statusTotals.active
+      } active · ${statusTotals.onHold} on hold · ${
         statusTotals.rejected
       } rejected`
     : "No applications yet.";
+
+  function goToPrevPage() {
+    setPage((p) => Math.max(1, p - 1));
+  }
+
+  function goToNextPage() {
+    setPage((p) => Math.min(pageCount, p + 1));
+  }
 
   return (
     <div className="flex h-full flex-1 flex-col rounded-2xl border border-slate-200 bg-white">
@@ -101,211 +129,265 @@ export default function ApplicationsList({
 
       {/* Rows */}
       {hasRows ? (
-        <ul className="divide-y divide-slate-100">
-          {applications.map((app, idx) => {
-            const score =
-              typeof app.matchScore === "number" && !isNaN(app.matchScore)
-                ? Math.max(0, Math.min(100, Math.round(app.matchScore)))
-                : null;
+        <>
+          <ul className="divide-y divide-slate-100">
+            {visibleApplications.map((app, idx) => {
+              const score =
+                typeof app.matchScore === "number" && !isNaN(app.matchScore)
+                  ? Math.max(0, Math.min(100, Math.round(app.matchScore)))
+                  : null;
 
-            const scoreReason =
-              app.scoreReason ||
-              app.matchReason ||
-              "Scored by semantic CV/JD engine.";
+              const scoreReason =
+                app.scoreReason ||
+                app.matchReason ||
+                "Scored by semantic CV/JD engine.";
 
-            const appliedDate = formatAppliedDate(app.appliedAt);
+              const appliedDate = formatAppliedDate(app.appliedAt);
 
-            const normalizedStatus = (app.status || "PENDING").toUpperCase();
-            const isActive =
-              normalizedStatus === "PENDING" ||
-              normalizedStatus === "ACTIVE" ||
-              normalizedStatus === "";
-            const isOnHold = normalizedStatus === "ON_HOLD";
-            const isRejected = normalizedStatus === "REJECTED";
+              const normalizedStatus = (app.status || "PENDING").toUpperCase();
+              const isActive =
+                normalizedStatus === "PENDING" ||
+                normalizedStatus === "ACTIVE" ||
+                normalizedStatus === "";
+              const isOnHold = normalizedStatus === "ON_HOLD";
+              const isRejected = normalizedStatus === "REJECTED";
 
-            const maxSkillsToShow = 4;
-            const visibleSkills = app.skillTags.slice(0, maxSkillsToShow);
-            const extraSkills = app.skillTags.length - visibleSkills.length;
+              const maxSkillsToShow = 4;
+              const visibleSkills = app.skillTags.slice(0, maxSkillsToShow);
+              const extraSkills = app.skillTags.length - visibleSkills.length;
 
-            return (
-              <li
-                key={app.id}
-                className={`flex items-start gap-4 px-4 py-3 md:items-center ${
-                  idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"
-                }`}
-              >
-                {/* Checkbox (read-only for now) */}
-                <div className="flex w-8 justify-center pt-1 md:pt-0">
-                  <input
-                    type="checkbox"
-                    disabled
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/60"
-                  />
-                </div>
+              const rowNumber = startIndex + idx + 1;
 
-                {/* Main content */}
-                <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center md:gap-4">
-                  {/* Candidate + job context */}
-                  <div className="min-w-[220px] flex-1">
-                    <div className="flex flex-col gap-0.5">
-                      <Link
-                        href={
-                          app.candidateId
-                            ? `/ats/candidates/${app.candidateId}`
-                            : "#"
-                        }
-                        className="inline-flex max-w-xs items-center gap-1 text-[12px] font-semibold text-slate-900 hover:text-indigo-700 hover:underline"
-                      >
-                        {app.fullName || "Unnamed candidate"}
-                      </Link>
-
-                      <p className="max-w-xs truncate text-[10px] text-slate-500">
-                        {app.email || "No email on record"}
-                      </p>
-
-                      <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
-                        {app.currentTitle && (
-                          <span className="truncate">{app.currentTitle}</span>
-                        )}
-                        {app.currentCompany && (
-                          <span className="truncate">
-                            {" · "}
-                            {app.currentCompany}
-                          </span>
-                        )}
-                        {app.location && (
-                          <span className="truncate">
-                            {" · "}
-                            {app.location}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
-                        {app.jobId ? (
-                          <Link
-                            href={`/ats/jobs/${app.jobId}`}
-                            className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:underline"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-                            <span className="truncate">{app.jobTitle}</span>
-                            {app.clientName && (
-                              <span className="truncate text-slate-400">
-                                {" · "}
-                                {app.clientName}
-                              </span>
-                            )}
-                          </Link>
-                        ) : (
-                          <span className="inline-flex items-center gap-1">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                            <span className="truncate">
-                              {app.jobTitle || "Unmapped role"}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Match score + tier */}
-                  <div className="flex w-[150px] flex-col items-center justify-center gap-1">
-                    <MatchScoreDonut score={score} reason={scoreReason} />
-                    <span className="text-[10px] text-slate-500">
-                      Match score
+              return (
+                <li
+                  key={app.id}
+                  className={`flex items-start gap-4 px-4 py-3 md:items-center ${
+                    rowNumber % 2 === 0 ? "bg-slate-50/60" : "bg-white"
+                  }`}
+                >
+                  {/* Number + checkbox (read-only for now) */}
+                  <div className="flex w-10 flex-col items-center gap-1 pt-1 md:pt-0">
+                    <span className="text-[10px] font-medium text-slate-400">
+                      {rowNumber}
                     </span>
-                    {app.tier && (
-                      <span
-                        className={[
-                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
-                          tierColour(app.tier),
-                        ].join(" ")}
-                        title={`Tier ${app.tier.toUpperCase()} · ${scoreReason}`}
-                      >
-                        {app.tier.toUpperCase() === "A" && <span>★</span>}
-                        <span>Tier {app.tier.toUpperCase()}</span>
-                      </span>
-                    )}
+                    <input
+                      type="checkbox"
+                      disabled
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/60"
+                    />
                   </div>
 
-                  {/* Stage (read-only pill) + status chips */}
-                  <div className="flex w-[200px] flex-col gap-1">
-                    <div className="w-full">
-                      <div className="inline-flex w-full items-center justify-between gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-700">
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                          {(app.stage || "APPLIED").toUpperCase()}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          Stage
-                        </span>
+                  {/* Main content */}
+                  <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center md:gap-4">
+                    {/* Candidate + job context */}
+                    <div className="min-w-[220px] flex-1">
+                      <div className="flex flex-col gap-0.5">
+                        <Link
+                          href={
+                            app.candidateId
+                              ? `/ats/candidates/${app.candidateId}`
+                              : "#"
+                          }
+                          className="inline-flex max-w-xs items-center gap-1 text-[12px] font-semibold text-slate-900 hover:text-indigo-700 hover:underline"
+                        >
+                          {app.fullName || "Unnamed candidate"}
+                        </Link>
+
+                        <p className="max-w-xs truncate text-[10px] text-slate-500">
+                          {app.email || "No email on record"}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500">
+                          {app.currentTitle && (
+                            <span className="truncate">{app.currentTitle}</span>
+                          )}
+                          {app.currentCompany && (
+                            <span className="truncate">
+                              {" · "}
+                              {app.currentCompany}
+                            </span>
+                          )}
+                          {app.location && (
+                            <span className="truncate">
+                              {" · "}
+                              {app.location}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+                          {app.jobId ? (
+                            <Link
+                              href={`/ats/jobs/${app.jobId}`}
+                              className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:underline"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                              <span className="truncate">{app.jobTitle}</span>
+                              {app.clientName && (
+                                <span className="truncate text-slate-400">
+                                  {" · "}
+                                  {app.clientName}
+                                </span>
+                              )}
+                            </Link>
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                              <span className="truncate">
+                                {app.jobTitle || "Unmapped role"}
+                              </span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <StatusChip
-                        label="Active"
-                        dotClass="bg-emerald-500"
-                        active={isActive && !isOnHold && !isRejected}
-                        activeClass="bg-emerald-50 text-emerald-700 border-emerald-100"
-                      />
-                      <StatusChip
-                        label="On hold"
-                        dotClass="bg-amber-500"
-                        active={isOnHold}
-                        activeClass="bg-amber-50 text-amber-700 border-amber-100"
-                      />
-                      <StatusChip
-                        label="Rejected"
-                        dotClass="bg-rose-500"
-                        active={isRejected}
-                        activeClass="bg-rose-50 text-rose-700 border-rose-100"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Applied date */}
-                  <div className="w-[110px] text-right text-[11px] text-slate-600">
-                    <div>{appliedDate}</div>
-                    <div className="text-[10px] text-slate-400">Applied</div>
-                  </div>
-
-                  {/* Source / skills */}
-                  <div className="min-w-[180px] flex-1">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] font-semibold text-slate-700">
-                        {(app.source || "Unknown source").toUpperCase()}
+                    {/* Match score + tier */}
+                    <div className="flex w-[150px] flex-col items-center justify-center gap-1">
+                      <MatchScoreDonut score={score} reason={scoreReason} />
+                      <span className="text-[10px] text-slate-500">
+                        Match score
                       </span>
-                      <div className="flex flex-wrap gap-1">
-                        {visibleSkills.length === 0 ? (
-                          <span className="text-[10px] text-slate-400">
-                            No skills tagged
+                      {app.tier && (
+                        <span
+                          className={[
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1",
+                            tierColour(app.tier),
+                          ].join(" ")}
+                          title={`Tier ${app.tier.toUpperCase()} · ${scoreReason}`}
+                        >
+                          {app.tier.toUpperCase() === "A" && <span>★</span>}
+                          <span>Tier {app.tier.toUpperCase()}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Stage (read-only pill) + status chips */}
+                    <div className="flex w-[200px] flex-col gap-1">
+                      <div className="w-full">
+                        <div className="inline-flex w-full items-center justify-between gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-700">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                            {(app.stage || "APPLIED").toUpperCase()}
                           </span>
-                        ) : (
-                          <>
-                            {visibleSkills.map((tag) => (
-                              <span
-                                key={tag.id}
-                                className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
-                              >
-                                {tag.label}
-                              </span>
-                            ))}
-                            {extraSkills > 0 && (
-                              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                                +{extraSkills} more
-                              </span>
-                            )}
-                          </>
-                        )}
+                          <span className="text-[10px] text-slate-400">
+                            Stage
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <StatusChip
+                          label="Active"
+                          dotClass="bg-emerald-500"
+                          active={isActive && !isOnHold && !isRejected}
+                          activeClass="bg-emerald-50 text-emerald-700 border-emerald-100"
+                        />
+                        <StatusChip
+                          label="On hold"
+                          dotClass="bg-amber-500"
+                          active={isOnHold}
+                          activeClass="bg-amber-50 text-amber-700 border-amber-100"
+                        />
+                        <StatusChip
+                          label="Rejected"
+                          dotClass="bg-rose-500"
+                          active={isRejected}
+                          activeClass="bg-rose-50 text-rose-700 border-rose-100"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Applied date */}
+                    <div className="w-[110px] text-right text-[11px] text-slate-600">
+                      <div>{appliedDate}</div>
+                      <div className="text-[10px] text-slate-400">Applied</div>
+                    </div>
+
+                    {/* Source / skills */}
+                    <div className="min-w-[180px] flex-1">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-slate-700">
+                          {(app.source || "Unknown source").toUpperCase()}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {visibleSkills.length === 0 ? (
+                            <span className="text-[10px] text-slate-400">
+                              No skills tagged
+                            </span>
+                          ) : (
+                            <>
+                              {visibleSkills.map((tag) => (
+                                <span
+                                  key={tag.id}
+                                  className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+                                >
+                                  {tag.label}
+                                </span>
+                              ))}
+                              {extraSkills > 0 && (
+                                <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                                  +{extraSkills} more
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Pagination bar */}
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 text-[11px] text-slate-600">
+            <div>
+              Showing{" "}
+              <span className="font-semibold text-slate-800">
+                {from || 0}
+              </span>{" "}
+              –{" "}
+              <span className="font-semibold text-slate-800">
+                {to || 0}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-slate-800">
+                {total}
+              </span>{" "}
+              applications
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={goToPrevPage}
+                disabled={currentPage <= 1 || total === 0}
+                className="inline-flex h-7 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                ‹ Prev
+              </button>
+              <span className="text-[11px] text-slate-500">
+                Page{" "}
+                <span className="font-semibold text-slate-800">
+                  {currentPage}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-slate-800">
+                  {pageCount}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={goToNextPage}
+                disabled={currentPage >= pageCount || total === 0}
+                className="inline-flex h-7 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+              >
+                Next ›
+              </button>
+            </div>
+          </div>
+        </>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-[11px] text-slate-500">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-900/90 text-xs font-semibold text-white shadow-sm">
