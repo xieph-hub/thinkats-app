@@ -21,14 +21,17 @@ export async function POST(
   const tenantId = params.tenantId;
 
   try {
-    // 1) Auth guard (super admin / tenant admin)
+    // 1) Auth guard (super admin or tenant owner/admin)
     const ctx = await getServerUser();
 
     if (!ctx || !ctx.user || !ctx.user.email) {
-      return NextResponse.json(
-        { ok: false, error: "unauthenticated" },
-        { status: 401 },
+      // If somehow unauthenticated, send them back to login
+      const loginUrl = new URL("/login", req.nextUrl);
+      loginUrl.searchParams.set(
+        "next",
+        `/ats/tenants/${encodeURIComponent(tenantId)}/invite-admin`,
       );
+      return NextResponse.redirect(loginUrl);
     }
 
     const { isSuperAdmin, tenantRoles } = ctx;
@@ -37,17 +40,17 @@ export async function POST(
       (r: any) => r.tenantId === tenantId,
     );
     const isTenantAdmin =
-      thisTenantRole &&
-      ["owner", "admin"].includes((thisTenantRole as any).role);
+      thisTenantRole && ["owner", "admin"].includes(thisTenantRole.role);
 
     if (!isSuperAdmin && !isTenantAdmin) {
-      return NextResponse.json(
-        { ok: false, error: "forbidden" },
-        { status: 403 },
+      const redirectUrl = new URL(
+        `/ats/tenants/${tenantId}/invite-admin?error=server_error`,
+        req.nextUrl,
       );
+      return NextResponse.redirect(redirectUrl);
     }
 
-    // 2) Parse HTML form data (THIS is the key change)
+    // 2) Parse HTML FORM DATA (not JSON!)
     const formData = await req.formData();
 
     const rawEmail = (formData.get("email") || "").toString().trim();
@@ -65,10 +68,10 @@ export async function POST(
 
     const email = rawEmail.toLowerCase();
 
-    // Basic email sanity check
+    // Simple email sanity check
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       const redirectUrl = new URL(
-        `/ats/tenants/${tenantId}/invite-admin?error=invalid_email`,
+        `/ats/tenants/${tenantId}/invite-admin?error=missing_email`,
         req.nextUrl,
       );
       return NextResponse.redirect(redirectUrl);
@@ -81,7 +84,7 @@ export async function POST(
 
     if (!tenant) {
       const redirectUrl = new URL(
-        `/ats/tenants/${tenantId}/invite-admin?error=tenant_not_found`,
+        `/ats/tenants/${tenantId}/invite-admin?error=server_error`,
         req.nextUrl,
       );
       return NextResponse.redirect(redirectUrl);
@@ -101,10 +104,10 @@ export async function POST(
         role,
         tokenHash,
         expiresAt,
-        // Uncomment if your schema has these:
-        // invitedByUserId: ctx.user.id,
+        // If your schema has these fields later, you can store them:
         // inviteeName: fullName || null,
         // inviteMessage: message || null,
+        // invitedByUserId: ctx.user.id,
       },
     });
 
@@ -134,7 +137,7 @@ export async function POST(
       html,
     });
 
-    // 6) Redirect back with success flag for your page banner
+    // 6) Redirect back with success flag so your page shows the green banner
     const redirectUrl = new URL(
       `/ats/tenants/${tenantId}/invite-admin?invited=1`,
       req.nextUrl,
