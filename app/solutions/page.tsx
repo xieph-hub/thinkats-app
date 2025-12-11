@@ -24,14 +24,15 @@ export default function SolutionsPage() {
 
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
               Workflows tuned to how{" "}
-              <span className="text-sky-300">you actually hire.</span>
+              <span className="text-sky-300">your team actually hires.</span>
             </h1>
 
             <p className="max-w-2xl text-sm text-slate-300">
               In-house HR &amp; People teams, recruitment agencies and founders
-              running lean hiring all share the same challenge: keep hiring
-              structured without drowning in process. ThinkATS adapts to each
-              type of team while keeping everything in one clean system.
+              running lean hiring all share the same tension: keep hiring
+              structured, without drowning in process or tools. ThinkATS adapts
+              to each setup with one core platform for jobs, pipelines, scoring
+              and career sites.
             </p>
 
             {/* Anchor pills */}
@@ -57,8 +58,8 @@ export default function SolutionsPage() {
             </div>
 
             <p className="mt-3 text-[11px] text-slate-400">
-              One core ATS, three different ways of working – all compatible
-              with multi-tenant, client-ready hiring as you grow.
+              One ATS, three common models – all compatible with multi-tenant,
+              client-ready hiring as you grow.
             </p>
           </div>
         </div>
@@ -76,19 +77,20 @@ export default function SolutionsPage() {
                 In-house HR &amp; People teams
               </h2>
               <p className="text-[12px] text-slate-300">
-                Centralise hiring across departments and subsidiaries, keep
-                managers aligned on priorities and remove the friction from
-                getting feedback – without forcing everyone into a heavy HR
-                suite on day one.
+                Centralise hiring across departments and entities, keep managers
+                aligned on priorities and get a truthful view of where each role
+                sits. ThinkATS gives HR &amp; People teams a single source of
+                truth for jobs, candidates, communications and decisions.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-300 md:min-w-[220px]">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-300 md:min-w-[230px]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Typical setup
+                Typical configuration
               </p>
               <p className="mt-1">
-                1 ThinkATS tenant · multiple departments / business units · HR
-                &amp; People team as admins · hiring managers as collaborators.
+                1 ThinkATS tenant · multiple departments / subsidiaries · HR /
+                People as admins · hiring managers as collaborators · one
+                shared careers site or separate hubs per entity.
               </p>
             </div>
           </div>
@@ -96,24 +98,41 @@ export default function SolutionsPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                What it solves
+                Pain points it tackles
               </p>
               <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
-                <li>• Fragmented roles across email, forms and spreadsheets</li>
+                <li>• Roles scattered across email, forms and spreadsheets</li>
                 <li>• No shared view of where candidates are stuck</li>
                 <li>• HR leadership relying on manual status updates</li>
-                <li>• Candidates getting lost between HR and hiring managers</li>
+                <li>• Candidates falling between HR and hiring managers</li>
+                <li>• Little visibility into which teams are over- or under-hiring</li>
               </ul>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                How ThinkATS helps
+                How ThinkATS fits into the stack
               </p>
               <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
-                <li>• Clear pipelines for leadership and specialist roles</li>
-                <li>• Shared board with visibility on bottlenecks</li>
-                <li>• Simple dashboards for HR and People leadership</li>
-                <li>• Candidate communication that feels structured, not cold</li>
+                <li>
+                  • Clear pipelines for leadership and specialist roles, per
+                  department or entity
+                </li>
+                <li>
+                  • Screening &amp; scoring that helps managers focus on the
+                  most relevant profiles first
+                </li>
+                <li>
+                  • Simple dashboards for HR / People leadership across all
+                  roles
+                </li>
+                <li>
+                  • Structured but human candidate communication that lives next
+                  to the pipeline
+                </li>
+                <li>
+                  • Career sites that reflect the organisation&apos;s brand,
+                  without a separate website project
+                </li>
               </ul>
             </div>
           </div>
@@ -132,18 +151,19 @@ export default function SolutionsPage() {
                 Recruitment &amp; search agencies
               </h2>
               <p className="text-[12px] text-slate-300">
-                Run multiple client mandates from a single workspace, keep
-                shortlists clean and client-ready, and report on activity
-                without building a new spreadsheet every week.
+                Run multiple client mandates from one workspace. Keep shortlists
+                clean, scored and client-ready, and report on activity without
+                building a new spreadsheet or slide deck for every update.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-300 md:min-w-[220px]">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-300 md:min-w-[230px]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Typical setup
+                Typical configuration
               </p>
               <p className="mt-1">
-                1 ThinkATS tenant · multi-client structure · each mandate has
-                its own pipeline · consultants share a common candidate pool.
+                1 ThinkATS tenant · client-aware mandates · each role has its
+                own pipeline · consultants share a candidate pool with full
+                history and scoring, scoped by client.
               </p>
             </div>
           </div>
@@ -151,24 +171,44 @@ export default function SolutionsPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                What it solves
+                Pain points it tackles
               </p>
               <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
                 <li>• Mandates tracked differently by each recruiter</li>
                 <li>• No clean view of who&apos;s in which client process</li>
                 <li>• Shortlists assembled by copy-pasting into slides</li>
                 <li>• Candidates being reused with no central history</li>
+                <li>
+                  • Difficult to show clients a clear funnel from sourced →
+                  shortlisted → offer
+                </li>
               </ul>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                How ThinkATS helps
+                How ThinkATS fits into the stack
               </p>
               <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
-                <li>• Multi-tenant structure scoped by client or portfolio</li>
-                <li>• Per-role pipelines with rich notes and activity</li>
-                <li>• Clear view of every candidate&apos;s journey by client</li>
-                <li>• Cleaner exports and views for client-ready updates</li>
+                <li>
+                  • Client-aware roles and pipelines, with a clear separation
+                  between mandates
+                </li>
+                <li>
+                  • Screening &amp; ranking so the top candidates for each
+                  client rise to the top automatically
+                </li>
+                <li>
+                  • Shared candidate records with notes, timelines and
+                  attachments across multiple mandates
+                </li>
+                <li>
+                  • Clean, exportable views you can drop into client reports or
+                  live review sessions
+                </li>
+                <li>
+                  • Branded jobs hubs per client, powered by the same ATS
+                  underneath
+                </li>
               </ul>
             </div>
           </div>
@@ -187,20 +227,20 @@ export default function SolutionsPage() {
                 Founders &amp; lean leadership teams
               </h2>
               <p className="text-[12px] text-slate-300">
-                When you&apos;re still under 50 people, you don&apos;t need a huge
-                HR stack. You need a reliable place to put roles, applications
-                and decisions – that can quietly grow into a multi-tenant setup
-                when you start hiring for others.
+                When you&apos;re still under 50 people, you don&apos;t need a
+                huge HR stack. You need a reliable place to put roles,
+                applications and decisions – with just enough structure to avoid
+                chaos and a clear path to scale when the team grows.
               </p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-300 md:min-w-[220px]">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px] text-slate-300 md:min-w-[230px]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Typical setup
+                Typical configuration
               </p>
               <p className="mt-1">
                 1 ThinkATS tenant · founders and early leaders in the ATS ·
-                clean job links for candidates · ready to split into multiple
-                tenants as you spin up new entities.
+                simple careers page for your brand · ready to split into
+                multiple tenants as you spin up new entities or products.
               </p>
             </div>
           </div>
@@ -208,24 +248,38 @@ export default function SolutionsPage() {
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                What it solves
+                Pain points it tackles
               </p>
               <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
                 <li>• Roles scattered across Notion, email and chats</li>
                 <li>• No single view of who applied to what</li>
                 <li>• Decisions lost in threads or calls</li>
-                <li>• Difficulty graduating to a more structured model</li>
+                <li>• Founders spending time manually triaging CVs</li>
+                <li>• Difficulty graduating to a more structured hiring model</li>
               </ul>
             </div>
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                How ThinkATS helps
+                How ThinkATS fits into the stack
               </p>
               <ul className="mt-2 space-y-1.5 text-[11px] text-slate-300">
-                <li>• Simple job creation flow with clean public links</li>
-                <li>• CV-first applications that don&apos;t require accounts</li>
-                <li>• Clear, auditable decisions per candidate</li>
-                <li>• Path to multi-tenant if you start hiring for others</li>
+                <li>
+                  • Simple job creation flow with clean, shareable role links
+                </li>
+                <li>
+                  • CV-first applications and screening scores so founders see
+                  the strongest profiles first
+                </li>
+                <li>
+                  • Clear, auditable decisions per candidate and per role
+                </li>
+                <li>
+                  • A careers page that feels considered, not like a quick form
+                </li>
+                <li>
+                  • A path to multi-tenant if you later start hiring for other
+                  entities or portfolio companies
+                </li>
               </ul>
             </div>
           </div>
