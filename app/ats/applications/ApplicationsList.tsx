@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Mail } from "lucide-react";
 
 type ApplicationsRow = {
   id: string;
@@ -301,21 +300,6 @@ export default function ApplicationsList({
                         )}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Email button */}
-                  <div className="flex w-10 justify-end">
-                    {app.email ? (
-                      <a
-                        href={`mailto:${app.email}`}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-px hover:bg-slate-50 hover:text-slate-900"
-                        title="Email candidate"
-                      >
-                        <Mail className="h-3.5 w-3.5" />
-                      </a>
-                    ) : (
-                      <div className="h-8 w-8 rounded-full border border-dashed border-slate-200" />
-                    )}
                   </div>
                 </div>
               </li>
