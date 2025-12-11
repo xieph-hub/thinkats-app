@@ -1,4 +1,3 @@
-// app/ats/candidates/CandidatesTable.tsx
 "use client";
 
 import { useState } from "react";
@@ -99,6 +98,24 @@ function formatDateFromIso(iso: string) {
   return d.toISOString().slice(0, 10);
 }
 
+function humanisedAge(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 1) return "Today";
+  if (diffDays === 1) return "1 day ago";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks === 1) return "1 week ago";
+  if (diffWeeks < 5) return `${diffWeeks} weeks ago`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths === 1) return "1 month ago";
+  return `${diffMonths} months ago`;
+}
+
 function csvEscape(value: string | number | null | undefined): string {
   if (value == null) return "";
   const str = String(value);
@@ -156,7 +173,6 @@ export default function CandidatesTable({
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(text);
       } else {
-        // Fallback for older browsers
         const textarea = document.createElement("textarea");
         textarea.value = text;
         textarea.style.position = "fixed";
@@ -166,7 +182,9 @@ export default function CandidatesTable({
         document.execCommand("copy");
         document.body.removeChild(textarea);
       }
-      setFeedback(`Copied ${emails.length} email${emails.length === 1 ? "" : "s"} to clipboard.`);
+      setFeedback(
+        `Copied ${emails.length} email${emails.length === 1 ? "" : "s"} to clipboard.`,
+      );
     } catch (err) {
       console.error("Failed to copy emails", err);
       setFeedback("Could not copy emails. Please try again.");
@@ -244,9 +262,7 @@ export default function CandidatesTable({
               onChange={toggleAll}
             />
             <span>
-              {allSelected
-                ? "Clear selection"
-                : "Select all on this page"}
+              {allSelected ? "Clear selection" : "Select all on this page"}
             </span>
           </label>
 
@@ -277,9 +293,7 @@ export default function CandidatesTable({
             Export selected as CSV
           </button>
           {feedback && (
-            <span className="text-[10px] text-slate-500">
-              {feedback}
-            </span>
+            <span className="text-[10px] text-slate-500">{feedback}</span>
           )}
         </div>
       </div>
@@ -287,7 +301,7 @@ export default function CandidatesTable({
       <table className="w-full border-separate border-spacing-y-1 text-[11px]">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            <th className="w-16 px-3 py-2">#</th>
+            <th className="w-20 px-3 py-2">#</th>
             <th className="px-3 py-2">Candidate</th>
             <th className="px-3 py-2">Pipelines</th>
             <th className="px-3 py-2 text-right">Match score</th>
@@ -302,6 +316,12 @@ export default function CandidatesTable({
 
             const firstTwoPipelines = row.pipelines.slice(0, 2);
             const extraPipelines = Math.max(row.pipelines.length - 2, 0);
+
+            const cardBase =
+              "flex flex-col gap-1 rounded-xl border px-3 py-2 transition-shadow";
+            const cardClass = isSelected
+              ? `${cardBase} border-indigo-200 bg-indigo-50/70 shadow-sm`
+              : `${cardBase} border-slate-100 bg-slate-50/60`;
 
             return (
               <tr key={row.id}>
@@ -322,7 +342,7 @@ export default function CandidatesTable({
 
                 {/* Candidate card */}
                 <td className="align-top px-3 py-2">
-                  <div className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                  <div className={cardClass}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <Link
@@ -454,7 +474,10 @@ export default function CandidatesTable({
 
                 {/* Last seen */}
                 <td className="align-top px-3 py-2 text-right text-[10px] text-slate-600">
-                  {formatDateFromIso(row.lastSeen)}
+                  <div>{formatDateFromIso(row.lastSeen)}</div>
+                  <div className="text-[9px] text-slate-400">
+                    {humanisedAge(row.lastSeen)}
+                  </div>
                 </td>
               </tr>
             );
