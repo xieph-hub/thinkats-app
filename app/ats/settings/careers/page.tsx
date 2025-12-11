@@ -32,9 +32,6 @@ export default async function CareersSettingsPage({
 }: {
   searchParams?: SearchParams;
 }) {
-  // -----------------------------
-  // Load tenants + resolve current tenant
-  // -----------------------------
   const tenants = await prisma.tenant.findMany({
     orderBy: { name: "asc" },
   });
@@ -64,9 +61,7 @@ export default async function CareersSettingsPage({
   const selectedTenantId = selectedTenant.id;
   const tenantSlug = (selectedTenant as any).slug || selectedTenantId;
 
-  // -----------------------------
-  // Load hub settings for this tenant
-  // -----------------------------
+  // Settings for this tenant
   const settings = await prisma.careerSiteSettings.findFirst({
     where: { tenantId: selectedTenantId },
   });
@@ -87,13 +82,11 @@ export default async function CareersSettingsPage({
   const includeInMarketplace =
     (settings as any)?.includeInMarketplace ?? false;
 
-  // Banner preview: trust the DB's bannerImageUrl as the source of truth
+  // 🔑 Canonical banner URL: directly from DB
   const bannerImagePreviewUrl =
     (settings as any)?.bannerImageUrl ?? "";
 
-  // -----------------------------
-  // Layout (JSON) for hub homepage (still stored in CareerPage)
-  // -----------------------------
+  // Layout (JSON) for hub homepage
   const careerPage = await prisma.careerPage.findFirst({
     where: {
       tenantId: selectedTenantId,
@@ -103,9 +96,6 @@ export default async function CareersSettingsPage({
 
   const initialLayout = (careerPage?.layout ?? null) as CareerLayout | null;
 
-  // -----------------------------
-  // Preview URLs (hub + jobs listing)
-  // -----------------------------
   const mainSiteBase = process.env.NEXT_PUBLIC_SITE_URL || "";
   const tenantBaseDomain = process.env.NEXT_PUBLIC_TENANT_BASE_DOMAIN || "";
 
@@ -114,7 +104,6 @@ export default async function CareersSettingsPage({
       ? `https://${tenantSlug}.${tenantBaseDomain}`
       : "";
 
-  // Client-facing hub and jobs listing
   const hubUrl = tenantHostUrl || `${mainSiteBase}/?tenant=${tenantSlug}`;
   const jobsUrl = tenantHostUrl
     ? `${tenantHostUrl}/jobs`
@@ -258,6 +247,7 @@ export default async function CareersSettingsPage({
       <form
         method="POST"
         action="/api/ats/settings/careers-site"
+        encType="multipart/form-data"
         className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 text-[11px] text-slate-700 shadow-sm"
       >
         <input type="hidden" name="tenantId" value={selectedTenantId} />
@@ -289,7 +279,6 @@ export default async function CareersSettingsPage({
               </p>
             </div>
 
-            {/* Banner upload via Supabase */}
             <BannerUploadField
               tenantId={selectedTenantId}
               initialUrl={bannerImagePreviewUrl || null}
@@ -529,7 +518,6 @@ export default async function CareersSettingsPage({
         </div>
       </form>
 
-      {/* JSON layout editor (writes CareerPage.layout via API) */}
       <CareersLayoutEditor
         tenantId={selectedTenantId}
         initialLayout={initialLayout ?? undefined}
