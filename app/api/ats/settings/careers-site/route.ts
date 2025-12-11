@@ -4,8 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-function nullIfEmpty(value: any): string | null {
-  if (value === undefined || value === null) return null;
+function nullIfEmpty(value: any): string | null | undefined {
+  // IMPORTANT: undefined means "do not touch this field"
+  if (value === undefined) return undefined;
+  if (value === null) return null;
   if (typeof value !== "string") return String(value);
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
@@ -110,13 +112,14 @@ export async function POST(req: NextRequest) {
           console.error("Error uploading banner image:", uploadError);
         } else {
           newBannerImagePath = objectPath;
-          const publicBase =
-            process.env.NEXT_PUBLIC_CAREERS_ASSET_BASE_URL || "";
-          if (publicBase) {
-            newBannerImageUrl = `${publicBase.replace(
-              /\/$/,
-              "",
-            )}/${objectPath}`;
+
+          // Use Supabase to derive the public URL directly
+          const { data: publicData } = supabaseAdmin.storage
+            .from("careers-assets")
+            .getPublicUrl(objectPath);
+
+          if (publicData?.publicUrl) {
+            newBannerImageUrl = publicData.publicUrl;
           }
         }
       } catch (e) {
@@ -129,10 +132,6 @@ export async function POST(req: NextRequest) {
     // --------------------------------------------------
     const data: Record<string, any> = {
       logoUrl: nullIfEmpty(body.logoUrl),
-
-      // Only update banner fields if we actually uploaded a new file
-      bannerImageUrl: newBannerImageUrl,
-      bannerImagePath: newBannerImagePath,
 
       primaryColorHex: nullIfEmpty(body.primaryColorHex),
       accentColorHex: nullIfEmpty(body.accentColorHex),
@@ -149,15 +148,24 @@ export async function POST(req: NextRequest) {
       twitterUrl: nullIfEmpty(body.twitterUrl),
       instagramUrl: nullIfEmpty(body.instagramUrl),
 
-      includeInMarketplace:
-        body.includeInMarketplace !== undefined
-          ? parseCheckbox(body.includeInMarketplace)
-          : undefined,
-      isPublic:
-        body.isPublic !== undefined ? parseCheckbox(body.isPublic) : undefined,
-
       updatedAt: new Date(),
     };
+
+    // Only touch these booleans if the form actually sent them
+    if (body.includeInMarketplace !== undefined) {
+      data.includeInMarketplace = parseCheckbox(body.includeInMarketplace);
+    }
+    if (body.isPublic !== undefined) {
+      data.isPublic = parseCheckbox(body.isPublic);
+    }
+
+    // Only update banner fields if we actually uploaded a new file
+    if (newBannerImageUrl !== undefined) {
+      data.bannerImageUrl = newBannerImageUrl;
+    }
+    if (newBannerImagePath !== undefined) {
+      data.bannerImagePath = newBannerImagePath;
+    }
 
     // Strip undefined (but keep null to allow clearing values)
     const cleanedData = Object.fromEntries(
