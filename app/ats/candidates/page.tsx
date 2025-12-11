@@ -1,4 +1,3 @@
-// app/ats/candidates/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -348,8 +347,8 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               Candidates
             </h1>
             <p className="mt-0.5 max-w-xl text-[11px] text-slate-500">
-              Talent across all roles in this workspace. Search, segment and
-              tier candidates into a single, unified view.
+              Talent across all roles in this workspace. Search, segment, rank
+              and nurture candidates from a single, unified pool.
             </p>
           </div>
           <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
@@ -357,8 +356,16 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               {tenant.name}
             </span>
             <span className="text-[10px] text-slate-400">
-              {totalFiltered} of {totalCandidates} candidates visible
+              {totalFiltered.toLocaleString()} of{" "}
+              {totalCandidates.toLocaleString()} candidates visible
             </span>
+            {activeView && (
+              <span className="mt-1 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                <span className="mr-1 h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                View: {activeView.name}
+                {activeView.isDefault ? " · default" : ""}
+              </span>
+            )}
           </div>
         </div>
 
@@ -369,7 +376,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               Total candidates
             </span>
             <span className="text-sm font-semibold text-slate-900">
-              {totalCandidates}
+              {totalCandidates.toLocaleString()}
             </span>
           </div>
           <div className="flex flex-col">
@@ -377,11 +384,11 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               Pipelines
             </span>
             <span className="text-sm font-semibold text-slate-900">
-              {totalPipelines}
+              {totalPipelines.toLocaleString()}
             </span>
             <span className="text-[10px] text-slate-400">
-              {Math.max(totalCandidates, 1)
-                ? (totalPipelines / Math.max(totalCandidates, 1)).toFixed(1)
+              {totalCandidates > 0
+                ? (totalPipelines / totalCandidates).toFixed(1)
                 : "0.0"}{" "}
               per candidate on average
             </span>
@@ -391,7 +398,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               Active in last 30 days
             </span>
             <span className="text-sm font-semibold text-slate-900">
-              {activeIn30Days}
+              {activeIn30Days.toLocaleString()}
             </span>
             <span className="text-[10px] text-slate-400">
               {totalCandidates
@@ -405,7 +412,8 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               Sources &amp; tiers
             </span>
             <span className="text-sm font-semibold text-slate-900">
-              {uniqueSources} sources
+              {uniqueSources} source
+              {uniqueSources === 1 ? "" : "s"}
             </span>
             <div className="mt-0.5 flex flex-wrap gap-1 text-[9px] text-slate-500">
               <span>Tier A {tierCounts.A}</span>
@@ -420,7 +428,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
 
       {/* Body */}
       <main className="flex flex-1 flex-col bg-slate-50 px-5 py-4">
-        {/* Filters + saved views + quick chips */}
+        {/* Filters + saved views */}
         <section className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)]">
           {/* Filters card */}
           <div className="rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
@@ -436,21 +444,25 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               </Link>
             </div>
 
-            <form className="flex flex-wrap items-center gap-2">
+            <form
+              className="flex flex-wrap items-center gap-2"
+              method="GET"
+              action="/ats/candidates"
+            >
               {/* Text search */}
               <input
                 type="text"
                 name="q"
                 defaultValue={filterQ}
                 placeholder="Search by name, email, company…"
-                className="h-8 min-w-[180px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+                className="h-8 min-w-[180px] flex-1 rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               />
 
               {/* Source dropdown */}
               <select
                 name="source"
                 defaultValue={filterSource}
-                className="h-8 min-w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+                className="h-8 min-w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="">All sources</option>
                 {sourceOptions.map((src) => (
@@ -464,7 +476,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               <select
                 name="stage"
                 defaultValue={filterStage}
-                className="h-8 min-w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+                className="h-8 min-w-[160px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="">All stages</option>
                 {stageOptions.map((stg) => (
@@ -478,7 +490,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               <select
                 name="tier"
                 defaultValue={filterTier}
-                className="h-8 min-w-[120px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800"
+                className="h-8 min-w-[120px] rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/30"
               >
                 <option value="">All tiers</option>
                 <option value="A">Tier A</option>
@@ -489,9 +501,10 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
               {activeView && (
                 <input type="hidden" name="view" value={activeView.id} />
               )}
+
               <button
                 type="submit"
-                className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
+                className="inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
               >
                 Apply filters
               </button>
@@ -516,7 +529,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                     className={[
                       "inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px]",
                       isActive
-                        ? "bg-slate-900 text-slate-50"
+                        ? "bg-slate-900 text-slate-50 shadow-sm"
                         : "bg-slate-100 text-slate-700 hover:bg-slate-200",
                     ].join(" ")}
                   >
@@ -534,16 +547,16 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                 Saved views
               </span>
               <span className="text-[10px] text-slate-400">
-                Views are workspace-wide. Build sourcing &amp; screening
-                dashboards here.
+                Use views for recurring slices like leadership funnels or
+                referral pools.
               </span>
             </div>
 
             {savedViews.length === 0 ? (
               <p className="text-[11px] text-slate-400">
-                No saved views yet. We&apos;ll use this space later for things
-                like &ldquo;Leadership funnel&rdquo; or &ldquo;Referrals
-                only&rdquo;.
+                No saved views yet. We&apos;ll use this space later for
+                &ldquo;Leadership funnel&rdquo;, &ldquo;Referrals only&rdquo;
+                and other curated segments.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -606,7 +619,9 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                     {Math.min(offset + pageSize, totalFiltered)}
                   </span>{" "}
                   of{" "}
-                  <span className="font-semibold">{totalFiltered}</span>{" "}
+                  <span className="font-semibold">
+                    {totalFiltered.toLocaleString()}
+                  </span>{" "}
                   candidates
                 </span>
                 <div className="inline-flex items-center gap-1">
