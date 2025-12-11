@@ -70,18 +70,17 @@ export default async function RootPage() {
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/10 text-[10px] text-emerald-300">
                   ●
                 </span>
-                ATS infrastructure for agencies, in-house teams &amp; platforms
+                Multi-tenant ATS for agencies, in-house teams &amp; platforms
               </p>
               <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-                One ATS that powers{" "}
+                One ATS to run{" "}
                 <span className="text-sky-300">every client&apos;s jobs hub</span>.
               </h1>
               <p className="max-w-xl text-sm text-slate-300">
-                ThinkATS is a multi-tenant applicant tracking system for
-                recruitment agencies, in-house HR &amp; People teams, talent
-                platforms and anyone who manages hiring for multiple
-                organisations. Give each client a branded jobs hub and keep all
-                your pipelines in one workspace.
+                ThinkATS lets you publish roles, screen candidates and manage
+                pipelines across multiple organisations. Each client gets a
+                branded jobs hub on its own subdomain, all powered by a shared
+                ATS with built-in screening and ranking.
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
@@ -98,28 +97,30 @@ export default async function RootPage() {
                   Explore product overview
                 </Link>
                 <p className="text-[11px] text-slate-400">
-                  Designed for multi-client teams from day one.
+                  ATS, career sites and scoring in one stack.
                 </p>
               </div>
             </div>
 
-            {/* Right: anonymised client snapshot */}
+            {/* Right: anonymised client + scoring snapshot */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-200 shadow-xl">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 Example client workspace
               </p>
+
               <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                {/* Client header */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10 text-[11px] font-semibold text-sky-300">
-                      AT
+                      AC
                     </div>
                     <div>
                       <p className="text-[11px] font-medium text-slate-50">
-                        Acme Talent
+                        Acme Collective
                       </p>
                       <p className="text-[10px] text-slate-500">
-                        Jobs hub · 4 open roles
+                        Jobs hub · 6 open roles
                       </p>
                     </div>
                   </div>
@@ -128,6 +129,7 @@ export default async function RootPage() {
                   </span>
                 </div>
 
+                {/* Featured roles */}
                 <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/80 p-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Featured roles
@@ -150,10 +152,37 @@ export default async function RootPage() {
                   </div>
                 </div>
 
+                {/* Scoring snapshot */}
+                <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/60 p-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Screened &amp; ranked automatically
+                  </p>
+                  <div className="space-y-1 text-[11px]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-200">Adaobi O.</span>
+                      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                        92 · Strong match
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-200">Tolu A.</span>
+                      <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                        78 · Good fit
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-200">Chioma K.</span>
+                      <span className="rounded-full bg-slate-700/60 px-2 py-0.5 text-[10px] font-medium text-slate-200">
+                        64 · Needs review
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px]">
                   <span className="text-slate-400">
-                    Each client gets a branded jobs hub, listing and ATS – on
-                    their own subdomain.
+                    Each client gets a branded jobs hub, ATS workspace and
+                    built-in scoring on their own subdomain.
                   </span>
                 </div>
               </div>
@@ -171,9 +200,9 @@ export default async function RootPage() {
                   Multi-tenant by design
                 </p>
                 <p className="mt-2 text-[12px] text-slate-300">
-                  Manage dozens of clients or business units in one shared ATS.
-                  Separate workspaces and permissions, shared infrastructure
-                  underneath.
+                  Run roles for your own organisation and for clients from one
+                  workspace. Each tenant remains isolated; your team stays on a
+                  single platform.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
@@ -181,21 +210,22 @@ export default async function RootPage() {
                   Branded jobs hubs
                 </p>
                 <p className="mt-2 text-[12px] text-slate-300">
-                  Spin up clean, on-brand jobs hubs on subdomains like{" "}
+                  Give each organisation a clean jobs hub and role pages on
+                  subdomains like{" "}
                   <span className="font-mono text-sky-300">
                     client.thinkats.com
                   </span>{" "}
-                  without new websites or plugins.
+                  — no extra websites or plugins.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Built for modern teams
+                  Screening &amp; scoring
                 </p>
                 <p className="mt-2 text-[12px] text-slate-300">
-                  Recruiters, People teams, talent partners and platforms all
-                  work in the same place – instead of stitching together
-                  spreadsheets and forms.
+                  Every application is scored and ranked against the role, so
+                  shortlists and “who to review first” are always one click
+                  away.
                 </p>
               </div>
             </div>
@@ -213,8 +243,8 @@ export default async function RootPage() {
                 </p>
                 <p>
                   Own the full hiring experience for every client. Publish roles
-                  to each client hub, run pipelines centrally and share clean
-                  candidate shortlists.
+                  to client hubs, manage pipelines centrally and send scored
+                  shortlists.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[12px] text-slate-200">
@@ -223,7 +253,7 @@ export default async function RootPage() {
                 </p>
                 <p>
                   Give different business units or subsidiaries their own jobs
-                  hub while keeping approvals, reporting and candidate records
+                  hub while keeping approvals, analytics and candidate history
                   in one system.
                 </p>
               </div>
@@ -232,8 +262,8 @@ export default async function RootPage() {
                   Talent platforms &amp; networks
                 </p>
                 <p>
-                  Power a marketplace of roles across multiple organisations,
-                  with shared infrastructure and flexible branding per partner.
+                  Power a network of roles across multiple organisations, with
+                  shared infrastructure and flexible branding per partner.
                 </p>
               </div>
             </div>
@@ -252,24 +282,25 @@ export default async function RootPage() {
                       Jobs hubs &amp; listings
                     </span>
                     <br />
-                    Public jobs hubs and listings for each tenant, hosted on
-                    clean URLs and wired directly into your ATS.
+                    Public jobs hubs, listings and role pages for each tenant,
+                    wired into the same ATS your team uses every day.
                   </li>
                   <li>
                     <span className="font-semibold text-slate-100">
                       Multi-client pipelines
                     </span>
                     <br />
-                    Keep all applications, stages and notes in one place, with
-                    clear separation between clients.
+                    Per-role pipelines with clear stages, notes and status for
+                    every candidate, separated cleanly by tenant and client.
                   </li>
                   <li>
                     <span className="font-semibold text-slate-100">
                       Hiring collaboration
                     </span>
                     <br />
-                    Give hiring managers controlled access to review
-                    applications, share feedback and move candidates forward.
+                    Bring hiring managers into the right roles, not the whole
+                    system. Capture feedback, move candidates and document
+                    decisions.
                   </li>
                 </ul>
               </div>
@@ -277,35 +308,36 @@ export default async function RootPage() {
                 <ul className="space-y-2">
                   <li>
                     <span className="font-semibold text-slate-100">
+                      Screening &amp; ranking
+                    </span>
+                    <br />
+                    Score applications as they land, surface the strongest
+                    profiles and keep a clear record of why someone was
+                    shortlisted.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-slate-100">
                       Central reporting
                     </span>
                     <br />
-                    View activity across all tenants: open roles, time-to-fill,
-                    candidate volume and more – without logging into separate
-                    tools.
+                    See open roles, funnel health and candidate volume across
+                    tenants from one place – without jumping between tools.
                   </li>
                   <li>
                     <span className="font-semibold text-slate-100">
                       Branding &amp; employer story
                     </span>
                     <br />
-                    Give each organisation control over their copy, colours,
-                    banners and social links on their jobs hub.
-                  </li>
-                  <li>
-                    <span className="font-semibold text-slate-100">
-                      Future-ready scoring &amp; automations
-                    </span>
-                    <br />
-                    Plug scoring engines and workflow automations into a clean,
-                    multi-tenant foundation as your operations mature.
+                    Let each organisation control their copy, colours, banners
+                    and social links on their jobs hub while you keep the
+                    infrastructure consistent.
                   </li>
                 </ul>
               </div>
             </div>
           </section>
 
-          {/* CTA (no explicit copyright so it doesn't clash with global footer) */}
+          {/* CTA (no copyright so it doesn’t clash with global footer) */}
           <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8 text-sm text-slate-200">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -313,9 +345,8 @@ export default async function RootPage() {
                   Next step
                 </p>
                 <p className="mt-1 text-sm text-slate-100">
-                  Use ThinkATS for your own mandates, then extend it to your
-                  clients, business units or partners as a shared hiring
-                  backbone.
+                  Use ThinkATS for your own mandates, then extend it to clients,
+                  business units or partners as a shared hiring backbone.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
@@ -481,11 +512,11 @@ export default async function RootPage() {
                     View all jobs
                   </Link>
                   <p className="text-[11px] text-slate-500">
-                    Showing{" "}
+                    Top roles below are already{" "}
                     <span className="font-semibold text-slate-900">
-                      {Math.min(totalJobs, 4)}
+                      screened &amp; ranked
                     </span>{" "}
-                    featured role{totalJobs === 1 ? "" : "s"} below.
+                    against this organisation&apos;s needs.
                   </p>
                 </div>
               )}
@@ -701,7 +732,7 @@ export default async function RootPage() {
               )}
             </div>
 
-            {/* Subtle stamp – this one is fine even if you have a global footer */}
+            {/* Subtle stamp */}
             <p className="mt-2 text-[10px] text-slate-500">
               Powered by{" "}
               <span className="font-semibold text-slate-800">ThinkATS</span>.
