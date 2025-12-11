@@ -1,7 +1,7 @@
 // app/ats/jobs/[jobId]/JobPipelineList.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StageSelect } from "./StageSelect";
 
@@ -39,6 +39,7 @@ type Props = {
   jobId: string;
   applications: PipelineApp[];
   stageOptions: string[]; // from server: ["APPLIED", "SCREENING", ...]
+  startIndex?: number; // for numbering with pagination
 };
 
 function tierColour(tier: string | null | undefined) {
@@ -182,12 +183,19 @@ export default function JobPipelineList({
   jobId,
   applications,
   stageOptions,
+  startIndex = 0,
 }: Props) {
   const [rows, setRows] = useState<PipelineApp[]>(applications);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
   const [bulkStage, setBulkStage] = useState<string>("");
   const [bulkStatus, setBulkStatus] = useState<string>("");
+
+  // Keep table rows in sync when server-side data changes (e.g. pagination)
+  useEffect(() => {
+    setRows(applications);
+    setSelectedIds([]);
+  }, [applications]);
 
   const allSelected = rows.length > 0 && selectedIds.length === rows.length;
   const anySelected = selectedIds.length > 0;
@@ -400,6 +408,9 @@ export default function JobPipelineList({
                   onChange={toggleSelectAll}
                 />
               </th>
+              <th className="w-10 border-b border-slate-200 px-3 py-2 text-left">
+                #
+              </th>
               <th className="border-b border-slate-200 px-3 py-2 text-left">
                 Candidate
               </th>
@@ -424,13 +435,14 @@ export default function JobPipelineList({
             </tr>
           </thead>
           <tbody>
-            {rows.map((app) => {
+            {rows.map((app, index) => {
               const isSelected = selectedIds.includes(app.id);
               const tier = app.tier;
               const scoreReason =
                 app.scoreReason ||
                 app.matchReason ||
                 "Scored by semantic CV/JD engine.";
+              const rowNumber = startIndex + index + 1;
 
               return (
                 <tr
@@ -444,6 +456,11 @@ export default function JobPipelineList({
                       checked={isSelected}
                       onChange={() => toggleRowSelection(app.id)}
                     />
+                  </td>
+
+                  {/* Row number */}
+                  <td className="px-3 py-3 align-top text-[11px] text-slate-500">
+                    {rowNumber}
                   </td>
 
                   {/* Candidate card */}
@@ -578,7 +595,7 @@ export default function JobPipelineList({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-6 py-6 text-center text-[11px] text-slate-500"
                 >
                   No candidates match the current filters yet.
