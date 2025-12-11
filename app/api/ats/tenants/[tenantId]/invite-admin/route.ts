@@ -16,16 +16,15 @@ function hashToken(token: string) {
 
 export async function POST(
   req: NextRequest,
-  context: { params: { tenantId: string } },
+  { params }: { params: { tenantId: string } },
 ) {
-  const { tenantId } = context.params;
+  const tenantId = params.tenantId;
 
   try {
-    // 1) Auth guard
+    // 1) Auth guard (super admin / tenant admin)
     const ctx = await getServerUser();
 
     if (!ctx || !ctx.user || !ctx.user.email) {
-      // If you prefer a JSON error instead of redirect, change this
       return NextResponse.json(
         { ok: false, error: "unauthenticated" },
         { status: 401 },
@@ -34,11 +33,9 @@ export async function POST(
 
     const { isSuperAdmin, tenantRoles } = ctx;
 
-    // Optional: only super admins or tenant owners/admins can invite
     const thisTenantRole = tenantRoles.find(
       (r: any) => r.tenantId === tenantId,
     );
-
     const isTenantAdmin =
       thisTenantRole &&
       ["owner", "admin"].includes((thisTenantRole as any).role);
@@ -50,7 +47,7 @@ export async function POST(
       );
     }
 
-    // 2) Parse form data (HTML form → formData, not JSON!)
+    // 2) Parse HTML form data (THIS is the key change)
     const formData = await req.formData();
 
     const rawEmail = (formData.get("email") || "").toString().trim();
@@ -68,7 +65,7 @@ export async function POST(
 
     const email = rawEmail.toLowerCase();
 
-    // Tiny email sanity check
+    // Basic email sanity check
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       const redirectUrl = new URL(
         `/ats/tenants/${tenantId}/invite-admin?error=invalid_email`,
@@ -90,7 +87,7 @@ export async function POST(
       return NextResponse.redirect(redirectUrl);
     }
 
-    // 4) Create invitation record
+    // 4) Create invitation row
     const token = crypto.randomUUID();
     const tokenHash = hashToken(token);
 
@@ -104,16 +101,16 @@ export async function POST(
         role,
         tokenHash,
         expiresAt,
-        // Add these fields if you have them in your schema:
+        // Uncomment if your schema has these:
         // invitedByUserId: ctx.user.id,
         // inviteeName: fullName || null,
         // inviteMessage: message || null,
       },
     });
 
-    // 5) Send email via Resend
+    // 5) Send invite email via Resend
     const inviteUrl = `${
-      siteUrl.replace(/\/$/, "") // ensure no trailing slash
+      siteUrl.replace(/\/$/, "")
     }/invites/${token}`;
 
     const safeFullName = fullName || "there";
@@ -137,7 +134,7 @@ export async function POST(
       html,
     });
 
-    // 6) Redirect back with success flag
+    // 6) Redirect back with success flag for your page banner
     const redirectUrl = new URL(
       `/ats/tenants/${tenantId}/invite-admin?invited=1`,
       req.nextUrl,
