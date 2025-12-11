@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { getHostContext } from "@/lib/host";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+// Node runtime so Buffer works
+export const runtime = "nodejs";
+
 function nullIfEmpty(value: any): string | null | undefined {
-  // IMPORTANT: undefined means "do not touch this field"
+  // undefined = don't touch this DB column
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== "string") return String(value);
@@ -24,22 +27,15 @@ function parseCheckbox(value: any): boolean {
 async function parseBody(req: NextRequest): Promise<Record<string, any>> {
   const contentType = req.headers.get("content-type") || "";
 
-  // JSON body
   if (contentType.includes("application/json")) {
     return (await req.json()) as Record<string, any>;
   }
 
-  // form-data (HTML form)
   const formData = await req.formData();
   const obj: Record<string, any> = {};
 
   for (const [key, value] of formData.entries()) {
-    if (typeof value === "string") {
-      obj[key] = value;
-    } else {
-      // Keep File objects so we can upload them
-      obj[key] = value;
-    }
+    obj[key] = value; // string or File
   }
 
   return obj;
@@ -49,9 +45,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await parseBody(req);
 
-    // --------------------------------------------------
-    // Resolve tenantId (form field first, then host)
-    // --------------------------------------------------
+    // -----------------------
+    // Resolve tenantId
+    // -----------------------
     let tenantId: string | null = null;
 
     if (typeof body.tenantId === "string" && body.tenantId.trim() !== "") {
@@ -77,12 +73,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // --------------------------------------------------
-    // Optional banner image upload → Supabase Storage
-    // --------------------------------------------------
-    let newBannerImagePath: string | undefined;
-    let newBannerImageUrl: string | undefined;
+    // -----------------------
+    // Base settings payload (no banner yet)
+    // -----------------------
+    const data: Record<string, any> = {
+      logoUrl: nullIfEmpty(body.logoUrl),
 
+      primaryColor: nullIfEmpty(body.primaryColor),
+      accentColor: nullIfEmpty(body.accentColor),
+
+      heroTitle: nullIfEmpty(body.heroTitle),
+      heroSubtitle: nullIfEmpty(body.heroSubtitle),
+      aboutHtml: nullIfEmpty(body.aboutHtml),
+
+      linkedinUrl: nullIfEmpty(body.linkedinUrl),
+      twitterUrl: nullIfEmpty(body.twitterUrl),
+      instagramUrl: nullIfEmpty(body.instagramUrl),
+
+      updatedAt: new Date(),
+    };
+
+    if (body.includeInMarketplace !== undefined) {
+      data.includeInMarketplace = parseCheckbox(body.includeInMarketplace);
+    }
+    if (body.isPublic !== undefined) {
+      data.isPublic = parseCheckbox(body.isPublic);
+    }
+
+    // -----------------------
+    // Banner upload (optional)
+    // -----------------------
     const bannerFile = body.bannerImageFile as any | undefined;
     if (
       bannerFile &&
@@ -99,10 +119,12 @@ export async function POST(req: NextRequest) {
           ? originalName.split(".").pop()!
           : "jpg";
 
+        const bucket =
+          process.env.NEXT_PUBLIC_CAREER_BANNERS_BUCKET || "career-banners";
         const objectPath = `tenants/${tenantId}/banner-${Date.now()}.${ext}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
-          .from("careers-assets")
+          .from(bucket)
           .upload(objectPath, buffer, {
             contentType: bannerFile.type || "image/*",
             upsert: true,
@@ -111,15 +133,13 @@ export async function POST(req: NextRequest) {
         if (uploadError) {
           console.error("Error uploading banner image:", uploadError);
         } else {
-          newBannerImagePath = objectPath;
-
-          // Use Supabase to derive the public URL directly
           const { data: publicData } = supabaseAdmin.storage
-            .from("careers-assets")
+            .from(bucket)
             .getPublicUrl(objectPath);
 
           if (publicData?.publicUrl) {
-            newBannerImageUrl = publicData.publicUrl;
+            data.bannerImageUrl = publicData.publicUrl;
+            data.bannerImagePath = objectPath;
           }
         }
       } catch (e) {
@@ -127,47 +147,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // --------------------------------------------------
-    // Build update payload
-    // --------------------------------------------------
-    const data: Record<string, any> = {
-      logoUrl: nullIfEmpty(body.logoUrl),
+    // Do NOT touch bannerImageUrl if no file uploaded
+    // (data.bannerImageUrl will simply be undefined in that case)
 
-      primaryColorHex: nullIfEmpty(body.primaryColorHex),
-      accentColorHex: nullIfEmpty(body.accentColorHex),
-      heroBackgroundHex: nullIfEmpty(body.heroBackgroundHex),
-
-      primaryColor: nullIfEmpty(body.primaryColor),
-      accentColor: nullIfEmpty(body.accentColor),
-
-      heroTitle: nullIfEmpty(body.heroTitle),
-      heroSubtitle: nullIfEmpty(body.heroSubtitle),
-      aboutHtml: nullIfEmpty(body.aboutHtml),
-
-      linkedinUrl: nullIfEmpty(body.linkedinUrl),
-      twitterUrl: nullIfEmpty(body.twitterUrl),
-      instagramUrl: nullIfEmpty(body.instagramUrl),
-
-      updatedAt: new Date(),
-    };
-
-    // Only touch these booleans if the form actually sent them
-    if (body.includeInMarketplace !== undefined) {
-      data.includeInMarketplace = parseCheckbox(body.includeInMarketplace);
-    }
-    if (body.isPublic !== undefined) {
-      data.isPublic = parseCheckbox(body.isPublic);
-    }
-
-    // Only update banner fields if we actually uploaded a new file
-    if (newBannerImageUrl !== undefined) {
-      data.bannerImageUrl = newBannerImageUrl;
-    }
-    if (newBannerImagePath !== undefined) {
-      data.bannerImagePath = newBannerImagePath;
-    }
-
-    // Strip undefined (but keep null to allow clearing values)
     const cleanedData = Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== undefined),
     );
@@ -188,9 +170,6 @@ export async function POST(req: NextRequest) {
           },
         });
 
-    // --------------------------------------------------
-    // Browser form? Redirect back to settings
-    // --------------------------------------------------
     const accept = req.headers.get("accept") || "";
     const isBrowser = accept.includes("text/html");
 
