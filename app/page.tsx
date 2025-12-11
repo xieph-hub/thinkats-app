@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ThinkATS",
-  description: "Modern ATS and jobs infrastructure for teams and agencies.",
+  description: "Multi-tenant ATS and jobs infrastructure for modern teams.",
 };
 
 function normaliseWebsiteUrl(raw: string | null | undefined): string | null {
@@ -62,97 +62,98 @@ export default async function RootPage() {
   if (isAppHost && !tenant) {
     return (
       <main className="min-h-screen bg-slate-950 text-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-16 space-y-20">
+        <div className="mx-auto max-w-6xl space-y-20 px-4 py-16">
           {/* HERO */}
-          <section className="grid gap-10 md:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)] items-center">
+          <section className="grid items-center gap-10 md:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)]">
             <div className="space-y-4">
               <p className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-[11px] font-medium text-slate-300">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/10 text-[10px] text-emerald-300">
                   ●
                 </span>
-                Applicant tracking · Multi-tenant
+                ATS infrastructure for agencies, in-house teams &amp; platforms
               </p>
               <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-                The ATS that powers{" "}
-                <span className="text-sky-300">your clients&apos; jobs hubs</span>.
+                One ATS that powers{" "}
+                <span className="text-sky-300">every client&apos;s jobs hub</span>.
               </h1>
               <p className="max-w-xl text-sm text-slate-300">
-                ThinkATS lets agencies, in-house teams and platforms spin up
-                branded jobs hubs, candidate pipelines and hiring workflows for
-                every client – on clean subdomains like{" "}
-                <span className="font-mono text-sky-300">
-                  resourcin.thinkats.com
-                </span>
-                .
+                ThinkATS is a multi-tenant applicant tracking system for
+                recruitment agencies, in-house HR &amp; People teams, talent
+                platforms and anyone who manages hiring for multiple
+                organisations. Give each client a branded jobs hub and keep all
+                your pipelines in one workspace.
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                 <Link
-                  href="/signup"
+                  href="/contact"
                   className="inline-flex items-center rounded-full bg-sky-500 px-5 py-2 text-[12px] font-semibold text-slate-950 shadow-sm hover:bg-sky-400"
                 >
-                  Start free trial
+                  Book a product walkthrough
                 </Link>
                 <Link
                   href="/product"
                   className="inline-flex items-center rounded-full border border-slate-700 bg-transparent px-5 py-2 text-[12px] font-semibold text-slate-100 hover:bg-slate-900/60"
                 >
-                  View product overview
+                  Explore product overview
                 </Link>
                 <p className="text-[11px] text-slate-400">
-                  No setup fees. Designed for agencies and group teams.
+                  Designed for multi-client teams from day one.
                 </p>
               </div>
             </div>
 
-            {/* Right: mini product snapshot */}
+            {/* Right: anonymised client snapshot */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-xs text-slate-200 shadow-xl">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Example: client workspace
+                Example client workspace
               </p>
               <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10 text-[11px] font-semibold text-sky-300">
-                      RE
+                      AT
                     </div>
                     <div>
                       <p className="text-[11px] font-medium text-slate-50">
-                        Resourcin
+                        Acme Talent
                       </p>
                       <p className="text-[10px] text-slate-500">
-                        Jobs hub · 3 open roles
+                        Jobs hub · 4 open roles
                       </p>
                     </div>
                   </div>
                   <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                    Live
+                    Live hub
                   </span>
                 </div>
 
                 <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/80 p-2">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Open roles
+                    Featured roles
                   </p>
                   <div className="space-y-1.5 text-[11px]">
                     <div className="flex items-center justify-between">
                       <span className="text-slate-50">
-                        Assistant Head of Sales
+                        Head of Commercial Operations
                       </span>
-                      <span className="text-slate-500">Lagos · Full-time</span>
+                      <span className="text-slate-500">
+                        Lagos · Full-time
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-50">
-                        Training &amp; Operations Manager
+                        Senior Product Manager
                       </span>
-                      <span className="text-slate-500">Hybrid</span>
+                      <span className="text-slate-500">Remote</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between rounded-lg border border-dashed border-slate-800 bg-slate-950/40 px-3 py-2 text-[11px]">
                   <span className="text-slate-400">
-                    Every client gets a branded jobs hub, listing &amp; ATS.
+                    Each client gets a branded jobs hub, listing and ATS – on
+                    their own subdomain.
                   </span>
                 </div>
               </div>
@@ -162,16 +163,17 @@ export default async function RootPage() {
           {/* VALUE PILLARS */}
           <section className="space-y-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Why ThinkATS
+              Why teams choose ThinkATS
             </p>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Multi-tenant by default
+                  Multi-tenant by design
                 </p>
                 <p className="mt-2 text-[12px] text-slate-300">
-                  Create workspaces and jobs hubs for dozens of clients from one
-                  shared ATS, without duct-taping tools together.
+                  Manage dozens of clients or business units in one shared ATS.
+                  Separate workspaces and permissions, shared infrastructure
+                  underneath.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
@@ -179,95 +181,159 @@ export default async function RootPage() {
                   Branded jobs hubs
                 </p>
                 <p className="mt-2 text-[12px] text-slate-300">
-                  Give every client a clean, branded careers surface on a
-                  subdomain like{" "}
+                  Spin up clean, on-brand jobs hubs on subdomains like{" "}
                   <span className="font-mono text-sky-300">
                     client.thinkats.com
-                  </span>
-                  .
+                  </span>{" "}
+                  without new websites or plugins.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-                  Built for agencies
+                  Built for modern teams
                 </p>
                 <p className="mt-2 text-[12px] text-slate-300">
-                  Track mandates, score candidates and keep clients updated from
-                  one workspace, instead of bouncing across spreadsheets.
+                  Recruiters, People teams, talent partners and platforms all
+                  work in the same place – instead of stitching together
+                  spreadsheets and forms.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* HOW IT WORKS */}
+          {/* WHO IT'S FOR */}
           <section className="space-y-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              How it works
+              Who ThinkATS is for
             </p>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[12px] text-slate-200">
-                <p className="mb-1 text-[11px] font-semibold text-slate-400">
-                  1 · Create a tenant
+                <p className="mb-1 text-[11px] font-semibold text-slate-200">
+                  Recruitment agencies
                 </p>
                 <p>
-                  Spin up a new client workspace with their logo, brand colours
-                  and jobs hub settings.
+                  Own the full hiring experience for every client. Publish roles
+                  to each client hub, run pipelines centrally and share clean
+                  candidate shortlists.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[12px] text-slate-200">
-                <p className="mb-1 text-[11px] font-semibold text-slate-400">
-                  2 · Publish roles
+                <p className="mb-1 text-[11px] font-semibold text-slate-200">
+                  In-house HR &amp; People teams
                 </p>
                 <p>
-                  Post roles once and automatically publish them to the
-                  client&apos;s jobs hub and your shared pipelines.
+                  Give different business units or subsidiaries their own jobs
+                  hub while keeping approvals, reporting and candidate records
+                  in one system.
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[12px] text-slate-200">
-                <p className="mb-1 text-[11px] font-semibold text-slate-400">
-                  3 · Run the process
+                <p className="mb-1 text-[11px] font-semibold text-slate-200">
+                  Talent platforms &amp; networks
                 </p>
                 <p>
-                  Score candidates, keep hiring managers updated and close
-                  mandates faster – all inside ThinkATS.
+                  Power a marketplace of roles across multiple organisations,
+                  with shared infrastructure and flexible branding per partner.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* CTA */}
+          {/* WHAT YOU CENTRALISE */}
+          <section className="space-y-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              What you run on ThinkATS
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[12px] text-slate-200">
+                <ul className="space-y-2">
+                  <li>
+                    <span className="font-semibold text-slate-100">
+                      Jobs hubs &amp; listings
+                    </span>
+                    <br />
+                    Public jobs hubs and listings for each tenant, hosted on
+                    clean URLs and wired directly into your ATS.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-slate-100">
+                      Multi-client pipelines
+                    </span>
+                    <br />
+                    Keep all applications, stages and notes in one place, with
+                    clear separation between clients.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-slate-100">
+                      Hiring collaboration
+                    </span>
+                    <br />
+                    Give hiring managers controlled access to review
+                    applications, share feedback and move candidates forward.
+                  </li>
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-[12px] text-slate-200">
+                <ul className="space-y-2">
+                  <li>
+                    <span className="font-semibold text-slate-100">
+                      Central reporting
+                    </span>
+                    <br />
+                    View activity across all tenants: open roles, time-to-fill,
+                    candidate volume and more – without logging into separate
+                    tools.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-slate-100">
+                      Branding &amp; employer story
+                    </span>
+                    <br />
+                    Give each organisation control over their copy, colours,
+                    banners and social links on their jobs hub.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-slate-100">
+                      Future-ready scoring &amp; automations
+                    </span>
+                    <br />
+                    Plug scoring engines and workflow automations into a clean,
+                    multi-tenant foundation as your operations mature.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {/* CTA (no explicit copyright so it doesn't clash with global footer) */}
           <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 sm:p-8 text-sm text-slate-200">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Ready to see it in action?
+                  Next step
                 </p>
                 <p className="mt-1 text-sm text-slate-100">
-                  Use ThinkATS for your own mandates, then roll it out to your
-                  clients as white-label infrastructure.
+                  Use ThinkATS for your own mandates, then extend it to your
+                  clients, business units or partners as a shared hiring
+                  backbone.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <Link
-                  href="/signup"
+                  href="/contact"
                   className="inline-flex items-center rounded-full bg-sky-500 px-5 py-2 text-[12px] font-semibold text-slate-950 shadow-sm hover:bg-sky-400"
                 >
-                  Start free trial
+                  Book a demo
                 </Link>
                 <Link
-                  href="/contact"
+                  href="/product"
                   className="inline-flex items-center rounded-full border border-slate-700 px-5 py-2 text-[12px] font-semibold text-slate-100 hover:bg-slate-900"
                 >
-                  Talk to us
+                  View product details
                 </Link>
               </div>
             </div>
           </section>
-
-          <footer className="text-[10px] text-slate-500">
-            © {new Date().getFullYear()} ThinkATS. Built for agencies, in-house
-            teams and modern platforms.
-          </footer>
         </div>
       </main>
     );
@@ -351,7 +417,7 @@ export default async function RootPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="mx-auto max-w-6xl px-4 py-10 lg:py-12 space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-10 lg:py-12">
         {/* HERO: client mini ATS home */}
         <div
           className="overflow-hidden rounded-2xl border bg-white shadow-sm"
@@ -635,7 +701,7 @@ export default async function RootPage() {
               )}
             </div>
 
-            {/* Footer: minimal ThinkATS stamp */}
+            {/* Subtle stamp – this one is fine even if you have a global footer */}
             <p className="mt-2 text-[10px] text-slate-500">
               Powered by{" "}
               <span className="font-semibold text-slate-800">ThinkATS</span>.
