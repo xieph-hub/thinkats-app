@@ -22,6 +22,7 @@ type PageProps = {
     status?: string;
     tier?: string;
     viewId?: string;
+    page?: string;
   };
 };
 
@@ -101,6 +102,10 @@ export default async function JobPipelinePage({
   // Saved views (per job)
   // ---------------------------------------------------------------------------
 
+  const hasViewIdParam =
+    searchParams &&
+    Object.prototype.hasOwnProperty.call(searchParams, "viewId");
+
   const rawViewId =
     typeof searchParams.viewId === "string" ? searchParams.viewId : "";
 
@@ -122,7 +127,11 @@ export default async function JobPipelinePage({
       ? jobViews.find((v) => v.id === rawViewId) || null
       : null;
 
-  const defaultView = jobViews.find((v) => v.isDefault) || null;
+  // Only auto-apply default view when there is *no* viewId param at all.
+  const defaultView =
+    !hasViewIdParam && jobViews.length
+      ? jobViews.find((v) => v.isDefault) || null
+      : null;
 
   const activeView = viewFromId || defaultView || null;
 
@@ -268,6 +277,37 @@ export default async function JobPipelinePage({
     });
   }
 
+  const totalApplications = pipelineApps.length;
+
+  // ---------------------------------------------------------------------------
+  // Pagination (server-side)
+  // ---------------------------------------------------------------------------
+
+  const rawPage =
+    typeof searchParams.page === "string" ? searchParams.page : undefined;
+  let page = rawPage ? Number.parseInt(rawPage, 10) : 1;
+  if (Number.isNaN(page) || page < 1) page = 1;
+
+  const pageSize = 25;
+  const pageCount =
+    totalApplications === 0 ? 1 : Math.ceil(totalApplications / pageSize);
+
+  if (page > pageCount) page = pageCount;
+
+  const startIndex =
+    totalApplications === 0 ? 0 : (page - 1) * pageSize;
+
+  const paginatedPipelineApps =
+    totalApplications === 0
+      ? []
+      : pipelineApps.slice(startIndex, startIndex + pageSize);
+
+  const showingFrom = totalApplications === 0 ? 0 : startIndex + 1;
+  const showingTo =
+    totalApplications === 0
+      ? 0
+      : Math.min(startIndex + pageSize, totalApplications);
+
   const allVisibleApplicationIds = pipelineApps.map((a) => a.id);
 
   const uniqueTiers = Array.from(
@@ -279,10 +319,32 @@ export default async function JobPipelinePage({
     ),
   ).sort();
 
-  const currentViewId =
-    typeof searchParams.viewId === "string"
-      ? searchParams.viewId
-      : activeView?.id || "";
+  const activeViewId = activeView?.id || "";
+  const currentViewId = activeViewId;
+
+  // Build base query for pagination links
+  const baseUrl = `/ats/jobs/${job.id}`;
+  const baseParams = new URLSearchParams();
+
+  if (currentViewId) baseParams.set("viewId", currentViewId);
+  if (filterQ) baseParams.set("q", filterQ);
+  if (filterStage !== "ALL") baseParams.set("stage", filterStage);
+  if (filterStatus !== "ALL") baseParams.set("status", filterStatus);
+  if (filterTier !== "ALL") baseParams.set("tier", filterTier);
+
+  const buildPageHref = (pageNum: number) => {
+    const params = new URLSearchParams(baseParams);
+    if (pageNum > 1) {
+      params.set("page", String(pageNum));
+    } else {
+      params.delete("page");
+    }
+    const qs = params.toString();
+    return qs ? `${baseUrl}?${qs}` : baseUrl;
+  };
+
+  const prevPageHref = page > 1 ? buildPageHref(page - 1) : null;
+  const nextPageHref = page < pageCount ? buildPageHref(page + 1) : null;
 
   // ---------------------------------------------------------------------------
   // UI (LIST ONLY)
@@ -459,8 +521,9 @@ export default async function JobPipelinePage({
             >
               Apply filters
             </button>
+            {/* Reset: explicitly include viewId param so default view is NOT auto-applied */}
             <Link
-              href={`/ats/jobs/${job.id}`}
+              href={`/ats/jobs/${job.id}?viewId=`}
               className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 transition hover:bg-slate-100"
             >
               Reset
@@ -531,13 +594,56 @@ export default async function JobPipelinePage({
         </form>
       </section>
 
-      {/* Pipeline list (with bulk selection/actions) */}
+      {/* Pipeline list (with bulk selection/actions) + pagination */}
       <section className="flex-1 px-5 py-4">
         <JobPipelineList
           jobId={job.id}
-          applications={pipelineApps}
+          applications={paginatedPipelineApps}
           stageOptions={stageNames}
+          startIndex={startIndex}
         />
+
+        {/* Pagination footer */}
+        <div className="mt-3 flex flex-col items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 md:flex-row">
+          <p>
+            Showing{" "}
+            <span className="font-semibold">
+              {showingFrom}–{showingTo}
+            </span>{" "}
+            of{" "}
+            <span className="font-semibold">
+              {totalApplications}
+            </span>{" "}
+            {totalApplications === 1 ? "application" : "applications"}
+          </p>
+          <div className="flex items-center gap-2">
+            <Link
+              href={prevPageHref ?? "#"}
+              aria-disabled={!prevPageHref}
+              className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${
+                prevPageHref
+                  ? "border-slate-300 text-slate-700 hover:bg-slate-100"
+                  : "cursor-not-allowed border-slate-200 text-slate-400"
+              }`}
+            >
+              ← Previous
+            </Link>
+            <span className="text-[10px] text-slate-500">
+              Page {page} of {pageCount}
+            </span>
+            <Link
+              href={nextPageHref ?? "#"}
+              aria-disabled={!nextPageHref}
+              className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium ${
+                nextPageHref
+                  ? "border-slate-300 text-slate-700 hover:bg-slate-100"
+                  : "cursor-not-allowed border-slate-200 text-slate-400"
+              }`}
+            >
+              Next →
+            </Link>
+          </div>
+        </div>
       </section>
     </div>
   );
