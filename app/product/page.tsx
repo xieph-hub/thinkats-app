@@ -5,7 +5,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Product | ThinkATS",
   description:
-    "See how ThinkATS combines ATS pipelines, career sites, automation, analytics and integrations into one modern recruiting platform.",
+    "See how ThinkATS combines ATS pipelines, screening & scoring, career sites, automation, analytics and integrations into one modern recruiting platform.",
 };
 
 export default function ProductPage() {
@@ -18,13 +18,13 @@ export default function ProductPage() {
             Product
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-50 sm:text-4xl">
-            One engine for jobs, pipelines and career sites.
+            One engine for jobs, scoring, pipelines and career sites.
           </h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-300">
-            ThinkATS powers multi-tenant ATS workspaces, branded job hubs and
-            clean application flows on your own domains and subdomains — built
-            for agencies, in-house teams and modern platforms running hiring
-            for more than one brand.
+            ThinkATS powers multi-tenant ATS workspaces, candidate screening &
+            scoring, branded job hubs and clean application flows on your own
+            domains and subdomains — built for agencies, in-house teams and
+            modern platforms running hiring for more than one brand.
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
@@ -91,31 +91,31 @@ export default function ProductPage() {
               Core product
             </p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-50 sm:text-2xl">
-              Everything you expect from a modern ATS — built for multi-tenant
-              setups from day one.
+              Everything you expect from a modern ATS — with screening, scoring
+              and multi-tenant structure built in.
             </h2>
             <p className="mt-3 text-[12px] text-slate-400">
-              Instead of stitching together separate tools for jobs, pipelines
-              and career sites, ThinkATS gives you one shared engine with
-              tenants, clients and brands modelled in the database — not just in
-              spreadsheets.
+              Instead of stitching together separate tools for jobs, pipelines,
+              scoring and career sites, ThinkATS gives you one shared engine
+              with tenants, clients and brands modelled in the database — not
+              just in spreadsheets.
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3 text-[11px]">
+          <div className="grid gap-5 text-[11px] md:grid-cols-3">
             {/* ATS & Pipelines */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
               <h3 className="text-xs font-semibold text-slate-50">
-                ATS &amp; pipelines
+                ATS, pipelines &amp; decisions
               </h3>
-              <p className="mt-2 text-slate-300 text-[12px]">
+              <p className="mt-2 text-[12px] text-slate-300">
                 Per-job pipelines from applied to hired, with candidates tied to
                 tenants and roles instead of one flat table.
               </p>
               <ul className="mt-3 space-y-1.5 text-slate-300">
                 <li>• Custom stages per job, with stage counts</li>
                 <li>• Single candidate view across all jobs</li>
-                <li>• Notes, decisions and basic activity history</li>
+                <li>• Notes, decisions and activity history</li>
                 <li>• Support for internal and external roles</li>
               </ul>
               <div className="mt-4">
@@ -128,59 +128,81 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {/* Career Sites */}
+            {/* Screening & Scoring */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
               <h3 className="text-xs font-semibold text-slate-50">
-                Career sites &amp; job hubs
+                Screening, scoring &amp; shortlisting
               </h3>
-              <p className="mt-2 text-slate-300 text-[12px]">
-                Branded jobs hubs on your own domains and subdomains, powered by
-                the same data your ATS uses — no duplicate forms.
+              <p className="mt-2 text-[12px] text-slate-300">
+                A scoring layer that helps you move from “big pile of CVs” to a
+                ranked shortlist, without turning hiring into a black box.
               </p>
               <ul className="mt-3 space-y-1.5 text-slate-300">
-                <li>• Tenant-branded hubs and job pages</li>
-                <li>• Filters for location, function and keywords</li>
-                <li>• CV-first application flow with secure storage</li>
-                <li>• Clean experience on desktop and mobile</li>
+                <li>• Match scores based on CV and role context</li>
+                <li>• Clear ranking to triage large applicant pools</li>
+                <li>• Signals that support, not replace, human judgment</li>
+                <li>• Designed to keep an audit trail of how scores were set</li>
               </ul>
-              <div className="mt-4">
-                <Link
-                  href="/career-sites"
-                  className="text-[11px] font-semibold text-sky-300 hover:text-sky-200 hover:underline"
-                >
-                  Explore the career sites engine →
-                </Link>
-              </div>
+              <p className="mt-4 text-[11px] text-slate-400">
+                The scoring engine sits inside the same ATS, so every candidate
+                and decision has both narrative feedback and structured signals.
+              </p>
             </div>
 
-            {/* Automation & Analytics */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-              <h3 className="text-xs font-semibold text-slate-50">
-                Automation, analytics &amp; context
-              </h3>
-              <p className="mt-2 text-slate-300 text-[12px]">
-                Simple, honest communication and lightweight analytics so you
-                always know where roles and candidates stand.
-              </p>
-              <ul className="mt-3 space-y-1.5 text-slate-300">
-                <li>• Application acknowledgements and key updates</li>
-                <li>• Stage and status changes that stay in sync</li>
-                <li>• Basic views of pipeline health and job status</li>
-                <li>• Export-friendly snapshots for leadership reviews</li>
-              </ul>
-              <div className="mt-4 space-y-1">
-                <Link
-                  href="/product/features/automation"
-                  className="block text-[11px] font-semibold text-sky-300 hover:text-sky-200 hover:underline"
-                >
-                  Automation &amp; emails →
-                </Link>
-                <Link
-                  href="/product/features/analytics"
-                  className="block text-[11px] font-semibold text-sky-300 hover:text-sky-200 hover:underline"
-                >
-                  Analytics &amp; reporting →
-                </Link>
+            {/* Career Sites + Automation & Analytics */}
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <h3 className="text-xs font-semibold text-slate-50">
+                  Career sites &amp; job hubs
+                </h3>
+                <p className="mt-2 text-[12px] text-slate-300">
+                  Branded jobs hubs on your own domains and subdomains, powered
+                  directly by your ATS.
+                </p>
+                <ul className="mt-3 space-y-1.5 text-slate-300">
+                  <li>• Tenant-branded hubs and job pages</li>
+                  <li>• Filters for location, function and keywords</li>
+                  <li>• CV-first application flow with secure storage</li>
+                  <li>• Clean experience on desktop and mobile</li>
+                </ul>
+                <div className="mt-4">
+                  <Link
+                    href="/career-sites"
+                    className="text-[11px] font-semibold text-sky-300 hover:text-sky-200 hover:underline"
+                  >
+                    Explore the career sites engine →
+                  </Link>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
+                <h3 className="text-xs font-semibold text-slate-50">
+                  Automation, analytics &amp; context
+                </h3>
+                <p className="mt-2 text-[12px] text-slate-300">
+                  Simple communication flows and lightweight analytics so you
+                  always know where roles and candidates stand.
+                </p>
+                <ul className="mt-3 space-y-1.5 text-slate-300">
+                  <li>• Application acknowledgements and key updates</li>
+                  <li>• Stage and status changes that stay in sync</li>
+                  <li>• Views of pipeline health and job status</li>
+                  <li>• Export-friendly snapshots for leadership reviews</li>
+                </ul>
+                <div className="mt-4 space-y-1">
+                  <Link
+                    href="/product/features/automation"
+                    className="block text-[11px] font-semibold text-sky-300 hover:text-sky-200 hover:underline"
+                  >
+                    Automation &amp; emails →
+                  </Link>
+                  <Link
+                    href="/product/features/analytics"
+                    className="block text-[11px] font-semibold text-sky-300 hover:text-sky-200 hover:underline"
+                  >
+                    Analytics &amp; reporting →
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -201,28 +223,27 @@ export default function ProductPage() {
               </h2>
             </div>
             <p className="max-w-md text-[12px] text-slate-400">
-              Multi-tenant structure is built into the data model, so you can
-              start with one tenant and grow into multiple brands, clients or
-              entities without migrating tools.
+              Multi-tenant structure and scoring are built into the model, so
+              you can start with one tenant and grow into multiple brands,
+              clients or entities without migrating tools.
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3 text-[11px]">
+          <div className="grid gap-5 text-[11px] md:grid-cols-3">
             {/* In-house */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
               <h3 className="text-xs font-semibold text-slate-50">
                 In-house HR &amp; People teams
               </h3>
               <p className="mt-2 text-[12px] text-slate-300">
-                Keep hiring managers aligned, reduce back-and-forth and keep
-                every role visible — from leadership positions to specialist
-                hires.
+                Keep hiring managers aligned, reduce back-and-forth and get a
+                truthful view of every role.
               </p>
               <ul className="mt-3 space-y-1.5 text-slate-300">
-                <li>• Clear pipelines for critical roles</li>
-                <li>• Shared candidate history across departments</li>
-                <li>• Simple dashboards for HR leadership</li>
-                <li>• Candidate communication that still feels human</li>
+                <li>• Clear pipelines for critical roles per department</li>
+                <li>• Screening scores to focus review on the best fits</li>
+                <li>• Shared candidate history across teams and entities</li>
+                <li>• Simple dashboards for HR and People leadership</li>
               </ul>
             </div>
 
@@ -233,13 +254,13 @@ export default function ProductPage() {
               </h3>
               <p className="mt-2 text-[12px] text-slate-300">
                 Run multiple mandates and clients from one place, with clear
-                separation by tenant and shared tooling across the whole desk.
+                separation by tenant and shared tooling across the desk.
               </p>
               <ul className="mt-3 space-y-1.5 text-slate-300">
                 <li>• Tenants per client, brand or portfolio</li>
-                <li>• Client-ready shortlists without extra spreadsheets</li>
-                <li>• Shared talent pool for repeated roles</li>
-                <li>• Branded job hubs for each client</li>
+                <li>• Ranked shortlists instead of raw CV bundles</li>
+                <li>• Shared talent pool with history across mandates</li>
+                <li>• Branded job hubs that still sit on your rails</li>
               </ul>
             </div>
 
@@ -249,15 +270,15 @@ export default function ProductPage() {
                 Founders, platforms &amp; group structures
               </h3>
               <p className="mt-2 text-[12px] text-slate-300">
-                Whether you&apos;re hiring across a group of companies or
-                embedding hiring into a platform, ThinkATS gives you one place
-                to run jobs and see what&apos;s live.
+                Whether you&apos;re hiring across a group or embedding roles
+                into a platform, ThinkATS gives you one place to run jobs and
+                understand what&apos;s live.
               </p>
               <ul className="mt-3 space-y-1.5 text-slate-300">
-                <li>• Shared engine across multiple entities</li>
+                <li>• Shared engine across multiple entities or products</li>
                 <li>• Clear view of “who is hiring what, where”</li>
                 <li>• Hubs that live on your existing domains</li>
-                <li>• Ready to feed leadership and board reporting</li>
+                <li>• Scoring that helps founders and leaders triage quickly</li>
               </ul>
             </div>
           </div>
@@ -267,7 +288,7 @@ export default function ProductPage() {
       {/* INTEGRATIONS STRIP */}
       <section className="border-b border-slate-900 bg-slate-950">
         <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)] items-start">
+          <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1.4fr),minmax(0,1fr)]">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300">
                 Integrations
@@ -301,14 +322,14 @@ export default function ProductPage() {
                 One engine, multiple tenants
               </p>
               <p className="mt-2 text-[12px] text-slate-200">
-                Under the hood, tenants, jobs, candidates and hubs are all
-                linked. That means:
+                Under the hood, tenants, jobs, candidates, scores and hubs are
+                all linked in a single model. That means:
               </p>
               <ul className="mt-3 space-y-1.5">
                 <li>• No duplicate configuration per client</li>
                 <li>• Shared infrastructure with clear boundaries</li>
-                <li>• Consistent data model for analytics</li>
-                <li>• Space to layer on scoring and automation over time</li>
+                <li>• Consistent data for reporting and leadership reviews</li>
+                <li>• A clean place to keep improving your scoring and flows</li>
               </ul>
             </div>
           </div>
@@ -325,7 +346,8 @@ export default function ProductPage() {
               </p>
               <p className="mt-1 max-w-lg text-[12px] text-slate-300">
                 A short walkthrough is usually enough to see how tenants, jobs,
-                pipelines and hubs line up with your current teams and brands.
+                pipelines, scoring and hubs line up with your current teams and
+                brands.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
