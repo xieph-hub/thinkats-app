@@ -1,5 +1,6 @@
 // app/product/features/integrations/page.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Integrations | ThinkATS",
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 export default function IntegrationsFeaturesPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-50">
+      {/* HERO */}
       <section className="border-b border-slate-900 bg-slate-950">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300">
@@ -19,16 +21,18 @@ export default function IntegrationsFeaturesPage() {
             Built to plug into a realistic HR stack.
           </h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-300">
-            Out of the box, ThinkATS focuses on doing a few things very well.
-            Over time, it connects to your email, file storage and people
-            systems so hiring data isn&apos;t trapped in a silo or copied across
-            five tools.
+            ThinkATS is designed to sit alongside the tools you already trust —
+            email, calendars, file storage and HR systems — so hiring data
+            doesn&apos;t live in a silo or get copied across five different
+            places.
           </p>
         </div>
       </section>
 
+      {/* INTEGRATION PILLARS */}
       <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-6 md:grid-cols-3">
+          {/* Email & calendars */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-50">
               Email &amp; calendars
@@ -39,53 +43,77 @@ export default function IntegrationsFeaturesPage() {
               inbox.
             </p>
             <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-              <li>• Send emails from your own domain (planned)</li>
-              <li>• Calendar-friendly interview invitations</li>
-              <li>• Templates that match your tone, not ours</li>
+              <li>• Send messages from work email, not a no-reply address</li>
+              <li>• Calendar-friendly interview invitations and reminders</li>
+              <li>• Templates that keep tone consistent across the team</li>
             </ul>
           </div>
 
+          {/* Files & storage */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-50">
               Files &amp; document storage
             </h2>
             <p className="mt-2 text-[12px] text-slate-300">
-              CVs, scorecards and hiring docs should be stored securely with
-              clear links from candidates and jobs — not buried in email threads.
+              CVs, scorecards and hiring docs are stored securely, with clear
+              links from candidates and jobs — not buried in forwarded threads.
             </p>
             <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-              <li>• CV storage with secure links (Supabase-backed)</li>
-              <li>• Attachment history per candidate and job</li>
-              <li>• Export options when you need local copies</li>
+              <li>• CV storage with secure, shareable links</li>
+              <li>• Attachment history per candidate and per role</li>
+              <li>• Exports when you need local copies or backups</li>
             </ul>
           </div>
 
+          {/* HRIS & internal systems */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-200 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-50">
               HRIS &amp; internal systems
             </h2>
             <p className="mt-2 text-[12px] text-slate-300">
-              Long term, ThinkATS should sit neatly between your sourcing and
-              your people systems — not try to replace payroll, HRIS or finance.
+              ThinkATS sits neatly between your sourcing channels and your
+              people systems — it helps you run hiring, without trying to
+              replace payroll, HRIS or finance.
             </p>
             <ul className="mt-3 space-y-1.5 text-[11px] text-slate-300">
-              <li>• Basic exports for HR hand-off</li>
-              <li>• API-first mindset for deeper connections</li>
-              <li>• Room for group-wide data flows and leadership views</li>
+              <li>• Clean hand-off once candidates are hired</li>
+              <li>• API-first mindset for deeper data connections</li>
+              <li>• Room for group-wide views across tenants and clients</li>
             </ul>
           </div>
         </div>
 
+        {/* HOW IT FITS INTO YOUR STACK */}
         <div className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-xs text-slate-100">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            Where we start
+            How teams use ThinkATS alongside existing tools
           </p>
           <p className="mt-2 text-[12px] text-slate-200">
-            For now this page is narrative-only, so it won&apos;t break your
-            app. As you lock in the first integrations to ship, this can evolve
-            into real examples with logos, diagrams and concrete “this is how it
-            works” flows for your stack.
+            In practice, teams keep email, calendars and HR systems exactly
+            where they are. ThinkATS becomes the place where roles, pipelines
+            and candidate decisions live — with just enough integration to keep
+            everyone aligned.
           </p>
+          <p className="mt-2 text-[12px] text-slate-200">
+            That means: hiring managers still work from their inbox, ops teams
+            still trust their HR stack, and leadership can see hiring progress
+            without asking for a new spreadsheet every week.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Link
+              href="/product"
+              className="text-[11px] font-medium text-sky-300 hover:underline"
+            >
+              See the full product overview →
+            </Link>
+            <Link
+              href="/contact"
+              className="text-[11px] font-medium text-slate-200 underline-offset-2 hover:underline"
+            >
+              Talk to us about your stack →
+            </Link>
+          </div>
         </div>
       </section>
     </main>
