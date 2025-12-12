@@ -1,4 +1,3 @@
-// app/api/ats/tenants/[tenantId]/invite-admin/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
@@ -7,13 +6,30 @@ import { Resend } from "resend";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const resendApiKey = process.env.RESEND_API_KEY;
-const resendFrom =
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const RESEND_FROM =
   process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@thinkats.com>";
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.thinkats.com";
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://www.thinkats.com").replace(
+  /\/$/,
+  "",
+);
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function isEmail(email: string) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+}
+
+function redirectWith(
+  req: NextRequest,
+  tenantId: string,
+  params: Record<string, string>,
+) {
+  const url = new URL(`/ats/tenants/${tenantId}/invite-admin`, req.nextUrl);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return NextResponse.redirect(url);
 }
 
 export async function POST(
@@ -23,50 +39,28 @@ export async function POST(
   const tenantId = params.tenantId;
 
   try {
-    // 1) Parse HTML form data (NOT JSON)
     const formData = await req.formData();
 
-    const rawEmail = (formData.get("email") || "").toString().trim();
-    const role = (formData.get("role") || "admin").toString().trim();
-    const fullName = (formData.get("fullName") || "").toString().trim();
-    const message = (formData.get("message") || "").toString().trim();
+    const rawEmail = String(formData.get("email") || "").trim();
+    const role = String(formData.get("role") || "admin").trim();
+    const fullName = String(formData.get("fullName") || "").trim();
+    const message = String(formData.get("message") || "").trim();
 
     if (!rawEmail) {
-      const url = new URL(
-        `/ats/tenants/${tenantId}/invite-admin?error=missing_email`,
-        req.nextUrl,
-      );
-      return NextResponse.redirect(url);
+      return redirectWith(req, tenantId, { error: "missing_email" });
     }
 
     const email = rawEmail.toLowerCase();
-
-    // Basic email sanity check
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      const url = new URL(
-        `/ats/tenants/${tenantId}/invite-admin?error=missing_email`,
-        req.nextUrl,
-      );
-      return NextResponse.redirect(url);
+    if (!isEmail(email)) {
+      return redirectWith(req, tenantId, { error: "invalid_email" });
     }
 
-    // 2) Confirm tenant exists
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
-    });
-
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
-      console.error(
-        `Invite-admin: tenant not found for tenantId=${tenantId}`,
-      );
-      const url = new URL(
-        `/ats/tenants/${tenantId}/invite-admin?error=server_error`,
-        req.nextUrl,
-      );
-      return NextResponse.redirect(url);
+      return redirectWith(req, tenantId, { error: "tenant_not_found" });
     }
 
-    // 3) Create invitation row
+    // Create invite
     const token = crypto.randomUUID();
     const tokenHash = hashToken(token);
 
@@ -80,65 +74,99 @@ export async function POST(
         role,
         tokenHash,
         expiresAt,
-        // optional: add fields later, e.g.
-        // inviteeName: fullName || null,
-        // inviteMessage: message || null,
       },
     });
 
-    const inviteUrl = `${
-      siteUrl.replace(/\/$/, "")
-    }/invites/${token}`;
+    const inviteUrl = `${SITE_URL}/invites/${token}`;
 
-    // 4) Try to send email – but DON'T break the flow if this fails
-    if (!resendApiKey) {
-      console.error(
-        "Invite-admin: RESEND_API_KEY missing, skipping email send.",
-      );
-    } else {
-      try {
-        const resend = new Resend(resendApiKey);
-        const safeFullName = fullName || "there";
-
-        const html = `
-          <p>Hi ${safeFullName},</p>
-          <p>You’ve been invited to join the <strong>${tenant.name}</strong> workspace on ThinkATS.</p>
-          <p><a href="${inviteUrl}">Click here to accept your invitation</a>.</p>
-          ${
-            message
-              ? `<p style="margin-top:16px;"><em>Personal note from the inviter:</em><br/>${message}</p>`
-              : ""
-          }
-          <p>This link expires in 7 days.</p>
-        `;
-
-        await resend.emails.send({
-          from: resendFrom,
-          to: email,
-          subject: `You’ve been invited to ThinkATS (${tenant.name})`,
-          html,
-        });
-      } catch (emailError) {
-        console.error("Invite-admin: failed to send invite email", emailError);
-        // We still continue – invite record exists, user sees "Invitation sent"
-      }
+    // If no key, don’t pretend. Still created invite record, but no email.
+    if (!RESEND_API_KEY) {
+      console.error("Invite-admin: RESEND_API_KEY missing (Production?)");
+      return redirectWith(req, tenantId, {
+        invited: "1",
+        emailSent: "0",
+        error: "resend_not_configured",
+        inviteUrl: encodeURIComponent(inviteUrl),
+      });
     }
 
-    // 5) Redirect back with success flag → your page shows the green banner
-    const successUrl = new URL(
-      `/ats/tenants/${tenantId}/invite-admin?invited=1`,
-      req.nextUrl,
-    );
-    return NextResponse.redirect(successUrl);
-  } catch (error) {
-    console.error(
-      `/api/ats/tenants/${tenantId}/invite-admin POST error`,
-      error,
-    );
-    const url = new URL(
-      `/ats/tenants/${tenantId}/invite-admin?error=server_error`,
-      req.nextUrl,
-    );
-    return NextResponse.redirect(url);
+    // Send via Resend (and surface errors)
+    const resend = new Resend(RESEND_API_KEY);
+
+    const safeName = fullName || "there";
+    const subject = `You’ve been invited to ThinkATS (${tenant.name})`;
+
+    const html = `
+      <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; line-height:1.5">
+        <p>Hi ${escapeHtml(safeName)},</p>
+        <p>You’ve been invited to join the <strong>${escapeHtml(
+          tenant.name ?? "a tenant workspace",
+        )}</strong> workspace on ThinkATS.</p>
+
+        <p style="margin:18px 0">
+          <a href="${inviteUrl}" style="display:inline-block;background:#172965;color:#fff;padding:10px 14px;border-radius:999px;text-decoration:none;font-weight:600">
+            Accept invitation
+          </a>
+        </p>
+
+        <p style="font-size:12px;color:#475569">Or copy this link:</p>
+        <p style="font-size:12px;color:#0f172a;word-break:break-all">${inviteUrl}</p>
+
+        ${
+          message
+            ? `<hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0" />
+               <p style="font-size:12px;color:#475569;margin:0 0 6px">Personal note:</p>
+               <p style="margin:0">${escapeHtml(message)}</p>`
+            : ""
+        }
+
+        <p style="margin-top:18px;font-size:12px;color:#64748b">
+          This link expires in 7 days.
+        </p>
+      </div>
+    `;
+
+    const result: any = await resend.emails.send({
+      from: RESEND_FROM,
+      to: email,
+      subject,
+      html,
+      text: `Hi ${safeName},
+
+You've been invited to join ${tenant.name} on ThinkATS.
+
+Accept invitation: ${inviteUrl}
+
+This link expires in 7 days.`,
+    });
+
+    // Resend sometimes returns { data, error } instead of throwing
+    if (result?.error) {
+      console.error("Invite-admin: Resend error:", result.error);
+      return redirectWith(req, tenantId, {
+        invited: "1",
+        emailSent: "0",
+        error: "email_send_failed",
+        inviteUrl: encodeURIComponent(inviteUrl),
+      });
+    }
+
+    return redirectWith(req, tenantId, {
+      invited: "1",
+      emailSent: "1",
+    });
+  } catch (err) {
+    console.error("Invite-admin POST error:", err);
+    return redirectWith(req, params.tenantId, { error: "server_error" });
   }
+}
+
+// minimal HTML escaping for user-provided fields
+function escapeHtml(input: string) {
+  return input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
