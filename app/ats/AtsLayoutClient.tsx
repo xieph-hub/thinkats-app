@@ -3,11 +3,8 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  usePathname,
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
+import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AppUserWithTenants } from "@/lib/auth/getServerUser";
 
 type Props = {
@@ -66,25 +63,18 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-export default function AtsLayoutClient({
-  user,
-  isSuperAdmin,
-  children,
-}: Props) {
+export default function AtsLayoutClient({ user, isSuperAdmin, children }: Props) {
   const pathname = usePathname() || "/ats";
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // Tenant roles attached in getServerUser → appUser.tenants
-  const tenantRoles: TenantRoleLite[] = Array.isArray(
-    (user as any).tenants,
-  )
+  const tenantRoles: TenantRoleLite[] = Array.isArray((user as any).tenants)
     ? ((user as any).tenants as TenantRoleLite[])
     : [];
 
   const tenantIdFromQuery = searchParams.get("tenantId") ?? "";
-  const fallbackTenantId =
-    tenantRoles.length > 0 ? tenantRoles[0].tenantId : "";
+  const fallbackTenantId = tenantRoles.length > 0 ? tenantRoles[0].tenantId : "";
   const activeTenantId = tenantIdFromQuery || fallbackTenantId || "";
 
   const activeTenant: TenantRoleLite | null =
@@ -112,19 +102,16 @@ export default function AtsLayoutClient({
     const nextTenantId = e.target.value;
 
     const sp = new URLSearchParams(searchParams.toString());
-    if (nextTenantId) {
-      sp.set("tenantId", nextTenantId);
-    } else {
-      sp.delete("tenantId");
-    }
+    if (nextTenantId) sp.set("tenantId", nextTenantId);
+    else sp.delete("tenantId");
+
     const query = sp.toString();
     const target = query ? `${pathname}?${query}` : pathname;
 
     router.push(target);
   }
 
-  const displayName =
-    user.fullName || user.email || "ATS user";
+  const displayName = user.fullName || user.email || "ATS user";
 
   const initials = (user.fullName || user.email || "?")
     .split(" ")
@@ -143,29 +130,32 @@ export default function AtsLayoutClient({
       <div className="flex h-screen">
         {/* Sidebar (desktop) */}
         <aside
-          className="hidden w-68 flex-col border-r px-4 py-4 lg:flex"
-          style={{
-            backgroundColor: SHELL_BG,
-            borderColor: BRAND_BORDER,
-          }}
+          className="hidden w-72 flex-col border-r px-4 py-4 lg:flex"
+          style={{ backgroundColor: SHELL_BG, borderColor: BRAND_BORDER }}
         >
-          <div className="mb-6 flex items-center gap-2">
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
-              style={{ backgroundColor: BRAND_ACTIVE }}
-            >
-              TA
+          {/* Brand */}
+          <Link href="/ats" className="mb-6 flex items-center gap-3">
+            <div className="flex items-center">
+              <Image
+                src="/thinkats-logo.svg"
+                alt="ThinkATS"
+                width={120}
+                height={34}
+                className="h-7 w-auto"
+                priority
+              />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-semibold text-slate-50">
-                ThinkATS
+                ATS Workspace
               </span>
               <span className="text-[11px] text-slate-400">
-                Multi-tenant ATS workspace
+                Multi-tenant recruiting OS
               </span>
             </div>
-          </div>
+          </Link>
 
+          {/* Nav */}
           <nav className="flex-1 space-y-5 text-sm">
             {navGroups.map((group) => (
               <div key={group.label} className="space-y-1">
@@ -181,13 +171,8 @@ export default function AtsLayoutClient({
                       className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition"
                       style={
                         active
-                          ? {
-                              backgroundColor: BRAND_ACTIVE,
-                              color: "#F9FAFB",
-                            }
-                          : {
-                              color: "#E5E7EB",
-                            }
+                          ? { backgroundColor: BRAND_ACTIVE, color: "#F9FAFB" }
+                          : { color: "#E5E7EB" }
                       }
                     >
                       {item.label}
@@ -198,10 +183,11 @@ export default function AtsLayoutClient({
             ))}
           </nav>
 
+          {/* Footer actions */}
           <button
             type="button"
             onClick={handleSignOut}
-            className="mt-4 w-full rounded-lg border px-3 py-2 text-xs font-medium transition"
+            className="mt-4 w-full rounded-lg border px-3 py-2 text-xs font-medium transition hover:bg-slate-900/40"
             style={{
               backgroundColor: SHELL_BG,
               borderColor: BRAND_BORDER,
@@ -217,23 +203,22 @@ export default function AtsLayoutClient({
           {/* Top bar */}
           <header
             className="flex items-center justify-between border-b px-4 py-3"
-            style={{
-              backgroundColor: SHELL_BG,
-              borderColor: BRAND_BORDER,
-            }}
+            style={{ backgroundColor: SHELL_BG, borderColor: BRAND_BORDER }}
           >
             {/* Brand on mobile */}
-            <div className="flex items-center gap-2 lg:hidden">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
-                style={{ backgroundColor: BRAND_ACTIVE }}
-              >
-                TA
-              </div>
-              <span className="text-sm font-semibold text-slate-50">
-                ThinkATS
+            <Link href="/ats" className="flex items-center gap-2 lg:hidden">
+              <Image
+                src="/thinkats-logo.svg"
+                alt="ThinkATS"
+                width={110}
+                height={32}
+                className="h-7 w-auto"
+                priority
+              />
+              <span className="text-[11px] font-semibold text-slate-300">
+                ATS
               </span>
-            </div>
+            </Link>
 
             {/* Right side: workspace switcher + user */}
             <div className="ml-auto flex items-center gap-3">
@@ -254,9 +239,7 @@ export default function AtsLayoutClient({
                         value={t.tenantId}
                         className="bg-slate-900 text-slate-100"
                       >
-                        {t.tenantName ||
-                          t.tenantSlug ||
-                          "Workspace"}
+                        {t.tenantName || t.tenantSlug || "Workspace"}
                       </option>
                     ))}
                   </select>
@@ -265,22 +248,23 @@ export default function AtsLayoutClient({
 
               <div className="flex items-center gap-3">
                 <div className="hidden flex-col items-end text-right text-xs sm:flex">
-                  <span className="max-w-[200px] truncate font-medium text-slate-100">
+                  <span className="max-w-[220px] truncate font-medium text-slate-100">
                     {displayName}
                   </span>
                   {user.email && (
-                    <span className="max-w-[200px] truncate text-[11px] text-slate-400">
+                    <span className="max-w-[220px] truncate text-[11px] text-slate-400">
                       {user.email}
                     </span>
                   )}
                   {activeTenant && (
-                    <span className="max-w-[200px] truncate text-[10px] text-slate-500">
+                    <span className="max-w-[220px] truncate text-[10px] text-slate-500">
                       {activeTenant.tenantName ||
                         activeTenant.tenantSlug ||
                         "Default workspace"}
                     </span>
                   )}
                 </div>
+
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-semibold"
                   style={{ backgroundColor: "#111827" }}
@@ -294,10 +278,7 @@ export default function AtsLayoutClient({
           {/* Mobile nav strip */}
           <nav
             className="flex gap-2 overflow-x-auto border-b px-3 py-2 text-xs lg:hidden"
-            style={{
-              backgroundColor: SHELL_BG,
-              borderColor: BRAND_BORDER,
-            }}
+            style={{ backgroundColor: SHELL_BG, borderColor: BRAND_BORDER }}
           >
             {flatNavItems.map((item) => {
               const active = isActive(pathname, item.href);
@@ -308,10 +289,7 @@ export default function AtsLayoutClient({
                   className="whitespace-nowrap rounded-full px-3 py-1 transition"
                   style={
                     active
-                      ? {
-                          backgroundColor: BRAND_ACTIVE,
-                          color: "#F9FAFB",
-                        }
+                      ? { backgroundColor: BRAND_ACTIVE, color: "#F9FAFB" }
                       : {
                           backgroundColor: "rgba(31,41,55,0.9)",
                           color: "#E5E7EB",
