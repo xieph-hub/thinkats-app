@@ -83,10 +83,15 @@ export default function AtsLayoutClient({ user, isSuperAdmin, children }: Props)
     (tenantRoles.length > 0 ? tenantRoles[0] : null);
 
   const navGroups: NavGroup[] = useMemo(() => {
-    return isSuperAdmin ? ALL_NAV_GROUPS : ALL_NAV_GROUPS.filter((g) => g.label !== "Admin");
+    return isSuperAdmin
+      ? ALL_NAV_GROUPS
+      : ALL_NAV_GROUPS.filter((g) => g.label !== "Admin");
   }, [isSuperAdmin]);
 
-  const flatNavItems: NavItem[] = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
+  const flatNavItems: NavItem[] = useMemo(
+    () => navGroups.flatMap((g) => g.items),
+    [navGroups],
+  );
 
   const displayName = user.fullName || user.email || "ATS user";
   const initials = initialsFrom(user.fullName || user.email);
@@ -136,21 +141,22 @@ export default function AtsLayoutClient({ user, isSuperAdmin, children }: Props)
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: SHELL_BG }}>
-      <div className="flex h-screen">
+    // ✅ FIX: lock the ATS shell to the viewport so you never see the body’s white background
+    <div className="fixed inset-0" style={{ backgroundColor: SHELL_BG }}>
+      <div className="flex h-full">
         {/* Sidebar (desktop) */}
         <aside
-          className="hidden w-[290px] flex-col border-r px-4 py-4 lg:flex"
+          className="hidden w-[300px] flex-col border-r px-4 py-4 lg:flex"
           style={{ backgroundColor: SHELL_BG, borderColor: BRAND_BORDER }}
         >
-          {/* ✅ Bigger real logo (replace src if your preferred ATS logo path differs) */}
-          <Link href="/ats" className="mb-6 flex items-center gap-3">
+          {/* ✅ Bigger real logo */}
+          <Link href="/ats" className="mb-6 flex items-center">
             <Image
               src="/thinkats-logo.svg"
               alt="ThinkATS"
-              width={190}
-              height={56}
-              className="h-10 w-auto"
+              width={230}
+              height={64}
+              className="h-12 w-auto"
               priority
             />
           </Link>
@@ -183,8 +189,11 @@ export default function AtsLayoutClient({ user, isSuperAdmin, children }: Props)
             ))}
           </nav>
 
-          {/* ✅ No duplicate “signed in / sign out” block here anymore */}
-          <div className="mt-5 border-t pt-4 text-[11px] text-slate-500" style={{ borderColor: BRAND_BORDER }}>
+          {/* ✅ Minimal bottom note (no email / no sign-out duplication) */}
+          <div
+            className="mt-auto border-t pt-4 text-[11px] text-slate-500"
+            style={{ borderColor: BRAND_BORDER }}
+          >
             <p className="truncate">
               Workspace:{" "}
               <span className="font-medium text-slate-300">
@@ -208,9 +217,9 @@ export default function AtsLayoutClient({ user, isSuperAdmin, children }: Props)
                 <Image
                   src="/thinkats-logo.svg"
                   alt="ThinkATS"
-                  width={170}
-                  height={52}
-                  className="h-9 w-auto"
+                  width={210}
+                  height={60}
+                  className="h-11 w-auto"
                   priority
                 />
               </Link>
@@ -330,7 +339,7 @@ export default function AtsLayoutClient({ user, isSuperAdmin, children }: Props)
             })}
           </nav>
 
-          {/* Light central canvas */}
+          {/* Light central canvas (scrolls) */}
           <main
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6"
             style={{ backgroundColor: SURFACE_BG }}
