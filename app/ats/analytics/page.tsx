@@ -89,7 +89,6 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     typeof searchParams?.clientKey === "string"
       ? searchParams.clientKey
       : "all";
-  // "all" or a specific clientKey
   const requestedClientKey = rawClientKeyParam || "all";
 
   const now = new Date();
@@ -126,7 +125,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   const hasJobs = allJobIds.length > 0;
 
   // ---------------------------------------------------------------------------
-  // Aggregations (tenant-wide, unchanged)
+  // Aggregations (tenant-wide)
   // ---------------------------------------------------------------------------
   const totalCandidatesPromise = prisma.candidate.count({
     where: {
@@ -355,6 +354,8 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                     ? `&clientKey=${encodeURIComponent(effectiveClientKey)}`
                     : ""
                 }`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-900"
               >
                 <span>PDF summary</span>
