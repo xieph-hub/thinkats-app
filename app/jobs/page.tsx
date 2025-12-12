@@ -283,35 +283,40 @@ export default async function JobsPage({
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <a
-                  href={whatsappShareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full bg-[#22C55E] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  WhatsApp
-                </a>
-                <a
-                  href={linkedinShareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full bg-[#2563EB] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
-                >
-                  <Linkedin className="h-3.5 w-3.5" />
-                  LinkedIn
-                </a>
-                <a
-                  href={twitterShareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:opacity-90"
-                >
-                  <Twitter className="h-3.5 w-3.5" />
-                  X
-                </a>
-                <div className="mt-1 text-[10px] text-slate-500">
+              {/* 🔁 Updated share icons to mirror job detail design */}
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm">
+                  <span className="hidden sm:inline">Share</span>
+                  <a
+                    href={linkedinShareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100"
+                    aria-label="Share on LinkedIn"
+                  >
+                    <Linkedin className="h-3.5 w-3.5" />
+                  </a>
+                  <a
+                    href={twitterShareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100"
+                    aria-label="Share on X"
+                  >
+                    <Twitter className="h-3.5 w-3.5" />
+                  </a>
+                  <a
+                    href={whatsappShareUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100"
+                    aria-label="Share on WhatsApp"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+
+                <div className="text-[10px] text-slate-500">
                   <span className="inline-flex items-center gap-1">
                     <Link2 className="h-3 w-3 text-slate-400" />
                     <span className="truncate">{currentUrl}</span>
