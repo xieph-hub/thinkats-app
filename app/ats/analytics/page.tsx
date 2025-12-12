@@ -346,26 +346,30 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 </div>
               )}
 
-              {/* PDF summary – opens a print-friendly summary page */}
+              {/* PDF summary – downloads a rich PDF report */}
               <a
-                href={`/ats/analytics/summary?range=${encodeURIComponent(
+                href={`/ats/analytics/export/pdf?range=${encodeURIComponent(
                   range,
                 )}${
                   effectiveClientKey !== "all"
                     ? `&clientKey=${encodeURIComponent(effectiveClientKey)}`
                     : ""
                 }`}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-900"
               >
                 <span>PDF summary</span>
-                <span className="text-[11px]">⧉</span>
+                <span className="text-[11px]">⬇</span>
               </a>
 
-              {/* CSV export – points to your app/ats/analytics/export/route.ts */}
+              {/* CSV export – same filters */}
               <a
-                href="/ats/analytics/export"
+                href={`/ats/analytics/export?range=${encodeURIComponent(
+                  range,
+                )}${
+                  effectiveClientKey !== "all"
+                    ? `&clientKey=${encodeURIComponent(effectiveClientKey)}`
+                    : ""
+                }`}
                 className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-900"
               >
                 <span>Export CSV</span>
