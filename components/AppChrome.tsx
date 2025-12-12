@@ -22,18 +22,11 @@ type Props = {
 };
 
 function isAtsSurface(pathname: string) {
-  // ATS + its auth flows should NOT use marketing chrome.
-  // Keep it conservative to avoid breaking flows.
   if (pathname.startsWith("/ats")) return true;
   if (pathname === "/login") return true;
   if (pathname === "/access-denied") return true;
   if (pathname.startsWith("/auth")) return true;
   return false;
-}
-
-function isJobsSurface(pathname: string) {
-  // Avoid accidental matches like "/jobssomething"
-  return pathname === "/jobs" || pathname.startsWith("/jobs/");
 }
 
 export default function AppChrome({
@@ -45,10 +38,10 @@ export default function AppChrome({
   const pathname = usePathname() || "/";
 
   const onTenantHost = !hostIsPrimary;
+  const onJobs = pathname.startsWith("/jobs");
   const onAts = isAtsSurface(pathname);
-  const onJobs = isJobsSurface(pathname);
 
-  // 1) Tenant subdomain: NO ThinkATS marketing chrome (tenant controls its own)
+  // 1) Tenant subdomain: NO ThinkATS marketing chrome
   if (onTenantHost) {
     return <main className="min-h-screen">{children}</main>;
   }
@@ -69,7 +62,7 @@ export default function AppChrome({
     );
   }
 
-  // 4) Everything else on primary host: marketing chrome
+  // 4) Everything else: marketing chrome
   return (
     <>
       <Navbar
