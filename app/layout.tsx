@@ -2,12 +2,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+
 import AuthRecoveryListener from "@/components/AuthRecoveryListener";
 import AuthHashRedirector from "./AuthHashRedirector";
+
 import { getServerUser } from "@/lib/supabaseServer";
 import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
+import { getHostContext } from "@/lib/host";
+
+import AppChrome from "@/components/AppChrome";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,27 +24,12 @@ export const metadata: Metadata = {
     "ThinkATS is a modern, multi-tenant ATS for recruitment teams, agencies and HR departments.",
   icons: {
     icon: [
-      {
-        url: "/favicon.ico?v=2",
-        type: "image/x-icon",
-      },
-      {
-        url: "/icon-192.png?v=2",
-        sizes: "192x192",
-        type: "image/png",
-      },
-      {
-        url: "/icon-512.png?v=2",
-        sizes: "512x512",
-        type: "image/png",
-      },
+      { url: "/favicon.ico?v=2", type: "image/x-icon" },
+      { url: "/icon-192.png?v=2", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png?v=2", sizes: "512x512", type: "image/png" },
     ],
     apple: [
-      {
-        url: "/apple-touch-icon.png?v=2",
-        sizes: "180x180",
-        type: "image/png",
-      },
+      { url: "/apple-touch-icon.png?v=2", sizes: "180x180", type: "image/png" },
     ],
   },
   openGraph: {
@@ -74,6 +62,9 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Host context (primary host vs tenant subdomain)
+  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
+
   // Supabase session (may exist even before OTP)
   const user = await getServerUser().catch(() => null);
 
@@ -91,9 +82,15 @@ export default async function RootLayout({
         {/* Handles other recovery / magic-link flows as you already had */}
         <AuthRecoveryListener />
 
-        <Navbar currentUser={user} otpVerified={otpVerified} />
-        <main className="min-h-screen">{children}</main>
-        <Footer />
+        {/* ✅ Single, centralized switch for chrome (marketing vs jobs vs none) */}
+        <AppChrome
+          hostIsPrimary={isPrimaryHost}
+          tenantSlugFromHost={tenantSlugFromHost}
+          currentUser={user}
+          otpVerified={otpVerified}
+        >
+          {children}
+        </AppChrome>
       </body>
     </html>
   );
