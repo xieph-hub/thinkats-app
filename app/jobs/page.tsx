@@ -283,7 +283,6 @@ export default async function JobsPage({
                 </div>
               </div>
 
-              {/* 🔁 Updated share icons to mirror job detail design */}
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm">
                   <span className="hidden sm:inline">Share</span>
@@ -507,29 +506,32 @@ export default async function JobsPage({
                                 )}
                               </div>
 
-                              {/* Company + meta icons */}
-                              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                              {/* Company + meta icons (pills for location / job type / work mode) */}
+                              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-600">
                                 <span className="inline-flex items-center gap-1 font-medium text-slate-800">
                                   <Building2 className="h-3.5 w-3.5 text-slate-400" />
                                   {companyLabel}
                                 </span>
 
-                                <span className="inline-flex items-center gap-1">
-                                  <MapPin className="h-3.5 w-3.5 text-[#EF4444]" />
-                                  {locationLabel}
+                                {/* Location pill */}
+                                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                                  <MapPin className="h-3.5 w-3.5 text-[#172965]" />
+                                  <span>{locationLabel}</span>
                                 </span>
 
+                                {/* Job type pill (employment type) */}
                                 {employmentLabel && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <BriefcaseBusiness className="h-3.5 w-3.5 text-[#92400E]" />
-                                    {employmentLabel}
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                                    <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-500" />
+                                    <span>{employmentLabel}</span>
                                   </span>
                                 )}
 
+                                {/* Work mode pill (location type) */}
                                 {locationTypeLabel && (
-                                  <span className="inline-flex items-center gap-1">
-                                    <Clock className="h-3.5 w-3.5 text-[#2563EB]" />
-                                    {locationTypeLabel}
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                                    <Clock className="h-3.5 w-3.5 text-slate-500" />
+                                    <span>{locationTypeLabel}</span>
                                   </span>
                                 )}
                               </div>
