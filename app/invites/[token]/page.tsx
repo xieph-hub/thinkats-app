@@ -1,38 +1,20 @@
 // app/invites/[token]/page.tsx
 import crypto from "crypto";
-import Link from "next/link";
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import InviteAcceptClient from "./InviteAcceptClient";
+import InviteAcceptForm from "./InviteAcceptForm";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function hashToken(token: string) {
-  return crypto.createHash("sha256").update(token).digest("hex");
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    v,
+  );
 }
 
-function normaliseToken(raw: string) {
-  const decoded = decodeURIComponent(String(raw || "")).trim();
-
-  // If raw is a full URL, extract the last path segment
-  if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
-    try {
-      const u = new URL(decoded);
-      const parts = u.pathname.split("/").filter(Boolean);
-      return parts[parts.length - 1] || decoded;
-    } catch {
-      // fall through
-    }
-  }
-
-  // If it contains ".../invites/..."
-  const marker = "/invites/";
-  const idx = decoded.lastIndexOf(marker);
-  if (idx !== -1) return decoded.slice(idx + marker.length);
-
-  if (decoded.includes("invites/")) return decoded.split("invites/").pop() || decoded;
-
-  return decoded;
+function hashToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 export default async function InviteTokenPage({
@@ -40,67 +22,59 @@ export default async function InviteTokenPage({
 }: {
   params: { token: string };
 }) {
-  const token = normaliseToken(params.token);
+  const token = String(params.token || "").trim();
+
+  if (!isUuid(token)) notFound();
+
   const tokenHash = hashToken(token);
 
   const invite = await prisma.tenantInvitation.findFirst({
-    where: {
-      tokenHash,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
-    },
+    where: { tokenHash },
     select: {
+      id: true,
       email: true,
       role: true,
       expiresAt: true,
-      tenantId: true,
-      tenant: { select: { name: true, slug: true } },
+      usedAt: true,
+      tenant: { select: { id: true, name: true, slug: true } },
     },
   });
 
-  if (!invite) {
-    return (
-      <div className="mx-auto max-w-lg px-4 py-12">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-            ThinkATS · Invitation
-          </p>
-          <h1 className="mt-2 text-lg font-semibold text-slate-900">
-            Invitation not available
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            This invitation link is invalid, expired, or already used.
-          </p>
-          <div className="mt-4">
-            <Link
-              href="/"
-              className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white"
-            >
-              Go to ThinkATS
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!invite) notFound();
 
-  // If the invited email already has a password, don’t let invites become a reset mechanism.
+  const now = new Date();
+  const isExpired = invite.expiresAt <= now;
+  const isUsed = !!invite.usedAt;
+
   const existingUser = await prisma.user.findUnique({
     where: { email: invite.email },
-    select: { id: true, passwordHash: true, fullName: true },
+    select: { id: true, email: true },
   });
 
-  const mode: "create" | "signin" =
-    existingUser?.passwordHash ? "signin" : "create";
-
   return (
-    <InviteAcceptClient
-      token={token}
-      tenantName={invite.tenant?.name || invite.tenant?.slug || "Workspace"}
-      invitedEmail={invite.email}
-      role={invite.role}
-      expiresAt={invite.expiresAt.toISOString()}
-      mode={mode}
-    />
+    <div className="mx-auto max-w-xl px-4 py-10">
+      <div className="mb-6 space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+          ThinkATS · Workspace Invitation
+        </p>
+        <h1 className="text-xl font-semibold text-slate-900">
+          Join <span className="text-[#172965]">{invite.tenant.name}</span>
+        </h1>
+        <p className="text-xs text-slate-600">
+          This invitation grants <span className="font-semibold">{invite.role}</span>{" "}
+          access to the workspace.
+        </p>
+      </div>
+
+      <InviteAcceptForm
+        token={token}
+        email={invite.email}
+        tenantName={invite.tenant.name}
+        role={invite.role}
+        isExpired={isExpired}
+        isUsed={isUsed}
+        accountExists={!!existingUser}
+      />
+    </div>
   );
 }
