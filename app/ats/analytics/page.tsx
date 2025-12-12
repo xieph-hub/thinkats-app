@@ -346,14 +346,26 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 </div>
               )}
 
+              {/* PDF summary – opens a print-friendly summary page */}
               <a
-                href={`/api/ats/analytics/export?range=${encodeURIComponent(
+                href={`/ats/analytics/summary?range=${encodeURIComponent(
                   range,
                 )}${
                   effectiveClientKey !== "all"
                     ? `&clientKey=${encodeURIComponent(effectiveClientKey)}`
                     : ""
                 }`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-900"
+              >
+                <span>PDF summary</span>
+                <span className="text-[11px]">⧉</span>
+              </a>
+
+              {/* CSV export – points to your app/ats/analytics/export/route.ts */}
+              <a
+                href="/ats/analytics/export"
                 className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm hover:border-slate-300 hover:text-slate-900"
               >
                 <span>Export CSV</span>
@@ -600,7 +612,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                   Distribution of auto-screening results.
                 </p>
               </div>
-            <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600">
+              <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[10px] text-slate-600">
                 {totalTierEvents} scored events
               </span>
             </div>
