@@ -1,4 +1,3 @@
-// components/AppChrome.tsx
 "use client";
 
 import type { ReactNode } from "react";
@@ -32,6 +31,11 @@ function isAtsSurface(pathname: string) {
   return false;
 }
 
+function isJobsSurface(pathname: string) {
+  // Avoid accidental matches like "/jobssomething"
+  return pathname === "/jobs" || pathname.startsWith("/jobs/");
+}
+
 export default function AppChrome({
   hostIsPrimary,
   currentUser,
@@ -40,9 +44,9 @@ export default function AppChrome({
 }: Props) {
   const pathname = usePathname() || "/";
 
-  const onTenantHost = !hostIsPrimary; // key separation
-  const onJobs = pathname.startsWith("/jobs");
+  const onTenantHost = !hostIsPrimary;
   const onAts = isAtsSurface(pathname);
+  const onJobs = isJobsSurface(pathname);
 
   // 1) Tenant subdomain: NO ThinkATS marketing chrome (tenant controls its own)
   if (onTenantHost) {
@@ -71,7 +75,7 @@ export default function AppChrome({
       <Navbar
         currentUser={currentUser}
         otpVerified={otpVerified}
-        hostIsPrimary={true}
+        hostIsPrimary={hostIsPrimary}
       />
       <main className="min-h-screen">{children}</main>
       <Footer />
