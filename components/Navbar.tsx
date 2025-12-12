@@ -1,10 +1,9 @@
-// components/Navbar.tsx
 "use client";
 
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type NavLink = {
   href: string;
@@ -35,14 +34,16 @@ type NavbarUser = {
   user_metadata?: { full_name?: string } | Record<string, any>;
 } | null;
 
-export type NavbarProps = {
+type NavbarProps = {
   currentUser: NavbarUser;
-  /** true only if user has a recent, consumed OTP */
   otpVerified: boolean;
 
   /**
-   * True on thinkats.com (primary host). False on tenant subdomains.
-   * If false, we hide the marketing navbar entirely (tenant sites should have their own nav or none).
+   * ✅ IMPORTANT:
+   * - true on thinkats.com (marketing host)
+   * - false on tenantSlug.thinkats.com (tenant public host)
+   *
+   * If false, we hide the marketing navbar entirely so tenants don’t see ThinkATS chrome.
    */
   hostIsPrimary?: boolean;
 };
@@ -72,54 +73,67 @@ export default function Navbar({
   const router = useRouter();
 
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const hasSession = !!currentUser; // Supabase session exists
-  const fullyLoggedIn = hasSession && otpVerified; // Supabase + OTP
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
-  // 1) Never show marketing chrome inside the ATS
+  const hasSession = !!currentUser;
+  const fullyLoggedIn = hasSession && otpVerified;
+
+  // ✅ Marketing chrome should not appear inside ATS OR on tenant subdomains.
+  if (!hostIsPrimary) return null;
   if (pathname?.startsWith("/ats")) return null;
 
-  // 2) Never show marketing chrome on tenant subdomains
-  if (!hostIsPrimary) return null;
-
-  // Close menus on route change (polish)
   useEffect(() => {
     setMobileOpen(false);
-    setMenuOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setUserMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (!userMenuRef.current) return;
+      if (!userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setUserMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, []);
 
   async function handleLogout() {
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      setMenuOpen(false);
+      setUserMenuOpen(false);
       router.push("/");
       router.refresh();
-    } catch {
-      // optional: toast later
     } finally {
       setLoggingOut(false);
     }
   }
 
-  const atsWorkspaceHref = useMemo(() => {
-    return fullyLoggedIn ? "/ats" : "/auth/otp?returnTo=/ats";
-  }, [fullyLoggedIn]);
+  const atsWorkspaceHref = fullyLoggedIn ? "/ats" : "/auth/otp?returnTo=/ats";
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo = home */}
         <Link href="/" className="flex items-center gap-2" aria-label="ThinkATS home">
+          {/* ⬇️ Slightly bigger logo (per your feedback) */}
           <Image
             src="/thinkats-logo.svg"
             alt="ThinkATS"
-            width={140}
-            height={40}
-            className="h-9 w-auto sm:h-10"
+            width={180}
+            height={56}
+            className="h-10 w-auto sm:h-11"
             priority
           />
         </Link>
@@ -128,6 +142,7 @@ export default function Navbar({
         <div className="hidden flex-1 items-center justify-between md:flex">
           {/* Left: links */}
           <div className="flex items-center gap-6">
+            {/* Home first */}
             <Link
               href="/"
               className={`text-sm transition-colors ${
@@ -148,12 +163,14 @@ export default function Navbar({
                     ? "font-semibold text-[#1E40AF]"
                     : "text-slate-600 hover:text-[#1E40AF]"
                 }`}
+                aria-haspopup="menu"
+                aria-expanded="false"
               >
                 <span>Product</span>
                 <span className="text-[11px]">▾</span>
               </button>
 
-              <div className="invisible absolute left-0 top-full z-30 mt-2 w-60 rounded-xl border border-slate-200 bg-white opacity-0 shadow-lg ring-1 ring-black/5 transition-all group-hover:visible group-hover:opacity-100">
+              <div className="invisible absolute left-0 top-full z-30 mt-2 w-64 rounded-xl border border-slate-200 bg-white opacity-0 shadow-lg ring-1 ring-black/5 transition-all group-hover:visible group-hover:opacity-100">
                 <div className="py-2">
                   {productSubLinks.map((link) => (
                     <Link
@@ -201,11 +218,13 @@ export default function Navbar({
                   ATS workspace
                 </Link>
 
-                <div className="relative">
+                <div className="relative" ref={userMenuRef}>
                   <button
                     type="button"
-                    onClick={() => setMenuOpen((prev) => !prev)}
+                    onClick={() => setUserMenuOpen((prev) => !prev)}
                     className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                    aria-haspopup="menu"
+                    aria-expanded={userMenuOpen}
                   >
                     <span className="hidden text-xs text-slate-500 sm:inline">Logged in</span>
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
@@ -213,26 +232,30 @@ export default function Navbar({
                     </div>
                   </button>
 
-                  {menuOpen && (
-                    <div className="absolute right-0 mt-2 w-52 rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
-                      <div className="px-3 pb-2 pt-1 text-xs text-slate-500">
+                  {userMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                      <div className="px-3 pb-2 pt-2 text-xs text-slate-500">
                         {currentUser?.email}
                       </div>
+
                       <button
                         type="button"
                         onClick={() => {
-                          setMenuOpen(false);
+                          setUserMenuOpen(false);
                           router.push("/ats");
                         }}
-                        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50"
+                        className="block w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
                       >
                         Open ATS workspace
                       </button>
+
+                      <div className="my-1 border-t border-slate-100" />
+
                       <button
                         type="button"
                         onClick={handleLogout}
                         disabled={loggingOut}
-                        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {loggingOut ? "Logging out…" : "Log out"}
                       </button>
@@ -322,10 +345,10 @@ export default function Navbar({
       {mobileOpen && (
         <div className="border-t border-slate-200 bg-white md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
-            {/* Product group */}
             <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Product
             </p>
+
             <Link
               href="/product"
               onClick={() => setMobileOpen(false)}
@@ -355,7 +378,6 @@ export default function Navbar({
                 </Link>
               ))}
 
-            {/* Company links */}
             <p className="mt-3 px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Company
             </p>
@@ -377,19 +399,15 @@ export default function Navbar({
                 </Link>
               ))}
 
-            {/* Auth / workspace block */}
             <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
               {fullyLoggedIn ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    router.push("/ats");
-                  }}
+                <Link
+                  href="/ats"
+                  onClick={() => setMobileOpen(false)}
                   className="rounded-full bg-slate-900 px-4 py-1.5 text-center text-sm font-semibold text-white shadow-sm"
                 >
                   Open ATS workspace
-                </button>
+                </Link>
               ) : hasSession ? (
                 <Link
                   href={atsWorkspaceHref}
