@@ -36,6 +36,11 @@ function escapeHtml(s: string) {
     .replaceAll("'", "&#039;");
 }
 
+function wantsHtmlResponse(req: NextRequest) {
+  const accept = req.headers.get("accept") || "";
+  return accept.includes("text/html");
+}
+
 function buildInviteEmail(args: {
   recipientName?: string | null;
   recipientEmail: string;
@@ -57,7 +62,6 @@ function buildInviteEmail(args: {
 
   const safeName = (recipientName || "there").trim();
   const preheader = `You’ve been invited to join ${tenantName} on ThinkATS.`;
-
   const subject = `Invitation to ThinkATS: ${tenantName}`;
 
   const text = [
@@ -72,7 +76,7 @@ function buildInviteEmail(args: {
     personalMessage ? `Message from the inviter:\n${personalMessage}\n` : "",
     `If you weren’t expecting this invitation, you can ignore this email.`,
     ``,
-    `Need help? ${supportEmail}`,
+    `Support: ${supportEmail}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -89,7 +93,7 @@ function buildInviteEmail(args: {
           <tr>
             <td style="padding:20px 24px;border-bottom:1px solid #e5e7eb;">
               <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#0f172a;">
-                <div style="font-size:14px;font-weight:700;">ThinkATS</div>
+                <div style="font-size:14px;font-weight:800;letter-spacing:0.2px;">ThinkATS</div>
                 <div style="font-size:12px;color:#64748b;margin-top:2px;">Secure workspace invitation</div>
               </div>
             </td>
@@ -98,7 +102,7 @@ function buildInviteEmail(args: {
           <tr>
             <td style="padding:22px 24px 8px;">
               <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#0f172a;line-height:1.5;">
-                <div style="font-size:18px;font-weight:800;margin:0 0 8px;">You’ve been invited</div>
+                <div style="font-size:18px;font-weight:900;margin:0 0 8px;">You’ve been invited</div>
 
                 <div style="font-size:13px;color:#334155;margin:0 0 14px;">
                   Hi ${escapeHtml(safeName)}, you’ve been invited to join the
@@ -108,7 +112,7 @@ function buildInviteEmail(args: {
                 <table role="presentation" cellspacing="0" cellpadding="0" style="margin:12px 0 16px;">
                   <tr>
                     <td style="font-size:12px;color:#64748b;padding-right:16px;">Role</td>
-                    <td style="font-size:12px;color:#0f172a;font-weight:700;">${escapeHtml(role)}</td>
+                    <td style="font-size:12px;color:#0f172a;font-weight:800;">${escapeHtml(role)}</td>
                   </tr>
                   <tr>
                     <td style="font-size:12px;color:#64748b;padding-right:16px;padding-top:6px;">Recipient</td>
@@ -123,7 +127,7 @@ function buildInviteEmail(args: {
                 ${
                   personalMessage
                     ? `<div style="margin:14px 0 16px;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
-                         <div style="font-size:12px;color:#64748b;font-weight:700;margin-bottom:6px;">Message from the inviter</div>
+                         <div style="font-size:12px;color:#64748b;font-weight:800;margin-bottom:6px;">Message from the inviter</div>
                          <div style="font-size:13px;color:#0f172a;white-space:pre-wrap;">${escapeHtml(
                            personalMessage,
                          )}</div>
@@ -134,7 +138,7 @@ function buildInviteEmail(args: {
                 <table role="presentation" cellspacing="0" cellpadding="0" style="margin:10px 0 16px;">
                   <tr>
                     <td align="center" bgcolor="#172965" style="border-radius:999px;">
-                      <a href="${inviteUrl}" style="display:inline-block;padding:10px 16px;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;font-size:13px;font-weight:800;color:#ffffff;text-decoration:none;border-radius:999px;">
+                      <a href="${inviteUrl}" style="display:inline-block;padding:10px 16px;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;font-size:13px;font-weight:900;color:#ffffff;text-decoration:none;border-radius:999px;">
                         Accept invitation
                       </a>
                     </td>
@@ -160,7 +164,7 @@ function buildInviteEmail(args: {
               <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;font-size:12px;color:#64748b;line-height:1.5;">
                 Need help? <a href="mailto:${escapeHtml(
                   supportEmail,
-                )}" style="color:#172965;text-decoration:none;font-weight:700;">${escapeHtml(
+                )}" style="color:#172965;text-decoration:none;font-weight:800;">${escapeHtml(
     supportEmail,
   )}</a>.
                 <br/>
@@ -177,17 +181,8 @@ function buildInviteEmail(args: {
   return { subject, html, text };
 }
 
-function wantsHtmlResponse(req: NextRequest) {
-  const accept = req.headers.get("accept") || "";
-  // Form navigations typically accept text/html
-  return accept.includes("text/html");
-}
-
 export async function GET() {
-  return NextResponse.json(
-    { ok: false, error: "method_not_allowed" },
-    { status: 405 },
-  );
+  return NextResponse.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
 }
 
 export async function POST(
@@ -198,7 +193,7 @@ export async function POST(
   const backPath = `/ats/tenants/${encodeURIComponent(tenantParam)}/invite-admin`;
 
   try {
-    // ✅ AUTH GUARD (super admin OR tenant owner/admin)
+    // ✅ Auth guard: super admin OR tenant owner/admin
     const ctx: any = await getServerUser();
     const authedEmail: string | null = ctx?.user?.email || null;
 
@@ -264,6 +259,7 @@ export async function POST(
       return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
     }
 
+    // Create invitation
     const token = crypto.randomUUID();
     const tokenHash = hashToken(token);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -280,6 +276,7 @@ export async function POST(
 
     const inviteUrl = `${siteUrl}/invites/${token}`;
 
+    // Send email
     let emailStatus: "sent" | "failed" | "skipped" = "skipped";
     let emailErrorHint = "";
 
@@ -307,7 +304,10 @@ export async function POST(
           subject,
           html,
           text,
-          reply_to: supportEmail,
+          headers: {
+            "X-ThinkATS-Message-Type": "tenant_invite",
+            "X-ThinkATS-Tenant-Id": tenant.id,
+          },
         });
 
         emailStatus = "sent";
@@ -319,7 +319,7 @@ export async function POST(
       }
     }
 
-    // ✅ If this came from an HTML <form>, redirect back so your UI can show banners
+    // If submitted via browser <form>, redirect back to the UI page
     if (wantsHtmlResponse(req)) {
       const u = new URL(backPath, req.nextUrl);
       if (emailStatus === "sent" || emailStatus === "skipped") u.searchParams.set("invited", "1");
