@@ -293,7 +293,7 @@ export default function JobApplyForm({
             name="cv"
             type="file"
             accept=".pdf,.doc,.docx"
-            className="block w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-[#2563EB] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:border-slate-400"
+            className="block w-full cursor-pointer rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-[#172965] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:border-slate-400"
           />
           <p className="text-[11px] text-slate-500">
             If the upload fails, you can email your CV manually and we’ll attach
@@ -336,7 +336,7 @@ export default function JobApplyForm({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center rounded-md bg-[#2563EB] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center rounded-md bg-[#172965] px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#101842] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? "Submitting..." : "Submit application"}
             </button>
