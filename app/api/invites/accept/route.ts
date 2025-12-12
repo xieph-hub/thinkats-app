@@ -2,136 +2,157 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    v,
+  );
+}
 
 function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-// scrypt-based password hash without extra dependencies
-async function hashPassword(password: string) {
-  const salt = crypto.randomBytes(16);
-  const derivedKey = await new Promise<Buffer>((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, key) => {
-      if (err) reject(err);
-      else resolve(key as Buffer);
-    });
-  });
-
-  // format: scrypt$<saltB64>$<hashB64>
-  return `scrypt$${salt.toString("base64")}$${derivedKey.toString("base64")}`;
-}
-
-export async function GET() {
-  return NextResponse.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+function safeError(message: string) {
+  return NextResponse.json({ ok: false, error: message }, { status: 400 });
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as {
-      token?: string;
-      fullName?: string | null;
-      password?: string;
-    };
+    const body = (await req.json().catch(() => null)) as
+      | { token?: string; password?: string; fullName?: string | null }
+      | null;
 
-    const token = String(body.token || "").trim();
-    const password = String(body.password || "");
+    const token = String(body?.token || "").trim();
+    const password = String(body?.password || "");
+    const fullName = (body?.fullName ?? null) ? String(body?.fullName).trim() : null;
 
-    if (!token) {
-      return NextResponse.json({ ok: false, error: "missing_token" }, { status: 400 });
-    }
-    if (password.length < 10) {
-      return NextResponse.json({ ok: false, error: "weak_password" }, { status: 400 });
-    }
+    if (!token || !isUuid(token)) return safeError("invalid_token");
+    if (!password || password.length < 8) return safeError("weak_password");
 
     const tokenHash = hashToken(token);
+    const now = new Date();
 
     const invite = await prisma.tenantInvitation.findFirst({
       where: {
         tokenHash,
         usedAt: null,
-        expiresAt: { gt: new Date() },
+        expiresAt: { gt: now },
       },
       select: {
         id: true,
+        tenantId: true,
         email: true,
         role: true,
-        tenantId: true,
       },
     });
 
     if (!invite) {
-      return NextResponse.json({ ok: false, error: "invite_invalid_or_expired" }, { status: 404 });
+      return NextResponse.json(
+        { ok: false, error: "invite_not_found_or_expired" },
+        { status: 404 },
+      );
     }
 
-    // If user already exists and has a password, do NOT allow invite to reset it.
-    const existing = await prisma.user.findUnique({
-      where: { email: invite.email },
-      select: { id: true, passwordHash: true },
-    });
+    const email = invite.email.toLowerCase().trim();
 
-    if (existing?.passwordHash) {
-      return NextResponse.json({ ok: false, error: "account_exists" }, { status: 409 });
-    }
-
-    const passwordHash = await hashPassword(password);
-    const safeFullName = body.fullName ? String(body.fullName).trim() : null;
-
-    const user =
-      existing?.id
-        ? await prisma.user.update({
-            where: { id: existing.id },
-            data: {
-              passwordHash,
-              ...(safeFullName ? { fullName: safeFullName } : {}),
-            },
-            select: { id: true, email: true },
-          })
-        : await prisma.user.create({
-            data: {
-              email: invite.email,
-              fullName: safeFullName,
-              passwordHash,
-              globalRole: "USER",
-              isActive: true,
-            },
-            select: { id: true, email: true },
-          });
-
-    // Ensure tenant role exists (avoid duplicates)
-    const existingRole = await prisma.userTenantRole.findFirst({
-      where: { userId: user.id, tenantId: invite.tenantId },
+    // If app user already exists, do NOT reset password here (avoid takeover risk).
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
       select: { id: true },
     });
 
-    if (!existingRole) {
-      await prisma.userTenantRole.create({
-        data: {
-          userId: user.id,
-          tenantId: invite.tenantId,
-          role: invite.role,
-          isPrimary: false,
-        },
-      });
+    if (existingUser) {
+      return NextResponse.json(
+        { ok: false, error: "account_exists_sign_in" },
+        { status: 409 },
+      );
     }
 
-    // Consume invite
-    await prisma.tenantInvitation.update({
-      where: { id: invite.id },
-      data: {
-        usedAt: new Date(),
-        userId: user.id,
-      },
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "missing_supabase_service_role",
+          hint: "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel env vars.",
+        },
+        { status: 500 },
+      );
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Next: redirect them to login with email prefilled
-    const next = `/login?email=${encodeURIComponent(invite.email)}&welcome=1`;
+    // ✅ Create Auth user first → gives us an auth.users.id that satisfies users_id_fkey
+    const { data: created, error: createErr } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: fullName ? { full_name: fullName } : {},
+      });
 
-    return NextResponse.json({ ok: true, next });
-  } catch (err) {
+    if (createErr || !created?.user?.id) {
+      const msg = String(createErr?.message || "auth_create_failed");
+      // If they already exist in auth, require sign-in flow (don’t reset here)
+      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("registered")) {
+        return NextResponse.json(
+          { ok: false, error: "account_exists_sign_in" },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(
+        { ok: false, error: "auth_create_failed", detail: msg.slice(0, 180) },
+        { status: 500 },
+      );
+    }
+
+    const authUserId = created.user.id; // UUID from auth.users
+
+    // ✅ Create app row + attach tenant role + consume invitation (atomic)
+    await prisma.$transaction(async (tx) => {
+      await tx.user.create({
+        data: {
+          id: authUserId,          // IMPORTANT: must match auth.users.id
+          email,
+          fullName: fullName || null,
+          globalRole: "USER",
+          isActive: true,
+        },
+      });
+
+      await tx.userTenantRole.create({
+        data: {
+          userId: authUserId,
+          tenantId: invite.tenantId,
+          role: invite.role,
+          isPrimary: true,
+        },
+      });
+
+      await tx.tenantInvitation.update({
+        where: { id: invite.id },
+        data: {
+          userId: authUserId,
+          usedAt: new Date(),
+        },
+      });
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
     console.error("POST /api/invites/accept failed", err);
-    return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "server_error" },
+      { status: 500 },
+    );
   }
 }
