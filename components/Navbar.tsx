@@ -39,6 +39,12 @@ type NavbarProps = {
   currentUser: NavbarUser;
   // true only if user has a recent, consumed OTP
   otpVerified: boolean;
+
+  /**
+   * NEW: Safety guard to prevent marketing chrome from rendering on tenant subdomains.
+   * Default true for primary host rendering.
+   */
+  hostIsPrimary?: boolean;
 };
 
 function isActive(pathname: string | null, href: string) {
@@ -57,7 +63,11 @@ function getInitials(user: NavbarUser) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
+export default function Navbar({
+  currentUser,
+  otpVerified,
+  hostIsPrimary = true,
+}: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -67,8 +77,18 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
   const hasSession = !!currentUser; // Supabase session exists
   const fullyLoggedIn = hasSession && otpVerified; // Supabase + OTP
 
-  // Marketing chrome should not appear inside the ATS product.
-  if (pathname?.startsWith("/ats")) {
+  // ✅ Never render marketing chrome on tenant subdomains.
+  if (!hostIsPrimary) return null;
+
+  // ✅ Marketing chrome should not appear on ATS, auth pages, or Jobs surface.
+  // (Jobs has its own "Jobs by ThinkATS" chrome.)
+  if (
+    pathname?.startsWith("/ats") ||
+    pathname?.startsWith("/auth") ||
+    pathname === "/login" ||
+    pathname === "/access-denied" ||
+    pathname?.startsWith("/jobs")
+  ) {
     return null;
   }
 
@@ -80,15 +100,13 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
       router.push("/");
       router.refresh();
     } catch (e) {
-      // could add a toast later
+      // optional: toast later
     } finally {
       setLoggingOut(false);
     }
   }
 
-  const atsWorkspaceHref = fullyLoggedIn
-    ? "/ats"
-    : "/auth/otp?returnTo=/ats";
+  const atsWorkspaceHref = fullyLoggedIn ? "/ats" : "/auth/otp?returnTo=/ats";
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -138,6 +156,7 @@ export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
                 <span>Product</span>
                 <span className="text-[11px]">▾</span>
               </button>
+
               <div className="invisible absolute left-0 top-full z-30 mt-2 w-60 rounded-xl border border-slate-200 bg-white opacity-0 shadow-lg ring-1 ring-black/5 transition-all group-hover:visible group-hover:opacity-100">
                 <div className="py-2">
                   {productSubLinks.map((link) => (
