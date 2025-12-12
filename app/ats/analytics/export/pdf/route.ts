@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   // ---------------------------------------------------------------------------
   // Resolve tenant
   // ---------------------------------------------------------------------------
-  let tenant = null as any;
+  let tenant: any = null;
 
   if (tenantParam) {
     tenant = await prisma.tenant.findFirst({
@@ -54,6 +54,16 @@ export async function GET(req: NextRequest) {
   if (!tenant) {
     return new Response("Tenant not found", { status: 404 });
   }
+
+  const tenantSlug: string | null =
+    (tenant as any).slug ?? (tenant as any).subdomain ?? null;
+  const tenantPlan: string | null =
+    (tenant as any).plan ?? (tenant as any).billingPlan ?? null;
+  const tenantLogoUrl: string | null =
+    (tenant as any).logoUrl ??
+    (tenant as any).logo_url ??
+    (tenant as any).logo ??
+    null;
 
   // ---------------------------------------------------------------------------
   // Time window
@@ -78,7 +88,9 @@ export async function GET(req: NextRequest) {
       createdAt: true,
       clientCompanyId: true,
       clientCompany: {
-        select: { name: true },
+        select: {
+          name: true,
+        },
       },
     },
     orderBy: {
@@ -198,6 +210,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const clientSummaries = Array.from(clientSummaryMap.values()).sort(
+    (a, b) => b.applicationCount - a.applicationCount || b.jobCount - a.jobCount,
+  );
+
   const hasClientKey =
     requestedClientKey !== "all" && clientSummaryMap.has(requestedClientKey);
   const effectiveClientKey: string | "all" = hasClientKey
@@ -250,7 +266,7 @@ export async function GET(req: NextRequest) {
       applicationCount: applicationsByJobMap.get(j.id) ?? 0,
     }))
     .sort((a, b) => b.applicationCount - a.applicationCount)
-    .slice(0, 8); // little richer than screen, but still compact
+    .slice(0, 8);
 
   const maxVolume =
     jobsByVolume.length > 0
@@ -269,6 +285,29 @@ export async function GET(req: NextRequest) {
   let { width, height } = page.getSize();
   let cursorY = height - pageMargin;
 
+  // Try to embed tenant logo if we have a URL
+  let logoImage: any = null;
+  if (tenantLogoUrl) {
+    try {
+      const res = await fetch(tenantLogoUrl);
+      if (res.ok) {
+        const buffer = await res.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        try {
+          logoImage = await pdfDoc.embedPng(bytes);
+        } catch {
+          try {
+            logoImage = await pdfDoc.embedJpg(bytes);
+          } catch {
+            // ignore if not embeddable
+          }
+        }
+      }
+    } catch {
+      // ignore fetch/embedding errors, still produce PDF
+    }
+  }
+
   function newLine(multiplier = 1) {
     cursorY -= 14 * multiplier;
     if (cursorY < pageMargin) {
@@ -280,14 +319,15 @@ export async function GET(req: NextRequest) {
 
   function drawText(
     text: string,
-    opts?: { size?: number; bold?: boolean; colorGray?: number },
+    opts?: { size?: number; bold?: boolean; colorGray?: number; xOffset?: number },
   ) {
     const size = opts?.size ?? 10;
     const useBold = opts?.bold ?? false;
     const gray = opts?.colorGray ?? 0.1;
+    const xOffset = opts?.xOffset ?? 0;
 
     page.drawText(text, {
-      x: pageMargin,
+      x: pageMargin + xOffset,
       y: cursorY,
       size,
       font: useBold ? fontBold : font,
@@ -305,12 +345,34 @@ export async function GET(req: NextRequest) {
     drawText(text, { size: 9, colorGray: 0.45 });
   }
 
-  // Header
+  // Header logo (top-right)
+  if (logoImage) {
+    const maxLogoWidth = 80;
+    const maxLogoHeight = 40;
+    const { width: iw, height: ih } = logoImage.scale(1);
+    const scale = Math.min(maxLogoWidth / iw, maxLogoHeight / ih, 1);
+    const scaled = logoImage.scale(scale);
+
+    page.drawImage(logoImage, {
+      x: width - pageMargin - scaled.width,
+      y: height - pageMargin - scaled.height,
+      width: scaled.width,
+      height: scaled.height,
+    });
+  }
+
+  // Header text
   drawText("ThinkATS Analytics Summary", { size: 16, bold: true });
   drawText(tenant.name || "Tenant workspace", {
     size: 11,
     colorGray: 0.25,
   });
+
+  const slugLabel = tenantSlug ? tenantSlug : "n/a";
+  drawSubtle(`Slug: ${slugLabel}  |  Tenant ID: ${tenant.id}`);
+  if (tenantPlan) {
+    drawSubtle(`Plan: ${tenantPlan}`);
+  }
   drawSubtle(`Range: ${rangeLabel}`);
   drawSubtle(`Client filter: ${selectedClientLabel}`);
   drawSubtle(`Generated at: ${now.toISOString()}`);
@@ -336,10 +398,30 @@ export async function GET(req: NextRequest) {
       0,
     );
     drawSubtle(
-      `Clients with activity in window: ${totalClients} (${totalClientJobs} jobs across all clients)`,
+      `Clients with activity in window: ${totalClients} (${totalClientJobs} jobs across these clients)`,
     );
   } else {
     drawSubtle("No client-level breakdown available in this window.");
+  }
+
+  newLine(1);
+
+  // Clients mini-table
+  drawSectionTitle("Clients (top by application volume)");
+  if (clientSummaries.length === 0) {
+    drawSubtle(
+      "No client activity in this window. Once roles are linked to client companies, their volume will show here.",
+    );
+  } else {
+    const topClients = clientSummaries.slice(0, 10);
+    let idx = 1;
+    for (const client of topClients) {
+      const share = pct(client.applicationCount, totalApplications || 0);
+      drawText(
+        `${idx}. ${client.label} — ${client.jobCount} jobs · ${client.applicationCount} applications (${share} of all apps)`,
+      );
+      idx += 1;
+    }
   }
 
   newLine(1);
@@ -355,7 +437,7 @@ export async function GET(req: NextRequest) {
       const label = (bucket.stage || "UNASSIGNED").toUpperCase();
       const count = bucket._count._all;
       drawText(
-        `${label}: ${count} applications (${pct(count, totalApplications || 1)})`,
+        `${label}: ${count} applications (${pct(count, totalApplications || 0)})`,
       );
     }
   }
@@ -373,7 +455,7 @@ export async function GET(req: NextRequest) {
       const label = (bucket.tier || "UNRATED").toUpperCase();
       const count = bucket._count._all;
       drawText(
-        `${label}: ${count} events (${pct(count, totalTierEvents || 1)})`,
+        `${label}: ${count} events (${pct(count, totalTierEvents || 0)})`,
       );
     }
   }
@@ -391,7 +473,7 @@ export async function GET(req: NextRequest) {
       const label = bucket.source || "Unknown";
       const count = bucket._count._all;
       drawText(
-        `${label}: ${count} applications (${pct(count, totalApplications || 1)})`,
+        `${label}: ${count} applications (${pct(count, totalApplications || 0)})`,
       );
     }
   }
@@ -411,7 +493,7 @@ export async function GET(req: NextRequest) {
       const isOpen = (job.status || "").toLowerCase() === "open";
       const clientName = job.clientCompany?.name || "Internal";
       const relPct = maxVolume
-        ? `${Math.round((job.applicationCount / maxVolume) * 100)}% of top role`
+        ? `${Math.round((job.applicationCount / maxVolume) * 100)}% of top-role volume`
         : "–";
 
       drawText(
@@ -435,9 +517,7 @@ export async function GET(req: NextRequest) {
   const pdfBytes = await pdfDoc.save();
 
   const safeTenantSlug =
-    (tenant.slug as string | null) ??
-    (tenant.id as string | null) ??
-    "tenant";
+    tenantSlug ?? (tenant.id as string | null) ?? "tenant";
   const filename = `thinkats-analytics-summary-${safeTenantSlug}-${range}.pdf`;
 
   return new Response(pdfBytes, {
