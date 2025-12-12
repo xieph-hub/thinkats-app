@@ -462,7 +462,6 @@ export default async function JobsPage({
                       : [];
 
                     const cardStyle: CSSProperties = {
-                      // Make accent available to Tailwind arbitrary values
                       ["--jobs-accent" as any]: accentColor,
                     };
 
@@ -556,9 +555,9 @@ export default async function JobsPage({
                               )}
                             </div>
 
-                            {/* Right CTA */}
-                            <div className="hidden items-center pl-3 text-[11px] font-medium text-[var(--jobs-accent)] sm:flex">
-                              <span className="flex items-center gap-1">
+                            {/* Right CTA – now visible on all screen sizes */}
+                            <div className="flex items-center self-start pt-2 pl-0 text-[11px] font-medium text-[var(--jobs-accent)] sm:self-auto sm:pt-0 sm:pl-3">
+                              <span className="inline-flex items-center gap-1">
                                 View job
                                 <span aria-hidden>↗</span>
                               </span>
