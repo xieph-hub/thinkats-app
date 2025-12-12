@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 type NavLink = {
   href: string;
@@ -34,16 +34,13 @@ type NavbarUser = {
   user_metadata?: { full_name?: string } | Record<string, any>;
 } | null;
 
-type NavbarProps = {
+export type NavbarProps = {
   currentUser: NavbarUser;
   otpVerified: boolean;
 
   /**
-   * ✅ IMPORTANT:
-   * - true on thinkats.com (marketing host)
-   * - false on tenantSlug.thinkats.com (tenant public host)
-   *
-   * If false, we hide the marketing navbar entirely so tenants don’t see ThinkATS chrome.
+   * When false, we are on a tenant subdomain (slug.thinkats.com)
+   * and should NOT show ThinkATS marketing chrome.
    */
   hostIsPrimary?: boolean;
 };
@@ -51,7 +48,7 @@ type NavbarProps = {
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(href + "/");
+  return pathname.startsWith(href);
 }
 
 function getInitials(user: NavbarUser) {
@@ -71,48 +68,25 @@ export default function Navbar({
 }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
-
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-
-  const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   const hasSession = !!currentUser;
   const fullyLoggedIn = hasSession && otpVerified;
 
-  // ✅ Marketing chrome should not appear inside ATS OR on tenant subdomains.
+  // ✅ Never show ThinkATS marketing navbar on tenant hosts.
   if (!hostIsPrimary) return null;
+
+  // ✅ Never show marketing navbar inside ATS or Jobs (Jobs has its own chrome).
   if (pathname?.startsWith("/ats")) return null;
-
-  useEffect(() => {
-    setMobileOpen(false);
-    setUserMenuOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    function onDocMouseDown(e: MouseEvent) {
-      if (!userMenuRef.current) return;
-      if (!userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
-      }
-    }
-    function onEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") setUserMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onDocMouseDown);
-    document.addEventListener("keydown", onEsc);
-    return () => {
-      document.removeEventListener("mousedown", onDocMouseDown);
-      document.removeEventListener("keydown", onEsc);
-    };
-  }, []);
+  if (pathname?.startsWith("/jobs")) return null;
 
   async function handleLogout() {
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      setUserMenuOpen(false);
+      setMenuOpen(false);
       router.push("/");
       router.refresh();
     } finally {
@@ -125,24 +99,23 @@ export default function Navbar({
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        {/* Logo = home */}
-        <Link href="/" className="flex items-center gap-2" aria-label="ThinkATS home">
-          {/* ⬇️ Slightly bigger logo (per your feedback) */}
+        <Link
+          href="/"
+          className="flex items-center gap-2"
+          aria-label="ThinkATS home"
+        >
           <Image
             src="/thinkats-logo.svg"
             alt="ThinkATS"
-            width={180}
-            height={56}
+            width={160}
+            height={44}
             className="h-10 w-auto sm:h-11"
             priority
           />
         </Link>
 
-        {/* Desktop nav */}
         <div className="hidden flex-1 items-center justify-between md:flex">
-          {/* Left: links */}
           <div className="flex items-center gap-6">
-            {/* Home first */}
             <Link
               href="/"
               className={`text-sm transition-colors ${
@@ -154,7 +127,6 @@ export default function Navbar({
               Home
             </Link>
 
-            {/* Product (dropdown) */}
             <div className="relative group">
               <button
                 type="button"
@@ -163,14 +135,12 @@ export default function Navbar({
                     ? "font-semibold text-[#1E40AF]"
                     : "text-slate-600 hover:text-[#1E40AF]"
                 }`}
-                aria-haspopup="menu"
-                aria-expanded="false"
               >
                 <span>Product</span>
                 <span className="text-[11px]">▾</span>
               </button>
 
-              <div className="invisible absolute left-0 top-full z-30 mt-2 w-64 rounded-xl border border-slate-200 bg-white opacity-0 shadow-lg ring-1 ring-black/5 transition-all group-hover:visible group-hover:opacity-100">
+              <div className="invisible absolute left-0 top-full z-30 mt-2 w-60 rounded-xl border border-slate-200 bg-white opacity-0 shadow-lg ring-1 ring-black/5 transition-all group-hover:visible group-hover:opacity-100">
                 <div className="py-2">
                   {productSubLinks.map((link) => (
                     <Link
@@ -189,7 +159,6 @@ export default function Navbar({
               </div>
             </div>
 
-            {/* Other main links excluding Home + Product */}
             {mainLinks
               .filter((l) => l.href !== "/" && l.href !== "/product")
               .map((link) => (
@@ -207,7 +176,6 @@ export default function Navbar({
               ))}
           </div>
 
-          {/* Right: auth / workspace */}
           <div className="flex items-center gap-3">
             {fullyLoggedIn ? (
               <>
@@ -218,44 +186,40 @@ export default function Navbar({
                   ATS workspace
                 </Link>
 
-                <div className="relative" ref={userMenuRef}>
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setUserMenuOpen((prev) => !prev)}
+                    onClick={() => setMenuOpen((prev) => !prev)}
                     className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-                    aria-haspopup="menu"
-                    aria-expanded={userMenuOpen}
                   >
-                    <span className="hidden text-xs text-slate-500 sm:inline">Logged in</span>
+                    <span className="hidden text-xs text-slate-500 sm:inline">
+                      Logged in
+                    </span>
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
                       {getInitials(currentUser)}
                     </div>
                   </button>
 
-                  {userMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
-                      <div className="px-3 pb-2 pt-2 text-xs text-slate-500">
+                  {menuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                      <div className="px-3 pb-2 pt-1 text-xs text-slate-500">
                         {currentUser?.email}
                       </div>
-
                       <button
                         type="button"
                         onClick={() => {
-                          setUserMenuOpen(false);
+                          setMenuOpen(false);
                           router.push("/ats");
                         }}
-                        className="block w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50"
                       >
                         Open ATS workspace
                       </button>
-
-                      <div className="my-1 border-t border-slate-100" />
-
                       <button
                         type="button"
                         onClick={handleLogout}
                         disabled={loggingOut}
-                        className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {loggingOut ? "Logging out…" : "Log out"}
                       </button>
@@ -297,7 +261,6 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* Mobile: auth + hamburger */}
         <div className="flex items-center gap-2 md:hidden">
           {fullyLoggedIn ? (
             <Link
@@ -341,7 +304,6 @@ export default function Navbar({
         </div>
       </nav>
 
-      {/* Mobile panel */}
       {mobileOpen && (
         <div className="border-t border-slate-200 bg-white md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
@@ -401,13 +363,16 @@ export default function Navbar({
 
             <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
               {fullyLoggedIn ? (
-                <Link
-                  href="/ats"
-                  onClick={() => setMobileOpen(false)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false);
+                    router.push("/ats");
+                  }}
                   className="rounded-full bg-slate-900 px-4 py-1.5 text-center text-sm font-semibold text-white shadow-sm"
                 >
                   Open ATS workspace
-                </Link>
+                </button>
               ) : hasSession ? (
                 <Link
                   href={atsWorkspaceHref}
