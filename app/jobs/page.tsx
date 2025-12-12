@@ -163,7 +163,7 @@ export default async function JobsPage({
   const accentColor: string =
     (primarySettings as any)?.accentColorHex ||
     (primarySettings as any)?.accentColor ||
-    "#2563EB"; // Electric blue
+    "#2563EB"; // Electric blue (overridden by settings when present)
 
   const isTenantScoped = Boolean(tenant);
   const isClientScoped = Boolean(clientCompany);
@@ -267,7 +267,7 @@ export default async function JobsPage({
               </ul>
             </div>
 
-            {/* Share board card */}
+            {/* Share board card – styled like the job detail share pill */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[11px] text-slate-700 shadow-sm">
               <div className="mb-2 flex items-center gap-2">
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] text-slate-800">
@@ -284,8 +284,10 @@ export default async function JobsPage({
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 shadow-sm">
-                  <span className="hidden sm:inline">Share</span>
+                <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-2 py-1 text-[11px] text-slate-600 shadow-sm">
+                  <span className="hidden font-medium text-slate-600 sm:inline">
+                    Share
+                  </span>
                   <a
                     href={linkedinShareUrl}
                     target="_blank"
@@ -293,7 +295,7 @@ export default async function JobsPage({
                     className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100"
                     aria-label="Share on LinkedIn"
                   >
-                    <Linkedin className="h-3.5 w-3.5" />
+                    <Linkedin className="h-3.5 w-3.5 text-[#0A66C2]" />
                   </a>
                   <a
                     href={twitterShareUrl}
@@ -302,7 +304,7 @@ export default async function JobsPage({
                     className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100"
                     aria-label="Share on X"
                   >
-                    <Twitter className="h-3.5 w-3.5" />
+                    <Twitter className="h-3.5 w-3.5 text-slate-900" />
                   </a>
                   <a
                     href={whatsappShareUrl}
@@ -311,7 +313,7 @@ export default async function JobsPage({
                     className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100"
                     aria-label="Share on WhatsApp"
                   >
-                    <MessageCircle className="h-3.5 w-3.5" />
+                    <MessageCircle className="h-3.5 w-3.5 text-[#25D366]" />
                   </a>
                 </div>
 
@@ -506,31 +508,42 @@ export default async function JobsPage({
                                 )}
                               </div>
 
-                              {/* Company + meta icons (pills for location / job type / work mode) */}
+                              {/* Company + meta pills (location, job type, work mode) */}
                               <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-600">
+                                {/* Company (plain text + icon) */}
                                 <span className="inline-flex items-center gap-1 font-medium text-slate-800">
                                   <Building2 className="h-3.5 w-3.5 text-slate-400" />
                                   {companyLabel}
                                 </span>
 
-                                {/* Location pill */}
-                                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                                  <MapPin className="h-3.5 w-3.5 text-[#172965]" />
+                                {/* Location pill – primary tone (#172965) */}
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
+                                  style={{
+                                    borderColor: "#172965",
+                                    backgroundColor: "#1729650d",
+                                    color: "#172965",
+                                  }}
+                                >
+                                  <MapPin
+                                    className="h-3.5 w-3.5"
+                                    style={{ color: "#172965" }}
+                                  />
                                   <span>{locationLabel}</span>
                                 </span>
 
-                                {/* Job type pill (employment type) */}
+                                {/* Job type pill – subtle neutral, coloured icon */}
                                 {employmentLabel && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                                    <BriefcaseBusiness className="h-3.5 w-3.5 text-slate-500" />
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                    <BriefcaseBusiness className="h-3.5 w-3.5 text-amber-600" />
                                     <span>{employmentLabel}</span>
                                   </span>
                                 )}
 
-                                {/* Work mode pill (location type) */}
+                                {/* Work mode pill – subtle neutral, different accent */}
                                 {locationTypeLabel && (
-                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                                    <Clock className="h-3.5 w-3.5 text-slate-500" />
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                                    <Clock className="h-3.5 w-3.5 text-sky-600" />
                                     <span>{locationTypeLabel}</span>
                                   </span>
                                 )}
@@ -562,7 +575,7 @@ export default async function JobsPage({
                               )}
                             </div>
 
-                            {/* Right CTA – now visible on all screen sizes */}
+                            {/* Right CTA – visible on all screen sizes */}
                             <div className="flex items-center self-start pt-2 pl-0 text-[11px] font-medium text-[var(--jobs-accent)] sm:self-auto sm:pt-0 sm:pl-3">
                               <span className="inline-flex items-center gap-1">
                                 View job
