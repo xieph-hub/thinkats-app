@@ -4,7 +4,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type NavLink = {
   href: string;
@@ -37,14 +37,7 @@ type NavbarUser = {
 
 type NavbarProps = {
   currentUser: NavbarUser;
-  // true only if user has a recent, consumed OTP
   otpVerified: boolean;
-
-  /**
-   * NEW: Safety guard to prevent marketing chrome from rendering on tenant subdomains.
-   * Default true for primary host rendering.
-   */
-  hostIsPrimary?: boolean;
 };
 
 function isActive(pathname: string | null, href: string) {
@@ -63,34 +56,25 @@ function getInitials(user: NavbarUser) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export default function Navbar({
-  currentUser,
-  otpVerified,
-  hostIsPrimary = true,
-}: NavbarProps) {
+export default function Navbar({ currentUser, otpVerified }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  const hasSession = !!currentUser; // Supabase session exists
-  const fullyLoggedIn = hasSession && otpVerified; // Supabase + OTP
+  const hasSession = !!currentUser;
+  const fullyLoggedIn = hasSession && otpVerified;
 
-  // ✅ Never render marketing chrome on tenant subdomains.
-  if (!hostIsPrimary) return null;
+  // Marketing chrome should not appear inside the ATS product.
+  if (pathname?.startsWith("/ats")) return null;
 
-  // ✅ Marketing chrome should not appear on ATS, auth pages, or Jobs surface.
-  // (Jobs has its own "Jobs by ThinkATS" chrome.)
-  if (
-    pathname?.startsWith("/ats") ||
-    pathname?.startsWith("/auth") ||
-    pathname === "/login" ||
-    pathname === "/access-denied" ||
-    pathname?.startsWith("/jobs")
-  ) {
-    return null;
-  }
+  // Close menus on navigation
+  useEffect(() => {
+    setMobileOpen(false);
+    setMenuOpen(false);
+  }, [pathname]);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -99,8 +83,6 @@ export default function Navbar({
       setMenuOpen(false);
       router.push("/");
       router.refresh();
-    } catch (e) {
-      // optional: toast later
     } finally {
       setLoggingOut(false);
     }
@@ -112,11 +94,7 @@ export default function Navbar({
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         {/* Logo = home */}
-        <Link
-          href="/"
-          className="flex items-center gap-2"
-          aria-label="ThinkATS home"
-        >
+        <Link href="/" className="flex items-center gap-2" aria-label="ThinkATS home">
           <Image
             src="/thinkats-logo.svg"
             alt="ThinkATS"
@@ -131,7 +109,6 @@ export default function Navbar({
         <div className="hidden flex-1 items-center justify-between md:flex">
           {/* Left: links */}
           <div className="flex items-center gap-6">
-            {/* Home first */}
             <Link
               href="/"
               className={`text-sm transition-colors ${
@@ -143,8 +120,8 @@ export default function Navbar({
               Home
             </Link>
 
-            {/* Product (dropdown) */}
-            <div className="relative group">
+            {/* Product dropdown (hover) */}
+            <div className="group relative">
               <button
                 type="button"
                 className={`flex items-center gap-1 text-sm transition-colors ${
@@ -176,7 +153,6 @@ export default function Navbar({
               </div>
             </div>
 
-            {/* Other main links excluding Home + Product */}
             {mainLinks
               .filter((l) => l.href !== "/" && l.href !== "/product")
               .map((link) => (
@@ -220,8 +196,8 @@ export default function Navbar({
                   </button>
 
                   {menuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg">
-                      <div className="px-3 pb-2 pt-1 text-xs text-slate-500">
+                    <div className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
+                      <div className="px-3 pb-2 pt-2 text-xs text-slate-500">
                         {currentUser?.email}
                       </div>
                       <button
@@ -230,7 +206,7 @@ export default function Navbar({
                           setMenuOpen(false);
                           router.push("/ats");
                         }}
-                        className="block w-full px-3 py-1.5 text-left text-slate-700 hover:bg-slate-50"
+                        className="block w-full px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
                       >
                         Open ATS workspace
                       </button>
@@ -238,7 +214,7 @@ export default function Navbar({
                         type="button"
                         onClick={handleLogout}
                         disabled={loggingOut}
-                        className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {loggingOut ? "Logging out…" : "Log out"}
                       </button>
@@ -312,6 +288,7 @@ export default function Navbar({
               </Link>
             </>
           )}
+
           <button
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}
@@ -327,13 +304,12 @@ export default function Navbar({
       {mobileOpen && (
         <div className="border-t border-slate-200 bg-white md:hidden">
           <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
-            {/* Product group */}
             <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Product
             </p>
+
             <Link
               href="/product"
-              onClick={() => setMobileOpen(false)}
               className={`rounded-md px-2 py-2 text-sm ${
                 isActive(pathname, "/product")
                   ? "bg-slate-100 font-semibold text-[#1E40AF]"
@@ -342,13 +318,13 @@ export default function Navbar({
             >
               Overview
             </Link>
+
             {productSubLinks
               .filter((l) => l.href !== "/product")
               .map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  onClick={() => setMobileOpen(false)}
                   className={`rounded-md px-2 py-2 text-sm ${
                     isActive(pathname, link.href)
                       ? "bg-slate-100 font-semibold text-[#1E40AF]"
@@ -359,17 +335,16 @@ export default function Navbar({
                 </Link>
               ))}
 
-            {/* Main links including Home + Contact */}
             <p className="mt-3 px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
               Company
             </p>
+
             {mainLinks
               .filter((l) => l.href !== "/product")
               .map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  onClick={() => setMobileOpen(false)}
                   className={`rounded-md px-2 py-2 text-sm ${
                     isActive(pathname, link.href)
                       ? "bg-slate-100 font-semibold text-[#1E40AF]"
@@ -380,24 +355,18 @@ export default function Navbar({
                 </Link>
               ))}
 
-            {/* Auth / workspace block */}
-            <div className="mt-4 flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-3">
+            <div className="mt-4 flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-3">
               {fullyLoggedIn ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    router.push("/ats");
-                  }}
-                  className="rounded-full bg-slate-900 px-4 py-1.5 text-center text-sm font-semibold text-white shadow-sm"
+                <Link
+                  href="/ats"
+                  className="rounded-full bg-slate-900 px-4 py-2 text-center text-sm font-semibold text-white shadow-sm"
                 >
                   Open ATS workspace
-                </button>
+                </Link>
               ) : hasSession ? (
                 <Link
                   href={atsWorkspaceHref}
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-center text-sm font-semibold text-slate-700"
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-slate-700"
                 >
                   Finish sign-in
                 </Link>
@@ -405,15 +374,13 @@ export default function Navbar({
                 <>
                   <Link
                     href="/login"
-                    onClick={() => setMobileOpen(false)}
-                    className="rounded-full border border-slate-200 bg-white px-4 py-1.5 text-center text-sm font-semibold text-slate-700"
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-center text-sm font-semibold text-slate-700"
                   >
                     Login
                   </Link>
                   <Link
                     href="/signup"
-                    onClick={() => setMobileOpen(false)}
-                    className="rounded-full bg-[#1E40AF] px-4 py-1.5 text-center text-sm font-semibold text-white shadow-sm"
+                    className="rounded-full bg-[#1E40AF] px-4 py-2 text-center text-sm font-semibold text-white shadow-sm"
                   >
                     Start free trial
                   </Link>
