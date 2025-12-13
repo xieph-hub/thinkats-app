@@ -2,9 +2,8 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
-// 🔐 Shared cookie names for auth + OTP
+// 🔐 Shared cookie name for auth ONLY
 export const AUTH_COOKIE_NAME = "thinkats_user_id";
-export const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export type TenantRoleSummary = {
   tenantId: string;
@@ -15,11 +14,6 @@ export type TenantRoleSummary = {
 };
 
 export type ServerUserContext = {
-  /**
-   * Canonical login identity (top-level) so callers can safely do:
-   *   const authUser = await getServerUser();
-   *   if (!authUser?.email) redirect("/login");
-   */
   email: string | null;
 
   user: {
@@ -36,7 +30,6 @@ export type ServerUserContext = {
   primaryTenantPlanTier: string | null;
 };
 
-// ✨ Shape used by ATS UI (e.g. AtsLayoutClient)
 export type AppUserWithTenants = ServerUserContext["user"] & {
   tenants?: TenantRoleSummary[];
 };
@@ -50,7 +43,6 @@ function normalizeEmail(value: unknown): string | null {
 export async function getServerUser(): Promise<ServerUserContext | null> {
   const cookieStore = cookies();
 
-  // ✅ READ-ONLY cookies – allowed in server components
   const userId = cookieStore.get(AUTH_COOKIE_NAME)?.value?.trim();
   if (!userId) return null;
 
@@ -65,38 +57,29 @@ export async function getServerUser(): Promise<ServerUserContext | null> {
     },
   });
 
-  if (!dbUser || !dbUser.isActive) {
-    return null;
-  }
+  if (!dbUser || !dbUser.isActive) return null;
 
   const email = normalizeEmail(dbUser.email);
 
-  const tenantRoles: TenantRoleSummary[] = dbUser.userTenantRoles.map(
-    (utr) => ({
-      tenantId: utr.tenantId,
-      tenantSlug: utr.tenant.slug,
-      role: utr.role,
-      isPrimary: utr.isPrimary,
-      planTier: utr.tenant.planTier,
-    }),
-  );
+  const tenantRoles: TenantRoleSummary[] = dbUser.userTenantRoles.map((utr) => ({
+    tenantId: utr.tenantId,
+    tenantSlug: utr.tenant.slug,
+    role: utr.role,
+    isPrimary: utr.isPrimary,
+    planTier: utr.tenant.planTier,
+  }));
 
-  const primary =
-    tenantRoles.find((r) => r.isPrimary) || tenantRoles[0] || null;
-
+  const primary = tenantRoles.find((r) => r.isPrimary) || tenantRoles[0] || null;
   const isSuperAdmin = dbUser.globalRole === "SUPER_ADMIN";
 
   return {
-    // ✅ NEW: top-level alias used by requireAtsContext.ts
     email,
-
     user: {
       id: dbUser.id,
       email,
       fullName: dbUser.fullName,
       globalRole: dbUser.globalRole,
     },
-
     isSuperAdmin,
     tenantRoles,
     primaryTenantId: primary?.tenantId ?? null,
