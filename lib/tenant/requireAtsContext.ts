@@ -25,7 +25,8 @@ function getTenantSlugFromHost(host: string | null) {
   // local/dev
   if (clean === "localhost" || clean === "127.0.0.1") return null;
 
-  // only treat subdomains of ROOT_DOMAIN as tenant slugs
+  // Only treat subdomains of ROOT_DOMAIN as tenant slugs
+  // i.e. slug.thinkats.com -> slug
   if (clean === ROOT_DOMAIN) return null;
   if (!clean.endsWith(`.${ROOT_DOMAIN}`)) return null;
 
@@ -52,17 +53,16 @@ function isSuperAdminEmail(email: string) {
  * 1) tenant slug from host (slug.thinkats.com)
  * 2) ats_tenant_id cookie (for main domain /ats)
  *
- * IMPORTANT:
- * - Your membership source is getServerUser().tenantRoles (UserTenantRole join),
- *   NOT prisma.tenantMember (which your schema doesn't have).
+ * Membership source:
+ * - UserTenantRole (your schema) already loaded via getServerUser().tenantRoles
  */
 export async function requireAtsContext() {
   const auth = await getServerUser();
 
-  const email = auth?.user?.email?.toLowerCase() || null;
-  const userId = auth?.user?.id || null;
+  const userId = auth?.user?.id ?? null;
+  const email = auth?.user?.email?.toLowerCase() ?? null;
 
-  if (!email || !userId) redirect("/login");
+  if (!userId || !email) redirect("/login");
 
   // Resolve tenant by host subdomain or cookie
   const host = headers().get("host");
@@ -82,9 +82,7 @@ export async function requireAtsContext() {
 
   if (!tenantId) redirect("/ats/tenants");
 
-  // Superadmin rules:
-  // - globalRole SUPER_ADMIN from getServerUser().isSuperAdmin
-  // - OR in env SUPERADMIN_EMAILS
+  // Superadmin rules
   const superAdmin = Boolean(auth?.isSuperAdmin) || isSuperAdminEmail(email);
 
   // Membership check using roles already loaded by getServerUser()
