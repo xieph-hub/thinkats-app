@@ -153,40 +153,34 @@ export default async function ApplicationDetailPage({
     );
   }
 
-  // Tenant-scoped lookup, but no auth/membership gate
-  const job = await prisma.job.findFirst({
+  // ✅ Fetch the application directly, but tenant-safely via job.tenantId
+  const application = await prisma.jobApplication.findFirst({
     where: {
-      tenantId: tenant.id,
-      applications: {
-        some: { id: params.id },
-      },
+      id: params.id,
+      job: { tenantId: tenant.id },
     },
     include: {
-      clientCompany: true,
-      stages: {
-        orderBy: { position: "asc" },
-      },
-      applications: {
-        orderBy: { createdAt: "desc" },
+      candidate: true,
+      job: {
         include: {
-          candidate: true,
+          clientCompany: true,
+          stages: { orderBy: { position: "asc" } },
         },
+      },
+      scoringEvents: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
       },
     },
   });
 
-  if (!job) {
-    notFound();
-  }
-
-  const application = job.applications.find((app) => app.id === params.id);
-
-  if (!application) {
-    notFound();
-  }
+  if (!application) notFound();
 
   const appAny = application as any;
   const candidateAny = (application.candidate ?? null) as any;
+
+  const job = application.job;
+  if (!job) notFound();
 
   const candidateName =
     application.fullName ||
@@ -200,7 +194,7 @@ export default async function ApplicationDetailPage({
     "Not specified";
 
   const stageLabel = formatStageName(application.stage || "APPLIED");
-  const status = formatStatus(application.status || "PENDING");
+  const statusLabel = formatStatus(application.status || "PENDING");
 
   const linkedinUrl =
     appAny.linkedinUrl || appAny.linkedin || application.candidate?.linkedinUrl;
@@ -214,11 +208,7 @@ export default async function ApplicationDetailPage({
     null;
 
   const resumeUrl =
-    appAny.resumeUrl ||
-    appAny.cvUrl ||
-    candidateAny?.resumeUrl ||
-    candidateAny?.cvUrl ||
-    null;
+    appAny.resumeUrl || appAny.cvUrl || candidateAny?.resumeUrl || candidateAny?.cvUrl || null;
 
   const source = application.source || "Not specified";
   const appliedAt = formatDate(application.createdAt);
@@ -228,14 +218,8 @@ export default async function ApplicationDetailPage({
   const workModeLabel = formatWorkMode(workModeValue);
   const experienceLevelLabel = formatExperienceLevel(job.experienceLevel);
 
-  const salaryMinLabel = formatMoney(
-    job.salaryMin,
-    job.salaryCurrency || "NGN",
-  );
-  const salaryMaxLabel = formatMoney(
-    job.salaryMax,
-    job.salaryCurrency || "NGN",
-  );
+  const salaryMinLabel = formatMoney(job.salaryMin, job.salaryCurrency || "NGN");
+  const salaryMaxLabel = formatMoney(job.salaryMax, job.salaryCurrency || "NGN");
   const hasSalary = salaryMinLabel || salaryMaxLabel;
 
   const clientLabel =
@@ -246,10 +230,10 @@ export default async function ApplicationDetailPage({
       ? `/jobs/${encodeURIComponent(job.slug)}`
       : null;
 
-  const stages = job.stages;
-  const stageNames = stages.length
-    ? stages.map((s) => s.name)
-    : ["APPLIED", "SCREEN", "INTERVIEW", "OFFER", "HIRED"];
+  const stageNames =
+    job.stages.length > 0
+      ? job.stages.map((s) => s.name)
+      : ["APPLIED", "SCREEN", "INTERVIEW", "OFFER", "HIRED"];
 
   const currentStageKey = (application.stage || "APPLIED").toUpperCase();
   const currentStageIndex = stageNames.findIndex(
@@ -292,7 +276,7 @@ export default async function ApplicationDetailPage({
               {stageLabel}
             </span>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-700">
-              {status}
+              {statusLabel}
             </span>
           </div>
 
@@ -302,17 +286,8 @@ export default async function ApplicationDetailPage({
             className="flex flex-wrap items-center gap-2 text-[11px]"
           >
             <input type="hidden" name="jobId" value={job.id} />
-            <input
-              type="hidden"
-              name="applicationId"
-              value={application.id}
-            />
-            {/* Optional: if you ever want to stay on this page after update */}
-            {/* <input
-              type="hidden"
-              name="redirectTo"
-              value={`/ats/applications/${application.id}`}
-            /> */}
+            <input type="hidden" name="applicationId" value={application.id} />
+
             <label className="text-slate-500">
               Move to:
               <select
@@ -474,10 +449,7 @@ export default async function ApplicationDetailPage({
                   const isActive = index <= currentStageIndex;
                   const isCurrent = index === currentStageIndex;
                   return (
-                    <div
-                      key={stageName}
-                      className="flex flex-1 items-center gap-1"
-                    >
+                    <div key={stageName} className="flex flex-1 items-center gap-1">
                       <div
                         className={`flex h-6 min-w-[0] flex-1 items-center justify-center rounded-full border px-2 text-[10px] ${
                           isCurrent
@@ -487,9 +459,7 @@ export default async function ApplicationDetailPage({
                             : "border-slate-200 bg-slate-50 text-slate-600"
                         }`}
                       >
-                        <span className="truncate">
-                          {formatStageName(stageName)}
-                        </span>
+                        <span className="truncate">{formatStageName(stageName)}</span>
                       </div>
                       {index < stageNames.length - 1 && (
                         <div className="h-px flex-1 bg-slate-200" />
@@ -510,40 +480,30 @@ export default async function ApplicationDetailPage({
               <p className="font-medium text-slate-900">{job.title}</p>
               <p>
                 <span className="text-slate-500">Client:</span>{" "}
-                <span className="font-medium text-slate-800">
-                  {clientLabel}
-                </span>
+                <span className="font-medium text-slate-800">{clientLabel}</span>
               </p>
               {job.location && (
                 <p>
                   <span className="text-slate-500">Location:</span>{" "}
-                  <span className="font-medium text-slate-800">
-                    {job.location}
-                  </span>
+                  <span className="font-medium text-slate-800">{job.location}</span>
                 </p>
               )}
               {workModeLabel && (
                 <p>
                   <span className="text-slate-500">Work mode:</span>{" "}
-                  <span className="font-medium text-slate-800">
-                    {workModeLabel}
-                  </span>
+                  <span className="font-medium text-slate-800">{workModeLabel}</span>
                 </p>
               )}
               {employmentTypeLabel && (
                 <p>
                   <span className="text-slate-500">Type:</span>{" "}
-                  <span className="font-medium text-slate-800">
-                    {employmentTypeLabel}
-                  </span>
+                  <span className="font-medium text-slate-800">{employmentTypeLabel}</span>
                 </p>
               )}
               {experienceLevelLabel && (
                 <p>
                   <span className="text-slate-500">Level:</span>{" "}
-                  <span className="font-medium text-slate-800">
-                    {experienceLevelLabel}
-                  </span>
+                  <span className="font-medium text-slate-800">{experienceLevelLabel}</span>
                 </p>
               )}
               {hasSalary && (
