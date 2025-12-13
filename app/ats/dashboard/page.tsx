@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 
 type DashboardStats = {
+  tenantId: string;
   totalJobs: number;
   openJobs: number;
   totalCandidates: number;
@@ -20,7 +21,9 @@ type DashboardStats = {
   interviewsScheduled: number;
 };
 
-async function getDashboardStats(db: ReturnType<typeof tenantDb>): Promise<DashboardStats> {
+async function getDashboardStats(tenantId: string): Promise<DashboardStats> {
+  const db = tenantDb(tenantId);
+
   const [
     totalJobs,
     openJobs,
@@ -28,7 +31,7 @@ async function getDashboardStats(db: ReturnType<typeof tenantDb>): Promise<Dashb
     totalApplications,
     interviewsScheduled,
   ] = await Promise.all([
-    db.job.count({}),
+    db.job.count({}), // tenantId injected by tenantDb
     db.job.count({ where: { status: "open" } }),
     db.candidate.count({}),
     db.jobApplication.count({}),
@@ -40,6 +43,7 @@ async function getDashboardStats(db: ReturnType<typeof tenantDb>): Promise<Dashb
   ]);
 
   return {
+    tenantId,
     totalJobs,
     openJobs,
     totalCandidates,
@@ -49,10 +53,10 @@ async function getDashboardStats(db: ReturnType<typeof tenantDb>): Promise<Dashb
 }
 
 export default async function AtsDashboardPage() {
-  const { tenant, isSuperAdmin, role } = await requireAtsTenant();
-  const db = tenantDb(tenant.id);
+  const { tenant, role, isSuperAdmin } = await requireAtsTenant();
+  const stats = await getDashboardStats(tenant.id);
 
-  const stats = await getDashboardStats(db);
+  const roleLabel = isSuperAdmin ? "SUPER_ADMIN" : role ?? "MEMBER";
 
   return (
     <div className="p-6">
@@ -62,8 +66,9 @@ export default async function AtsDashboardPage() {
           <p className="mt-1 text-sm text-slate-600">
             Workspace: <span className="font-medium">{tenant.name}</span>
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">
-            {isSuperAdmin ? "SUPER_ADMIN" : role ?? "MEMBER"} · {tenant.slug}
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            Role: <span className="font-semibold">{roleLabel}</span> ·{" "}
+            <span className="text-slate-400">{tenant.slug}</span>
           </p>
         </div>
 
@@ -88,7 +93,10 @@ export default async function AtsDashboardPage() {
         <StatCard label="Open Jobs" value={stats.openJobs} />
         <StatCard label="Candidates" value={stats.totalCandidates} />
         <StatCard label="Applications" value={stats.totalApplications} />
-        <StatCard label="Scheduled Interviews" value={stats.interviewsScheduled} />
+        <StatCard
+          label="Scheduled Interviews"
+          value={stats.interviewsScheduled}
+        />
       </div>
 
       <div className="mt-8 rounded-xl border border-slate-200 bg-white p-5">
