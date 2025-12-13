@@ -1,15 +1,25 @@
 // lib/jobs.ts
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
+import { getAllowedTenantIdsForRequest } from "@/lib/auth/tenantAccess";
 
 /**
- * Internal ATS job list for a given tenant.
+ * Internal ATS job list for the CURRENT user context.
  * Used by /ats/jobs
+ *
+ * ✅ Tenant-safe: only returns jobs for tenant(s) the user can access.
+ * ✅ Tenant host-safe: if on slug.thinkats.com, it will be forced to that tenant.
  */
-export async function listTenantJobs(tenantId: string) {
+export async function listAtsJobsForCurrentUser() {
+  const { allowedTenantIds } = await getAllowedTenantIdsForRequest();
+
+  if (allowedTenantIds.length === 0) {
+    return [];
+  }
+
   return prisma.job.findMany({
     where: {
-      tenantId,
+      tenantId: { in: allowedTenantIds },
       // Show everything that is not explicitly closed
       status: {
         not: "closed",
@@ -32,21 +42,27 @@ export async function listTenantJobs(tenantId: string) {
 /**
  * Single job + its pipeline (applications, candidates) for ATS.
  * Used by /ats/jobs/[jobId]
+ *
+ * ✅ Tenant-safe: job must belong to a tenant the user can access.
  */
-export async function getJobWithPipeline(jobId: string, tenantId: string) {
+export async function getAtsJobWithPipelineForCurrentUser(jobId: string) {
+  const { allowedTenantIds } = await getAllowedTenantIdsForRequest();
+
+  if (allowedTenantIds.length === 0) {
+    return null;
+  }
+
   return prisma.job.findFirst({
     where: {
       id: jobId,
-      tenantId,
+      tenantId: { in: allowedTenantIds },
     },
     include: {
       clientCompany: true,
       applications: {
-        // Use a field that actually exists on JobApplication
         orderBy: { createdAt: "desc" },
         include: {
           candidate: true,
-          // pipelineStage removed because Prisma model doesn't have it
         },
       },
     },
@@ -57,6 +73,8 @@ export async function getJobWithPipeline(jobId: string, tenantId: string) {
  * Public jobs for Resourcin careers page.
  * Filters by tenant + visibility + status + internalOnly=false.
  * Used by /jobs
+ *
+ * (unchanged)
  */
 export async function listPublicJobsForResourcin() {
   const tenant = await getResourcinTenant();
@@ -81,6 +99,8 @@ export async function listPublicJobsForResourcin() {
  * Single public job for careers detail page.
  * Allows lookup by ID or slug.
  * Used by /jobs/[jobIdOrSlug]
+ *
+ * (unchanged)
  */
 export async function getPublicJobBySlugOrId(jobIdOrSlug: string) {
   const tenant = await getResourcinTenant();
