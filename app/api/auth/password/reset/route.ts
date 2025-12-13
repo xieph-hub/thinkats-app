@@ -2,11 +2,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { OTP_COOKIE_NAME } from "@/lib/requireOtp";
 
 export const runtime = "nodejs";
 
 const AUTH_COOKIE_NAME = "thinkats_user_id";
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,11 +34,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
+    const user = await prisma.user.findUnique({ where: { email } });
 
-    // Keep responses generic so we don't leak exact reason
     if (!user) {
       return NextResponse.json(
         { ok: false, error: "invalid_or_expired_code" },
@@ -53,9 +50,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         code,
         consumed: false,
-        expiresAt: {
-          gt: now,
-        },
+        expiresAt: { gt: now },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -82,7 +77,6 @@ export async function POST(req: NextRequest) {
 
     const res = NextResponse.json({ ok: true });
 
-    // Log them in immediately
     res.cookies.set(AUTH_COOKIE_NAME, user.id, {
       httpOnly: true,
       secure: true,
@@ -91,7 +85,7 @@ export async function POST(req: NextRequest) {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    // Clear OTP state; they'll re-verify when needed
+    // ✅ Clear canonical OTP cookie after reset login
     res.cookies.set(OTP_COOKIE_NAME, "", {
       httpOnly: true,
       secure: true,
