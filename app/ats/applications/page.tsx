@@ -73,8 +73,22 @@ export default async function AtsApplicationsPage({
 }: {
   searchParams?: ApplicationsPageSearchParams;
 }) {
-  const { activeTenantId } = await getAtsTenantScope();
+  // ---------------------------------------------------------------------------
+  // Tenant scope (GLOBAL STANDARD)
+  // ---------------------------------------------------------------------------
+  const scope = await getAtsTenantScope();
+  const activeTenantId = scope.activeTenantId;
+
   if (!activeTenantId) notFound();
+
+  // Enforce tenant membership (unless super admin)
+  if (
+    !scope.isSuperAdmin &&
+    scope.allowedTenantIds &&
+    !scope.allowedTenantIds.includes(activeTenantId)
+  ) {
+    notFound();
+  }
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: activeTenantId },
@@ -123,10 +137,13 @@ export default async function AtsApplicationsPage({
   }
 
   if (typeof searchParams.q === "string") filterQ = searchParams.q;
+
   if (typeof searchParams.stage === "string" && searchParams.stage !== "")
     filterStage = searchParams.stage;
+
   if (typeof searchParams.status === "string" && searchParams.status !== "")
     filterStatus = searchParams.status;
+
   if (typeof searchParams.tier === "string" && searchParams.tier !== "")
     filterTier = searchParams.tier;
 
@@ -245,7 +262,10 @@ export default async function AtsApplicationsPage({
     if (filterStatus !== "ALL" && statusValue !== filterStatus.toUpperCase())
       continue;
 
-    if (filterTier !== "ALL" && (tier || "").toUpperCase() !== filterTier.toUpperCase())
+    if (
+      filterTier !== "ALL" &&
+      (tier || "").toUpperCase() !== filterTier.toUpperCase()
+    )
       continue;
 
     const stageValue = (app.stage || "APPLIED").toUpperCase();
@@ -295,11 +315,18 @@ export default async function AtsApplicationsPage({
       ? searchParams.viewId
       : activeView?.id || "";
 
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
+
   return (
     <div className="flex h-full flex-1 flex-col bg-slate-50">
       <header className="border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Link href="/ats/dashboard" className="hover:text-slate-700 hover:underline">
+          <Link
+            href="/ats/dashboard"
+            className="hover:text-slate-700 hover:underline"
+          >
             ATS
           </Link>
           <span>/</span>
@@ -308,7 +335,9 @@ export default async function AtsApplicationsPage({
 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold text-slate-900">Applications</h1>
+            <h1 className="text-lg font-semibold text-slate-900">
+              Applications
+            </h1>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
@@ -324,7 +353,9 @@ export default async function AtsApplicationsPage({
           <div className="flex flex-col items-end gap-1 text-right text-[11px] text-slate-500">
             <span className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
               Tenant plan:{" "}
-              <span className="ml-1 capitalize">{tenant.planTier ?? "free"}</span>
+              <span className="ml-1 capitalize">
+                {tenant.planTier ?? "free"}
+              </span>
             </span>
             {activeView && (
               <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
@@ -345,7 +376,9 @@ export default async function AtsApplicationsPage({
             method="GET"
           >
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">View</label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                View
+              </label>
               <select
                 name="viewId"
                 defaultValue={currentViewId}
@@ -362,7 +395,9 @@ export default async function AtsApplicationsPage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">Search</label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Search
+              </label>
               <input
                 type="text"
                 name="q"
@@ -373,7 +408,9 @@ export default async function AtsApplicationsPage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">Stage</label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Stage
+              </label>
               <select
                 name="stage"
                 defaultValue={filterStage}
@@ -389,7 +426,9 @@ export default async function AtsApplicationsPage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">Decision</label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Decision
+              </label>
               <select
                 name="status"
                 defaultValue={filterStatus}
@@ -405,7 +444,9 @@ export default async function AtsApplicationsPage({
             </div>
 
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">Tier</label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">
+                Tier
+              </label>
               <select
                 name="tier"
                 defaultValue={filterTier}
@@ -438,10 +479,13 @@ export default async function AtsApplicationsPage({
           <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
             <span>
               Visible applications:{" "}
-              <span className="font-semibold text-slate-800">{allVisibleApplicationIds.length}</span>
+              <span className="font-semibold text-slate-800">
+                {allVisibleApplicationIds.length}
+              </span>
             </span>
             <span className="max-w-xs text-right text-[10px]">
-              Use the filters and saved views to keep your shortlists and interview-ready candidates one click away.
+              Use the filters and saved views to keep your shortlists and
+              interview-ready candidates one click away.
             </span>
           </div>
         </div>
@@ -451,7 +495,7 @@ export default async function AtsApplicationsPage({
           method="POST"
           className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
         >
-          {/* IMPORTANT: include tenantId so the API can enforce tenant-safe writes */}
+          {/* IMPORTANT: This is fine for convenience, but the API MUST ignore this value and derive tenant from scope server-side. */}
           <input type="hidden" name="tenantId" value={tenant.id} />
 
           <input type="hidden" name="scope" value="applications_pipeline" />
