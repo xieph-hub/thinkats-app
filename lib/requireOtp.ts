@@ -10,6 +10,8 @@ export function ensureOtpVerified(callbackUrl: string) {
 
   if (flag === "1") return;
 
-  const target = `/ats/verify?returnTo=${encodeURIComponent(callbackUrl)}`;
-  redirect(target);
+  const safeCallback =
+    callbackUrl && callbackUrl.startsWith("/ats") ? callbackUrl : "/ats";
+
+  redirect(`/ats/verify?returnTo=${encodeURIComponent(safeCallback)}`);
 }
