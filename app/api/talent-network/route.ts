@@ -33,6 +33,11 @@ function slugifySkillName(raw: string): string {
     .replace(/(^-|-$)+/g, "");
 }
 
+// Tag normalization (your Prisma client expects Tag.normalizedName)
+function normaliseTagName(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export async function POST(req: Request) {
   try {
     const tenant = await getResourcinTenant();
@@ -144,7 +149,6 @@ export async function POST(req: Request) {
           },
         });
       } else if (skill.tenantId === tenant.id && skill.name !== name) {
-        // Keep display name fresh for tenant-local skills
         await prisma.skill.update({
           where: { id: skill.id },
           data: { name },
@@ -162,7 +166,6 @@ export async function POST(req: Request) {
           ? raw.yearsExperience
           : null;
 
-      // Use upsert on the composite unique (candidateId, skillId)
       await prisma.candidateSkill.upsert({
         where: {
           candidateId_skillId: {
@@ -192,23 +195,28 @@ export async function POST(req: Request) {
     const sourceLabel = (body.sourceLabel || "Talent Network").trim();
 
     if (sourceLabel) {
+      const tagName = sourceLabel;
+      const tagNormalizedName = normaliseTagName(sourceLabel);
+
+      // IMPORTANT: your Prisma client requires Tag.normalizedName (per build error)
       let sourceTag = await prisma.tag.findFirst({
         where: {
           tenantId: tenant.id,
-          name: sourceLabel,
           kind: "SOURCE",
-        },
+          normalizedName: tagNormalizedName,
+        } as any, // keep this resilient if your TagWhereInput differs slightly
       });
 
       if (!sourceTag) {
         sourceTag = await prisma.tag.create({
           data: {
-            tenant: { connect: { id: tenant.id } }, // ✅ FIX
-            name: sourceLabel,
+            tenant: { connect: { id: tenant.id } },
+            name: tagName,
+            normalizedName: tagNormalizedName, // ✅ FIX (required)
             color: "#2563EB",
             kind: "SOURCE",
             isSystem: false,
-          },
+          } as any,
         });
       }
 
