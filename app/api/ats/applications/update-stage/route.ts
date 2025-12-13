@@ -21,13 +21,13 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
   const applicationId = firstString(formData.get("applicationId")).trim();
+  const jobId = firstString(formData.get("jobId")).trim();
+
   const newStage = firstString(formData.get("stage") || formData.get("newStage"))
     .trim();
   const newStatus = firstString(
     formData.get("status") || formData.get("newStatus"),
   ).trim();
-
-  const jobId = firstString(formData.get("jobId")).trim();
 
   const redirectToRaw = firstString(formData.get("redirectTo")).trim();
   const fallbackPath = jobId ? `/ats/jobs/${jobId}` : "/ats/jobs";
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Load application (tenant-safe via job.tenantId)
+    // Tenant-safe load (enforced through job.tenantId)
     const application = await prisma.jobApplication.findFirst({
       where: {
         id: applicationId,
@@ -62,7 +62,6 @@ export async function POST(request: NextRequest) {
     const toStage = newStage || fromStage;
     const toStatus = newStatus || fromStatus;
 
-    // Update application
     await prisma.jobApplication.update({
       where: { id: application.id },
       data: {
@@ -70,19 +69,18 @@ export async function POST(request: NextRequest) {
         status: toStatus,
         updatedAt: new Date(),
         statusChangedAt: toStatus !== fromStatus ? new Date() : undefined,
-        statusNote: undefined,
       },
     });
 
-    // Logging (best-effort, but run in the same request)
+    // Logging (best-effort)
     const now = new Date();
     const loggingOps: Promise<any>[] = [];
 
-    // ✅ FIX 1: ApplicationEvent must include tenantId + relation connect (NOT applicationId)
+    // ✅ FIX: use tenant relation connect (NOT tenantId) + application connect
     loggingOps.push(
       prisma.applicationEvent.create({
         data: {
-          tenantId: tenant.id,
+          tenant: { connect: { id: tenant.id } },
           application: { connect: { id: application.id } },
           type: "stage_status_change",
           payload: {
@@ -98,12 +96,11 @@ export async function POST(request: NextRequest) {
       }),
     );
 
-    // Activity log (already tenant-scoped)
     loggingOps.push(
       prisma.activityLog.create({
         data: {
           tenantId: tenant.id,
-          actorId: null, // wire later
+          actorId: null,
           entityType: "job_application",
           entityId: application.id,
           action: "stage_status_change",
@@ -124,7 +121,7 @@ export async function POST(request: NextRequest) {
     await Promise.allSettled(loggingOps);
   } catch (err) {
     console.error("Update stage error:", err);
-    // still redirect, so UI doesn't break
+    // still redirect
   }
 
   return NextResponse.redirect(fallbackUrl, { status: 303 });
