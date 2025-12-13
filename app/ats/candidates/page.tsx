@@ -1,6 +1,5 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
@@ -42,23 +41,26 @@ function firstString(value?: string | string[]): string | undefined {
 
 function derivePrimaryTier(apps: any[]): string | null {
   const tiers = new Set<string>();
+
   for (const app of apps) {
     const latest = app.scoringEvents?.[0];
     const tier = (latest?.tier as string | null) ?? null;
     if (tier) tiers.add(tier.toUpperCase());
   }
+
   if (!tiers.size) return null;
 
   const order = ["A", "B", "C", "D"];
   for (const t of order) {
     if (tiers.has(t)) return t;
   }
-  return Array.from(tiers)[0];
+
+  return Array.from(tiers)[0] ?? null;
 }
 
 function deriveLastSeen(apps: any[], fallback: Date): Date {
   if (!apps.length) return fallback;
-  return apps[0].createdAt ?? fallback;
+  return apps[0]?.createdAt ?? fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,38 +115,18 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   }
 
   // -------------------------------------------------------------------------
-  // Stats + distinct options (SAFE QUERIES)
+  // Stats + distinct options + tier map (SAFE QUERIES)
   // -------------------------------------------------------------------------
 
-  const now = new Date();
-  const cutoff30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
   const [
-  totalCandidates,
-  candidates,
-  rawSourcesDistinct,
-  appSourcesDistinct,
-  rawStageDistinct,
-  appsForTier, // ❌ this is “index 6” in TS’ eyes because your Promise.all has only 6 items
-] = await Promise.all([
-  prisma.candidate.count(...),
-  prisma.candidate.findMany(...),
-  prisma.candidate.findMany(...),
-  prisma.jobApplication.findMany(...),
-  prisma.jobApplication.findMany(...),
-  // ❌ missing the query that should produce appsForTier
-]);
-  },
-  select: {
-    candidateId: true,
-    scoringEvents: {
-      select: { tier: true },
-      orderBy: { createdAt: "desc" },
-      take: 1,
-    },
-  },
-}),
-    
+    totalCandidates,
+    candidateSourcesDistinct,
+    appSourcesDistinct,
+    rawStageDistinct,
+    appsForTier,
+  ] = await Promise.all([
+    prisma.candidate.count({ where: { tenantId: tenant.id } }),
+
     prisma.candidate.findMany({
       where: { tenantId: tenant.id },
       select: { source: true },
@@ -157,7 +139,6 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
       distinct: ["source"],
     }),
 
-    // ✅ SAFE: no null / notIn nonsense
     prisma.jobApplication.findMany({
       where: { job: { tenantId: tenant.id } },
       select: { stage: true },
@@ -185,42 +166,46 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   // -------------------------------------------------------------------------
 
   const sourceSet = new Set<string>();
-  for (const r of candidateSourcesDistinct) {
-    const v = (r.source || "").trim();
+
+  for (const r of candidateSourcesDistinct as any[]) {
+    const v = (r?.source || "").toString().trim();
     if (v) sourceSet.add(v);
   }
+
   for (const r of appSourcesDistinct as any[]) {
-    const v = (r.source || "").trim();
+    const v = (r?.source || "").toString().trim();
     if (v) sourceSet.add(v);
   }
+
   const sourceOptions = Array.from(sourceSet).sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: "base" }),
   );
 
   const stageSet = new Set<string>();
   for (const r of rawStageDistinct as any[]) {
-    const v = String(r.stage || "").trim();
+    const v = String(r?.stage || "").trim();
     if (v) stageSet.add(v.toUpperCase());
   }
   const stageOptions = Array.from(stageSet).sort();
 
   // -------------------------------------------------------------------------
-  // Tier aggregation
+  // Tier aggregation (per candidateId)
   // -------------------------------------------------------------------------
 
   const tierAgg = new Map<string, { A: boolean; B: boolean; C: boolean }>();
 
   for (const app of appsForTier as any[]) {
-    const cid = app.candidateId;
+    const cid = app?.candidateId as string | null | undefined;
     if (!cid) continue;
 
-    const tier = app.scoringEvents?.[0]?.tier?.toUpperCase();
+    const tier = app?.scoringEvents?.[0]?.tier?.toUpperCase?.();
     if (!tier) continue;
 
     const entry = tierAgg.get(cid) || { A: false, B: false, C: false };
     if (tier === "A") entry.A = true;
     else if (tier === "B") entry.B = true;
     else if (tier === "C") entry.C = true;
+
     tierAgg.set(cid, entry);
   }
 
@@ -232,7 +217,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   }
 
   // -------------------------------------------------------------------------
-  // Build candidate WHERE
+  // Build candidate WHERE (merge rules safely)
   // -------------------------------------------------------------------------
 
   const candidateWhere: any = { tenantId: tenant.id };
@@ -246,16 +231,20 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
     ];
   }
 
+  // Important: if you set candidateWhere.applications multiple times,
+  // you overwrite previous filters. So we combine them in one "some".
+  const appsSome: any = {};
+
   if (filterSource) {
-    candidateWhere.applications = {
-      some: { source: { equals: filterSource, mode: "insensitive" } },
-    };
+    appsSome.source = { equals: filterSource, mode: "insensitive" };
   }
 
   if (filterStage) {
-    candidateWhere.applications = {
-      some: { stage: { equals: filterStage, mode: "insensitive" } },
-    };
+    appsSome.stage = { equals: filterStage, mode: "insensitive" };
+  }
+
+  if (Object.keys(appsSome).length) {
+    candidateWhere.applications = { some: appsSome };
   }
 
   if (filterTier) {
@@ -289,7 +278,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
     where: candidateWhere,
   });
 
-  const candidates = await prisma.candidate.findMany({
+  const candidateRecords = await prisma.candidate.findMany({
     where: candidateWhere,
     orderBy: { createdAt: "desc" },
     skip: offset,
@@ -310,27 +299,38 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   // Map rows
   // -------------------------------------------------------------------------
 
-  const rows: CandidateRowProps[] = candidates.map((c, i) => {
-    const apps = c.applications as any[];
+  const rows: CandidateRowProps[] = candidateRecords.map((c: any, i: number) => {
+    const apps = (c.applications || []) as any[];
+
     return {
       id: c.id,
       index: offset + i + 1,
+
       fullName: c.fullName,
       email: c.email,
       location: c.location,
       currentCompany: c.currentCompany,
-      createdAt: c.createdAt.toISOString(),
-      tags: c.tags.map((t) => ({ id: t.tag.id, name: t.tag.name })),
-      pipelines: apps.map((a) => ({
+
+      createdAt: new Date(c.createdAt).toISOString(),
+
+      tags: (c.tags || []).map((t: any) => ({
+        id: t.tag.id,
+        name: t.tag.name,
+      })),
+
+      pipelines: apps.map((a: any) => ({
         id: a.id,
         title: a.job?.title ?? "—",
         stage: a.stage,
       })),
+
       primaryTier: derivePrimaryTier(apps),
-      latestScore: apps[0]?.scoringEvents?.[0]?.score ?? null,
-      latestJobTitle: apps[0]?.job?.title ?? "—",
-      latestClient: apps[0]?.job?.clientCompany?.name ?? null,
-      source: apps[0]?.source ?? c.source ?? "",
+      latestScore: apps?.[0]?.scoringEvents?.[0]?.score ?? null,
+
+      latestJobTitle: apps?.[0]?.job?.title ?? "—",
+      latestClient: apps?.[0]?.job?.clientCompany?.name ?? null,
+
+      source: apps?.[0]?.source ?? c.source ?? "",
       lastSeen: deriveLastSeen(apps, c.createdAt).toISOString(),
     };
   });
@@ -339,5 +339,8 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   // Render
   // -------------------------------------------------------------------------
 
+  // If your CandidatesTable supports these props, you can pass them in:
+  // totalCandidates / totalFiltered / sourceOptions / stageOptions / tierCounts / savedViews / activeView
+  // For now, we keep it compatible with your current usage (rows only).
   return <CandidatesTable rows={rows} />;
 }
