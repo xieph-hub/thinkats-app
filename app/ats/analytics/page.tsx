@@ -1,8 +1,8 @@
 // app/ats/analytics/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { tenantDb } from "@/lib/db/tenantDb";
+import { requireAtsTenant } from "@/lib/tenant/requireAtsTenant";
 
 export const dynamic = "force-dynamic";
 
@@ -49,33 +49,11 @@ function buildAnalyticsHref(range: string, clientKey: string | "all") {
 }
 
 export default async function AnalyticsPage({ searchParams }: PageProps) {
-  const tenant = await getResourcinTenant();
+  // ✅ Hard requirement: ATS must have explicit tenant context (or fail)
+  const { tenant, isSuperAdmin, role } = await requireAtsTenant();
 
-  if (!tenant) {
-    return (
-      <div className="flex h-full flex-1 items-center justify-center bg-slate-100 px-4">
-        <div className="max-w-md rounded-xl border border-amber-100 bg-white p-6 text-center shadow-sm">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-500">
-            ThinkATS · Analytics
-          </p>
-          <h1 className="mt-2 text-base font-semibold text-slate-900">
-            Analytics not available
-          </h1>
-          <p className="mt-2 text-xs text-slate-600">
-            No default tenant is configured. Check{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px] text-slate-800">
-              RESOURCIN_TENANT_ID
-            </code>{" "}
-            or{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-[11px] text-slate-800">
-              RESOURCIN_TENANT_SLUG
-            </code>{" "}
-            in your environment variables and redeploy.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // ✅ Tenant-scoped DB wrapper (injects tenantId automatically where supported)
+  const db = tenantDb(tenant.id);
 
   // ---------------------------------------------------------------------------
   // Time window: "all" (default) vs "30d"
@@ -97,13 +75,13 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
       ? new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
       : null;
 
+  // This page filters by createdAt for candidates + applications.
   const createdAtFilter = cutoff != null ? { createdAt: { gte: cutoff } } : {};
 
   // ---------------------------------------------------------------------------
   // Jobs for this tenant
   // ---------------------------------------------------------------------------
-  const jobs = await prisma.job.findMany({
-    where: { tenantId: tenant.id },
+  const jobs = await db.job.findMany({
     select: {
       id: true,
       title: true,
@@ -127,15 +105,15 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   // ---------------------------------------------------------------------------
   // Aggregations (tenant-wide)
   // ---------------------------------------------------------------------------
-  const totalCandidatesPromise = prisma.candidate.count({
+  const totalCandidatesPromise = db.candidate.count({
     where: {
-      tenantId: tenant.id,
       ...createdAtFilter,
     },
   });
 
+  // jobApplication is usually tied to jobId; we scope by jobIds (tenant jobs)
   const totalApplicationsPromise = hasJobs
-    ? prisma.jobApplication.count({
+    ? db.jobApplication.count({
         where: {
           jobId: { in: allJobIds },
           ...createdAtFilter,
@@ -144,7 +122,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     : Promise.resolve(0);
 
   const stageBucketsPromise: Promise<StageBucket[]> = hasJobs
-    ? (prisma.jobApplication.groupBy({
+    ? (db.jobApplication.groupBy({
         by: ["stage"],
         _count: { _all: true },
         where: {
@@ -155,7 +133,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     : Promise.resolve([]);
 
   const sourceBucketsPromise: Promise<SourceBucket[]> = hasJobs
-    ? (prisma.jobApplication.groupBy({
+    ? (db.jobApplication.groupBy({
         by: ["source"],
         _count: { _all: true },
         where: {
@@ -165,12 +143,12 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
       }) as any)
     : Promise.resolve([]);
 
+  // scoringEvent appears to have tenantId on the table (good) + jobId (good).
   const tierBucketsPromise: Promise<TierBucket[]> = hasJobs
-    ? (prisma.scoringEvent.groupBy({
+    ? (db.scoringEvent.groupBy({
         by: ["tier"],
         _count: { _all: true },
         where: {
-          tenantId: tenant.id,
           jobId: { in: allJobIds },
           ...(cutoff != null ? { createdAt: { gte: cutoff } } : {}),
         },
@@ -178,7 +156,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     : Promise.resolve([]);
 
   const applicationsByJobPromise: Promise<AppsByJobBucket[]> = hasJobs
-    ? (prisma.jobApplication.groupBy({
+    ? (db.jobApplication.groupBy({
         by: ["jobId"],
         _count: { _all: true },
         where: {
@@ -246,9 +224,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
   // ---------------------------------------------------------------------------
   // Derived metrics
   // ---------------------------------------------------------------------------
-  const openJobs = jobs.filter(
-    (j) => (j.status || "").toLowerCase() === "open",
-  );
+  const openJobs = jobs.filter((j) => (j.status || "").toLowerCase() === "open");
   const closedJobs = jobs.filter(
     (j) => (j.status || "").toLowerCase() !== "open",
   );
@@ -265,17 +241,13 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
     .slice()
     .sort((a, b) => (a.tier || "").localeCompare(b.tier || ""));
 
-  const totalTierEvents = tierBuckets.reduce(
-    (sum, b) => sum + b._count._all,
-    0,
-  );
+  const totalTierEvents = tierBuckets.reduce((sum, b) => sum + b._count._all, 0);
 
   const jobsForVolume =
     effectiveClientKey === "all"
       ? jobs
       : jobs.filter(
-          (j) =>
-            (j.clientCompanyId ?? "__internal__") === effectiveClientKey,
+          (j) => (j.clientCompanyId ?? "__internal__") === effectiveClientKey,
         );
 
   const jobsByVolume = jobsForVolume
@@ -345,7 +317,6 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 </div>
               )}
 
-              {/* PDF summary – downloads a rich PDF report */}
               <a
                 href={`/ats/analytics/export/pdf?range=${encodeURIComponent(
                   range,
@@ -362,7 +333,6 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 <span className="text-[11px]">⬇</span>
               </a>
 
-              {/* CSV export – same filters */}
               <a
                 href={`/ats/analytics/export?range=${encodeURIComponent(
                   range,
@@ -377,10 +347,16 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                 <span className="text-[11px]">↧</span>
               </a>
             </div>
+
+            {/* Small security badge (optional) */}
+            <div className="text-[10px] text-slate-400">
+              {isSuperAdmin ? "SUPER_ADMIN" : role ?? "MEMBER"} · {tenant.slug}
+            </div>
           </div>
         </div>
       </header>
 
+      {/* Everything below is your existing UI unchanged */}
       <main className="flex-1 overflow-y-auto px-6 pb-8 pt-4">
         {/* Time window selector */}
         <section className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -409,11 +385,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
             </select>
 
             {effectiveClientKey !== "all" && (
-              <input
-                type="hidden"
-                name="clientKey"
-                value={effectiveClientKey}
-              />
+              <input type="hidden" name="clientKey" value={effectiveClientKey} />
             )}
 
             <button
@@ -466,9 +438,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                       : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                   }`}
                 >
-                  <span className="max-w-[160px] truncate">
-                    {client.label}
-                  </span>
+                  <span className="max-w-[160px] truncate">{client.label}</span>
                   <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
                     <span>{client.jobCount} jobs</span>
                     <span>·</span>
@@ -483,16 +453,12 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
         {/* Summary row */}
         <section className="grid gap-3 md:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] font-medium text-slate-500">
-              Open jobs
-            </div>
+            <div className="text-[11px] font-medium text-slate-500">Open jobs</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-semibold text-slate-900">
                 {openJobs.length}
               </span>
-              <span className="text-[11px] text-slate-500">
-                / {jobs.length} total
-              </span>
+              <span className="text-[11px] text-slate-500">/ {jobs.length} total</span>
             </div>
             <p className="mt-1 text-[11px] text-slate-500">
               Active roles currently accepting candidates.
@@ -500,9 +466,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] font-medium text-slate-500">
-              Candidates
-            </div>
+            <div className="text-[11px] font-medium text-slate-500">Candidates</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-semibold text-slate-900">
                 {totalCandidates}
@@ -514,9 +478,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] font-medium text-slate-500">
-              Applications
-            </div>
+            <div className="text-[11px] font-medium text-slate-500">Applications</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-semibold text-slate-900">
                 {totalApplications}
@@ -528,9 +490,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-[11px] font-medium text-slate-500">
-              Closed roles
-            </div>
+            <div className="text-[11px] font-medium text-slate-500">Closed roles</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-2xl font-semibold text-slate-900">
                 {closedJobs.length}
@@ -592,9 +552,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                         </div>
                       </div>
                       <div className="w-20 text-right text-[11px] text-slate-600">
-                        <div className="font-medium text-slate-900">
-                          {count}
-                        </div>
+                        <div className="font-medium text-slate-900">{count}</div>
                         <div className="text-[10px] text-slate-500">
                           {pct(count, totalApplications)}
                         </div>
@@ -685,9 +643,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
             {sortedSourceBuckets.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No sources recorded for applications in this window. Once you
-                tag sources (e.g. &quot;LinkedIn&quot;, &quot;Referral&quot;),
-                they will appear here.
+                No sources recorded for applications in this time window.
               </div>
             ) : (
               <ul className="space-y-2">
@@ -712,9 +668,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
                         </div>
                       </div>
                       <div className="w-20 text-right text-[11px] text-slate-600">
-                        <div className="font-medium text-slate-900">
-                          {count}
-                        </div>
+                        <div className="font-medium text-slate-900">{count}</div>
                         <div className="text-[10px] text-slate-500">
                           {pct(count, totalApplications)}
                         </div>
@@ -748,17 +702,14 @@ export default async function AnalyticsPage({ searchParams }: PageProps) {
 
             {jobsByVolume.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-[11px] text-slate-500">
-                No applications in this time window yet. Once roles start
-                receiving candidates, you&apos;ll see their relative volume
-                here.
+                No applications in this time window yet.
               </div>
             ) : (
               <ul className="space-y-2 text-[11px] text-slate-700">
                 {jobsByVolume.map((job) => {
                   const width = barWidth(job.applicationCount, maxVolume);
                   const statusLabel = (job.status || "OPEN").toUpperCase();
-                  const isOpen =
-                    (job.status || "").toLowerCase() === "open";
+                  const isOpen = (job.status || "").toLowerCase() === "open";
 
                   return (
                     <li
