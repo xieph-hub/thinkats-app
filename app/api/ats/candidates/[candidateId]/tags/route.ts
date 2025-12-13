@@ -1,17 +1,27 @@
-// app/api/ats/candidates/[candidateId]/tags/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function redirectToCandidate(req: NextRequest, candidateId: string) {
+  const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
+  return NextResponse.redirect(redirectUrl, { status: 303 });
+}
+
+function getFormString(formData: FormData, key: string) {
+  const v = formData.get(key);
+  return typeof v === "string" ? v.trim() : "";
+}
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { candidateId: string } },
 ) {
   try {
-    const candidateId = params.candidateId;
+    const candidateId = params?.candidateId?.trim();
     if (!candidateId) {
       return NextResponse.json(
         { ok: false, error: "Missing candidateId" },
@@ -19,6 +29,7 @@ export async function POST(
       );
     }
 
+    // Tenant from host context
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -28,23 +39,21 @@ export async function POST(
     }
 
     const formData = await req.formData();
-    const rawTagName = formData.get("tagName");
-    const tagName =
-      typeof rawTagName === "string" ? rawTagName.trim() : "";
+    const tagName = getFormString(formData, "tagName");
 
+    // Empty tag -> just return to candidate page
     if (!tagName) {
-      // Nothing to do — bounce back to candidate page.
-      const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
-      return NextResponse.redirect(redirectUrl, { status: 303 });
+      return redirectToCandidate(req, candidateId);
     }
 
-    // Ensure caller is an authenticated app user (for audit later if needed)
+    // Ensure caller is authenticated (ATS)
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
+      error: userErr,
     } = await supabase.auth.getUser();
 
-    if (!user || !user.email) {
+    if (userErr || !user?.email) {
       return NextResponse.json(
         { ok: false, error: "Unauthenticated" },
         { status: 401 },
@@ -53,23 +62,20 @@ export async function POST(
 
     const email = user.email.toLowerCase();
 
-    // Make sure we have an app-level User record for this email
+    // App-level user row (global)
     const appUser = await prisma.user.upsert({
       where: { email },
       update: { isActive: true },
       create: {
         email,
-        fullName: user.user_metadata?.full_name ?? null,
+        fullName: (user.user_metadata as any)?.full_name ?? null,
         globalRole: "USER",
       },
     });
 
-    // Sanity check candidate belongs to this tenant
+    // Sanity check: candidate must belong to this tenant
     const candidate = await prisma.candidate.findFirst({
-      where: {
-        id: candidateId,
-        tenantId: tenant.id,
-      },
+      where: { id: candidateId, tenantId: tenant.id },
       select: { id: true },
     });
 
@@ -80,11 +86,11 @@ export async function POST(
       );
     }
 
-    // Find or create Tag for this tenant
+    // Find or create tag (tenant-scoped) – case-insensitive match
     let tag = await prisma.tag.findFirst({
       where: {
         tenantId: tenant.id,
-        name: tagName,
+        name: { equals: tagName, mode: "insensitive" },
       },
     });
 
@@ -93,18 +99,18 @@ export async function POST(
         data: {
           tenantId: tenant.id,
           name: tagName,
-          // you can later add color logic here if you like
         },
       });
     }
 
-    // Attach tag to candidate if not already attached
+    // Attach tag to candidate (tenant-scoped). Avoid duplicates safely.
     const existing = await prisma.candidateTag.findFirst({
       where: {
         tenantId: tenant.id,
         candidateId: candidate.id,
         tagId: tag.id,
       },
+      select: { id: true },
     });
 
     if (!existing) {
@@ -116,7 +122,7 @@ export async function POST(
         },
       });
 
-      // Optional: log to ActivityLog for audit trail
+      // Optional audit trail (tenant-scoped)
       await prisma.activityLog.create({
         data: {
           tenantId: tenant.id,
@@ -132,8 +138,7 @@ export async function POST(
       });
     }
 
-    const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
-    return NextResponse.redirect(redirectUrl, { status: 303 });
+    return redirectToCandidate(req, candidateId);
   } catch (err) {
     console.error("Candidate tags POST error:", err);
     return NextResponse.json(
