@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { getAtsTenant } from "@/lib/ats/getAtsTenant";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +21,7 @@ type DashboardStats = {
   interviewsScheduled: number;
 };
 
-async function getDashboardStats(): Promise<DashboardStats> {
-  const tenant = await getResourcinTenant();
-  if (!tenant) throw new Error("No active tenant");
-
-  const tenantId = tenant.id;
-
+async function getDashboardStats(tenantId: string): Promise<DashboardStats> {
   const [
     totalJobs,
     openJobs,
@@ -34,29 +29,19 @@ async function getDashboardStats(): Promise<DashboardStats> {
     totalApplications,
     interviewsScheduled,
   ] = await Promise.all([
-    prisma.job.count({
-      where: { tenantId },
-    }),
+    prisma.job.count({ where: { tenantId } }),
 
-    prisma.job.count({
-      where: { tenantId, status: "open" },
-    }),
+    prisma.job.count({ where: { tenantId, status: "open" } }),
 
-    prisma.candidate.count({
-      where: { tenantId },
-    }),
+    prisma.candidate.count({ where: { tenantId } }),
 
     prisma.jobApplication.count({
-      where: {
-        job: { tenantId },
-      },
+      where: { job: { tenantId } },
     }),
 
     prisma.applicationInterview.count({
       where: {
-        application: {
-          job: { tenantId },
-        },
+        application: { job: { tenantId } },
         status: "SCHEDULED",
       },
     }),
@@ -73,10 +58,10 @@ async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 export default async function AtsDashboardPage() {
-  const tenant = await getResourcinTenant();
-  if (!tenant) notFound();
+  const tenant = await getAtsTenant();
+  if (!tenant) notFound(); // No active ATS tenant selected
 
-  const stats = await getDashboardStats();
+  const stats = await getDashboardStats(tenant.id);
 
   return (
     <div className="p-6">
