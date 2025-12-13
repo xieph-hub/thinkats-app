@@ -327,24 +327,24 @@ model Tag {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String   @map("tenant_id") @db.Uuid
 
-  // Display (what user sees)
   name            String
+  normalizedName  String   @map("normalized_name") @db.Text
 
-  // Canonical (what system enforces)
-  normalizedName  String   @map("normalized_name")
+  color     String?
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  color           String?
-  createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+  kind     TagKind @map("kind") @default(GENERAL)
+  isSystem Boolean @map("is_system") @default(false)
 
-  kind            TagKind  @map("kind") @default(GENERAL)
-  isSystem        Boolean  @map("is_system") @default(false)
-
-  tenant          Tenant         @relation(fields: [tenantId], references: [id])
-  candidates      CandidateTag[]
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  candidates CandidateTag[]
 
   @@map("tags")
-  @@unique([tenantId, normalizedName, kind], name: "tenant_tag_identity")
+
+  // ✅ Best-practice identity (case/whitespace safe)
+  @@unique([tenantId, kind, normalizedName], name: "tenant_kind_normalizedName")
+
   @@index([tenantId, kind], map: "idx_tags_tenant_kind")
   @@index([tenantId, normalizedName], map: "idx_tags_tenant_normalized_name")
 }
