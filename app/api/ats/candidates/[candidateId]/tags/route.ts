@@ -5,9 +5,13 @@ import { getResourcinTenant } from "@/lib/tenant";
 import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function normalizeTagName(input: string) {
-  return input.trim().toLowerCase().replace(/\s+/g, " ");
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 export async function POST(
@@ -34,13 +38,14 @@ export async function POST(
     const formData = await req.formData();
     const rawTagName = formData.get("tagName");
     const tagName = typeof rawTagName === "string" ? rawTagName.trim() : "";
+    const normalizedName = tagName ? normalizeTagName(tagName) : "";
 
-    if (!tagName) {
+    if (!normalizedName) {
       const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
       return NextResponse.redirect(redirectUrl, { status: 303 });
     }
 
-    // Ensure caller is authenticated (future audit trail)
+    // Ensure caller is authenticated
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
@@ -55,7 +60,7 @@ export async function POST(
 
     const email = user.email.toLowerCase();
 
-    // Ensure app-level User row exists
+    // Ensure app-level User record
     const appUser = await prisma.user.upsert({
       where: { email },
       update: { isActive: true },
@@ -66,7 +71,7 @@ export async function POST(
       },
     });
 
-    // Candidate must belong to tenant
+    // Sanity check candidate belongs to this tenant
     const candidate = await prisma.candidate.findFirst({
       where: { id: candidateId, tenantId: tenant.id },
       select: { id: true },
@@ -79,48 +84,46 @@ export async function POST(
       );
     }
 
-    const normalizedName = normalizeTagName(tagName);
-
-    // ✅ Atomic + concurrency-safe tag create/get
+    // ✅ Best practice: atomic upsert on (tenantId, kind, normalizedName)
     const tag = await prisma.tag.upsert({
       where: {
-        tenantId_normalizedName_kind: {
+        tenant_kind_normalizedName: {
           tenantId: tenant.id,
-          normalizedName,
           kind: "GENERAL",
+          normalizedName,
         },
       },
       update: {
-        // If user typed different casing, keep display name fresh
+        // Keep "display name" fresh if someone typed a nicer casing later
         name: tagName,
+        updatedAt: new Date(),
       },
       create: {
         tenantId: tenant.id,
+        kind: "GENERAL",
         name: tagName,
         normalizedName,
-        kind: "GENERAL",
       },
     });
 
-    // Link tag → candidate (safe by unique constraint)
-    const existing = await prisma.candidateTag.findFirst({
+    // Attach tag if not already attached (unique constraint on candidateId+tagId)
+    await prisma.candidateTag.upsert({
       where: {
+        candidateId_tagId: {
+          candidateId: candidate.id,
+          tagId: tag.id,
+        },
+      },
+      update: {},
+      create: {
         tenantId: tenant.id,
         candidateId: candidate.id,
         tagId: tag.id,
       },
-      select: { id: true },
     });
 
-    if (!existing) {
-      await prisma.candidateTag.create({
-        data: {
-          tenantId: tenant.id,
-          candidateId: candidate.id,
-          tagId: tag.id,
-        },
-      });
-
+    // Activity log (best-effort; don’t fail tag attach if logging fails)
+    try {
       await prisma.activityLog.create({
         data: {
           tenantId: tenant.id,
@@ -128,14 +131,11 @@ export async function POST(
           entityType: "candidate",
           entityId: candidate.id,
           action: "tag_added",
-          metadata: {
-            tagId: tag.id,
-            tagName: tag.name,
-            normalizedName: tag.normalizedName,
-            kind: tag.kind,
-          },
+          metadata: { tagId: tag.id, tagName: tag.name },
         },
       });
+    } catch (e) {
+      console.warn("ActivityLog create failed (non-blocking):", e);
     }
 
     const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
