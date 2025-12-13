@@ -1,57 +1,47 @@
 // lib/auth/tenantAccess.ts
-import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
-import { getHostContext } from "@/lib/host";
 
 /**
- * Canonical tenant selection rules (until you build a tenant switcher):
- * - If on tenant host (slug.thinkats.com): force that tenant
- * - Else (primary host thinkats.com): use user's primary tenant
- * - Super admin: can see everything on primary host, but on tenant host still forced
+ * Canonical tenant scope for the current server request.
+ * - Super admin: all tenants (returns null meaning "no restriction")
+ * - Normal user: returns allowed tenantIds
  */
-export async function getAtsTenantScope() {
+export async function getAllowedTenantIdsForRequest(): Promise<{
+  isSuperAdmin: boolean;
+  allowedTenantIds: string[] | null;
+}> {
   const ctx = await getServerUser();
-  if (!ctx?.user?.id) redirect("/login?returnTo=/ats");
 
-  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
-
-  const isSuperAdmin = !!ctx.isSuperAdmin;
-  const tenantRoles = ctx.tenantRoles || [];
-
-  // Tenant host: force tenant from host (unless missing / unknown => deny)
-  if (!isPrimaryHost && tenantSlugFromHost) {
-    const match = tenantRoles.find((r) => r.tenantSlug === tenantSlugFromHost);
-
-    if (!match && !isSuperAdmin) {
-      redirect("/access-denied?reason=tenant_mismatch");
-    }
-
-    // On tenant host, even super admin should be scoped to that tenant UI context
-    const forcedTenantId = match?.tenantId ?? null;
-    return {
-      isSuperAdmin,
-      activeTenantId: forcedTenantId,
-      allowedTenantIds: forcedTenantId ? [forcedTenantId] : [],
-    };
+  if (!ctx?.user?.id) {
+    // Not logged in: no access
+    return { isSuperAdmin: false, allowedTenantIds: [] };
   }
 
-  // Primary host:
-  if (isSuperAdmin) {
-    // super admin can see cross-tenant in admin views if desired
-    const allTenantIds = Array.from(new Set(tenantRoles.map((r) => r.tenantId)));
-    return {
-      isSuperAdmin,
-      activeTenantId: ctx.primaryTenantId ?? (allTenantIds[0] ?? null),
-      allowedTenantIds: allTenantIds,
-    };
+  if (ctx.isSuperAdmin) {
+    // No tenant restriction for super admins
+    return { isSuperAdmin: true, allowedTenantIds: null };
   }
 
-  // Normal user on primary host: keep it simple — primary tenant only
-  const activeTenantId = ctx.primaryTenantId ?? (tenantRoles[0]?.tenantId ?? null);
+  const allowedTenantIds =
+    (ctx.tenantRoles || [])
+      .map((r) => r.tenantId)
+      .filter(Boolean) || [];
 
-  return {
-    isSuperAdmin,
-    activeTenantId,
-    allowedTenantIds: activeTenantId ? [activeTenantId] : [],
-  };
+  return { isSuperAdmin: false, allowedTenantIds };
+}
+
+/**
+ * Convenience helper: throw/deny when user has no tenants.
+ */
+export async function requireAllowedTenantIdsForRequest(): Promise<{
+  isSuperAdmin: boolean;
+  allowedTenantIds: string[] | null;
+}> {
+  const scope = await getAllowedTenantIdsForRequest();
+
+  if (!scope.isSuperAdmin && (!scope.allowedTenantIds || scope.allowedTenantIds.length === 0)) {
+    return { isSuperAdmin: false, allowedTenantIds: [] };
+  }
+
+  return scope;
 }
