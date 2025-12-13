@@ -244,7 +244,7 @@ model Job {
   clientCompanyId    String?  @map("client_company_id") @db.Uuid
   workMode           String?  @map("work_mode")
   overview           String?
-  aboutClient        String?
+  aboutClient        String?  @map("about_client")
   responsibilities   String?
   requirements       String?
   benefits           String?
