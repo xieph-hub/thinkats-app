@@ -1,23 +1,26 @@
 // lib/jobs.ts
 import { prisma } from "@/lib/prisma";
+import { getAtsTenantScope } from "@/lib/auth/tenantAccess";
 import { getResourcinTenant } from "@/lib/tenant";
-import { getAllowedTenantIdsForRequest } from "@/lib/auth/tenantAccess";
 
 /**
- * Internal ATS job list for the CURRENT user context.
- * Used by /ats/jobs
+ * ATS: jobs visible for current user (tenant-safe).
+ * - Super admin: returns jobs for activeTenantId (host-based), not “all tenants” by default.
+ *   (Global standard: you only show cross-tenant when you explicitly build that UI.)
  */
-export async function listTenantJobsForCurrentUser() {
-  const { isSuperAdmin, allowedTenantIds } = await getAllowedTenantIdsForRequest();
+export async function listTenantJobsForAts() {
+  const scope = await getAtsTenantScope();
 
-  // Not logged in or no tenant membership
-  if (!isSuperAdmin && (!allowedTenantIds || allowedTenantIds.length === 0)) {
+  if (!scope.activeTenantId) return [];
+
+  // Non-admin must belong to the active tenant
+  if (!scope.isSuperAdmin && scope.allowedTenantIds && !scope.allowedTenantIds.includes(scope.activeTenantId)) {
     return [];
   }
 
   return prisma.job.findMany({
     where: {
-      ...(isSuperAdmin ? {} : { tenantId: { in: allowedTenantIds! } }),
+      tenantId: scope.activeTenantId,
       status: { not: "closed" },
     },
     orderBy: { createdAt: "desc" },
@@ -28,22 +31,16 @@ export async function listTenantJobsForCurrentUser() {
   });
 }
 
-/**
- * Single job + its pipeline (applications, candidates) for ATS.
- * Used by /ats/jobs/[jobId]
- */
-export async function getJobWithPipelineForCurrentUser(jobId: string) {
-  const { isSuperAdmin, allowedTenantIds } = await getAllowedTenantIdsForRequest();
+export async function getJobWithPipelineForAts(jobId: string) {
+  const scope = await getAtsTenantScope();
+  if (!scope.activeTenantId) return null;
 
-  if (!isSuperAdmin && (!allowedTenantIds || allowedTenantIds.length === 0)) {
+  if (!scope.isSuperAdmin && scope.allowedTenantIds && !scope.allowedTenantIds.includes(scope.activeTenantId)) {
     return null;
   }
 
   return prisma.job.findFirst({
-    where: {
-      id: jobId,
-      ...(isSuperAdmin ? {} : { tenantId: { in: allowedTenantIds! } }),
-    },
+    where: { id: jobId, tenantId: scope.activeTenantId },
     include: {
       clientCompany: true,
       applications: {
@@ -55,12 +52,10 @@ export async function getJobWithPipelineForCurrentUser(jobId: string) {
 }
 
 /**
- * Public jobs for Resourcin careers page.
- * Used by /jobs
+ * Public jobs for Resourcin careers page (still fine).
  */
 export async function listPublicJobsForResourcin() {
   const tenant = await getResourcinTenant();
-
   return prisma.job.findMany({
     where: {
       tenantId: tenant.id,
@@ -73,13 +68,8 @@ export async function listPublicJobsForResourcin() {
   });
 }
 
-/**
- * Single public job for careers detail page.
- * Used by /jobs/[jobIdOrSlug]
- */
 export async function getPublicJobBySlugOrId(jobIdOrSlug: string) {
   const tenant = await getResourcinTenant();
-
   return prisma.job.findFirst({
     where: {
       tenantId: tenant.id,
