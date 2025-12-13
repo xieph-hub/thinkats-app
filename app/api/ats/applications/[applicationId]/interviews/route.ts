@@ -11,6 +11,7 @@ export async function POST(
   { params }: { params: { applicationId: string } },
 ) {
   try {
+    // NOTE: you asked to keep this for now; later we’ll replace with host/slug-based tenant resolution
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -35,30 +36,35 @@ export async function POST(
     const locationRaw = formData.get("location");
     const videoUrlRaw = formData.get("videoUrl");
     const notesRaw = formData.get("notes");
+    const statusRaw = formData.get("status"); // ✅ add status support (it was missing)
     const redirectToRaw = formData.get("redirectTo");
 
     const type =
-      typeof typeRaw === "string" && typeRaw.trim()
-        ? typeRaw.trim()
-        : null;
+      typeof typeRaw === "string" && typeRaw.trim() ? typeRaw.trim() : null;
+
     const location =
       typeof locationRaw === "string" && locationRaw.trim()
         ? locationRaw.trim()
         : null;
+
     const videoUrl =
       typeof videoUrlRaw === "string" && videoUrlRaw.trim()
         ? videoUrlRaw.trim()
         : null;
+
     const notes =
-      typeof notesRaw === "string" && notesRaw.trim()
-        ? notesRaw.trim()
-        : null;
+      typeof notesRaw === "string" && notesRaw.trim() ? notesRaw.trim() : null;
+
+    const status =
+      typeof statusRaw === "string" && statusRaw.trim()
+        ? statusRaw.trim()
+        : "SCHEDULED";
 
     let scheduledAt: Date | null = null;
     if (typeof scheduledAtRaw === "string" && scheduledAtRaw.trim()) {
-      // scheduledAtRaw from <input type="datetime-local"> (local time)
+      // from <input type="datetime-local"> (interpreted by JS Date in local/server tz)
       const parsed = new Date(scheduledAtRaw);
-      if (!isNaN(parsed.getTime())) {
+      if (!Number.isNaN(parsed.getTime())) {
         scheduledAt = parsed;
       }
     }
@@ -78,10 +84,21 @@ export async function POST(
       }
     }
 
+    // Load application + verify tenant scope (by job.tenantId)
     const application = await prisma.jobApplication.findFirst({
       where: { id: applicationId },
-      include: {
-        job: true,
+      select: {
+        id: true,
+        tenantId: true, // ✅ needed for tenant-scoped interview create
+        candidateId: true,
+        fullName: true,
+        email: true,
+        job: {
+          select: {
+            id: true,
+            tenantId: true,
+          },
+        },
       },
     });
 
@@ -136,27 +153,28 @@ export async function POST(
       appUserId = appUser.id;
     }
 
-    // Create interview
-    // Create interview (FIXED: use relation connect, not applicationId)
-const interview = await prisma.applicationInterview.create({
-  data: {
-    application: { connect: { id: application.id } }, // ✅ instead of applicationId
+    // ✅ Create interview (FIXED: tenant required + application relation)
+    const interview = await prisma.applicationInterview.create({
+      data: {
+        // tenant is REQUIRED in your schema
+        tenant: { connect: { id: application.tenantId } },
 
-    scheduledAt,
+        // application relation (do not pass applicationId directly)
+        application: { connect: { id: application.id } },
 
-    // keep these nullable-safe so Prisma types + DB constraints behave
-    type: type || null,
-    location: location || null,
-    videoUrl: videoUrl || null,
+        scheduledAt,
 
-    status: status || "SCHEDULED",
-    durationMins: typeof durationMins === "number" ? durationMins : null,
-    notes: notes || null,
-  },
-});
+        type,
+        location,
+        videoUrl,
 
-    // Participants
-    // Candidate
+        status,
+        durationMins,
+        notes,
+      },
+    });
+
+    // Participants (Candidate)
     if (application.fullName || application.email) {
       await prisma.interviewParticipant.create({
         data: {
@@ -168,7 +186,7 @@ const interview = await prisma.applicationInterview.create({
       });
     }
 
-    // Host / interviewer (current user)
+    // Participants (Host / interviewer)
     if (appUserEmail) {
       await prisma.interviewParticipant.create({
         data: {
@@ -196,6 +214,7 @@ const interview = await prisma.applicationInterview.create({
           videoUrl,
           durationMins,
           hasNotes: Boolean(notes),
+          status,
         },
       },
     });
