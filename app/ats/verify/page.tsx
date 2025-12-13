@@ -1,12 +1,52 @@
 // app/ats/verify/page.tsx
 import type { Metadata } from "next";
-import VerifyOtpPageClient from "./VerifyOtpPageClient";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import OtpVerifyForm from "./OtpVerifyForm";
+import { getServerUser } from "@/lib/auth/getServerUser";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Verify access",
   description: "Enter your one-time code to access the ATS workspace.",
 };
 
-export default function VerifyOtpPage() {
-  return <VerifyOtpPageClient />;
+export default async function VerifyOtpPage({
+  searchParams,
+}: {
+  searchParams?: { returnTo?: string };
+}) {
+  const cookieStore = cookies();
+  const alreadyOk = cookieStore.get("thinkats_otp_ok")?.value === "1";
+
+  const returnTo =
+    searchParams?.returnTo && searchParams.returnTo.startsWith("/ats")
+      ? searchParams.returnTo
+      : "/ats";
+
+  if (alreadyOk) {
+    redirect(returnTo);
+  }
+
+  const ctx = await getServerUser();
+  const email = ctx?.user?.email ?? undefined;
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            ThinkATS
+          </p>
+          <h1 className="text-xl font-semibold text-slate-900">
+            Verify it&apos;s really you
+          </h1>
+          <p className="text-xs text-slate-600">
+            Enter the one-time code sent to your email to continue.
+          </p>
+        </div>
+
+        <OtpVerifyForm email={email} returnTo={returnTo} />
+      </div>
+    </main>
+  );
 }
