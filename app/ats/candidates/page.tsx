@@ -1,8 +1,7 @@
 // app/ats/candidates/page.tsx
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { tenantDb } from "@/lib/db/tenantDb";
+import { requireAtsTenant } from "@/lib/tenant/requireAtsTenant";
 import CandidatesTable, { type CandidateRowProps } from "./CandidatesTable";
 
 export const dynamic = "force-dynamic";
@@ -68,8 +67,10 @@ function deriveLastSeen(apps: any[], fallback: Date): Date {
 // ---------------------------------------------------------------------------
 
 export default async function CandidatesPage({ searchParams = {} }: PageProps) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) notFound();
+  // 🔐 Resolve tenant + user (SUPER_ADMIN override handled here)
+  const { tenant } = await requireAtsTenant();
+  // 🔐 Create tenant-scoped Prisma client
+  const db = tenantDb(tenant.id);
 
   // -------------------------------------------------------------------------
   // URL filters
@@ -87,12 +88,11 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const activeViewId = firstString(searchParams.view);
 
   // -------------------------------------------------------------------------
-  // Saved views
-  // -------------------------------------------------------------------------
+  // Saved views (tenant-scoped via tenantDb)
+// -------------------------------------------------------------------------
 
-  const savedViews = await prisma.savedView.findMany({
+  const savedViews = await db.savedView.findMany({
     where: {
-      tenantId: tenant.id,
       scope: "candidates",
     },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
@@ -115,8 +115,8 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   }
 
   // -------------------------------------------------------------------------
-  // Stats + distinct options + tier map (SAFE QUERIES)
-  // -------------------------------------------------------------------------
+  // Stats + distinct options + tier map (SAFE + tenantDb-scoped)
+// -------------------------------------------------------------------------
 
   const [
     totalCandidates,
@@ -125,29 +125,21 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
     rawStageDistinct,
     appsForTier,
   ] = await Promise.all([
-    prisma.candidate.count({ where: { tenantId: tenant.id } }),
-
-    prisma.candidate.findMany({
-      where: { tenantId: tenant.id },
+    db.candidate.count({}), // tenantId injected
+    db.candidate.findMany({
       select: { source: true },
       distinct: ["source"],
     }),
-
-    prisma.jobApplication.findMany({
-      where: { job: { tenantId: tenant.id } },
+    db.jobApplication.findMany({
       select: { source: true },
       distinct: ["source"],
     }),
-
-    prisma.jobApplication.findMany({
-      where: { job: { tenantId: tenant.id } },
+    db.jobApplication.findMany({
       select: { stage: true },
       distinct: ["stage"],
     }),
-
-    prisma.jobApplication.findMany({
+    db.jobApplication.findMany({
       where: {
-        job: { tenantId: tenant.id },
         candidateId: { not: null },
       },
       select: {
@@ -163,7 +155,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
 
   // -------------------------------------------------------------------------
   // Normalize sources + stages (JS-level sanitisation)
-  // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 
   const sourceSet = new Set<string>();
 
@@ -190,7 +182,7 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
 
   // -------------------------------------------------------------------------
   // Tier aggregation (per candidateId)
-  // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
 
   const tierAgg = new Map<string, { A: boolean; B: boolean; C: boolean }>();
 
@@ -217,10 +209,10 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   }
 
   // -------------------------------------------------------------------------
-  // Build candidate WHERE (merge rules safely)
-  // -------------------------------------------------------------------------
+  // Build candidate WHERE (tenant is injected by tenantDb)
+// -------------------------------------------------------------------------
 
-  const candidateWhere: any = { tenantId: tenant.id };
+  const candidateWhere: any = {}; // ❗ no tenantId here – tenantDb adds it
 
   if (filterQ) {
     candidateWhere.OR = [
@@ -274,11 +266,11 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const pageSize = 20;
   const offset = (page - 1) * pageSize;
 
-  const totalFiltered = await prisma.candidate.count({
+  const totalFiltered = await db.candidate.count({
     where: candidateWhere,
   });
 
-  const candidateRecords = await prisma.candidate.findMany({
+  const candidateRecords = await db.candidate.findMany({
     where: candidateWhere,
     orderBy: { createdAt: "desc" },
     skip: offset,
@@ -299,48 +291,49 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   // Map rows
   // -------------------------------------------------------------------------
 
-  const rows: CandidateRowProps[] = candidateRecords.map((c: any, i: number) => {
-    const apps = (c.applications || []) as any[];
+  const rows: CandidateRowProps[] = candidateRecords.map(
+    (c: any, i: number) => {
+      const apps = (c.applications || []) as any[];
 
-    return {
-      id: c.id,
-      index: offset + i + 1,
+      return {
+        id: c.id,
+        index: offset + i + 1,
 
-      fullName: c.fullName,
-      email: c.email,
-      location: c.location,
-      currentCompany: c.currentCompany,
+        fullName: c.fullName,
+        email: c.email,
+        location: c.location,
+        currentCompany: c.currentCompany,
 
-      createdAt: new Date(c.createdAt).toISOString(),
+        createdAt: new Date(c.createdAt).toISOString(),
 
-      tags: (c.tags || []).map((t: any) => ({
-        id: t.tag.id,
-        name: t.tag.name,
-      })),
+        tags: (c.tags || []).map((t: any) => ({
+          id: t.tag.id,
+          name: t.tag.name,
+        })),
 
-      pipelines: apps.map((a: any) => ({
-        id: a.id,
-        title: a.job?.title ?? "—",
-        stage: a.stage,
-      })),
+        pipelines: apps.map((a: any) => ({
+          id: a.id,
+          title: a.job?.title ?? "—",
+          stage: a.stage,
+        })),
 
-      primaryTier: derivePrimaryTier(apps),
-      latestScore: apps?.[0]?.scoringEvents?.[0]?.score ?? null,
+        primaryTier: derivePrimaryTier(apps),
+        latestScore: apps?.[0]?.scoringEvents?.[0]?.score ?? null,
 
-      latestJobTitle: apps?.[0]?.job?.title ?? "—",
-      latestClient: apps?.[0]?.job?.clientCompany?.name ?? null,
+        latestJobTitle: apps?.[0]?.job?.title ?? "—",
+        latestClient: apps?.[0]?.job?.clientCompany?.name ?? null,
 
-      source: apps?.[0]?.source ?? c.source ?? "",
-      lastSeen: deriveLastSeen(apps, c.createdAt).toISOString(),
-    };
-  });
+        source: apps?.[0]?.source ?? c.source ?? "",
+        lastSeen: deriveLastSeen(apps, c.createdAt).toISOString(),
+      };
+    },
+  );
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
-  // If your CandidatesTable supports these props, you can pass them in:
-  // totalCandidates / totalFiltered / sourceOptions / stageOptions / tierCounts / savedViews / activeView
-  // For now, we keep it compatible with your current usage (rows only).
+  // You can later pass stats into CandidatesTable if you extend its props:
+  // totalCandidates, totalFiltered, sourceOptions, stageOptions, tierCounts, savedViews, activeView
   return <CandidatesTable rows={rows} />;
 }
