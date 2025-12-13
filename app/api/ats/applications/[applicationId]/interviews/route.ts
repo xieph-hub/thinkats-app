@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: { applicationId: string } },
 ) {
   try {
-    // NOTE: you asked to keep this for now; later we’ll replace with host/slug-based tenant resolution
+    // TEMP: legacy tenant resolution (will be removed later)
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -36,7 +36,7 @@ export async function POST(
     const locationRaw = formData.get("location");
     const videoUrlRaw = formData.get("videoUrl");
     const notesRaw = formData.get("notes");
-    const statusRaw = formData.get("status"); // ✅ add status support (it was missing)
+    const statusRaw = formData.get("status");
     const redirectToRaw = formData.get("redirectTo");
 
     const type =
@@ -62,7 +62,6 @@ export async function POST(
 
     let scheduledAt: Date | null = null;
     if (typeof scheduledAtRaw === "string" && scheduledAtRaw.trim()) {
-      // from <input type="datetime-local"> (interpreted by JS Date in local/server tz)
       const parsed = new Date(scheduledAtRaw);
       if (!Number.isNaN(parsed.getTime())) {
         scheduledAt = parsed;
@@ -84,18 +83,17 @@ export async function POST(
       }
     }
 
-    // Load application + verify tenant scope (by job.tenantId)
+    // Load application + tenant guard
     const application = await prisma.jobApplication.findFirst({
       where: { id: applicationId },
       select: {
         id: true,
-        tenantId: true, // ✅ needed for tenant-scoped interview create
+        tenantId: true,
         candidateId: true,
         fullName: true,
         email: true,
         job: {
           select: {
-            id: true,
             tenantId: true,
           },
         },
@@ -116,33 +114,31 @@ export async function POST(
       );
     }
 
-    // Resolve current app user (interviewer / host) via Supabase session
+    // Resolve current user (interviewer)
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
-      error: userError,
     } = await supabase.auth.getUser();
 
     let appUserId: string | null = null;
     let appUserName: string | null = null;
     let appUserEmail: string | null = null;
 
-    if (!userError && user && user.email) {
-      const email = user.email.toLowerCase();
-      appUserEmail = email;
+    if (user?.email) {
+      appUserEmail = user.email.toLowerCase();
       appUserName =
         (user.user_metadata as any)?.full_name ??
         (user.user_metadata as any)?.name ??
         null;
 
       let appUser = await prisma.user.findUnique({
-        where: { email },
+        where: { email: appUserEmail },
       });
 
       if (!appUser) {
         appUser = await prisma.user.create({
           data: {
-            email,
+            email: appUserEmail,
             fullName: appUserName,
             globalRole: "USER",
             isActive: true,
@@ -153,32 +149,33 @@ export async function POST(
       appUserId = appUser.id;
     }
 
-    // ✅ Create interview (FIXED: tenant required + application relation)
+    // ─────────────────────────────────────────────
+    // CREATE INTERVIEW (tenant + application scoped)
+    // ─────────────────────────────────────────────
     const interview = await prisma.applicationInterview.create({
       data: {
-        // tenant is REQUIRED in your schema
         tenant: { connect: { id: application.tenantId } },
-
-        // application relation (do not pass applicationId directly)
         application: { connect: { id: application.id } },
 
         scheduledAt,
-
         type,
         location,
         videoUrl,
-
         status,
         durationMins,
         notes,
       },
     });
 
-    // Participants (Candidate)
+    // ─────────────────────────────────────────────
+    // PARTICIPANTS (FIXED: use relation connect)
+    // ─────────────────────────────────────────────
+
+    // Candidate
     if (application.fullName || application.email) {
       await prisma.interviewParticipant.create({
         data: {
-          interviewId: interview.id,
+          interview: { connect: { id: interview.id } },
           name: application.fullName || application.email || "Candidate",
           email: application.email || "",
           role: "Candidate",
@@ -186,11 +183,11 @@ export async function POST(
       });
     }
 
-    // Participants (Host / interviewer)
+    // Interviewer / host
     if (appUserEmail) {
       await prisma.interviewParticipant.create({
         data: {
-          interviewId: interview.id,
+          interview: { connect: { id: interview.id } },
           name: appUserName || appUserEmail,
           email: appUserEmail,
           role: "Interviewer",
@@ -213,8 +210,8 @@ export async function POST(
           location,
           videoUrl,
           durationMins,
-          hasNotes: Boolean(notes),
           status,
+          hasNotes: Boolean(notes),
         },
       },
     });
@@ -224,8 +221,7 @@ export async function POST(
         ? redirectToRaw
         : `/ats/candidates/${application.candidateId || ""}`;
 
-    const redirectUrl = new URL(redirectTo, req.url);
-    return NextResponse.redirect(redirectUrl, { status: 303 });
+    return NextResponse.redirect(new URL(redirectTo, req.url), { status: 303 });
   } catch (err) {
     console.error("Schedule interview error:", err);
     return NextResponse.json(
