@@ -10,6 +10,26 @@ export const runtime = "nodejs";
 const resendApiKey = process.env.RESEND_API_KEY || "";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
+type QuickSendPayload = {
+  to?: string;
+  toEmail?: string;
+  subject?: string;
+  body?: string;
+  candidateId?: string;
+  jobId?: string;
+  applicationId?: string;
+  templateId?: string;
+};
+
+function asTrimmedString(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function asOptionalId(v: unknown): string | null {
+  const s = asTrimmedString(v);
+  return s.length > 0 ? s : null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const tenant = await getResourcinTenant();
@@ -34,51 +54,17 @@ export async function POST(req: NextRequest) {
     let redirectTo: string | null = null;
 
     if (isJson) {
-      const json = (await req.json().catch(() => null)) as
-        | {
-            to?: string;
-            toEmail?: string;
-            subject?: string;
-            body?: string;
-            candidateId?: string;
-            jobId?: string;
-            applicationId?: string;
-            templateId?: string;
-          }
-        | null;
+      const json = (await req.json().catch(() => null)) as QuickSendPayload | null;
 
       const toRaw = json?.to ?? json?.toEmail ?? "";
-      const subjectRaw = json?.subject ?? "";
-      const bodyRaw = json?.body ?? "";
+      toEmail = asTrimmedString(toRaw).toLowerCase();
+      subject = asTrimmedString(json?.subject);
+      body = asTrimmedString(json?.body);
 
-      toEmail =
-        typeof toRaw === "string" ? toRaw.trim().toLowerCase() : "";
-      subject =
-        typeof subjectRaw === "string" ? subjectRaw.trim() : "";
-      body = typeof bodyRaw === "string" ? bodyRaw.trim() : "";
-
-      candidateId =
-        typeof json?.candidateId === "string" &&
-        json.candidateId.trim().length > 0
-          ? json.candidateId.trim()
-          : null;
-
-      jobId =
-        typeof json?.jobId === "string" && json.jobId.trim().length > 0
-          ? json.jobId.trim()
-          : null;
-
-      applicationId =
-        typeof json?.applicationId === "string" &&
-        json.applicationId.trim().length > 0
-          ? json.applicationId.trim()
-          : null;
-
-      templateId =
-        typeof json?.templateId === "string" &&
-        json.templateId.trim().length > 0
-          ? json.templateId.trim()
-          : null;
+      candidateId = asOptionalId(json?.candidateId);
+      jobId = asOptionalId(json?.jobId);
+      applicationId = asOptionalId(json?.applicationId);
+      templateId = asOptionalId(json?.templateId);
     } else {
       const formData = await req.formData();
 
@@ -86,37 +72,15 @@ export async function POST(req: NextRequest) {
       const subjectRaw = formData.get("subject");
       const bodyRaw = formData.get("body");
 
-      toEmail =
-        typeof toRaw === "string" ? toRaw.trim().toLowerCase() : "";
-      subject =
-        typeof subjectRaw === "string" ? subjectRaw.trim() : "";
-      body =
-        typeof bodyRaw === "string" ? bodyRaw.trim() : "";
+      toEmail = asTrimmedString(toRaw).toLowerCase();
+      subject = asTrimmedString(subjectRaw);
+      body = asTrimmedString(bodyRaw);
 
-      const candidateIdRaw = formData.get("candidateId");
-      const jobIdRaw = formData.get("jobId");
-      const applicationIdRaw = formData.get("applicationId");
-      const templateIdRaw = formData.get("templateId");
-      const redirectToRaw = formData.get("redirectTo");
-
-      candidateId =
-        typeof candidateIdRaw === "string" && candidateIdRaw
-          ? candidateIdRaw
-          : null;
-      jobId =
-        typeof jobIdRaw === "string" && jobIdRaw ? jobIdRaw : null;
-      applicationId =
-        typeof applicationIdRaw === "string" && applicationIdRaw
-          ? applicationIdRaw
-          : null;
-      templateId =
-        typeof templateIdRaw === "string" && templateIdRaw
-          ? templateIdRaw
-          : null;
-      redirectTo =
-        typeof redirectToRaw === "string" && redirectToRaw
-          ? redirectToRaw
-          : null;
+      candidateId = asOptionalId(formData.get("candidateId"));
+      jobId = asOptionalId(formData.get("jobId"));
+      applicationId = asOptionalId(formData.get("applicationId"));
+      templateId = asOptionalId(formData.get("templateId"));
+      redirectTo = asOptionalId(formData.get("redirectTo"));
     }
 
     // Basic validation
@@ -132,14 +96,11 @@ export async function POST(req: NextRequest) {
         redirectTo || (candidateId ? `/ats/candidates/${candidateId}` : "/ats"),
         req.url,
       );
-      url.searchParams.set(
-        "emailError",
-        "To, subject and body are required.",
-      );
+      url.searchParams.set("emailError", "To, subject and body are required.");
       return NextResponse.redirect(url, { status: 303 });
     }
 
-    // Resolve current app user via Supabase session
+    // Resolve current app user via Supabase session (for createdById)
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
@@ -202,19 +163,16 @@ export async function POST(req: NextRequest) {
           html: body.replace(/\n/g, "<br />"),
         });
 
-        // Resend typically returns an { id } on success
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const castResult = result as any;
         providerMessageId = castResult?.id ?? null;
         status = "sent";
-      } catch (err: any) {
-        console.error("Email provider send error:", err);
+      } catch (e: any) {
+        console.error("Email provider send error:", e);
         status = "failed";
-        errorMessage =
-          err?.message || "Failed to send via email provider.";
+        errorMessage = e?.message || "Failed to send via email provider.";
       }
     } else {
-      // No provider configured – keep record but mark as failed
       status = "failed";
       errorMessage =
         "RESEND_API_KEY not configured; email was not actually sent.";
@@ -225,7 +183,7 @@ export async function POST(req: NextRequest) {
       data: {
         tenantId: tenant.id,
         templateId,
-        templateName, // <– chips can now safely use this
+        templateName,
         toEmail,
         candidateId,
         jobId,
@@ -235,16 +193,20 @@ export async function POST(req: NextRequest) {
         errorMessage,
         providerMessageId,
         createdById: appUser?.id ?? null,
-        // sentAt has default now()
       },
     });
 
-    // If tied to a specific application, log an application event
+    // If tied to a specific application, log an application event (tenant-scoped)
     if (applicationId) {
       try {
         await prisma.applicationEvent.create({
           data: {
-            applicationId,
+            // ✅ Tenant-scoped by design
+            tenant: { connect: { id: tenant.id } },
+
+            // ✅ Must be relation connect (NOT applicationId scalar)
+            application: { connect: { id: applicationId } },
+
             type: "email_sent",
             payload: {
               templateId,
@@ -257,10 +219,7 @@ export async function POST(req: NextRequest) {
           },
         });
       } catch (eventErr) {
-        console.error(
-          "Failed to write application email_sent event:",
-          eventErr,
-        );
+        console.error("Failed to write application email_sent event:", eventErr);
       }
     }
 
@@ -281,8 +240,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (err) {
     console.error("ATS email/send – unexpected error:", err);
-
-    // Best-effort JSON error; if this was a form, the browser will just show a generic error anyway
     return NextResponse.json(
       { ok: false, error: "Unexpected error sending email" },
       { status: 500 },
