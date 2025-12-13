@@ -5,8 +5,8 @@ import { getResourcinTenant } from "@/lib/tenant";
 
 type IncomingSkill = {
   name: string;
-  proficiency?: number;      // 1–5
-  yearsExperience?: number;  // integer years
+  proficiency?: number; // 1–5
+  yearsExperience?: number; // integer years
 };
 
 type TalentNetworkPayload = {
@@ -20,7 +20,7 @@ type TalentNetworkPayload = {
   headline?: string;
   summary?: string;
   skills?: IncomingSkill[];
-  sourceLabel?: string;      // e.g. "Talent Network", "Sourcing Drive – Lagos"
+  sourceLabel?: string; // e.g. "Talent Network", "Sourcing Drive – Lagos"
 };
 
 function normaliseSkillName(raw: string): string {
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     if (!candidate) {
       candidate = await prisma.candidate.create({
         data: {
-          tenantId: tenant.id,
+          tenant: { connect: { id: tenant.id } },
           fullName,
           email,
           phone: body.phone?.trim() || null,
@@ -101,8 +101,7 @@ export async function POST(req: Request) {
           location: body.location?.trim() || candidate.location,
           linkedinUrl: body.linkedinUrl?.trim() || candidate.linkedinUrl,
           currentTitle: body.currentTitle?.trim() || candidate.currentTitle,
-          currentCompany:
-            body.currentCompany?.trim() || candidate.currentCompany,
+          currentCompany: body.currentCompany?.trim() || candidate.currentCompany,
           source: candidate.source ?? "talent_network",
         },
       });
@@ -124,22 +123,16 @@ export async function POST(req: Request) {
       let skill = await prisma.skill.findFirst({
         where: {
           OR: [
-            {
-              tenantId: tenant.id,
-              normalizedName,
-            },
-            {
-              tenantId: null,
-              normalizedName,
-            },
+            { tenantId: tenant.id, normalizedName },
+            { tenantId: null, normalizedName },
           ],
         },
       });
 
       if (!skill) {
-        // Create tenant-scoped skill via relation (tenant), not raw tenantId
         skill = await prisma.skill.create({
           data: {
+            tenant: { connect: { id: tenant.id } },
             name,
             normalizedName,
             slug: skillSlug,
@@ -148,9 +141,6 @@ export async function POST(req: Request) {
             externalSource: null,
             externalId: null,
             isGlobal: false,
-            tenant: {
-              connect: { id: tenant.id },
-            },
           },
         });
       } else if (skill.tenantId === tenant.id && skill.name !== name) {
@@ -162,8 +152,7 @@ export async function POST(req: Request) {
       }
 
       const proficiency =
-        typeof raw.proficiency === "number" &&
-        Number.isFinite(raw.proficiency)
+        typeof raw.proficiency === "number" && Number.isFinite(raw.proficiency)
           ? raw.proficiency
           : null;
 
@@ -182,9 +171,9 @@ export async function POST(req: Request) {
           },
         },
         create: {
-          tenantId: tenant.id,
-          candidateId: candidate.id,
-          skillId: skill.id,
+          tenant: { connect: { id: tenant.id } },
+          candidate: { connect: { id: candidate.id } },
+          skill: { connect: { id: skill.id } },
           proficiency,
           yearsExperience,
           source: "talent_network",
@@ -203,7 +192,6 @@ export async function POST(req: Request) {
     const sourceLabel = (body.sourceLabel || "Talent Network").trim();
 
     if (sourceLabel) {
-      // Respect TagKind and the (tenantId, name, kind) unique
       let sourceTag = await prisma.tag.findFirst({
         where: {
           tenantId: tenant.id,
@@ -215,7 +203,7 @@ export async function POST(req: Request) {
       if (!sourceTag) {
         sourceTag = await prisma.tag.create({
           data: {
-            tenantId: tenant.id,
+            tenant: { connect: { id: tenant.id } }, // ✅ FIX
             name: sourceLabel,
             color: "#2563EB",
             kind: "SOURCE",
@@ -235,9 +223,9 @@ export async function POST(req: Request) {
       if (!existingCandidateTag) {
         await prisma.candidateTag.create({
           data: {
-            tenantId: tenant.id,
-            candidateId: candidate.id,
-            tagId: sourceTag.id,
+            tenant: { connect: { id: tenant.id } },
+            candidate: { connect: { id: candidate.id } },
+            tag: { connect: { id: sourceTag.id } },
           },
         });
       }
