@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
 
   const jobIdRaw = formData.get("jobId");
-  const jobId = typeof jobIdRaw === "string" ? jobIdRaw : "";
+  const jobId = typeof jobIdRaw === "string" ? jobIdRaw.trim() : "";
 
   // Accept either applicationIds (multi) or applicationId
   const idsMulti = formData.getAll("applicationIds");
@@ -28,8 +28,8 @@ export async function POST(request: NextRequest) {
       applicationIds.push(v.trim());
     }
   }
-  if (applicationIds.length === 0 && typeof singleId === "string") {
-    applicationIds.push(singleId);
+  if (applicationIds.length === 0 && typeof singleId === "string" && singleId.trim()) {
+    applicationIds.push(singleId.trim());
   }
 
   const stageRaw = formData.get("stage") || formData.get("newStage");
@@ -81,8 +81,9 @@ export async function POST(request: NextRequest) {
     // Logging (best-effort)
     const now = new Date();
 
-    // application_events
+    // application_events (tenant-scoped rows required)
     const appEventsData = applications.map((app) => ({
+      tenantId: tenant.id, // ✅ REQUIRED by your schema
       applicationId: app.id,
       type: "bulk_stage_change",
       payload: {
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
         source: "pipeline_bulk_move",
         movedAt: now.toISOString(),
       },
+      createdAt: now,
     }));
 
     if (appEventsData.length) {
