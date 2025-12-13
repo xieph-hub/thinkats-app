@@ -1,17 +1,54 @@
 // app/api/ats/applications/[applicationId]/update/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getAtsTenantScope } from "@/lib/auth/tenantAccess";
+import { getServerUser } from "@/lib/auth/getServerUser";
+import { cookies } from "next/headers";
+import { OTP_COOKIE_NAME } from "@/lib/requireOtp";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-type ApplicationStatus = "applied" | "screening" | "interview" | "offer" | "rejected";
+type ApplicationStatus =
+  | "APPLIED"
+  | "SCREENING"
+  | "INTERVIEW"
+  | "OFFER"
+  | "REJECTED"
+  | "ON_HOLD"
+  | "HIRED"
+  | "WITHDRAWN";
+
+function normalizeStatus(input: unknown): ApplicationStatus | null {
+  if (typeof input !== "string") return null;
+  const raw = input.trim();
+  if (!raw) return null;
+
+  const upper = raw.toUpperCase();
+
+  // Accept common variants
+  const map: Record<string, ApplicationStatus> = {
+    APPLIED: "APPLIED",
+    SCREEN: "SCREENING",
+    SCREENING: "SCREENING",
+    INTERVIEW: "INTERVIEW",
+    OFFER: "OFFER",
+    REJECTED: "REJECTED",
+    ON_HOLD: "ON_HOLD",
+    ONHOLD: "ON_HOLD",
+    HIRED: "HIRED",
+    WITHDRAWN: "WITHDRAWN",
+  };
+
+  return map[upper] ?? null;
+}
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { applicationId: string } },
 ) {
   try {
-    const applicationId = params.applicationId;
+    const applicationId = params.applicationId?.trim();
 
     if (!applicationId) {
       return NextResponse.json(
@@ -20,71 +57,121 @@ export async function PATCH(
       );
     }
 
+    // ---------------------------------------------------------------------
+    // 1) Auth (server-side): must be logged in
+    // ---------------------------------------------------------------------
+    const ctx = await getServerUser();
+    if (!ctx?.user?.id) {
+      return NextResponse.json(
+        { error: "unauthenticated" },
+        { status: 401 },
+      );
+    }
+
+    // ---------------------------------------------------------------------
+    // 2) OTP (server-side): ATS APIs should require OTP too
+    // ---------------------------------------------------------------------
+    const otpOk = cookies().get(OTP_COOKIE_NAME)?.value === "1";
+    if (!otpOk) {
+      return NextResponse.json(
+        { error: "otp_required" },
+        { status: 403 },
+      );
+    }
+
+    // ---------------------------------------------------------------------
+    // 3) Tenant scope enforcement (CRITICAL)
+    // ---------------------------------------------------------------------
+    const { allowedTenantIds } = await getAtsTenantScope();
+    if (!allowedTenantIds || allowedTenantIds.length === 0) {
+      return NextResponse.json(
+        { error: "tenant_access_denied" },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
 
-    const status = body.status as ApplicationStatus | undefined;
-    const note = (body.note as string | undefined)?.trim() || null;
+    const nextStatus = normalizeStatus(body.status);
+    const note = (typeof body.note === "string" ? body.note : "")
+      .trim()
+      .slice(0, 2000) || null;
 
-    if (!status && !note) {
+    if (!nextStatus && !note) {
       return NextResponse.json(
-        {
-          error:
-            "Nothing to update. Provide at least a new status or a note.",
-        },
+        { error: "Nothing to update. Provide at least a new status or a note." },
         { status: 400 },
       );
     }
 
-    // 1) Update application status (only columns we’re sure exist)
-    const updatePayload: Record<string, unknown> = {};
-    if (status) {
-      updatePayload.status = status;
-    }
+    // Load the application tenant-safely via job.tenantId
+    const existing = await prisma.jobApplication.findFirst({
+      where: {
+        id: applicationId,
+        job: { tenantId: { in: allowedTenantIds } },
+      },
+      select: {
+        id: true,
+        status: true,
+        jobId: true,
+        fullName: true,
+        email: true,
+      },
+    });
 
-    const { data: updated, error } = await supabaseAdmin
-      .from("job_applications")
-      .update(updatePayload)
-      .eq("id", applicationId)
-      .select("id, job_id, full_name, email, status")
-      .single();
-
-    if (error || !updated) {
-      console.error(
-        "ATS applications/update – error updating application:",
-        error,
-      );
+    if (!existing) {
+      // Important: do not reveal whether it exists outside tenant scope
       return NextResponse.json(
-        { error: "Failed to update application" },
-        { status: 500 },
+        { error: "not_found" },
+        { status: 404 },
       );
     }
 
-    // 2) Log status change into application_events
+    // ---------------------------------------------------------------------
+    // 4) Update (Prisma) — only update fields we *know* exist
+    // ---------------------------------------------------------------------
+    const updated = await prisma.jobApplication.update({
+      where: { id: existing.id },
+      data: {
+        ...(nextStatus ? { status: nextStatus } : {}),
+      },
+      select: {
+        id: true,
+        status: true,
+        jobId: true,
+        fullName: true,
+        email: true,
+      },
+    });
+
+    // ---------------------------------------------------------------------
+    // 5) Best-effort event logging (non-blocking)
+    // ---------------------------------------------------------------------
+    // If you don’t actually have application_events yet, this will just no-op gracefully.
     try {
       await supabaseAdmin.from("application_events").insert({
         application_id: updated.id,
         type: "status_change",
         payload: {
-          new_status: status ?? updated.status,
+          old_status: existing.status,
+          new_status: nextStatus ?? updated.status,
           note,
+          actor_user_id: ctx.user.id,
+          actor_email: ctx.user.email,
         },
       });
     } catch (eventErr) {
-      console.error(
-        "ATS applications/update – failed to insert status_change event:",
-        eventErr,
-      );
-      // Don’t fail the whole request because of logging
+      console.error("application_events insert failed (ignored):", eventErr);
     }
 
-    // 3) Email hooks (stubbed, but logged as events)
-    if (status === "interview" || status === "offer" || status === "rejected") {
+    // Optional email hooks (still non-blocking)
+    if (nextStatus === "INTERVIEW" || nextStatus === "OFFER" || nextStatus === "REJECTED") {
       const templateKey =
-        status === "interview"
+        nextStatus === "INTERVIEW"
           ? "interview_invite"
-          : status === "offer"
-          ? "offer"
-          : "rejection";
+          : nextStatus === "OFFER"
+            ? "offer"
+            : "rejection";
 
       try {
         await supabaseAdmin.from("application_events").insert({
@@ -93,22 +180,17 @@ export async function PATCH(
           payload: {
             template: templateKey,
             to: updated.email,
-            candidate_name: updated.full_name,
+            candidate_name: updated.fullName,
+            actor_user_id: ctx.user.id,
           },
         });
       } catch (emailErr) {
-        console.error(
-          "ATS applications/update – failed to log email_queued event:",
-          emailErr,
-        );
+        console.error("email_queued event insert failed (ignored):", emailErr);
       }
     }
 
     return NextResponse.json(
-      {
-        id: updated.id,
-        status: updated.status,
-      },
+      { id: updated.id, status: updated.status },
       { status: 200 },
     );
   } catch (err) {
