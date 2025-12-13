@@ -137,18 +137,23 @@ export async function POST(
     }
 
     // Create interview
-    const interview = await prisma.applicationInterview.create({
-      data: {
-        applicationId: application.id,
-        scheduledAt,
-        type: type,
-        location: location,
-        videoUrl: videoUrl,
-        status: "SCHEDULED",
-        durationMins: durationMins,
-        notes: notes,
-      },
-    });
+    // Create interview (FIXED: use relation connect, not applicationId)
+const interview = await prisma.applicationInterview.create({
+  data: {
+    application: { connect: { id: application.id } }, // ✅ instead of applicationId
+
+    scheduledAt,
+
+    // keep these nullable-safe so Prisma types + DB constraints behave
+    type: type || null,
+    location: location || null,
+    videoUrl: videoUrl || null,
+
+    status: status || "SCHEDULED",
+    durationMins: typeof durationMins === "number" ? durationMins : null,
+    notes: notes || null,
+  },
+});
 
     // Participants
     // Candidate
