@@ -2,8 +2,9 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import OtpVerifyForm from "./OtpVerifyForm";
+import { OTP_COOKIE_NAME } from "@/lib/requireOtp";
 import { getServerUser } from "@/lib/auth/getServerUser";
+import OtpVerifyForm from "./OtpVerifyForm";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Verify access",
@@ -16,16 +17,14 @@ export default async function VerifyOtpPage({
   searchParams?: { returnTo?: string };
 }) {
   const cookieStore = cookies();
-  const alreadyOk = cookieStore.get("thinkats_otp_ok")?.value === "1";
+  const alreadyOk = cookieStore.get(OTP_COOKIE_NAME)?.value === "1";
 
   const returnTo =
     searchParams?.returnTo && searchParams.returnTo.startsWith("/ats")
       ? searchParams.returnTo
       : "/ats";
 
-  if (alreadyOk) {
-    redirect(returnTo);
-  }
+  if (alreadyOk) redirect(returnTo);
 
   const ctx = await getServerUser();
   const email = ctx?.user?.email ?? undefined;
