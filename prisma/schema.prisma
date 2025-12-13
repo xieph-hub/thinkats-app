@@ -105,6 +105,13 @@ model Tenant {
   careerThemes CareerTheme[]
   careerPages  CareerPage[]
 
+  // 🔒 Job applications + related timeline artifacts
+  jobApplications      JobApplication[]
+  applicationEvents    ApplicationEvent[]
+  applicationInterviews ApplicationInterview[]
+  interviewParticipants InterviewParticipant[]
+  interviewCompetencyRatings InterviewCompetencyRating[]
+
   @@map("tenants")
 }
 
@@ -142,6 +149,8 @@ model UserTenantRole {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("user_tenant_roles")
+  @@index([userId, tenantId], map: "idx_user_tenant_roles_user_tenant")
+  @@index([tenantId, role], map: "idx_user_tenant_roles_tenant_role")
 }
 
 // --------------------------------------------------------------------------
@@ -217,6 +226,9 @@ model ClientCompany {
   careerThemes CareerTheme[] // back-relation to themes
 
   @@map("client_companies")
+  @@index([tenantId, createdAt], map: "idx_client_companies_tenant_created")
+  @@unique([tenantId, name], name: "uniq_client_company_tenant_name")
+  @@unique([tenantId, slug], name: "uniq_client_company_tenant_slug")
 }
 
 // --------------------------------------------------------------------------
@@ -285,6 +297,9 @@ model Job {
   analyticsSnapshots AnalyticsSnapshot[]
 
   @@map("jobs")
+  @@index([tenantId, createdAt], map: "idx_jobs_tenant_created")
+  @@index([tenantId, status, visibility], map: "idx_jobs_tenant_status_visibility")
+  @@unique([tenantId, slug], name: "uniq_jobs_tenant_slug")
 }
 
 // --------------------------------------------------------------------------
@@ -321,14 +336,16 @@ model Candidate {
   skills CandidateSkill[]
 
   @@map("candidates")
+  @@index([tenantId, createdAt], map: "idx_candidates_tenant_created")
+  @@unique([tenantId, email], name: "uniq_candidates_tenant_email")
 }
 
 model Tag {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId        String   @map("tenant_id") @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
 
-  name            String
-  normalizedName  String   @map("normalized_name") @db.Text
+  name           String
+  normalizedName String   @map("normalized_name") @db.Text
 
   color     String?
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
@@ -374,11 +391,11 @@ model Skill {
   tenantId       String?  @map("tenant_id") @db.Uuid
   name           String
   normalizedName String   @map("normalized_name")
-  slug           String?  @map("slug")      // optional pretty key
+  slug           String?  @map("slug")
   description    String?  @map("description")
-  category       String?  @map("category")        // e.g. "Digital skills", "Management"
-  externalSource String?  @map("external_source") // e.g. "esco"
-  externalId     String?  @map("external_id")     // e.g. ESCO skill code
+  category       String?  @map("category")
+  externalSource String?  @map("external_source")
+  externalId     String?  @map("external_id")
   isGlobal       Boolean  @map("is_global") @default(false)
   createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
@@ -398,9 +415,9 @@ model CandidateSkill {
   tenantId        String   @map("tenant_id") @db.Uuid
   candidateId     String   @map("candidate_id") @db.Uuid
   skillId         String   @map("skill_id") @db.Uuid
-  proficiency     Int?     @map("proficiency")       // 1–5 self-rating / assessment
-  yearsExperience Int?     @map("years_experience")  // 0–50
-  source          String?  @map("source")            // "talent_network", "cv_parsed", etc.
+  proficiency     Int?     @map("proficiency")
+  yearsExperience Int?     @map("years_experience")
+  source          String?  @map("source")
   createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
@@ -419,7 +436,7 @@ model JobSkill {
   tenantId   String   @map("tenant_id") @db.Uuid
   jobId      String   @map("job_id") @db.Uuid
   skillId    String   @map("skill_id") @db.Uuid
-  importance Int?     @map("importance")   // 1–5
+  importance Int?     @map("importance")
   isRequired Boolean  @map("is_required") @default(true)
   createdAt  DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
@@ -438,6 +455,10 @@ model JobSkill {
 
 model JobApplication {
   id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // 🔒 Tenant hardening (denormalized)
+  tenantId               String    @map("tenant_id") @db.Uuid
+
   jobId                  String    @map("job_id") @db.Uuid
   candidateId            String?   @map("candidate_id") @db.Uuid
   fullName               String    @map("full_name")
@@ -473,8 +494,10 @@ model JobApplication {
   matchScore  Int?    @map("match_score")  // e.g. 0–100
   matchReason String? @map("match_reason") // short explanation / rationale
 
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
   job        Job        @relation(fields: [jobId], references: [id])
   candidate  Candidate? @relation(fields: [candidateId], references: [id])
+
   events     ApplicationEvent[]
   interviews ApplicationInterview[]
   notes      Note[]
@@ -483,23 +506,37 @@ model JobApplication {
   scoringEvents ScoringEvent[]
 
   @@map("job_applications")
+  @@index([tenantId, createdAt], map: "idx_job_applications_tenant_created")
+  @@index([tenantId, status], map: "idx_job_applications_tenant_status")
+  @@index([tenantId, jobId], map: "idx_job_applications_tenant_job")
 }
 
 model ApplicationEvent {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // 🔒 tenant scope
+  tenantId      String   @map("tenant_id") @db.Uuid
+
   applicationId String   @map("application_id") @db.Uuid
   type          String
   payload       Json?    @map("payload")
   createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
   application JobApplication @relation(fields: [applicationId], references: [id])
 
   @@map("application_events")
+  @@index([tenantId, createdAt], map: "idx_application_events_tenant_created")
+  @@index([tenantId, applicationId], map: "idx_application_events_tenant_application")
 }
 
 // Richer interview model tied to an application
 model ApplicationInterview {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // 🔒 tenant scope
+  tenantId      String   @map("tenant_id") @db.Uuid
+
   applicationId String   @map("application_id") @db.Uuid
   scheduledAt   DateTime @map("scheduled_at") @db.Timestamptz(6)
   type          String?  @map("type")      // PHONE, VIRTUAL, ONSITE, PANEL, etc.
@@ -508,31 +545,36 @@ model ApplicationInterview {
 
   // Lifecycle / status
   status String @map("status") @default("SCHEDULED") @db.Text
-  // e.g. SCHEDULED, COMPLETED, NO_SHOW, CANCELLED_CLIENT, CANCELLED_CANDIDATE, CANCELLED_OTHER
-
   durationMins Int? @map("duration_mins")
 
   // Internal scheduling notes (not candidate-facing)
   notes String? @map("notes")
 
   // Evaluation fields
-  rating         Int?    @map("rating")           // 1..ratingScaleMax
-  ratingScaleMax Int?    @map("rating_scale_max") // e.g. 4 or 5 depending on org preference
-  feedbackNotes  String? @map("feedback_notes")   // richer free-text summary
-  outcome        String? @map("outcome")          // e.g. "Proceed to panel", "Hold", "Reject"
+  rating         Int?    @map("rating")
+  ratingScaleMax Int?    @map("rating_scale_max")
+  feedbackNotes  String? @map("feedback_notes")
+  outcome        String? @map("outcome")
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  application   JobApplication            @relation(fields: [applicationId], references: [id])
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
+  application JobApplication  @relation(fields: [applicationId], references: [id])
   participants  InterviewParticipant[]
   competencies  InterviewCompetencyRating[]
 
   @@map("application_interviews")
+  @@index([tenantId, scheduledAt], map: "idx_application_interviews_tenant_scheduled")
+  @@index([tenantId, applicationId], map: "idx_application_interviews_tenant_application")
 }
 
 model InterviewParticipant {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // 🔒 tenant scope
+  tenantId    String   @map("tenant_id") @db.Uuid
+
   interviewId String   @map("interview_id") @db.Uuid
   name        String
   email       String
@@ -540,26 +582,34 @@ model InterviewParticipant {
   createdAt   DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
+  tenant   Tenant               @relation(fields: [tenantId], references: [id])
   interview ApplicationInterview @relation(fields: [interviewId], references: [id])
 
   @@map("interview_participants")
   @@index([interviewId], map: "idx_interview_participants_interview")
+  @@index([tenantId, interviewId], map: "idx_interview_participants_tenant_interview")
 }
 
 model InterviewCompetencyRating {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // 🔒 tenant scope
+  tenantId    String   @map("tenant_id") @db.Uuid
+
   interviewId String   @map("interview_id") @db.Uuid
 
-  label   String // e.g. "Structured thinking & analysis"
-  rating  Int?   @map("rating")  // 1..ratingScaleMax (optional)
-  comment String? @map("comment") // short colour / nuance
+  label   String
+  rating  Int?    @map("rating")
+  comment String? @map("comment")
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
+  tenant   Tenant               @relation(fields: [tenantId], references: [id])
   interview ApplicationInterview @relation(fields: [interviewId], references: [id])
 
   @@map("interview_competency_ratings")
   @@index([interviewId], map: "idx_interview_competency_ratings_interview")
+  @@index([tenantId, interviewId], map: "idx_interview_competency_ratings_tenant_interview")
 }
 
 // --------------------------------------------------------------------------
@@ -580,6 +630,7 @@ model JobStage {
   job    Job    @relation(fields: [jobId], references: [id])
 
   @@map("job_stages")
+  @@index([tenantId, jobId], map: "idx_job_stages_tenant_job")
 }
 
 // --------------------------------------------------------------------------
@@ -590,20 +641,16 @@ model CareerSiteSettings {
   id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId String  @map("tenant_id") @db.Uuid
 
-  // logo specifically for careers site (overrides Tenant.logoUrl if set)
   logoUrl String? @map("logo_url")
 
-  // Hero/banner image for the careers microsite
   bannerImageUrl  String? @map("banner_image_url")
   bannerImagePath String? @map("banner_image_path")
   bannerImageAlt  String? @map("banner_image_alt")
 
-  // Hex-based brand colours for careers microsite
-  primaryColorHex   String? @map("primary_color_hex")   // e.g. "#172965"
-  accentColorHex    String? @map("accent_color_hex")    // e.g. "#FFC000"
-  heroBackgroundHex String? @map("hero_background_hex") // e.g. "#F5F6FA"
+  primaryColorHex   String? @map("primary_color_hex")
+  accentColorHex    String? @map("accent_color_hex")
+  heroBackgroundHex String? @map("hero_background_hex")
 
-  // Legacy non-hex fields
   primaryColor String? @map("primary_color")
   accentColor  String? @map("accent_color")
 
@@ -611,12 +658,10 @@ model CareerSiteSettings {
   heroSubtitle String? @map("hero_subtitle")
   aboutHtml    String? @map("about_html")
 
-  // Social links for the public careers page
   linkedinUrl  String? @map("linkedin_url")
   twitterUrl   String? @map("twitter_url")
   instagramUrl String? @map("instagram_url")
 
-  // Theme builder linkage
   themeId    String? @map("theme_id") @db.Uuid
   homePageId String? @map("home_page_id") @db.Uuid
 
@@ -631,6 +676,7 @@ model CareerSiteSettings {
   homePage CareerPage?  @relation(fields: [homePageId], references: [id])
 
   @@map("career_site_settings")
+  @@index([tenantId, createdAt], map: "idx_career_site_settings_tenant_created")
 }
 
 // --------------------------------------------------------------------------
@@ -720,6 +766,7 @@ model EmailTemplate {
   sentEmails SentEmail[]
 
   @@map("email_templates")
+  @@index([tenantId, createdAt], map: "idx_email_templates_tenant_created")
 }
 
 model SentEmail {
@@ -744,6 +791,7 @@ model SentEmail {
   job       Job?           @relation(fields: [jobId], references: [id])
 
   @@map("sent_emails")
+  @@index([tenantId, sentAt], map: "idx_sent_emails_tenant_sentat")
 }
 
 // --------------------------------------------------------------------------
@@ -768,6 +816,7 @@ model Note {
   application JobApplication? @relation(fields: [applicationId], references: [id])
 
   @@map("notes")
+  @@index([tenantId, createdAt], map: "idx_notes_tenant_created")
 }
 
 model ActivityLog {
@@ -783,6 +832,7 @@ model ActivityLog {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("activity_log")
+  @@index([tenantId, createdAt], map: "idx_activity_log_tenant_created")
 }
 
 // --------------------------------------------------------------------------
@@ -797,7 +847,7 @@ model ScoringEvent {
 
   engine        String   @map("engine")
   engineVersion String?  @map("engine_version")
-  mode          String?  @map("mode")   // volume | executive | balanced
+  mode          String?  @map("mode")
   score         Int?     @map("score")
   tier          String?  @map("tier")
 
@@ -815,6 +865,7 @@ model ScoringEvent {
 
   @@map("scoring_events")
   @@index([tenantId, jobId, applicationId], map: "idx_scoring_events_tenant_job_app")
+  @@index([tenantId, createdAt], map: "idx_scoring_events_tenant_created")
 }
 
 // --------------------------------------------------------------------------
@@ -825,12 +876,12 @@ model SavedView {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId  String   @map("tenant_id") @db.Uuid
   ownerId   String?  @map("owner_id") @db.Uuid
-  scope     String   @map("scope") // e.g. "job_applications", "candidates", "job_pipeline"
+  scope     String   @map("scope")
   name      String
   isShared  Boolean  @map("is_shared") @default(false)
   isDefault Boolean  @map("is_default") @default(false)
-  filters   Json?    @map("filters") // persisted filters
-  sort      Json?    @map("sort")    // sort config
+  filters   Json?    @map("filters")
+  sort      Json?    @map("sort")
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
@@ -851,8 +902,8 @@ model AnalyticsSnapshot {
   tenantId String   @map("tenant_id") @db.Uuid
   jobId    String?  @map("job_id") @db.Uuid
 
-  scope String  @map("scope") // e.g. "pipeline_daily", "source_breakdown"
-  label String? @map("label") // e.g. "2025-12-05" or "last_30_days"
+  scope String  @map("scope")
+  label String? @map("label")
 
   asOf    DateTime @map("as_of") @db.Timestamptz(6)
   payload Json     @map("payload")
