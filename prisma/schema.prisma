@@ -54,7 +54,7 @@ model Tenant {
 
   // Scoring + hiring configuration
   hiringMode    String @map("hiring_mode") @default("balanced") // volume | executive | balanced
-  scoringConfig Json?  @map("scoring_config")                    // tenant-level weights/thresholds
+  scoringConfig Json?  @map("scoring_config")                   // tenant-level weights/thresholds
 
   // KYC / compliance-lite fields (mapped to existing Supabase columns)
   registrationNumber String? @map("registration_number")
@@ -124,7 +124,7 @@ model User {
 
   userTenantRoles   UserTenantRole[]
   loginOtps         LoginOtp[]
-  savedViews        SavedView[]       // back-relation for SavedView.owner
+  savedViews        SavedView[]        // back-relation for SavedView.owner
   tenantInvitations TenantInvitation[]
 
   @@map("users")
@@ -167,15 +167,15 @@ model LoginOtp {
 // --------------------------------------------------------------------------
 
 model TenantInvitation {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  userId    String?  @map("user_id") @db.Uuid
-  email     String   @map("email")
-  role      String   @map("role") @default("admin") // "owner" | "admin" | "recruiter" | "viewer"
-  tokenHash String   @map("token_hash")
-  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  userId    String?   @map("user_id") @db.Uuid
+  email     String    @map("email")
+  role      String    @map("role") @default("admin") // "owner" | "admin" | "recruiter" | "viewer"
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
   usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
-  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  createdAt DateTime  @map("created_at") @default(now()) @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   user   User?  @relation(fields: [userId], references: [id])
@@ -214,7 +214,7 @@ model ClientCompany {
 
   // Theme-builder pages specifically scoped to this client
   careerPages  CareerPage[]
-  careerThemes CareerTheme[]   // back-relation to themes
+  careerThemes CareerTheme[] // back-relation to themes
 
   @@map("client_companies")
 }
@@ -244,7 +244,7 @@ model Job {
   clientCompanyId    String?  @map("client_company_id") @db.Uuid
   workMode           String?  @map("work_mode")
   overview           String?
-  aboutClient        String?  @map("about_client")
+  aboutClient        String?
   responsibilities   String?
   requirements       String?
   benefits           String?
@@ -274,9 +274,9 @@ model Job {
   // normalized skills attached to job
   skills JobSkill[]
 
-  applications  JobApplication[]
-  stages        JobStage[]
-  sentEmails    SentEmail[]
+  applications JobApplication[]
+  stages       JobStage[]
+  sentEmails   SentEmail[]
 
   // scoring audit trail
   scoringEvents ScoringEvent[]
@@ -302,9 +302,11 @@ model Candidate {
   currentTitle   String?  @map("current_title")
   currentCompany String?  @map("current_company")
   cvUrl          String?  @map("cv_url")
+
   // richer profile links for ATS views
   portfolioUrl   String?  @map("portfolio_url")
   resumeUrl      String?  @map("resume_url")
+
   source         String?
   createdAt      DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
   updatedAt      DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
@@ -322,21 +324,29 @@ model Candidate {
 }
 
 model Tag {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
-  name      String
-  color     String?
-  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
 
-  kind     TagKind @map("kind") @default(GENERAL)
-  isSystem Boolean @map("is_system") @default(false)
+  // Display (what user sees)
+  name            String
 
-  tenant     Tenant         @relation(fields: [tenantId], references: [id])
-  candidates CandidateTag[]
+  // Canonical (what system enforces)
+  normalizedName  String   @map("normalized_name")
+
+  color           String?
+  createdAt       DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+
+  kind            TagKind  @map("kind") @default(GENERAL)
+  isSystem        Boolean  @map("is_system") @default(false)
+
+  tenant          Tenant         @relation(fields: [tenantId], references: [id])
+  candidates      CandidateTag[]
 
   @@map("tags")
-  @@unique([tenantId, name, kind], name: "tenantId_name_kind")
+  @@unique([tenantId, normalizedName, kind], name: "tenant_tag_identity")
+  @@index([tenantId, kind], map: "idx_tags_tenant_kind")
+  @@index([tenantId, normalizedName], map: "idx_tags_tenant_normalized_name")
 }
 
 model CandidateTag {
@@ -497,13 +507,13 @@ model ApplicationInterview {
   videoUrl      String?  @map("video_url") // e.g. Zoom/Meet link
 
   // Lifecycle / status
-  status       String   @map("status") @default("SCHEDULED") @db.Text
+  status String @map("status") @default("SCHEDULED") @db.Text
   // e.g. SCHEDULED, COMPLETED, NO_SHOW, CANCELLED_CLIENT, CANCELLED_CANDIDATE, CANCELLED_OTHER
 
-  durationMins Int?     @map("duration_mins")
+  durationMins Int? @map("duration_mins")
 
   // Internal scheduling notes (not candidate-facing)
-  notes        String?  @map("notes")
+  notes String? @map("notes")
 
   // Evaluation fields
   rating         Int?    @map("rating")           // 1..ratingScaleMax
@@ -511,12 +521,12 @@ model ApplicationInterview {
   feedbackNotes  String? @map("feedback_notes")   // richer free-text summary
   outcome        String? @map("outcome")          // e.g. "Proceed to panel", "Hold", "Reject"
 
-  createdAt     DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
-  updatedAt     DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @map("updated_at") @default(now()) @db.Timestamptz(6)
 
-  application  JobApplication            @relation(fields: [applicationId], references: [id])
-  participants InterviewParticipant[]
-  competencies InterviewCompetencyRating[]
+  application   JobApplication            @relation(fields: [applicationId], references: [id])
+  participants  InterviewParticipant[]
+  competencies  InterviewCompetencyRating[]
 
   @@map("application_interviews")
 }
@@ -536,16 +546,15 @@ model InterviewParticipant {
   @@index([interviewId], map: "idx_interview_participants_interview")
 }
 
-// Per-interview competency grid (for rating matrix)
 model InterviewCompetencyRating {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   interviewId String   @map("interview_id") @db.Uuid
 
-  label       String   // e.g. "Structured thinking & analysis"
-  rating      Int?     @map("rating")   // 1..ratingScaleMax (optional)
-  comment     String?  @map("comment")  // short colour / nuance
+  label   String // e.g. "Structured thinking & analysis"
+  rating  Int?   @map("rating")  // 1..ratingScaleMax (optional)
+  comment String? @map("comment") // short colour / nuance
 
-  createdAt   DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
+  createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
 
   interview ApplicationInterview @relation(fields: [interviewId], references: [id])
 
@@ -582,11 +591,9 @@ model CareerSiteSettings {
   tenantId String  @map("tenant_id") @db.Uuid
 
   // logo specifically for careers site (overrides Tenant.logoUrl if set)
-  logoUrl        String? @map("logo_url")
+  logoUrl String? @map("logo_url")
 
   // Hero/banner image for the careers microsite
-  // bannerImagePath = uploaded asset path (e.g. Supabase storage)
-  // bannerImageUrl  = fully-qualified URL (legacy / external)
   bannerImageUrl  String? @map("banner_image_url")
   bannerImagePath String? @map("banner_image_path")
   bannerImageAlt  String? @map("banner_image_alt")
@@ -630,23 +637,19 @@ model CareerSiteSettings {
 // CAREER THEMES & PAGES (WEBFLOW-LITE)
 // --------------------------------------------------------------------------
 
-// Re-usable theme (design tokens) for one or many tenants/sites.
 model CareerTheme {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId       String?  @map("tenant_id") @db.Uuid
-  clientCompanyId String? @map("client_company_id") @db.Uuid
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String?  @map("tenant_id") @db.Uuid
+  clientCompanyId String?  @map("client_company_id") @db.Uuid
 
   name        String
   slug        String?  @map("slug")
   description String?  @map("description")
 
-  // If true, this is a global/system theme you ship out-of-the-box
   isSystem Boolean @map("is_system") @default(false)
 
-  // Arbitrary JSON "design token" blob: colors, typography, radii, spacing, etc.
   tokens Json @map("tokens")
 
-  // Optional preview thumbnail for theme picker
   previewImageUrl String? @map("preview_image_url")
 
   createdAt DateTime @map("created_at") @default(now()) @db.Timestamptz(6)
@@ -662,7 +665,6 @@ model CareerTheme {
   @@index([tenantId, clientCompanyId], map: "idx_career_themes_tenant_client")
 }
 
-// Represents a single configurable page in the careers microsite.
 model CareerPage {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId        String   @map("tenant_id") @db.Uuid
@@ -671,16 +673,12 @@ model CareerPage {
 
   kind CareerPageKind @map("kind") @default(CAREERS_HOME)
 
-  // Optional slug for CUSTOM pages; for core pages the path is still useful
   slug String? @map("slug")
-
-  // Route for this page within the careers site, e.g. "/careers", "/jobs", "/about"
   path String @map("path")
 
   title       String? @map("title")
   description String? @map("description")
 
-  // JSON layout tree: sections, blocks, components with props.
   layout Json? @map("layout")
 
   isPublished Boolean @map("is_published") @default(true)
@@ -693,7 +691,6 @@ model CareerPage {
   clientCompany ClientCompany? @relation(fields: [clientCompanyId], references: [id])
   theme         CareerTheme?   @relation(fields: [themeId], references: [id])
 
-  // Back-reference for "homePage" on CareerSiteSettings
   primaryForSites CareerSiteSettings[]
 
   @@map("career_pages")
@@ -729,7 +726,6 @@ model SentEmail {
   id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId          String   @map("tenant_id") @db.Uuid
   templateId        String?  @map("template_id") @db.Uuid
-  // denormalised template label for quick UI chips
   templateName      String?  @map("template_name")
   toEmail           String   @map("to_email")
   candidateId       String?  @map("candidate_id") @db.Uuid
@@ -760,7 +756,6 @@ model Note {
   candidateId   String?   @map("candidate_id") @db.Uuid
   applicationId String?   @map("application_id") @db.Uuid
   authorId      String    @map("author_id") @db.Uuid
-  // denormalised author display for UI
   authorName    String?   @map("author_name")
   noteType      String?   @map("note_type") @default("general")
   body          String
@@ -795,10 +790,10 @@ model ActivityLog {
 // --------------------------------------------------------------------------
 
 model ScoringEvent {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  jobId         String?   @map("job_id") @db.Uuid
-  applicationId String?   @map("application_id") @db.Uuid
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  jobId         String?  @map("job_id") @db.Uuid
+  applicationId String?  @map("application_id") @db.Uuid
 
   engine        String   @map("engine")
   engineVersion String?  @map("engine_version")
