@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
 import bcrypt from "bcryptjs";
+import { OTP_COOKIE_NAME } from "@/lib/requireOtp";
 
 export const runtime = "nodejs";
 
 const AUTH_COOKIE_NAME = "thinkats_user_id";
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,19 +32,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch default tenant (Resourcin) for auto-provisioning
     const defaultTenant = await getResourcinTenant();
 
-    // Try find existing user
     let user = await prisma.user.findUnique({
       where: { email },
-      include: {
-        userTenantRoles: true,
-      },
+      include: { userTenantRoles: true },
     });
 
     if (!user) {
-      // Self-signup: create user + attach to default tenant
       const passwordHash = await bcrypt.hash(password, 10);
 
       user = await prisma.user.create({
@@ -63,12 +58,9 @@ export async function POST(req: NextRequest) {
               }
             : undefined,
         },
-        include: {
-          userTenantRoles: true,
-        },
+        include: { userTenantRoles: true },
       });
     } else {
-      // If user exists but passwordHash is empty, treat this as first-time set
       if (!user.passwordHash) {
         const passwordHash = await bcrypt.hash(password, 10);
         user = await prisma.user.update({
@@ -86,7 +78,6 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // If they somehow have no workspace yet, wire them to the default
       if (user.userTenantRoles.length === 0 && defaultTenant) {
         await prisma.userTenantRole.create({
           data: {
@@ -101,16 +92,15 @@ export async function POST(req: NextRequest) {
 
     const res = NextResponse.json({ ok: true });
 
-    // Main auth cookie
     res.cookies.set(AUTH_COOKIE_NAME, user.id, {
       httpOnly: true,
       secure: true,
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
     });
 
-    // Clear OTP state on fresh login
+    // ✅ Clear canonical OTP cookie on fresh login
     res.cookies.set(OTP_COOKIE_NAME, "", {
       httpOnly: true,
       secure: true,
