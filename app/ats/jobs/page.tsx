@@ -1,9 +1,8 @@
 // app/ats/jobs/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
+import { tenantDb } from "@/lib/db/tenantDb";
+import { requireAtsTenant } from "@/lib/tenant/requireAtsTenant";
 import AtsJobsTable, { AtsJobRow } from "./AtsJobsTable";
 
 export const dynamic = "force-dynamic";
@@ -31,12 +30,8 @@ function firstString(value?: string | string[]): string {
 }
 
 export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
-  const tenant = await getResourcinTenant();
-  if (!tenant) notFound();
-
-  // 🔓 No per-page tenant membership check here.
-  // Access control is handled in app/ats/layout.tsx,
-  // and data is scoped by tenantId below.
+  const { tenant, isSuperAdmin, role } = await requireAtsTenant();
+  const db = tenantDb(tenant.id);
 
   const filterQ = firstString(searchParams.q).trim();
 
@@ -49,13 +44,8 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   const filterClientId = firstString(searchParams.clientId).trim();
   const filterFunction = firstString(searchParams.function).trim();
 
-  // Base scoping by tenant
-  const baseWhere: any = {
-    tenantId: tenant.id,
-  };
-
-  // Compose filters using AND so they stack cleanly
-  const where: any = { ...baseWhere };
+  // Build where WITHOUT tenantId — tenantDb injects it automatically
+  const where: any = {};
   const andConditions: any[] = [];
 
   if (filterQ) {
@@ -82,10 +72,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   } else if (filterStatus === "UNPUBLISHED") {
     // anything that is NOT open+public
     andConditions.push({
-      OR: [
-        { status: { not: "open" } },
-        { visibility: { not: "public" } },
-      ],
+      OR: [{ status: { not: "open" } }, { visibility: { not: "public" } }],
     });
   }
 
@@ -94,22 +81,18 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
   }
 
   if (filterFunction) {
-    // Using department field in Prisma, but labelled as “Function” in UI
     andConditions.push({
-      department: {
-        contains: filterFunction,
-        mode: "insensitive",
-      },
+      department: { contains: filterFunction, mode: "insensitive" },
     });
   }
 
   if (andConditions.length > 0) {
-    (where as any).AND = andConditions;
+    where.AND = andConditions;
   }
 
   const [totalJobs, jobsRaw, clientCompanies] = await Promise.all([
-    prisma.job.count({ where: baseWhere }),
-    prisma.job.findMany({
+    db.job.count({}),
+    db.job.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: {
@@ -119,22 +102,17 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
         },
       },
     }),
-    prisma.clientCompany.findMany({
-      where: { tenantId: tenant.id },
+    db.clientCompany.findMany({
       orderBy: { name: "asc" },
     }),
   ]);
 
-  // 🔧 Map Prisma model -> AtsJobRow (Decimal → number here)
-  const jobs: AtsJobRow[] = jobsRaw.map((job) => {
-    const anyJob = job as any;
+  const jobs: AtsJobRow[] = jobsRaw.map((job: any) => {
+    const workMode = job.workMode ?? job.locationType ?? null;
+    const experienceLevel = job.experienceLevel ?? job.seniority ?? null;
 
-    const workMode = anyJob.workMode ?? anyJob.locationType ?? null;
-    const experienceLevel =
-      anyJob.experienceLevel ?? anyJob.seniority ?? null;
-
-    const status: string = anyJob.status ?? "draft";
-    const visibility: string = anyJob.visibility ?? "public";
+    const status: string = job.status ?? "draft";
+    const visibility: string = job.visibility ?? "public";
 
     return {
       id: job.id,
@@ -142,23 +120,19 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
       clientName: job.clientCompany?.name ?? "",
       location: job.location ?? null,
       workMode,
-      employmentType: anyJob.employmentType ?? null,
+      employmentType: job.employmentType ?? null,
       experienceLevel,
       status,
       visibility,
-      applicationsCount: job._count.applications ?? 0,
+      applicationsCount: job._count?.applications ?? 0,
       createdAt: job.createdAt.toISOString(),
 
-      // extra fields for preview / future use
       shortDescription: job.shortDescription ?? null,
       overview: job.overview ?? null,
       department: job.department ?? null,
 
-      // 👇 Prisma Decimal → number | null
-      salaryMin:
-        job.salaryMin != null ? Number(job.salaryMin) : null,
-      salaryMax:
-        job.salaryMax != null ? Number(job.salaryMax) : null,
+      salaryMin: job.salaryMin != null ? Number(job.salaryMin) : null,
+      salaryMax: job.salaryMax != null ? Number(job.salaryMax) : null,
       salaryCurrency: job.salaryCurrency ?? null,
     };
   });
@@ -172,7 +146,6 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
 
   return (
     <div className="flex h-full flex-1 flex-col">
-      {/* Header */}
       <header className="border-b border-slate-200 bg-white px-5 py-4">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
           <Link href="/ats/dashboard" className="hover:underline">
@@ -184,20 +157,15 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-base font-semibold text-slate-900">
-              Jobs
-            </h1>
+            <h1 className="text-base font-semibold text-slate-900">Jobs</h1>
             <p className="mt-0.5 text-[11px] text-slate-500">
-              All open and draft roles in this workspace. Search, filter
-              by client and function, and manage publishing directly from
-              here.
+              All open and draft roles in this workspace. Search, filter by
+              client and function, and manage publishing directly from here.
             </p>
           </div>
 
           <div className="flex flex-col items-end text-right text-[11px] text-slate-500">
-            <span className="font-medium text-slate-800">
-              {tenant.name}
-            </span>
+            <span className="font-medium text-slate-800">{tenant.name}</span>
             <span className="text-[10px] text-slate-400">
               {visibleJobs} of {totalJobs} jobs visible ·{" "}
               <span className="font-semibold text-emerald-700">
@@ -205,6 +173,12 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
               </span>{" "}
               published
             </span>
+
+            {/* Optional tiny security badge */}
+            <span className="mt-1 text-[10px] text-slate-400">
+              {isSuperAdmin ? "SUPER_ADMIN" : role ?? "MEMBER"} · {tenant.slug}
+            </span>
+
             <Link
               href="/ats/jobs/new"
               className="mt-2 inline-flex h-8 items-center rounded-full bg-slate-900 px-4 text-[11px] font-semibold text-white hover:bg-slate-800"
@@ -215,9 +189,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
         </div>
       </header>
 
-      {/* Filters + table */}
       <main className="flex flex-1 flex-col bg-slate-50 px-5 py-4">
-        {/* Filters row */}
         <section className="mb-3 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-[11px] text-slate-700">
           <form className="flex flex-wrap items-center gap-2">
             <input
@@ -265,6 +237,7 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
             >
               Apply filters
             </button>
+
             <Link
               href="/ats/jobs"
               className="inline-flex h-8 items-center rounded-full border border-slate-200 bg-white px-3 text-[11px] text-slate-600 hover:bg-slate-50"
@@ -275,14 +248,12 @@ export default async function AtsJobsPage({ searchParams = {} }: PageProps) {
 
           <div className="flex items-center justify-between text-[10px] text-slate-500">
             <span>
-              Use bulk actions below to publish/unpublish multiple jobs
-              in one go, then drill into any role for a full pipeline
-              view.
+              Use bulk actions below to publish/unpublish multiple jobs in one go,
+              then drill into any role for a full pipeline view.
             </span>
           </div>
         </section>
 
-        {/* Jobs table + bulk actions */}
         <AtsJobsTable initialJobs={jobs} />
       </main>
     </div>
