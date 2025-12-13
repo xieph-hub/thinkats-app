@@ -1,4 +1,3 @@
-// app/api/ats/candidates/[candidateId]/notes/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResourcinTenant } from "@/lib/tenant";
@@ -7,12 +6,22 @@ import { createSupabaseRouteClient } from "@/lib/supabaseRouteClient";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function redirectToCandidate(req: NextRequest, candidateId: string) {
+  const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
+  return NextResponse.redirect(redirectUrl, { status: 303 });
+}
+
+function getFormString(formData: FormData, key: string) {
+  const v = formData.get(key);
+  return typeof v === "string" ? v.trim() : "";
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { candidateId: string } },
 ) {
   try {
-    const candidateId = params.candidateId;
+    const candidateId = params?.candidateId?.trim();
     if (!candidateId) {
       return NextResponse.json(
         { ok: false, error: "Missing candidateId" },
@@ -20,6 +29,7 @@ export async function POST(
       );
     }
 
+    // Tenant from host context
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -29,28 +39,27 @@ export async function POST(
     }
 
     const formData = await req.formData();
-    const noteBodyRaw = formData.get("noteBody");
+
+    // IMPORTANT: your page uses textarea name="body"
+    // older route expected "noteBody"
     const noteBody =
-      typeof noteBodyRaw === "string" ? noteBodyRaw.trim() : "";
+      getFormString(formData, "body") || getFormString(formData, "noteBody");
 
     if (!noteBody) {
-      const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
-      return NextResponse.redirect(redirectUrl, { status: 303 });
+      return redirectToCandidate(req, candidateId);
     }
 
-    // Optional future: allow binding to a specific application
-    const applicationIdRaw = formData.get("applicationId");
-    const applicationId =
-      typeof applicationIdRaw === "string" && applicationIdRaw.trim()
-        ? applicationIdRaw.trim()
-        : null;
+    const applicationIdRaw = getFormString(formData, "applicationId");
+    const applicationId = applicationIdRaw ? applicationIdRaw : null;
 
+    // Ensure caller is authenticated (ATS)
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
+      error: userErr,
     } = await supabase.auth.getUser();
 
-    if (!user || !user.email) {
+    if (userErr || !user?.email) {
       return NextResponse.json(
         { ok: false, error: "Unauthenticated" },
         { status: 401 },
@@ -59,7 +68,7 @@ export async function POST(
 
     const email = user.email.toLowerCase();
 
-    // Ensure we have an app-level User record
+    // App-level user row (global)
     const appUser = await prisma.user.upsert({
       where: { email },
       update: { isActive: true },
@@ -70,12 +79,9 @@ export async function POST(
       },
     });
 
-    // Sanity check candidate belongs to this tenant
+    // Sanity check: candidate must belong to this tenant
     const candidate = await prisma.candidate.findFirst({
-      where: {
-        id: candidateId,
-        tenantId: tenant.id,
-      },
+      where: { id: candidateId, tenantId: tenant.id },
       select: { id: true },
     });
 
@@ -86,21 +92,20 @@ export async function POST(
       );
     }
 
-    // Optional: if applicationId is provided, ensure it belongs to same tenant
+    // Optional: if applicationId supplied, validate it is within this tenant
     let validatedApplicationId: string | null = null;
     if (applicationId) {
       const app = await prisma.jobApplication.findFirst({
         where: {
           id: applicationId,
-          job: {
-            tenantId: tenant.id,
-          },
+          job: { tenantId: tenant.id },
+          // (optional extra safety) also ensure this application is tied to candidateId if your schema allows:
+          // candidateId: candidate.id,
         },
         select: { id: true },
       });
-      if (app) {
-        validatedApplicationId = app.id;
-      }
+
+      if (app) validatedApplicationId = app.id;
     }
 
     const note = await prisma.note.create({
@@ -112,7 +117,7 @@ export async function POST(
         authorName: appUser.fullName ?? appUser.email ?? null,
         noteType: "general",
         body: noteBody,
-        isPrivate: true, // internal-only by default
+        isPrivate: true,
       },
     });
 
@@ -130,8 +135,7 @@ export async function POST(
       },
     });
 
-    const redirectUrl = new URL(`/ats/candidates/${candidateId}`, req.url);
-    return NextResponse.redirect(redirectUrl, { status: 303 });
+    return redirectToCandidate(req, candidateId);
   } catch (err) {
     console.error("Candidate notes POST error:", err);
     return NextResponse.json(
