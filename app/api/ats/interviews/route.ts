@@ -183,18 +183,25 @@ export async function POST(req: NextRequest) {
       "Hiring organisation";
 
     // 1) Persist interview record – lifecycle starts as SCHEDULED
-    const interview = await prisma.applicationInterview.create({
-      data: {
-        applicationId: application.id,
-        scheduledAt: start,
-        durationMins,
-        type: type || null,
-        location: location || null,
-        videoUrl: videoUrl || null,
-        notes: notes || null,
-        status: "SCHEDULED",
-      },
-    });
+const interview = await prisma.applicationInterview.create({
+  data: {
+    // ✅ tenant is required in your schema pattern for tenant-scoped objects
+    tenant: { connect: { id: tenant.id } },
+
+    // ✅ must be relation connect, not applicationId scalar
+    application: { connect: { id: application.id } },
+
+    scheduledAt: start,
+    durationMins: typeof durationMins === "number" ? durationMins : null,
+
+    type: type || null,
+    location: location || null,
+    videoUrl: videoUrl || null,
+    notes: notes || null,
+
+    status: status || "SCHEDULED",
+  },
+});
 
     // 2) Optional participants (interviewers, observers, etc.)
     if (attendees && attendees.length > 0) {
