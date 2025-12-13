@@ -1,76 +1,78 @@
 // lib/auth/tenantAccess.ts
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
-import { getHostContext } from "@/lib/host";
-import { prisma } from "@/lib/prisma";
 
 export type AtsTenantScope = {
+  userId: string;
   isSuperAdmin: boolean;
-  allowedTenantIds: string[] | null; // null => unrestricted
   activeTenantId: string | null;
-  activeTenantSlug: string | null;
+  allowedTenantIds: string[];
 };
 
-export async function getAtsTenantScope(): Promise<AtsTenantScope> {
+/**
+ * Single source of truth for ATS tenant scoping.
+ *
+ * Today: active tenant = primaryTenantId from DB.
+ * Future: add a workspace-switcher cookie, e.g. "thinkats_active_tenant",
+ * and validate it against allowedTenantIds.
+ */
+export async function getAtsTenantScope(opts?: {
+  requireAuth?: boolean; // default true
+  requireTenant?: boolean; // default true
+}): Promise<AtsTenantScope> {
+  const requireAuth = opts?.requireAuth ?? true;
+  const requireTenant = opts?.requireTenant ?? true;
+
   const ctx = await getServerUser();
 
-  // Not logged in
   if (!ctx?.user?.id) {
+    if (requireAuth) redirect("/login?returnTo=/ats");
     return {
+      userId: "",
       isSuperAdmin: false,
-      allowedTenantIds: [],
       activeTenantId: null,
-      activeTenantSlug: null,
+      allowedTenantIds: [],
     };
   }
 
-  const isSuperAdmin = !!ctx.isSuperAdmin;
+  const allowedTenantIds = (ctx.tenantRoles ?? []).map((r) => r.tenantId);
 
-  // Super admin: can access all tenants, but still needs an "active" tenant
-  // for pages that require one.
-  const tenantRoles = ctx.tenantRoles || [];
-  const primaryRole = tenantRoles.find((r) => r.isPrimary) || tenantRoles[0] || null;
+  // Current standard: primary tenant from DB context
+  let activeTenantId = ctx.primaryTenantId ?? null;
 
-  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
+  // OPTIONAL future switcher (safe validation) — keep disabled unless you add UI:
+  // const cookieTenantId = cookies().get("thinkats_active_tenant")?.value?.trim();
+  // if (cookieTenantId && allowedTenantIds.includes(cookieTenantId)) {
+  //   activeTenantId = cookieTenantId;
+  // }
 
-  // Determine activeTenant by host
-  let activeTenantId: string | null = null;
-  let activeTenantSlug: string | null = null;
-
-  if (!isPrimaryHost && tenantSlugFromHost) {
-    // Tenant host dictates the tenant
-    const tenant = await prisma.tenant.findUnique({
-      where: { slug: tenantSlugFromHost },
-      select: { id: true, slug: true },
-    });
-
-    activeTenantId = tenant?.id ?? null;
-    activeTenantSlug = tenant?.slug ?? tenantSlugFromHost;
-  } else {
-    // Primary host: use user's primary tenant (or first)
-    activeTenantId = primaryRole?.tenantId ?? null;
-    activeTenantSlug = primaryRole?.tenantSlug ?? null;
+  if (requireTenant && !activeTenantId && !ctx.isSuperAdmin) {
+    redirect("/access-denied?reason=no_active_tenant");
   }
 
-  // Allowed tenant ids
-  const allowedTenantIds = isSuperAdmin
-    ? null
-    : tenantRoles.map((r) => r.tenantId).filter(Boolean);
+  // Membership enforcement (unless super admin)
+  if (
+    activeTenantId &&
+    !ctx.isSuperAdmin &&
+    !allowedTenantIds.includes(activeTenantId)
+  ) {
+    redirect("/access-denied?reason=tenant_forbidden");
+  }
 
   return {
-    isSuperAdmin,
-    allowedTenantIds,
+    userId: ctx.user.id,
+    isSuperAdmin: ctx.isSuperAdmin,
     activeTenantId,
-    activeTenantSlug,
+    allowedTenantIds,
   };
 }
 
 /**
- * Backwards compatible exports (you had callers using these names).
+ * If you still have older imports expecting this name, keep this alias.
+ * (Your build log shows older references.)
  */
 export async function getAllowedTenantIdsForRequest() {
-  const scope = await getAtsTenantScope();
-  return {
-    isSuperAdmin: scope.isSuperAdmin,
-    allowedTenantIds: scope.allowedTenantIds,
-  };
+  const scope = await getAtsTenantScope({ requireAuth: true, requireTenant: false });
+  return scope.allowedTenantIds;
 }
