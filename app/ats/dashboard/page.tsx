@@ -1,19 +1,18 @@
 // app/ats/dashboard/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getAtsTenant } from "@/lib/ats/getAtsTenant";
+import { tenantDb } from "@/lib/db/tenantDb";
+import { requireAtsTenant } from "@/lib/tenant/requireAtsTenant";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ThinkATS | Dashboard",
-  description: "ATS dashboard overview of jobs, candidates, applications and interviews.",
+  description:
+    "ATS dashboard overview of jobs, candidates, applications and interviews.",
 };
 
 type DashboardStats = {
-  tenantId: string;
   totalJobs: number;
   openJobs: number;
   totalCandidates: number;
@@ -21,7 +20,7 @@ type DashboardStats = {
   interviewsScheduled: number;
 };
 
-async function getDashboardStats(tenantId: string): Promise<DashboardStats> {
+async function getDashboardStats(db: ReturnType<typeof tenantDb>): Promise<DashboardStats> {
   const [
     totalJobs,
     openJobs,
@@ -29,26 +28,18 @@ async function getDashboardStats(tenantId: string): Promise<DashboardStats> {
     totalApplications,
     interviewsScheduled,
   ] = await Promise.all([
-    prisma.job.count({ where: { tenantId } }),
-
-    prisma.job.count({ where: { tenantId, status: "open" } }),
-
-    prisma.candidate.count({ where: { tenantId } }),
-
-    prisma.jobApplication.count({
-      where: { job: { tenantId } },
-    }),
-
-    prisma.applicationInterview.count({
+    db.job.count({}),
+    db.job.count({ where: { status: "open" } }),
+    db.candidate.count({}),
+    db.jobApplication.count({}),
+    db.applicationInterview.count({
       where: {
-        application: { job: { tenantId } },
         status: "SCHEDULED",
       },
     }),
   ]);
 
   return {
-    tenantId,
     totalJobs,
     openJobs,
     totalCandidates,
@@ -58,10 +49,10 @@ async function getDashboardStats(tenantId: string): Promise<DashboardStats> {
 }
 
 export default async function AtsDashboardPage() {
-  const tenant = await getAtsTenant();
-  if (!tenant) notFound(); // No active ATS tenant selected
+  const { tenant, isSuperAdmin, role } = await requireAtsTenant();
+  const db = tenantDb(tenant.id);
 
-  const stats = await getDashboardStats(tenant.id);
+  const stats = await getDashboardStats(db);
 
   return (
     <div className="p-6">
@@ -70,6 +61,9 @@ export default async function AtsDashboardPage() {
           <h1 className="text-xl font-semibold text-slate-900">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-600">
             Workspace: <span className="font-medium">{tenant.name}</span>
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {isSuperAdmin ? "SUPER_ADMIN" : role ?? "MEMBER"} · {tenant.slug}
           </p>
         </div>
 
