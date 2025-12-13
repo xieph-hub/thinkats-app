@@ -58,6 +58,9 @@ export function tenantDb(tenantId: string) {
         aggregate({ args, query }) {
           return query(withTenantId(args, tenantId));
         },
+        groupBy({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
         findUnique: blockFindUnique("job"),
       },
 
@@ -82,6 +85,12 @@ export function tenantDb(tenantId: string) {
           return query(withTenantId(args, tenantId));
         },
         count({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
+        aggregate({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
+        groupBy({ args, query }) {
           return query(withTenantId(args, tenantId));
         },
         findUnique: blockFindUnique("candidate"),
@@ -162,6 +171,12 @@ export function tenantDb(tenantId: string) {
         count({ args, query }) {
           return query(withTenantId(args, tenantId));
         },
+        aggregate({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
+        groupBy({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
         findUnique: blockFindUnique("scoringEvent"),
       },
 
@@ -186,6 +201,12 @@ export function tenantDb(tenantId: string) {
           return query(withTenantId(args, tenantId));
         },
         count({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
+        aggregate({ args, query }) {
+          return query(withTenantId(args, tenantId));
+        },
+        groupBy({ args, query }) {
           return query(withTenantId(args, tenantId));
         },
         findUnique: blockFindUnique("analyticsSnapshot"),
@@ -303,6 +324,9 @@ export function tenantDb(tenantId: string) {
           return query(withTenantViaJob(args, tenantId));
         },
         aggregate({ args, query }) {
+          return query(withTenantViaJob(args, tenantId));
+        },
+        groupBy({ args, query }) {
           return query(withTenantViaJob(args, tenantId));
         },
         findUnique: blockFindUnique("jobApplication"),
