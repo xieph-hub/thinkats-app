@@ -5,8 +5,7 @@ import { redirect } from "next/navigation";
 export const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export function ensureOtpVerified(callbackUrl: string) {
-  const cookieStore = cookies();
-  const flag = cookieStore.get(OTP_COOKIE_NAME)?.value;
+  const flag = cookies().get(OTP_COOKIE_NAME)?.value;
 
   if (flag === "1") return;
 
