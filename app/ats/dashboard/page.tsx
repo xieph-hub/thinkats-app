@@ -75,7 +75,7 @@ async function getDashboardStats(): Promise<DashboardStats> {
 
     prisma.jobApplication.findMany({
       where: {
-        job: { tenantId },
+        tenantId,
         createdAt: { gte: thirtyDaysAgo },
       },
       select: {
