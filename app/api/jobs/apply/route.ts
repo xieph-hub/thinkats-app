@@ -7,12 +7,12 @@ import { resend } from "@/lib/resendClient";
 
 import CandidateApplicationReceived from "@/emails/CandidateApplicationReceived";
 
-// NEW: scoring engine hook
+// scoring engine hook (non-blocking)
 import { scoreAndPersistApplication } from "@/lib/scoring/server";
 
 // Helper: safe string for file paths
 function safeSlug(input: string) {
-  return input
+  return (input || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
@@ -24,16 +24,16 @@ const PUBLIC_SITE_URL =
 const RESEND_FROM_EMAIL =
   process.env.RESEND_FROM_EMAIL || "ThinkATS <no-reply@mail.thinkats.com>";
 
-// We’re no longer using ATS_NOTIFICATIONS_EMAIL here (weekly digest will)
-const ATS_NOTIFICATIONS_EMAIL =
-  process.env.ATS_NOTIFICATIONS_EMAIL ||
-  process.env.RESOURCIN_ADMIN_EMAIL ||
-  "";
+// If you want a single global bucket name, set NEXT_PUBLIC_UPLOADS_BUCKET in env.
+// Otherwise, fallback to old name for backwards-compat (but you should rename it).
+const UPLOADS_BUCKET =
+  process.env.NEXT_PUBLIC_UPLOADS_BUCKET ||
+  process.env.NEXT_PUBLIC_CV_UPLOADS_BUCKET ||
+  "resourcin-uploads";
 
 // ---------------------------------------------------------------------------
 // POST /api/jobs/apply
 // ---------------------------------------------------------------------------
-
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       .trim();
 
     const howHeard = (formData.get("howHeard") || "").toString().trim();
-    const source = (formData.get("source") || "").toString().trim(); // internal tracking source
+    const source = (formData.get("source") || "").toString().trim();
 
     const coverLetter = (formData.get("coverLetter") || "")
       .toString()
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1) Load job to get tenant id + title (+ slug for nice URLs)
+    // 1) Load job to get tenantId + title (+ slug for nice URLs)
     const job = await prisma.job.findUnique({
       where: { id: jobId },
       select: {
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Optional but sensible: block applications to non-open/non-public roles
+    // Guard: only accept public + open jobs
     if (job.status !== "open" || job.visibility !== "public") {
       return NextResponse.json(
         {
@@ -118,58 +118,70 @@ export async function POST(req: Request) {
       );
     }
 
+    const tenantId = job.tenantId;
+
     // 2) Find or create candidate for this tenant + email
     let candidate = await prisma.candidate.findFirst({
       where: {
-        tenantId: job.tenantId,
+        tenantId,
         email,
+      },
+      select: {
+        id: true,
+        cvUrl: true,
       },
     });
 
-    // We’ll keep / override CV URL on candidate if we successfully upload one
     let candidateCvUrl: string | null =
       (candidate?.cvUrl as string | null | undefined) || null;
 
     if (!candidate) {
       candidate = await prisma.candidate.create({
         data: {
-          tenantId: job.tenantId,
+          tenantId,
           fullName,
           email,
+          phone: phone || null,
           location: location || null,
           linkedinUrl: linkedinUrl || null,
           cvUrl: candidateCvUrl,
         },
+        select: {
+          id: true,
+          cvUrl: true,
+        },
       });
     } else {
       // Light touch update with fresher data
-      candidate = await prisma.candidate.update({
+      await prisma.candidate.update({
         where: { id: candidate.id },
         data: {
           fullName,
+          phone: phone || undefined,
           location: location || undefined,
           linkedinUrl: linkedinUrl || undefined,
         },
       });
     }
 
-    // 3) Optional CV upload to Supabase Storage (bucket: resourcin-uploads)
+    // 3) Optional CV upload to Supabase Storage (tenant-scoped path)
     let applicationCvUrl: string | null = null;
 
     if (cvFile instanceof File && cvFile.size > 0) {
       try {
-        const bucket = "resourcin-uploads";
-
         const ext =
           cvFile.name && cvFile.name.includes(".")
             ? cvFile.name.split(".").pop()
             : "pdf";
 
         const safeEmailPart = safeSlug(email || fullName || "candidate");
-        const filePath = `cvs/${job.id}/${safeEmailPart}-${Date.now()}.${ext}`;
+
+        // ✅ tenant-scoped path (no “resourcin” leakage)
+        // and includes jobId for easy cleanup/exports.
+        const filePath = `tenants/${tenantId}/jobs/${job.id}/cvs/${safeEmailPart}-${Date.now()}.${ext}`;
 
         const { error: uploadError } = await supabaseAdmin.storage
-          .from(bucket)
+          .from(UPLOADS_BUCKET)
           .upload(filePath, cvFile, {
             cacheControl: "3600",
             upsert: false,
@@ -180,7 +192,7 @@ export async function POST(req: Request) {
           console.error("Supabase CV upload error:", uploadError);
         } else {
           const { data: publicData } = supabaseAdmin.storage
-            .from(bucket)
+            .from(UPLOADS_BUCKET)
             .getPublicUrl(filePath);
 
           applicationCvUrl = publicData?.publicUrl || null;
@@ -192,18 +204,19 @@ export async function POST(req: Request) {
 
     // If we got a CV URL, also sync it to candidate profile
     if (applicationCvUrl && applicationCvUrl !== candidateCvUrl) {
-      candidate = await prisma.candidate.update({
+      await prisma.candidate.update({
         where: { id: candidate.id },
-        data: {
-          cvUrl: applicationCvUrl,
-        },
+        data: { cvUrl: applicationCvUrl },
       });
       candidateCvUrl = applicationCvUrl;
     }
 
-    // 4) Create the job application
+    // 4) Create the job application (✅ tenant-hardened)
+    // NOTE: This assumes your schema now includes JobApplication.tenantId
     const application = await prisma.jobApplication.create({
       data: {
+        tenantId, // ✅ REQUIRED after tenant-hardening
+
         jobId: job.id,
         candidateId: candidate.id,
 
@@ -225,13 +238,15 @@ export async function POST(req: Request) {
         cvUrl: applicationCvUrl || candidateCvUrl || null,
         coverLetter: coverLetter || null,
 
-        // sensible defaults
         stage: "APPLIED",
         status: "PENDING",
       },
+      select: {
+        id: true,
+      },
     });
 
-    // 4b) FIRE SCORING ENGINE (non-blocking for candidate experience)
+    // 4b) FIRE SCORING ENGINE (non-blocking)
     try {
       await scoreAndPersistApplication(application.id);
     } catch (scoringError) {
@@ -240,12 +255,9 @@ export async function POST(req: Request) {
         application.id,
         scoringError,
       );
-      // Never break candidate apply flow because of scoring
     }
 
-    // -----------------------------------------------------------------------
-    // 5) Fire emails via Resend – CANDIDATE ONLY
-    // -----------------------------------------------------------------------
+    // 5) Candidate acknowledgement email (best-effort)
     try {
       const jobTitle = job.title;
       const candidateName = fullName;
@@ -272,7 +284,6 @@ export async function POST(req: Request) {
         "Resend email error (candidate acknowledgement):",
         emailError,
       );
-      // Don’t fail the request – DB is still the source of truth
     }
 
     return NextResponse.json({
