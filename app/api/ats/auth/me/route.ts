@@ -5,8 +5,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { isSuperAdminUser } from "@/lib/officialEmail";
-
-const OTP_COOKIE_NAME = "thinkats_otp_ok";
+import { OTP_COOKIE_NAME } from "@/lib/requireOtp";
 
 export async function GET() {
   try {
@@ -15,7 +14,6 @@ export async function GET() {
 
     const isOtpVerified = cookieStore.get(OTP_COOKIE_NAME)?.value === "1";
 
-    // No app-level user (i.e. no thinkats_user_id cookie)
     if (!ctx || !ctx.user || !ctx.user.email) {
       return NextResponse.json({
         ok: false,
@@ -28,12 +26,7 @@ export async function GET() {
     const email = ctx.user.email.toLowerCase();
     const isSuperAdmin = ctx.isSuperAdmin || isSuperAdminUser({ email });
 
-    return NextResponse.json({
-      ok: true,
-      email,
-      isSuperAdmin,
-      isOtpVerified,
-    });
+    return NextResponse.json({ ok: true, email, isSuperAdmin, isOtpVerified });
   } catch (err) {
     console.error("auth/me error:", err);
     return NextResponse.json({
