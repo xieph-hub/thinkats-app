@@ -6,14 +6,14 @@ import { cookies } from "next/headers";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { isSuperAdminUser } from "@/lib/officialEmail";
 
-const OTP_COOKIE_NAME = "thinkats_otp_verified";
+const OTP_COOKIE_NAME = "thinkats_otp_ok";
 
 export async function GET() {
   try {
     const ctx = await getServerUser();
     const cookieStore = cookies();
-    const otpCookie = cookieStore.get(OTP_COOKIE_NAME);
-    const isOtpVerified = !!otpCookie?.value;
+
+    const isOtpVerified = cookieStore.get(OTP_COOKIE_NAME)?.value === "1";
 
     // No app-level user (i.e. no thinkats_user_id cookie)
     if (!ctx || !ctx.user || !ctx.user.email) {
@@ -26,7 +26,6 @@ export async function GET() {
     }
 
     const email = ctx.user.email.toLowerCase();
-    // Combine DB globalRole flag + legacy email-based super admin helper
     const isSuperAdmin = ctx.isSuperAdmin || isSuperAdminUser({ email });
 
     return NextResponse.json({
