@@ -6,7 +6,12 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getServerUser } from "@/lib/auth/getServerUser";
 
-const ROOT_DOMAIN = process.env.TENANT_ROOT_DOMAIN || "thinkats.com";
+// Normalize ROOT_DOMAIN (no leading dot, lowercase)
+const ROOT_DOMAIN = (process.env.TENANT_ROOT_DOMAIN || "thinkats.com")
+  .trim()
+  .replace(/^\./, "")
+  .toLowerCase();
+
 const SUPERADMIN_EMAILS = (process.env.SUPERADMIN_EMAILS || "")
   .split(",")
   .map((s) => s.trim().toLowerCase())
@@ -14,13 +19,15 @@ const SUPERADMIN_EMAILS = (process.env.SUPERADMIN_EMAILS || "")
 
 function getTenantSlugFromHost(host: string | null) {
   if (!host) return null;
+
   const clean = host.split(":")[0].toLowerCase();
 
   // local/dev
-  if (clean === "localhost") return null;
+  if (clean === "localhost" || clean === "127.0.0.1") return null;
 
-  // only treat subdomains of ROOT_DOMAIN as tenant slugs
-  if (!clean.endsWith(ROOT_DOMAIN)) return null;
+  // Only treat subdomains of ROOT_DOMAIN as tenant slugs
+  if (clean === ROOT_DOMAIN) return null;
+  if (!clean.endsWith(`.${ROOT_DOMAIN}`) && !clean.endsWith(ROOT_DOMAIN)) return null;
 
   const parts = clean.split(".");
   const rootParts = ROOT_DOMAIN.split(".");
@@ -35,8 +42,7 @@ function getTenantSlugFromHost(host: string | null) {
 }
 
 function isSuperAdminEmail(email: string) {
-  const e = (email || "").toLowerCase();
-  return SUPERADMIN_EMAILS.includes(e);
+  return SUPERADMIN_EMAILS.includes((email || "").toLowerCase());
 }
 
 /**
@@ -46,15 +52,13 @@ function isSuperAdminEmail(email: string) {
  * 2) ats_tenant_id cookie (for main domain /ats)
  */
 export async function requireAtsContext() {
-  const authUser = await getServerUser();
-  if (!authUser?.email) redirect("/login");
+  const auth = await getServerUser();
 
-  const email = authUser.email.toLowerCase();
+  // getServerUser() returns { user: { email } }, not auth.email
+  const email = auth?.user?.email?.toLowerCase() || null;
+  const userId = auth?.user?.id || null;
 
-  // Ensure we have an app-level user row (by email)
-  const appUser =
-    (await prisma.user.findUnique({ where: { email } })) ??
-    (await prisma.user.create({ data: { email } }));
+  if (!email || !userId) redirect("/login");
 
   // Resolve tenant by host subdomain or cookie
   const host = headers().get("host");
@@ -76,24 +80,31 @@ export async function requireAtsContext() {
 
   // Membership check
   const member = await prisma.tenantMember.findUnique({
-    where: { tenantId_userId: { tenantId, userId: appUser.id } },
+    where: { tenantId_userId: { tenantId, userId } },
     select: { role: true, status: true },
   });
 
-  const superAdmin = isSuperAdminEmail(email) || member?.role === "SUPERADMIN";
+  // Superadmin rules:
+  // - globalRole SUPER_ADMIN from the DB user (auth.isSuperAdmin)
+  // - OR in env SUPERADMIN_EMAILS
+  // - OR tenant member has role SUPERADMIN
+  const superAdmin =
+    Boolean(auth?.isSuperAdmin) ||
+    isSuperAdminEmail(email) ||
+    member?.role === "SUPERADMIN";
 
   if (!superAdmin) {
     if (!member || member.status !== "ACTIVE") {
-      // You can replace this redirect with a nice 403 page if you prefer
       redirect("/ats/tenants?error=no_access");
     }
   }
 
   return {
     tenantId,
-    userId: appUser.id,
+    userId,
     email,
     role: member?.role ?? (superAdmin ? "SUPERADMIN" : null),
     isSuperAdmin: superAdmin,
+    tenantSlug: slug, // useful for UI/logging (optional)
   };
 }
