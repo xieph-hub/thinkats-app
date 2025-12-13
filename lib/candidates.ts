@@ -1,77 +1,39 @@
 // lib/candidates.ts
-import { createSupabaseServerClient } from "./supabaseServer";
+import { prisma } from "@/lib/prisma";
 
-/**
- * Get full candidate detail:
- * - candidate profile
- * - applications + job context
- * - notes + author info
- */
-export async function getCandidateDetail(candidateId: string) {
-  // Shared cookie-based Supabase server client
-  const supabase = createSupabaseServerClient();
+export async function getCandidateDetail(tenantId: string, candidateId: string) {
+  // Candidate must match tenant
+  const candidate = await prisma.candidate.findFirst({
+    where: { id: candidateId, tenantId },
+    include: {
+      tags: { include: { tag: true } },
+      skills: { include: { skill: true } },
+    },
+  });
 
-  // Candidate profile
-  const { data: candidate, error: candError } = await supabase
-    .from("candidates")
-    .select("*")
-    .eq("id", candidateId)
-    .single();
+  if (!candidate) return null;
 
-  if (candError) {
-    throw candError;
-  }
+  // Applications must belong to jobs under same tenant
+  const applications = await prisma.jobApplication.findMany({
+    where: {
+      candidateId,
+      job: { tenantId },
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      job: { select: { id: true, title: true, department: true, location: true } },
+      scoringEvents: { orderBy: { createdAt: "desc" }, take: 1 },
+    },
+  });
 
-  // Applications + job info
-  const { data: applications, error: appsError } = await supabase
-    .from("applications")
-    .select(
-      `
-      id,
-      status,
-      applied_at,
-      current_stage_id,
-      job:jobs (
-        id,
-        title,
-        department,
-        location
-      )
-    `
-    )
-    .eq("candidate_id", candidateId)
-    .order("applied_at", { ascending: false });
+  // Notes already have tenantId - enforce it
+  const notes = await prisma.note.findMany({
+    where: { candidateId, tenantId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      // if you want author, you may need an author relation in Prisma schema (currently you store authorId + authorName)
+    },
+  });
 
-  if (appsError) {
-    throw appsError;
-  }
-
-  // Notes (timeline)
-  const { data: notes, error: notesError } = await supabase
-    .from("notes")
-    .select(
-      `
-      id,
-      body,
-      note_type,
-      created_at,
-      application_id,
-      author:users (
-        id,
-        full_name
-      )
-    `
-    )
-    .eq("candidate_id", candidateId)
-    .order("created_at", { ascending: false });
-
-  if (notesError) {
-    throw notesError;
-  }
-
-  return {
-    candidate,
-    applications: applications ?? [],
-    notes: notes ?? [],
-  };
+  return { candidate, applications, notes };
 }
