@@ -204,18 +204,24 @@ const interview = await prisma.applicationInterview.create({
 });
 
     // 2) Optional participants (interviewers, observers, etc.)
-    if (attendees && attendees.length > 0) {
-      await prisma.interviewParticipant.createMany({
-        data: attendees
-          .filter((p) => p.email)
-          .map((p) => ({
-            interviewId: interview.id,
-            name: p.name || p.email,
-            email: p.email,
-            role: p.role || "Interviewer",
-          })),
-      });
-    }
+   if (attendees && attendees.length > 0) {
+  const rows = attendees
+    .filter((p: any) => p?.email && String(p.email).trim())
+    .map((p: any) => ({
+      tenantId: tenant.id, // ✅ REQUIRED (tenant-scoped)
+      interviewId: interview.id, // ✅ ok for createMany when scalar is allowed
+      name: (p?.name ? String(p.name).trim() : "") || String(p.email).trim(),
+      email: String(p.email).trim().toLowerCase(),
+      role: (p?.role ? String(p.role).trim() : "Interviewer") || "Interviewer",
+    }));
+
+  if (rows.length) {
+    await prisma.interviewParticipant.createMany({
+      data: rows,
+      skipDuplicates: true, // ✅ avoids crashes if you retry
+    });
+  }
+}
 
     // 3) Build ICS payload
     const ics = buildInterviewIcs({
