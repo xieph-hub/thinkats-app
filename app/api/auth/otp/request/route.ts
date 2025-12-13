@@ -1,3 +1,4 @@
+// app/api/auth/otp/request/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
@@ -15,72 +16,45 @@ function generateOtpCode(): string {
 
 export async function POST(_req: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const userId = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
+    const userId = cookies().get(AUTH_COOKIE_NAME)?.value?.trim();
     if (!userId) {
       return NextResponse.json({ ok: false, error: "unauthenticated" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user?.email) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, isActive: true },
+    });
+
+    if (!user?.isActive || !user.email) {
       return NextResponse.json({ ok: false, error: "unauthenticated" }, { status: 401 });
     }
 
-    const email = user.email.toLowerCase();
-    const now = new Date();
+    const code = generateOtpCode();
 
-    // ✅ Idempotency window: if an OTP was created in the last 60s and still valid, reuse it
-    const reuseCutoff = new Date(Date.now() - 60 * 1000);
-
-    const existing = await prisma.loginOtp.findFirst({
-      where: {
+    // ✅ Server time is UTC — universal. Store expiresAt from server time only.
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+    const created = await prisma.loginOtp.create({
+      data: {
         userId: user.id,
+        code,
+        expiresAt,
         consumed: false,
-        expiresAt: { gt: now },
-        createdAt: { gt: reuseCutoff },
       },
-      orderBy: { createdAt: "desc" },
+      select: { id: true },
     });
 
-    let code: string;
-    let expiresAt: Date;
-
-    if (existing) {
-      code = existing.code;
-      expiresAt = existing.expiresAt;
-    } else {
-      code = generateOtpCode();
-      expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-      await prisma.loginOtp.create({
-        data: { userId: user.id, code, expiresAt, consumed: false },
-      });
-    }
-
-    // Send email (same code if reused)
-    try {
-      await resend.emails.send({
-        from: "ThinkATS <no-reply@thinkats.com>",
-        to: email,
-        subject: "Your ThinkATS verification code",
-        html: `
-          <p>Your ThinkATS verification code is:</p>
-          <p style="font-size: 24px; font-weight: bold; letter-spacing: 0.2em;">
-            ${code}
-          </p>
-          <p>This code expires in 10 minutes.</p>
-          <p>If you didn't try to sign in, you can ignore this email.</p>
-        `,
-      });
-    } catch (err) {
-      console.error("Failed to send OTP email", err);
-      // Still return ok to avoid leaking email delivery behaviour
-    }
+    // Send email
+    await resend.emails.send({
+      from: "ThinkATS <no-reply@thinkats.com>",
+      to: user.email,
+      subject: "Your ThinkATS verification code",
+      text: `Your verification code is: ${code}\n\nThis code expires in 10 minutes.`,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("OTP request error", err);
+    console.error("OTP request error:", err);
     return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });
   }
 }
