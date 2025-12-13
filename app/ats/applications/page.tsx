@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getResourcinTenant } from "@/lib/tenant";
 import { matchesBooleanQuery } from "@/lib/booleanSearch";
 import ApplicationsList from "./ApplicationsList";
+import { getAtsTenantScope } from "@/lib/auth/tenantAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +49,6 @@ type ApplicationsRow = {
   skillTags: { id: string; label: string; color?: string | null }[];
 };
 
-// Simple helpers to pretty-print stage/status labels
 function formatStageLabel(raw: string): string {
   const upper = raw.toUpperCase();
   return upper
@@ -74,13 +73,17 @@ export default async function AtsApplicationsPage({
 }: {
   searchParams?: ApplicationsPageSearchParams;
 }) {
-  // For now, use the Resourcin workspace as the default tenant
-  // (workspace switcher logic can override this later if needed)
-  const tenant = await getResourcinTenant();
+  const { activeTenantId } = await getAtsTenantScope();
+  if (!activeTenantId) notFound();
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: activeTenantId },
+    select: { id: true, slug: true, planTier: true },
+  });
   if (!tenant) notFound();
 
   // ---------------------------------------------------------------------------
-  // Saved views (workspace-wide applications)
+  // Saved views (tenant-scoped)
   // ---------------------------------------------------------------------------
 
   const rawViewId =
@@ -100,7 +103,6 @@ export default async function AtsApplicationsPage({
       : null;
 
   const defaultView = savedViewsRaw.find((v) => v.isDefault) || null;
-
   const activeView = viewFromId || defaultView || null;
 
   // ---------------------------------------------------------------------------
@@ -120,31 +122,21 @@ export default async function AtsApplicationsPage({
     if (typeof params.tier === "string") filterTier = params.tier;
   }
 
-  if (typeof searchParams.q === "string") {
-    filterQ = searchParams.q;
-  }
-
-  if (typeof searchParams.stage === "string" && searchParams.stage !== "") {
+  if (typeof searchParams.q === "string") filterQ = searchParams.q;
+  if (typeof searchParams.stage === "string" && searchParams.stage !== "")
     filterStage = searchParams.stage;
-  }
-
-  if (typeof searchParams.status === "string" && searchParams.status !== "") {
+  if (typeof searchParams.status === "string" && searchParams.status !== "")
     filterStatus = searchParams.status;
-  }
-
-  if (typeof searchParams.tier === "string" && searchParams.tier !== "") {
+  if (typeof searchParams.tier === "string" && searchParams.tier !== "")
     filterTier = searchParams.tier;
-  }
 
   // ---------------------------------------------------------------------------
-  // Load applications (tenant-wide) + build filtered list
+  // Load applications (tenant-scoped via job.tenantId)
   // ---------------------------------------------------------------------------
 
   const applicationsRaw = await prisma.jobApplication.findMany({
     where: {
-      job: {
-        tenantId: tenant.id,
-      },
+      job: { tenantId: tenant.id },
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -177,15 +169,12 @@ export default async function AtsApplicationsPage({
 
   const totalApplications = applicationsRaw.length;
 
-  // 🔹 Dynamically derive stages + statuses from actual data
   const stageValueSet = new Set<string>();
   const statusValueSet = new Set<string>();
 
   for (const app of applicationsRaw) {
-    const stage = (app.stage || "APPLIED").toUpperCase();
-    const status = (app.status || "PENDING").toUpperCase();
-    stageValueSet.add(stage);
-    statusValueSet.add(status);
+    stageValueSet.add((app.stage || "APPLIED").toUpperCase());
+    statusValueSet.add((app.status || "PENDING").toUpperCase());
   }
 
   const stageNames = Array.from(stageValueSet).sort();
@@ -200,8 +189,10 @@ export default async function AtsApplicationsPage({
       (latestScore?.score as number | null | undefined) ??
       (app.matchScore as number | null | undefined) ??
       null;
+
     const tier = (latestScore?.tier as string | null | undefined) ?? null;
     const engine = (latestScore?.engine as string | null | undefined) ?? null;
+
     const scoreReason =
       (latestScore?.reason as string | null | undefined) ??
       (app.matchReason as string | null | undefined) ??
@@ -220,12 +211,11 @@ export default async function AtsApplicationsPage({
         color: ct.tag.color,
       })) ?? [];
 
-    // Boolean / keyword search (workspace-wide)
     const haystack = [
       app.fullName,
       app.email,
       app.location,
-      app.linkedinUrl,
+      (app as any).linkedinUrl,
       app.source,
       jobTitle,
       clientName,
@@ -251,31 +241,16 @@ export default async function AtsApplicationsPage({
 
     if (!matchesQuery) continue;
 
-    // Status filter (decision), using the real, current status
     const statusValue = (app.status || "PENDING").toUpperCase();
-    if (
-      filterStatus !== "ALL" &&
-      statusValue !== filterStatus.toUpperCase()
-    ) {
+    if (filterStatus !== "ALL" && statusValue !== filterStatus.toUpperCase())
       continue;
-    }
 
-    // Tier filter
-    if (
-      filterTier !== "ALL" &&
-      (tier || "").toUpperCase() !== filterTier.toUpperCase()
-    ) {
+    if (filterTier !== "ALL" && (tier || "").toUpperCase() !== filterTier.toUpperCase())
       continue;
-    }
 
-    // Stage filter, using the real, current stage
     const stageValue = (app.stage || "APPLIED").toUpperCase();
-    if (
-      filterStage !== "ALL" &&
-      stageValue !== filterStage.toUpperCase()
-    ) {
+    if (filterStage !== "ALL" && stageValue !== filterStage.toUpperCase())
       continue;
-    }
 
     pipelineApps.push({
       id: app.id,
@@ -287,11 +262,10 @@ export default async function AtsApplicationsPage({
       fullName: app.fullName,
       email: app.email,
       location: app.location,
-      currentTitle: candidate?.currentTitle ?? null,
-      currentCompany: candidate?.currentCompany ?? null,
+      currentTitle: (candidate as any)?.currentTitle ?? null,
+      currentCompany: (candidate as any)?.currentCompany ?? null,
 
       source: app.source,
-      // 🔹 These two are the *actual* current values from DB
       stage: app.stage,
       status: app.status,
 
@@ -321,19 +295,11 @@ export default async function AtsApplicationsPage({
       ? searchParams.viewId
       : activeView?.id || "";
 
-  // ---------------------------------------------------------------------------
-  // UI – header + filters
-  // ---------------------------------------------------------------------------
-
   return (
     <div className="flex h-full flex-1 flex-col bg-slate-50">
-      {/* Header */}
       <header className="border-b border-slate-200 bg-white/90 px-5 py-4 backdrop-blur">
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
-          <Link
-            href="/ats/dashboard"
-            className="hover:text-slate-700 hover:underline"
-          >
+          <Link href="/ats/dashboard" className="hover:text-slate-700 hover:underline">
             ATS
           </Link>
           <span>/</span>
@@ -342,9 +308,7 @@ export default async function AtsApplicationsPage({
 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold text-slate-900">
-              Applications
-            </h1>
+            <h1 className="text-lg font-semibold text-slate-900">Applications</h1>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
               <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
@@ -360,9 +324,7 @@ export default async function AtsApplicationsPage({
           <div className="flex flex-col items-end gap-1 text-right text-[11px] text-slate-500">
             <span className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
               Tenant plan:{" "}
-              <span className="ml-1 capitalize">
-                {(tenant as any).plan ?? "free"}
-              </span>
+              <span className="ml-1 capitalize">{tenant.planTier ?? "free"}</span>
             </span>
             {activeView && (
               <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
@@ -378,16 +340,12 @@ export default async function AtsApplicationsPage({
       {/* Filters + view management */}
       <section className="border-b border-slate-200 bg-slate-50/80 px-5 py-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          {/* Filters */}
           <form
             className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
             method="GET"
           >
-            {/* View selector */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">
-                View
-              </label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">View</label>
               <select
                 name="viewId"
                 defaultValue={currentViewId}
@@ -403,11 +361,8 @@ export default async function AtsApplicationsPage({
               </select>
             </div>
 
-            {/* Search */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">
-                Search
-              </label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">Search</label>
               <input
                 type="text"
                 name="q"
@@ -417,11 +372,8 @@ export default async function AtsApplicationsPage({
               />
             </div>
 
-            {/* Stage filter — driven by real stages in the data */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">
-                Stage
-              </label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">Stage</label>
               <select
                 name="stage"
                 defaultValue={filterStage}
@@ -436,11 +388,8 @@ export default async function AtsApplicationsPage({
               </select>
             </div>
 
-            {/* Status filter — driven by real statuses in the data */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">
-                Decision
-              </label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">Decision</label>
               <select
                 name="status"
                 defaultValue={filterStatus}
@@ -455,11 +404,8 @@ export default async function AtsApplicationsPage({
               </select>
             </div>
 
-            {/* Tier filter */}
             <div className="flex flex-col">
-              <label className="mb-1 text-[11px] font-medium text-slate-600">
-                Tier
-              </label>
+              <label className="mb-1 text-[11px] font-medium text-slate-600">Tier</label>
               <select
                 name="tier"
                 defaultValue={filterTier}
@@ -480,6 +426,7 @@ export default async function AtsApplicationsPage({
             >
               Apply filters
             </button>
+
             <Link
               href="/ats/applications"
               className="mt-5 inline-flex h-8 items-center rounded-full border border-slate-300 bg-white px-3 text-[11px] text-slate-600 transition hover:bg-slate-100"
@@ -488,27 +435,25 @@ export default async function AtsApplicationsPage({
             </Link>
           </form>
 
-          {/* Visible count + hint */}
           <div className="flex flex-col items-end gap-1 text-[11px] text-slate-500">
             <span>
               Visible applications:{" "}
-              <span className="font-semibold text-slate-800">
-                {allVisibleApplicationIds.length}
-              </span>
+              <span className="font-semibold text-slate-800">{allVisibleApplicationIds.length}</span>
             </span>
             <span className="max-w-xs text-right text-[10px]">
-              Use the filters and saved views to keep your shortlists and
-              interview-ready candidates one click away.
+              Use the filters and saved views to keep your shortlists and interview-ready candidates one click away.
             </span>
           </div>
         </div>
 
-        {/* Save current filters as view */}
         <form
           action="/api/ats/views"
           method="POST"
           className="mt-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm"
         >
+          {/* IMPORTANT: include tenantId so the API can enforce tenant-safe writes */}
+          <input type="hidden" name="tenantId" value={tenant.id} />
+
           <input type="hidden" name="scope" value="applications_pipeline" />
           <input type="hidden" name="redirectTo" value="/ats/applications" />
           <input type="hidden" name="q" value={filterQ} />
@@ -547,7 +492,6 @@ export default async function AtsApplicationsPage({
         </form>
       </section>
 
-      {/* Applications list – full pipeline-styled rows */}
       <section className="flex-1 px-5 py-4">
         <ApplicationsList applications={pipelineApps} />
       </section>
