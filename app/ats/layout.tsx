@@ -25,7 +25,6 @@ export default async function AtsLayout({ children }: Props) {
 
   // 1) Require app-level user context (cookie-based auth)
   if (!ctx || !ctx.user) {
-    // ✅ match OtpGateClient’s param name
     redirect(`/login?returnTo=${encodeURIComponent("/ats")}`);
   }
 
@@ -37,7 +36,8 @@ export default async function AtsLayout({ children }: Props) {
     redirect("/access-denied");
   }
 
-  // 3) Tenant access on tenant host (unless super admin)
+  // 3) On tenant subdomain hosts, enforce tenant membership (unless super admin)
+  //    NOTE: This does NOT select a tenant for primary host.
   if (!isPrimaryHost && tenantSlugFromHost && !isSuperAdmin) {
     const hasTenantAccess = tenantRoles.some(
       (role) => role.tenantSlug === tenantSlugFromHost,
@@ -56,7 +56,7 @@ export default async function AtsLayout({ children }: Props) {
 
   return (
     <AtsLayoutClient user={appUser} isSuperAdmin={isSuperAdmin}>
-      {/* ✅ OTP gating applies ONLY inside /ats */}
+      {/* OTP gating applies ONLY inside /ats */}
       <OtpGateClient>{children}</OtpGateClient>
     </AtsLayoutClient>
   );
