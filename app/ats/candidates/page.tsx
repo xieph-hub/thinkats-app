@@ -120,20 +120,20 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   const cutoff30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   const [
-    totalCandidates,
-    totalPipelines,
-    activeIn30Days,
-    candidateSourcesDistinct,
-    appSourcesDistinct,
-    rawStageDistinct,
-    appsForTier,
-  ] = await Promise.all([
-    prisma.candidate.count({ where: { tenantId: tenant.id } }),
-
-    prisma.jobApplication.findMany({
-  where: {
-    tenantId: tenant.id,        // ✅ direct
-    candidateId: { not: null },
+  totalCandidates,
+  candidates,
+  rawSourcesDistinct,
+  appSourcesDistinct,
+  rawStageDistinct,
+  appsForTier, // ❌ this is “index 6” in TS’ eyes because your Promise.all has only 6 items
+] = await Promise.all([
+  prisma.candidate.count(...),
+  prisma.candidate.findMany(...),
+  prisma.candidate.findMany(...),
+  prisma.jobApplication.findMany(...),
+  prisma.jobApplication.findMany(...),
+  // ❌ missing the query that should produce appsForTier
+]);
   },
   select: {
     candidateId: true,
