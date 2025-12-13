@@ -410,13 +410,15 @@ export async function PATCH(req: NextRequest) {
 
       if (cleaned.length > 0) {
         await prisma.interviewCompetencyRating.createMany({
-          data: cleaned.map((c) => ({
-            interviewId,
-            label: c.label,
-            rating: c.rating,
-            comment: c.comment,
-          })),
-        });
+  data: cleaned.map((c) => ({
+    tenantId: tenant.id,        // ✅ REQUIRED
+    interviewId,                // ✅ ok for createMany if scalar allowed
+    label: c.label,
+    rating: c.rating ?? null,
+    comment: c.comment ?? null,
+  })),
+  skipDuplicates: true,
+});
       }
     }
 
