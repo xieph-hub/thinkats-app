@@ -2,7 +2,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-export const OTP_COOKIE_NAME = "thinkats_otp_ok";
+export const OTP_COOKIE_NAME = "thinkats_otp_verified";
 
 export function ensureOtpVerified(callbackUrl: string) {
   const cookieStore = cookies();
