@@ -1,50 +1,57 @@
+// lib/auth/tenantAccess.ts
+import { redirect } from "next/navigation";
 import { getServerUser } from "@/lib/auth/getServerUser";
 import { getHostContext } from "@/lib/host";
-import { prisma } from "@/lib/prisma";
 
-export async function getAllowedTenantIdsForRequest(): Promise<{
-  allowedTenantIds: string[];
-  isSuperAdmin: boolean;
-  activeTenantId: string | null; // if tenant host forces one
-}> {
+/**
+ * Canonical tenant selection rules (until you build a tenant switcher):
+ * - If on tenant host (slug.thinkats.com): force that tenant
+ * - Else (primary host thinkats.com): use user's primary tenant
+ * - Super admin: can see everything on primary host, but on tenant host still forced
+ */
+export async function getAtsTenantScope() {
   const ctx = await getServerUser();
-  if (!ctx) return { allowedTenantIds: [], isSuperAdmin: false, activeTenantId: null };
+  if (!ctx?.user?.id) redirect("/login?returnTo=/ats");
 
   const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
+
   const isSuperAdmin = !!ctx.isSuperAdmin;
+  const tenantRoles = ctx.tenantRoles || [];
 
-  // Super admin: allow all tenants (but still optionally lock to tenant host)
-  if (isSuperAdmin) {
-    if (!isPrimaryHost && tenantSlugFromHost) {
-      const t = await prisma.tenant.findUnique({
-        where: { slug: tenantSlugFromHost },
-        select: { id: true },
-      });
-      const forced = t?.id ?? null;
-      return { allowedTenantIds: forced ? [forced] : [], isSuperAdmin, activeTenantId: forced };
-    }
-    // all tenants
-    const all = await prisma.tenant.findMany({ select: { id: true } });
-    return { allowedTenantIds: all.map((t) => t.id), isSuperAdmin, activeTenantId: null };
-  }
-
-  // Normal user: tenants they belong to
-  const roleTenantIds = ctx.tenantRoles.map((r) => r.tenantId);
-
-  // On tenant host: force just that tenant (and ensure they belong)
+  // Tenant host: force tenant from host (unless missing / unknown => deny)
   if (!isPrimaryHost && tenantSlugFromHost) {
-    const t = await prisma.tenant.findUnique({
-      where: { slug: tenantSlugFromHost },
-      select: { id: true },
-    });
-    const forced = t?.id ?? null;
+    const match = tenantRoles.find((r) => r.tenantSlug === tenantSlugFromHost);
 
-    if (!forced) return { allowedTenantIds: [], isSuperAdmin, activeTenantId: null };
-    if (!roleTenantIds.includes(forced)) return { allowedTenantIds: [], isSuperAdmin, activeTenantId: forced };
+    if (!match && !isSuperAdmin) {
+      redirect("/access-denied?reason=tenant_mismatch");
+    }
 
-    return { allowedTenantIds: [forced], isSuperAdmin, activeTenantId: forced };
+    // On tenant host, even super admin should be scoped to that tenant UI context
+    const forcedTenantId = match?.tenantId ?? null;
+    return {
+      isSuperAdmin,
+      activeTenantId: forcedTenantId,
+      allowedTenantIds: forcedTenantId ? [forcedTenantId] : [],
+    };
   }
 
-  // Primary host: allow all user tenants
-  return { allowedTenantIds: roleTenantIds, isSuperAdmin, activeTenantId: null };
+  // Primary host:
+  if (isSuperAdmin) {
+    // super admin can see cross-tenant in admin views if desired
+    const allTenantIds = Array.from(new Set(tenantRoles.map((r) => r.tenantId)));
+    return {
+      isSuperAdmin,
+      activeTenantId: ctx.primaryTenantId ?? (allTenantIds[0] ?? null),
+      allowedTenantIds: allTenantIds,
+    };
+  }
+
+  // Normal user on primary host: keep it simple — primary tenant only
+  const activeTenantId = ctx.primaryTenantId ?? (tenantRoles[0]?.tenantId ?? null);
+
+  return {
+    isSuperAdmin,
+    activeTenantId,
+    allowedTenantIds: activeTenantId ? [activeTenantId] : [],
+  };
 }
