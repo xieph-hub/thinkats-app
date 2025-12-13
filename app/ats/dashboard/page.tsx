@@ -48,9 +48,10 @@ function normaliseJobStatus(status: string | null | undefined) {
 }
 
 async function getDashboardStats(): Promise<DashboardStats> {
-  const tenant = await getResourcinTenant();
-  const tenantId = tenant.id;
-  const tenantName = tenant.name;
+const ctx = await getAtsTenantContext();
+const tenant = ctx.tenant;
+if (!tenant) throw new Error("No active tenant");
+const tenantId = tenant.id;
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
