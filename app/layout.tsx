@@ -13,6 +13,7 @@ import { getServerUser } from "@/lib/supabaseServer";
 import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
 import { getHostContext } from "@/lib/host";
 
+// ✅ Vercel Web Analytics (App Router)
 import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
