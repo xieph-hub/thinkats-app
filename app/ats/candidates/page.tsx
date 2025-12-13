@@ -130,17 +130,21 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
   ] = await Promise.all([
     prisma.candidate.count({ where: { tenantId: tenant.id } }),
 
-    prisma.jobApplication.count({
-      where: { job: { tenantId: tenant.id } },
-    }),
-
-    prisma.candidate.count({
-      where: {
-        tenantId: tenant.id,
-        applications: { some: { createdAt: { gte: cutoff30d } } },
-      },
-    }),
-
+    prisma.jobApplication.findMany({
+  where: {
+    tenantId: tenant.id,        // ✅ direct
+    candidateId: { not: null },
+  },
+  select: {
+    candidateId: true,
+    scoringEvents: {
+      select: { tier: true },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+    },
+  },
+}),
+    
     prisma.candidate.findMany({
       where: { tenantId: tenant.id },
       select: { source: true },
