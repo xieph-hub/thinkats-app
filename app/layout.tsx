@@ -13,8 +13,8 @@ import { getServerUser } from "@/lib/supabaseServer";
 import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
 import { getHostContext } from "@/lib/host";
 
-// ✅ Vercel Web Analytics
-import { Analytics } from "@vercel/analytics/next";
+// ✅ Web Analytics (App Router-safe import)
+import { Analytics } from "@vercel/analytics/react";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -79,9 +79,7 @@ export default async function RootLayout({
   const user = await getServerUser().catch(() => null);
 
   // OTP status: has this user completed a recent OTP?
-  const otpVerified = user?.email
-    ? await getOtpVerifiedForEmail(user.email)
-    : false;
+  const otpVerified = user?.email ? await getOtpVerifiedForEmail(user.email) : false;
 
   return (
     <html lang="en" className={inter.className}>
@@ -93,9 +91,7 @@ export default async function RootLayout({
         <AuthRecoveryListener />
 
         {/* ✅ Only show marketing chrome on non-tenant hosts */}
-        {!isTenantHost && (
-          <Navbar currentUser={user} otpVerified={otpVerified} />
-        )}
+        {!isTenantHost && <Navbar currentUser={user} otpVerified={otpVerified} />}
 
         <main className="min-h-screen">{children}</main>
 
