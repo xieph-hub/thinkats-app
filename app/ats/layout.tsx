@@ -5,6 +5,7 @@ import { getServerUser } from "@/lib/auth/getServerUser";
 import { isOfficialUser } from "@/lib/officialEmail";
 import { getHostContext } from "@/lib/host";
 import AtsLayoutClient from "./AtsLayoutClient";
+import OtpGateClient from "./OtpGateClient";
 
 export const metadata = {
   title: "ThinkATS | ATS Workspace",
@@ -20,13 +21,12 @@ type Props = {
 
 export default async function AtsLayout({ children }: Props) {
   const ctx = await getServerUser();
-
-  // 🔧 FIX: getHostContext is async and returns isPrimaryHost + tenantSlugFromHost
   const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
 
   // 1) Require app-level user context (cookie-based auth)
   if (!ctx || !ctx.user) {
-    redirect("/login?callbackUrl=/ats");
+    // ✅ match OtpGateClient’s param name
+    redirect(`/login?returnTo=${encodeURIComponent("/ats")}`);
   }
 
   const { user, isSuperAdmin, tenantRoles } = ctx;
@@ -56,7 +56,8 @@ export default async function AtsLayout({ children }: Props) {
 
   return (
     <AtsLayoutClient user={appUser} isSuperAdmin={isSuperAdmin}>
-      {children}
+      {/* ✅ OTP gating applies ONLY inside /ats */}
+      <OtpGateClient>{children}</OtpGateClient>
     </AtsLayoutClient>
   );
 }
