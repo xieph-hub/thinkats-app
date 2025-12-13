@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: { applicationId: string } },
 ) {
   try {
-    // TEMP: legacy tenant resolution (will be removed later)
+    // TEMP legacy tenant resolution (we’ll remove later)
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -63,9 +63,7 @@ export async function POST(
     let scheduledAt: Date | null = null;
     if (typeof scheduledAtRaw === "string" && scheduledAtRaw.trim()) {
       const parsed = new Date(scheduledAtRaw);
-      if (!Number.isNaN(parsed.getTime())) {
-        scheduledAt = parsed;
-      }
+      if (!Number.isNaN(parsed.getTime())) scheduledAt = parsed;
     }
 
     if (!scheduledAt) {
@@ -78,9 +76,7 @@ export async function POST(
     let durationMins: number | null = null;
     if (typeof durationMinsRaw === "string" && durationMinsRaw.trim()) {
       const parsed = parseInt(durationMinsRaw, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        durationMins = parsed;
-      }
+      if (!Number.isNaN(parsed) && parsed > 0) durationMins = parsed;
     }
 
     // Load application + tenant guard
@@ -92,11 +88,7 @@ export async function POST(
         candidateId: true,
         fullName: true,
         email: true,
-        job: {
-          select: {
-            tenantId: true,
-          },
-        },
+        job: { select: { tenantId: true } },
       },
     });
 
@@ -107,6 +99,7 @@ export async function POST(
       );
     }
 
+    // Strict tenant scope
     if (application.job.tenantId !== tenant.id) {
       return NextResponse.json(
         { ok: false, error: "Application does not belong to this tenant" },
@@ -114,7 +107,7 @@ export async function POST(
       );
     }
 
-    // Resolve current user (interviewer)
+    // Resolve current user (interviewer) via Supabase session
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
@@ -165,17 +158,20 @@ export async function POST(
         durationMins,
         notes,
       },
+      select: { id: true },
     });
 
     // ─────────────────────────────────────────────
-    // PARTICIPANTS (FIXED: use relation connect)
+    // PARTICIPANTS (tenant required ✅)
     // ─────────────────────────────────────────────
 
-    // Candidate
+    // Candidate participant
     if (application.fullName || application.email) {
       await prisma.interviewParticipant.create({
         data: {
-          interview: { connect: { id: interview.id } },
+          tenant: { connect: { id: application.tenantId } }, // ✅ required
+          interview: { connect: { id: interview.id } }, // ✅ relation connect
+
           name: application.fullName || application.email || "Candidate",
           email: application.email || "",
           role: "Candidate",
@@ -183,11 +179,13 @@ export async function POST(
       });
     }
 
-    // Interviewer / host
+    // Interviewer participant (current user)
     if (appUserEmail) {
       await prisma.interviewParticipant.create({
         data: {
-          interview: { connect: { id: interview.id } },
+          tenant: { connect: { id: application.tenantId } }, // ✅ required
+          interview: { connect: { id: interview.id } }, // ✅ relation connect
+
           name: appUserName || appUserEmail,
           email: appUserEmail,
           role: "Interviewer",
