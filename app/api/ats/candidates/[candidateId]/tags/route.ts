@@ -16,6 +16,11 @@ function getFormString(formData: FormData, key: string) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+// Light canonicalization so "  product  design " doesn't create variants.
+function canonicalizeTagName(input: string) {
+  return input.replace(/\s+/g, " ").trim();
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { candidateId: string } },
@@ -29,7 +34,6 @@ export async function POST(
       );
     }
 
-    // Tenant from host context
     const tenant = await getResourcinTenant();
     if (!tenant) {
       return NextResponse.json(
@@ -39,14 +43,14 @@ export async function POST(
     }
 
     const formData = await req.formData();
-    const tagName = getFormString(formData, "tagName");
+    const raw = getFormString(formData, "tagName");
+    const tagName = canonicalizeTagName(raw);
 
-    // Empty tag -> just return to candidate page
     if (!tagName) {
       return redirectToCandidate(req, candidateId);
     }
 
-    // Ensure caller is authenticated (ATS)
+    // Auth gate (ATS only)
     const supabase = createSupabaseRouteClient();
     const {
       data: { user },
@@ -62,68 +66,74 @@ export async function POST(
 
     const email = user.email.toLowerCase();
 
-    // App-level user row (global)
-    const appUser = await prisma.user.upsert({
-      where: { email },
-      update: { isActive: true },
-      create: {
-        email,
-        fullName: (user.user_metadata as any)?.full_name ?? null,
-        globalRole: "USER",
-      },
-    });
-
-    // Sanity check: candidate must belong to this tenant
-    const candidate = await prisma.candidate.findFirst({
-      where: { id: candidateId, tenantId: tenant.id },
-      select: { id: true },
-    });
-
-    if (!candidate) {
-      return NextResponse.json(
-        { ok: false, error: "Candidate not found for this tenant" },
-        { status: 404 },
-      );
-    }
-
-    // Find or create tag (tenant-scoped) – case-insensitive match
-    let tag = await prisma.tag.findFirst({
-      where: {
-        tenantId: tenant.id,
-        name: { equals: tagName, mode: "insensitive" },
-      },
-    });
-
-    if (!tag) {
-      tag = await prisma.tag.create({
-        data: {
-          tenantId: tenant.id,
-          name: tagName,
+    await prisma.$transaction(async (tx) => {
+      // Ensure app-level User row exists (global)
+      const appUser = await tx.user.upsert({
+        where: { email },
+        update: { isActive: true },
+        create: {
+          email,
+          fullName: (user.user_metadata as any)?.full_name ?? null,
+          globalRole: "USER",
         },
       });
-    }
 
-    // Attach tag to candidate (tenant-scoped). Avoid duplicates safely.
-    const existing = await prisma.candidateTag.findFirst({
-      where: {
-        tenantId: tenant.id,
-        candidateId: candidate.id,
-        tagId: tag.id,
-      },
-      select: { id: true },
-    });
+      // Confirm candidate belongs to tenant (critical)
+      const candidate = await tx.candidate.findFirst({
+        where: { id: candidateId, tenantId: tenant.id },
+        select: { id: true },
+      });
 
-    if (!existing) {
-      await prisma.candidateTag.create({
-        data: {
+      if (!candidate) {
+        // Throw to escape transaction with clean error response
+        throw Object.assign(new Error("Candidate not found for this tenant"), {
+          status: 404,
+        });
+      }
+
+      // Upsert tag within tenant using composite unique
+      // Your UI "Add tag…" is GENERAL kind by default.
+      const tag = await tx.tag.upsert({
+        where: {
+          tenantId_name_kind: {
+            tenantId: tenant.id,
+            name: tagName,
+            kind: "GENERAL",
+          },
+        },
+        update: {
+          // keep as-is, but touch updatedAt automatically
+          // you can also set color here later if desired
+        },
+        create: {
+          tenantId: tenant.id,
+          name: tagName,
+          kind: "GENERAL",
+          isSystem: false,
+        },
+        select: { id: true, name: true },
+      });
+
+      // Upsert candidate-tag join (unique is candidateId+tagId)
+      await tx.candidateTag.upsert({
+        where: {
+          candidateId_tagId: {
+            candidateId: candidate.id,
+            tagId: tag.id,
+          },
+        },
+        update: {
+          // nothing to update; existence is enough
+        },
+        create: {
           tenantId: tenant.id,
           candidateId: candidate.id,
           tagId: tag.id,
         },
       });
 
-      // Optional audit trail (tenant-scoped)
-      await prisma.activityLog.create({
+      // Audit trail (optional but good practice)
+      await tx.activityLog.create({
         data: {
           tenantId: tenant.id,
           actorId: appUser.id,
@@ -131,19 +141,29 @@ export async function POST(
           entityId: candidate.id,
           action: "tag_added",
           metadata: {
-            tagId: tag.id,
             tagName: tag.name,
+            tagId: tag.id,
+            kind: "GENERAL",
           },
         },
       });
-    }
+    });
 
     return redirectToCandidate(req, candidateId);
-  } catch (err) {
+  } catch (err: any) {
+    const status = typeof err?.status === "number" ? err.status : 500;
+
+    if (status === 404) {
+      return NextResponse.json(
+        { ok: false, error: "Candidate not found for this tenant" },
+        { status: 404 },
+      );
+    }
+
     console.error("Candidate tags POST error:", err);
     return NextResponse.json(
       { ok: false, error: "Unexpected error adding tag" },
-      { status: 500 },
+      { status },
     );
   }
 }
