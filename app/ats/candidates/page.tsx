@@ -139,11 +139,15 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
       select: { source: true },
       distinct: ["source"],
     }),
+
+    // ✅ FIX: Prisma throws if you do stage: { not: null } in some cases.
+    // Use notIn to safely exclude null + empty.
     prisma.jobApplication.findMany({
-      where: { job: { tenantId: tenant.id }, stage: { not: null } },
+      where: { job: { tenantId: tenant.id }, stage: { notIn: [null, ""] } },
       select: { stage: true },
       distinct: ["stage"],
     }),
+
     prisma.jobApplication.findMany({
       where: {
         job: { tenantId: tenant.id },
@@ -287,7 +291,6 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
 
     // No matches => short-circuit to empty result set
     if (ids.length === 0) {
-      // keep UI identical: still render page with 0 rows
       const candidateRows: CandidateRowProps[] = [];
 
       const rawPage = parseInt(firstString(searchParams.page) || "1", 10);
@@ -590,17 +593,17 @@ export default async function CandidatesPage({ searchParams = {} }: PageProps) {
                   </span>
                   <div className="inline-flex items-center gap-1">
                     <Link
-                      href={buildPageHref(Math.max(1, currentPage - 1))}
+                      href={"/ats/candidates"}
                       className="inline-flex cursor-not-allowed items-center rounded-full border border-slate-200 px-3 py-1 text-[10px] text-slate-300"
                       aria-disabled
                     >
                       Previous
                     </Link>
                     <span className="text-[10px] text-slate-400">
-                      Page {currentPage} of {totalPages}
+                      Page 1 of 1
                     </span>
                     <Link
-                      href={buildPageHref(Math.min(totalPages, currentPage + 1))}
+                      href={"/ats/candidates"}
                       className="inline-flex cursor-not-allowed items-center rounded-full border border-slate-200 px-3 py-1 text-[10px] text-slate-300"
                       aria-disabled
                     >
