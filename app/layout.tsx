@@ -3,8 +3,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
 
-import { Analytics } from "@vercel/analytics/next";
-
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -14,6 +12,9 @@ import AuthHashRedirector from "./AuthHashRedirector";
 import { getServerUser } from "@/lib/supabaseServer";
 import { getOtpVerifiedForEmail } from "@/lib/otpStatus";
 import { getHostContext } from "@/lib/host";
+
+// ✅ Vercel Web Analytics
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -101,7 +102,7 @@ export default async function RootLayout({
         {/* ✅ Only show marketing chrome on non-tenant hosts */}
         {!isTenantHost && <Footer />}
 
-        {/* ✅ Vercel Web Analytics (tracks page views + route changes) */}
+        {/* ✅ Vercel Web Analytics */}
         <Analytics />
       </body>
     </html>
