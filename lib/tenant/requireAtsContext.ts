@@ -25,9 +25,9 @@ function getTenantSlugFromHost(host: string | null) {
   // local/dev
   if (clean === "localhost" || clean === "127.0.0.1") return null;
 
-  // Only treat subdomains of ROOT_DOMAIN as tenant slugs
+  // only treat subdomains of ROOT_DOMAIN as tenant slugs
   if (clean === ROOT_DOMAIN) return null;
-  if (!clean.endsWith(`.${ROOT_DOMAIN}`) && !clean.endsWith(ROOT_DOMAIN)) return null;
+  if (!clean.endsWith(`.${ROOT_DOMAIN}`)) return null;
 
   const parts = clean.split(".");
   const rootParts = ROOT_DOMAIN.split(".");
@@ -42,7 +42,8 @@ function getTenantSlugFromHost(host: string | null) {
 }
 
 function isSuperAdminEmail(email: string) {
-  return SUPERADMIN_EMAILS.includes((email || "").toLowerCase());
+  const e = (email || "").toLowerCase();
+  return SUPERADMIN_EMAILS.includes(e);
 }
 
 /**
@@ -50,11 +51,14 @@ function isSuperAdminEmail(email: string) {
  * Tenant resolution order:
  * 1) tenant slug from host (slug.thinkats.com)
  * 2) ats_tenant_id cookie (for main domain /ats)
+ *
+ * IMPORTANT:
+ * - Your membership source is getServerUser().tenantRoles (UserTenantRole join),
+ *   NOT prisma.tenantMember (which your schema doesn't have).
  */
 export async function requireAtsContext() {
   const auth = await getServerUser();
 
-  // getServerUser() returns { user: { email } }, not auth.email
   const email = auth?.user?.email?.toLowerCase() || null;
   const userId = auth?.user?.id || null;
 
@@ -76,35 +80,27 @@ export async function requireAtsContext() {
     tenantId = cookies().get("ats_tenant_id")?.value ?? null;
   }
 
-  if (!tenantId) redirect("/ats/tenants"); // choose a workspace
-
-  // Membership check
-  const member = await prisma.tenantMember.findUnique({
-    where: { tenantId_userId: { tenantId, userId } },
-    select: { role: true, status: true },
-  });
+  if (!tenantId) redirect("/ats/tenants");
 
   // Superadmin rules:
-  // - globalRole SUPER_ADMIN from the DB user (auth.isSuperAdmin)
+  // - globalRole SUPER_ADMIN from getServerUser().isSuperAdmin
   // - OR in env SUPERADMIN_EMAILS
-  // - OR tenant member has role SUPERADMIN
-  const superAdmin =
-    Boolean(auth?.isSuperAdmin) ||
-    isSuperAdminEmail(email) ||
-    member?.role === "SUPERADMIN";
+  const superAdmin = Boolean(auth?.isSuperAdmin) || isSuperAdminEmail(email);
 
-  if (!superAdmin) {
-    if (!member || member.status !== "ACTIVE") {
-      redirect("/ats/tenants?error=no_access");
-    }
+  // Membership check using roles already loaded by getServerUser()
+  const memberRole =
+    auth?.tenantRoles?.find((r) => r.tenantId === tenantId)?.role ?? null;
+
+  if (!superAdmin && !memberRole) {
+    redirect("/ats/tenants?error=no_access");
   }
 
   return {
     tenantId,
     userId,
     email,
-    role: member?.role ?? (superAdmin ? "SUPERADMIN" : null),
+    role: memberRole ?? (superAdmin ? "SUPERADMIN" : null),
     isSuperAdmin: superAdmin,
-    tenantSlug: slug, // useful for UI/logging (optional)
+    tenantSlug: slug,
   };
 }
