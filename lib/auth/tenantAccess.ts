@@ -1,49 +1,76 @@
 // lib/auth/tenantAccess.ts
 import { getServerUser } from "@/lib/auth/getServerUser";
+import { getHostContext } from "@/lib/host";
+import { prisma } from "@/lib/prisma";
 
 export type AtsTenantScope = {
   isSuperAdmin: boolean;
   allowedTenantIds: string[] | null; // null => unrestricted
+  activeTenantId: string | null;
+  activeTenantSlug: string | null;
 };
 
-/**
- * Canonical tenant scope for the current server request.
- * - Super admin: allowedTenantIds = null (no restriction)
- * - Normal user: allowedTenantIds = [tenantIds they belong to]
- * - Not logged in: allowedTenantIds = []
- */
-export async function getAllowedTenantIdsForRequest(): Promise<AtsTenantScope> {
+export async function getAtsTenantScope(): Promise<AtsTenantScope> {
   const ctx = await getServerUser();
 
+  // Not logged in
   if (!ctx?.user?.id) {
-    return { isSuperAdmin: false, allowedTenantIds: [] };
+    return {
+      isSuperAdmin: false,
+      allowedTenantIds: [],
+      activeTenantId: null,
+      activeTenantSlug: null,
+    };
   }
 
-  if (ctx.isSuperAdmin) {
-    return { isSuperAdmin: true, allowedTenantIds: null };
+  const isSuperAdmin = !!ctx.isSuperAdmin;
+
+  // Super admin: can access all tenants, but still needs an "active" tenant
+  // for pages that require one.
+  const tenantRoles = ctx.tenantRoles || [];
+  const primaryRole = tenantRoles.find((r) => r.isPrimary) || tenantRoles[0] || null;
+
+  const { isPrimaryHost, tenantSlugFromHost } = await getHostContext();
+
+  // Determine activeTenant by host
+  let activeTenantId: string | null = null;
+  let activeTenantSlug: string | null = null;
+
+  if (!isPrimaryHost && tenantSlugFromHost) {
+    // Tenant host dictates the tenant
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug: tenantSlugFromHost },
+      select: { id: true, slug: true },
+    });
+
+    activeTenantId = tenant?.id ?? null;
+    activeTenantSlug = tenant?.slug ?? tenantSlugFromHost;
+  } else {
+    // Primary host: use user's primary tenant (or first)
+    activeTenantId = primaryRole?.tenantId ?? null;
+    activeTenantSlug = primaryRole?.tenantSlug ?? null;
   }
 
-  const allowedTenantIds =
-    (ctx.tenantRoles || []).map((r) => r.tenantId).filter(Boolean) || [];
+  // Allowed tenant ids
+  const allowedTenantIds = isSuperAdmin
+    ? null
+    : tenantRoles.map((r) => r.tenantId).filter(Boolean);
 
-  return { isSuperAdmin: false, allowedTenantIds };
+  return {
+    isSuperAdmin,
+    allowedTenantIds,
+    activeTenantId,
+    activeTenantSlug,
+  };
 }
 
 /**
- * ✅ Backwards-compatible name (some files still import this).
- * Keep this until you've refactored callers.
+ * Backwards compatible exports (you had callers using these names).
  */
-export async function getAtsTenantScope(): Promise<AtsTenantScope> {
-  return getAllowedTenantIdsForRequest();
-}
-
-/**
- * Convenience helper for "must have access".
- */
-export async function requireAllowedTenantIdsForRequest(): Promise<AtsTenantScope> {
-  const scope = await getAllowedTenantIdsForRequest();
-  if (!scope.isSuperAdmin && (!scope.allowedTenantIds || scope.allowedTenantIds.length === 0)) {
-    return { isSuperAdmin: false, allowedTenantIds: [] };
-  }
-  return scope;
+export async function getAllowedTenantIdsForRequest() {
+  const scope = await getAtsTenantScope();
+  return {
+    isSuperAdmin: scope.isSuperAdmin,
+    allowedTenantIds: scope.allowedTenantIds,
+  };
 }
