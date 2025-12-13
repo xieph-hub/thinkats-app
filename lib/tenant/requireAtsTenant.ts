@@ -21,7 +21,6 @@ function getTenantSlugFromHost(host: string | null) {
   if (!host) return null;
   if (host === "localhost") return null;
 
-  // only treat subdomains of ROOT_DOMAIN as tenant slugs
   if (!host.endsWith(ROOT_DOMAIN)) return null;
 
   const parts = host.split(".");
@@ -59,18 +58,17 @@ export type AtsTenantContext = {
     fullName: string | null;
     globalRole: string;
   };
-  role: string | null; // tenant role (from UserTenantRole)
+  role: string | null;
   isSuperAdmin: boolean;
 };
 
 /**
- * Resolves an active tenant and enforces membership (UserTenantRole),
- * with explicit SUPER_ADMIN override.
+ * Strict tenant context:
+ * - Tenant host (slug.thinkats.com) wins
+ * - Else cookie-selected tenant id
+ * - Else FAIL (redirect to tenant picker)
  *
- * Resolution order:
- * 1) tenant slug from host (slug.thinkats.com)
- * 2) tenant id cookie (thinkats_tenant_id / ats_tenant_id)
- * 3) user's primary tenant (from getServerUser)
+ * No env fallback. No primaryTenant fallback. Ever.
  */
 export async function requireAtsTenant(): Promise<AtsTenantContext> {
   const ctx = await getServerUser();
@@ -79,10 +77,9 @@ export async function requireAtsTenant(): Promise<AtsTenantContext> {
   const host = getHost();
   const slug = getTenantSlugFromHost(host);
 
-  const cookieTenantId = readTenantIdCookie();
   let tenantId: string | null = null;
 
-  // 1) Host-based tenant
+  // 1) Tenant host
   if (slug) {
     const t = await prisma.tenant.findUnique({
       where: { slug },
@@ -91,29 +88,34 @@ export async function requireAtsTenant(): Promise<AtsTenantContext> {
     if (!t) notFound();
     tenantId = t.id;
   } else {
-    // 2) Cookie-based tenant
-    tenantId = cookieTenantId || ctx.primaryTenantId || null;
+    // 2) Cookie only
+    tenantId = readTenantIdCookie();
   }
 
-  if (!tenantId) redirect("/ats/tenants");
+  // 3) No tenant context => fail
+  if (!tenantId) redirect("/ats/tenants?error=select_tenant");
 
   const isSuperAdmin = ctx.isSuperAdmin || ctx.user.globalRole === "SUPER_ADMIN";
 
-  // Membership enforcement (unless SUPER_ADMIN)
+  // Optional defense: always ensure tenant exists (even for super admin)
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true, slug: true, name: true, status: true, planTier: true },
+  });
+  if (!tenant) notFound();
+
+  // Optional: block inactive tenants
+  if ((tenant.status || "").toLowerCase() !== "active") {
+    redirect("/ats/tenants?error=tenant_inactive");
+  }
+
+  // Membership enforcement (unless super admin)
   const roleFromList =
     ctx.tenantRoles.find((r) => r.tenantId === tenantId)?.role ?? null;
 
   if (!isSuperAdmin) {
-    // If cookie was tampered (tenant not in user roles), fall back safely to primary tenant.
-    if (!roleFromList) {
-      if (!slug && ctx.primaryTenantId) {
-        tenantId = ctx.primaryTenantId;
-      } else {
-        redirect("/ats/tenants?error=no_access");
-      }
-    }
+    if (!roleFromList) redirect("/ats/tenants?error=no_access");
 
-    // Final “real” membership verification in DB (defense in depth)
     const membership = await prisma.userTenantRole.findFirst({
       where: { userId: ctx.user.id, tenantId },
       select: { role: true },
@@ -122,24 +124,10 @@ export async function requireAtsTenant(): Promise<AtsTenantContext> {
     if (!membership) redirect("/ats/tenants?error=no_access");
   }
 
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { id: true, slug: true, name: true, status: true, planTier: true },
-  });
-
-  if (!tenant) notFound();
-
-  // Optional: block inactive tenants
-  if ((tenant.status || "").toLowerCase() !== "active") {
-    redirect("/ats/tenants?error=tenant_inactive");
-  }
-
   return {
     tenant,
     user: ctx.user,
-    role: isSuperAdmin
-      ? roleFromList ?? "SUPER_ADMIN"
-      : roleFromList ?? null,
+    role: isSuperAdmin ? roleFromList ?? "SUPER_ADMIN" : roleFromList,
     isSuperAdmin,
   };
 }
